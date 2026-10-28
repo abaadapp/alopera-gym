@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import { Building2, Pencil, Plus } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import SettingsBack from '@/Components/SettingsBack';
 import { Badge, Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Toggle } from '@/Components/ui';
 
 interface Branch {
@@ -19,7 +20,7 @@ export default function Branches({ branches }: { branches: Branch[] }) {
 
     return (
         <ClubLayout title="الفروع">
-            <PageHeader title="الفروع" subtitle="النظام جاهز لتعدد الفروع؛ عدد الفروع المتاح يحدده اشتراك المنصة" actions={<Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>فرع جديد</Button>} />
+            <PageHeader back={<SettingsBack />} title="الفروع" subtitle="النظام جاهز لتعدد الفروع؛ عدد الفروع المتاح يحدده اشتراك المنصة" actions={<Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>فرع جديد</Button>} />
             <Card padded={false}>
                 {branches.length === 0 ? (
                     <EmptyState icon={<Building2 className="size-6" />} title="لا توجد فروع" />

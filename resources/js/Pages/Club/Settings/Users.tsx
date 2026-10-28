@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import { Pencil, UserPlus, Users as UsersIcon } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import SettingsBack from '@/Components/SettingsBack';
 import { Badge, Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Toggle } from '@/Components/ui';
 import { useShared } from '@/hooks/useShared';
 import type { Option } from '@/types';
@@ -32,7 +33,7 @@ export default function Users({ users, roles, branches }: Props) {
 
     return (
         <ClubLayout title="المستخدمون">
-            <PageHeader title="مستخدمات اللوحة" subtitle="حسابات الموظفات وأدوارهن. الصلاحيات تُطبّق على الخادم وليس على الواجهة فقط." actions={<Button icon={<UserPlus className="size-4" />} onClick={() => setEditing('new')}>مستخدمة جديدة</Button>} />
+            <PageHeader back={<SettingsBack />} title="مستخدمات اللوحة" subtitle="حسابات الموظفات وأدوارهن. الصلاحيات تُطبّق على الخادم وليس على الواجهة فقط." actions={<Button icon={<UserPlus className="size-4" />} onClick={() => setEditing('new')}>مستخدمة جديدة</Button>} />
             <Card padded={false}>
                 {users.length === 0 ? (
                     <EmptyState icon={<UsersIcon className="size-6" />} title="لا توجد حسابات" />

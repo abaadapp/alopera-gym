@@ -2,6 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { useForm } from '@inertiajs/react';
 import { Check, Copy, CreditCard, Info, MessageCircle } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import SettingsBack from '@/Components/SettingsBack';
 import { Badge, Button, Card, CardHeader, Field, Input, PageHeader, Select, Toggle } from '@/Components/ui';
 
 interface Integration {
@@ -35,7 +36,7 @@ const PAYMOB_FIELDS = [
 export default function Integrations({ integrations, endpoints, paymob_ready, whatsapp_driver }: Props) {
     return (
         <ClubLayout title="الربط">
-            <PageHeader title="الربط: الدفع الإلكتروني وواتساب" subtitle="مفاتيح النادي الخاصة. تُحفظ مشفّرة ولا تُعرض مرة أخرى بعد الحفظ." />
+            <PageHeader back={<SettingsBack />} title="الربط: الدفع الإلكتروني وواتساب" subtitle="مفاتيح النادي الخاصة. تُحفظ مشفّرة ولا تُعرض مرة أخرى بعد الحفظ." />
 
             <div className="mb-6 flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm leading-7 text-sky-900">
                 <Info className="mt-1 size-4 shrink-0" />

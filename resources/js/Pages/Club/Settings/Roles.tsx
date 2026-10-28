@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import { Lock, Pencil, Plus, ShieldCheck, Trash2, Users } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import SettingsBack from '@/Components/SettingsBack';
 import { Badge, Button, Card, ConfirmAction, Field, Input, Modal, PageHeader, Textarea } from '@/Components/ui';
 
 interface Role {
@@ -27,7 +28,7 @@ export default function Roles({ roles, groups }: { roles: Role[]; groups: Group[
 
     return (
         <ClubLayout title="الأدوار والصلاحيات">
-            <PageHeader
+            <PageHeader back={<SettingsBack />}
                 title="الأدوار والصلاحيات"
                 subtitle="كل صلاحية تُفحص على الخادم في كل طلب؛ إخفاء الأزرار للتسهيل فقط"
                 actions={<Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>دور مخصص</Button>}

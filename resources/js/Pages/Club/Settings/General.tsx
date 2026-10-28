@@ -1,7 +1,8 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useMemo, type FormEvent, type ReactNode } from 'react';
 import { useForm } from '@inertiajs/react';
-import { ImagePlus, Plus, X } from 'lucide-react';
+import { ImagePlus } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import SettingsBack from '@/Components/SettingsBack';
 import { Button, Card, CardHeader, Field, Input, PageHeader, Textarea, Toggle } from '@/Components/ui';
 
 interface Club {
@@ -26,9 +27,6 @@ type Rules = {
     duplicate_scan_minutes: number;
     block_access_with_dues: boolean;
     auto_mark_no_show: boolean;
-    expiry_reminder_days: number[];
-    expired_followup_days: number[];
-    notify_class_changes: boolean;
     class_session_weeks_ahead: number;
     vat_rate: number;
     vat_number: string | null;
@@ -73,9 +71,6 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
             duplicate_scan_minutes: Number(rules.duplicate_scan_minutes ?? 5),
             block_access_with_dues: Boolean(rules.block_access_with_dues),
             auto_mark_no_show: Boolean(rules.auto_mark_no_show),
-            expiry_reminder_days: (rules.expiry_reminder_days ?? []).map(Number),
-            expired_followup_days: (rules.expired_followup_days ?? []).map(Number),
-            notify_class_changes: Boolean(rules.notify_class_changes),
             class_session_weeks_ahead: Number(rules.class_session_weeks_ahead),
             vat_rate: Number(rules.vat_rate),
             vat_number: rules.vat_number ?? '',
@@ -105,7 +100,7 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
 
     return (
         <ClubLayout title="إعدادات النادي">
-            <PageHeader title="إعدادات النادي" subtitle="الهوية وبيانات التواصل وقواعد العمل التي يطبقها النظام تلقائيًا" />
+            <PageHeader back={<SettingsBack />} title="إعدادات النادي" subtitle="الهوية وبيانات التواصل وقواعد العمل التي يطبقها النظام تلقائيًا" />
 
             <form onSubmit={submit} className="space-y-6">
                 <div className="grid gap-6 lg:grid-cols-3">
@@ -182,14 +177,6 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
                         </div>
                     </Card>
 
-                    <Card>
-                        <CardHeader title="رسائل واتساب التلقائية" subtitle="قواعد التذكير والمتابعة (تتطلب قوالب معتمدة)" />
-                        <DaysField label="تذكير قبل انتهاء العضوية بـ (أيام)" values={form.data.rules.expiry_reminder_days} onChange={(v) => setRule('expiry_reminder_days', v)} max={60} min={0} error={errors['rules.expiry_reminder_days']} />
-                        <DaysField label="متابعة بعد الانتهاء بـ (أيام)" values={form.data.rules.expired_followup_days} onChange={(v) => setRule('expired_followup_days', v)} max={180} min={1} error={errors['rules.expired_followup_days']} />
-                        <div className="mt-2">
-                            <Toggle checked={form.data.rules.notify_class_changes} onChange={(v) => setRule('notify_class_changes', v)} label="إبلاغ المحجوزات عند تعديل الحصة" hint="تغيير الموعد أو المدربة أو القاعة" />
-                        </div>
-                    </Card>
 
                     <Card>
                         <CardHeader title="الفواتير والضريبة" />
@@ -237,48 +224,6 @@ function NumberField({ label, value, onChange, error, hint, min, max, step = 1 }
     return (
         <Field label={label} error={error} hint={hint}>
             <Input type="number" value={Number.isFinite(value) ? value : ''} min={min} max={max} step={step} onChange={(e) => onChange(e.target.value === '' ? 0 : Number(e.target.value))} />
-        </Field>
-    );
-}
-
-function DaysField({ label, values, onChange, min, max, error }: { label: string; values: number[]; onChange: (v: number[]) => void; min: number; max: number; error?: string }) {
-    const [draft, setDraft] = useState('');
-    const add = () => {
-        const n = Number(draft);
-        if (draft === '' || !Number.isInteger(n) || n < min || n > max || values.includes(n) || values.length >= 5) return;
-        onChange([...values, n].sort((a, b) => b - a));
-        setDraft('');
-    };
-
-    return (
-        <Field label={label} error={error} className="mb-4" hint={values.length === 0 ? 'لا يوجد — هذه الرسائل متوقفة' : `حتى 5 قيم، بين ${min} و${max}`}>
-            <div className="flex flex-wrap items-center gap-1.5">
-                {values.map((d) => (
-                    <span key={d} className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-xs text-brand-700">
-                        <span className="num">{d}</span> يوم
-                        <button type="button" onClick={() => onChange(values.filter((x) => x !== d))} aria-label="حذف"><X className="size-3" /></button>
-                    </span>
-                ))}
-                {values.length < 5 && (
-                    <span className="inline-flex items-center gap-1">
-                        <input
-                            type="number"
-                            className="input h-8 w-20 py-1 text-xs"
-                            value={draft}
-                            min={min}
-                            max={max}
-                            onChange={(e) => setDraft(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    add();
-                                }
-                            }}
-                        />
-                        <button type="button" onClick={add} className="grid size-8 place-items-center rounded-lg border border-line hover:bg-brand-50" aria-label="إضافة"><Plus className="size-3.5" /></button>
-                    </span>
-                )}
-            </div>
         </Field>
     );
 }

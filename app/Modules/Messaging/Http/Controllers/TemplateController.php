@@ -18,10 +18,9 @@ use Inertia\Response;
  */
 class TemplateController extends Controller
 {
-    public function index(TenantContext $tenants): Response
+    public function index(): Response
     {
         TemplateCatalog::seedDefaults();
-        $tenant = $tenants->require();
 
         return Inertia::render('Messaging/Templates', [
             'templates' => MessageTemplate::orderBy('id')->get()->map(fn ($t) => $t->only('id', 'key', 'name', 'language', 'category', 'body', 'variables', 'status', 'is_active') + [
@@ -29,6 +28,15 @@ class TemplateController extends Controller
                 'is_system' => isset(TemplateCatalog::EVENTS[$t->key]),
                 'allowed_variables' => TemplateCatalog::EVENTS[$t->key]['variables'] ?? TemplateCatalog::CAMPAIGN_VARIABLES,
             ]),
+        ]);
+    }
+
+    /** Automatic sending rules (edited in Settings → Notifications) and keyword auto-replies. */
+    public function automation(TenantContext $tenants): Response
+    {
+        $tenant = $tenants->require();
+
+        return Inertia::render('Messaging/Automation', [
             'autoReplies' => AutoReply::orderBy('id')->get(['id', 'keyword', 'match_type', 'reply', 'is_active', 'hits']),
             'rules' => [
                 'expiry_reminder_days' => $tenant->setting('expiry_reminder_days'),

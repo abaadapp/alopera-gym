@@ -1122,7 +1122,7 @@ function WhatsAppTab({ messages, templates, member }: Props) {
                 <Card>
                     <CardHeader title="إرسال قالب معتمد" subtitle="القوالب المعتمدة من واتساب فقط" />
                     {templates.length === 0 ? (
-                        <p className="text-sm text-muted">لا توجد قوالب معتمدة. أضيفيها من «القوالب والأتمتة».</p>
+                        <p className="text-sm text-muted">لا توجد قوالب معتمدة. أضيفيها من «واتساب ← القوالب».</p>
                     ) : (
                         <form onSubmit={submit} className="space-y-4">
                             <Field label="القالب" error={form.errors.template_key}>

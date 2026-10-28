@@ -1,5 +1,6 @@
 import { CalendarRange, Layers } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import SettingsBack from '@/Components/SettingsBack';
 import { Badge, Card, CardHeader, EmptyState, PageHeader, Stat } from '@/Components/ui';
 import { date, money, number } from '@/lib/format';
 import { label, tenantStatus } from '@/lib/labels';
@@ -28,7 +29,7 @@ export default function Billing({ subscription, usage, invoices, status }: Props
 
     return (
         <ClubLayout title="اشتراك المنصة">
-            <PageHeader title="اشتراك النادي في المنصة" subtitle="منفصل تمامًا عن اشتراكات المشتركات داخل النادي" actions={<Badge tone={tTone}>حالة الحساب: {tLabel}</Badge>} />
+            <PageHeader back={status !== 'suspended' ? <SettingsBack /> : undefined} title="اشتراك النادي في المنصة" subtitle="منفصل تمامًا عن اشتراكات المشتركات داخل النادي" actions={<Badge tone={tTone}>حالة الحساب: {tLabel}</Badge>} />
 
             <div className="grid gap-6 lg:grid-cols-3">
                 <Card className="lg:col-span-2">

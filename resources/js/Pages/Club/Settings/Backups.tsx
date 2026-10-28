@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import { AlertTriangle, Database, Download, RotateCcw, Upload } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import SettingsBack from '@/Components/SettingsBack';
 import { Button, Card, CardHeader, EmptyState, Field, Input, PageHeader } from '@/Components/ui';
 import { useShared } from '@/hooks/useShared';
 import { number } from '@/lib/format';
@@ -34,7 +35,7 @@ export default function Backups({ backups }: { backups: Backup[] }) {
 
     return (
         <ClubLayout title="النسخ الاحتياطي">
-            <PageHeader
+            <PageHeader back={<SettingsBack />}
                 title="النسخ الاحتياطي والاستعادة"
                 subtitle="نسخة تلقائية يومية الساعة 3 فجرًا (آخر 14 نسخة)، ويمكنك إنشاء نسخة يدويًا في أي وقت"
                 actions={<Button onClick={create} loading={creating} icon={<Database className="size-4" />}>إنشاء نسخة الآن</Button>}

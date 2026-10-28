@@ -18,6 +18,7 @@ Route::post('/members/{member}/whatsapp', [InboxController::class, 'sendTemplate
 
 Route::middleware('can:templates.manage')->group(function () {
     Route::get('/templates', [TemplateController::class, 'index'])->name('templates.index');
+    Route::get('/automation', [TemplateController::class, 'automation'])->name('automation.index');
     Route::post('/templates', [TemplateController::class, 'store'])->name('templates.store');
     Route::put('/templates/{template}', [TemplateController::class, 'update'])->name('templates.update');
     Route::resource('auto-replies', AutoReplyController::class)->except(['index', 'show', 'create', 'edit']);

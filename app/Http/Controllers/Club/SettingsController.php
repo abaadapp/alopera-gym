@@ -7,12 +7,28 @@ use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/** Club profile, branding and business rules. */
+/** The settings hub, the club profile and business rules, and the notification rules. */
 class SettingsController extends Controller
 {
+    /** Opening the hub needs at least one of the screens it links to. */
+    public const HUB_PERMISSIONS = [
+        'settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'integrations.manage',
+        'audit.view', 'backups.manage', 'billing.view', 'website.manage',
+    ];
+
+    private const NOTIFICATION_RULES = ['expiry_reminder_days', 'expired_followup_days', 'notify_class_changes'];
+
+    public function index(Request $request): Response
+    {
+        abort_unless(collect(self::HUB_PERMISSIONS)->contains(fn (string $p) => $request->user()->can($p)), 403);
+
+        return Inertia::render('Club/Settings/Index');
+    }
+
     public function edit(TenantContext $tenants): Response
     {
         $tenant = $tenants->require();
@@ -47,11 +63,6 @@ class SettingsController extends Controller
             'rules.duplicate_scan_minutes' => ['integer', 'between:0,120'],
             'rules.block_access_with_dues' => ['boolean'],
             'rules.auto_mark_no_show' => ['boolean'],
-            'rules.expiry_reminder_days' => ['array', 'max:5'],
-            'rules.expiry_reminder_days.*' => ['integer', 'between:0,60'],
-            'rules.expired_followup_days' => ['array', 'max:5'],
-            'rules.expired_followup_days.*' => ['integer', 'between:1,180'],
-            'rules.notify_class_changes' => ['boolean'],
             'rules.class_session_weeks_ahead' => ['integer', 'between:1,12'],
             'rules.vat_rate' => ['numeric', 'between:0,30'],
             'rules.vat_number' => ['nullable', 'string', 'max:40'],
@@ -66,13 +77,8 @@ class SettingsController extends Controller
             $tenant->logo_path = ImageStore::store($request->file('logo'), 'branding', 600);
         }
 
-        $rules = array_intersect_key($data['rules'] ?? [], $tenant::DEFAULT_SETTINGS);
-        // Multipart requests (with a logo) drop empty arrays: missing list means "none".
-        if ($request->has('rules')) {
-            foreach (['expiry_reminder_days', 'expired_followup_days'] as $list) {
-                $rules[$list] ??= [];
-            }
-        }
+        // Notification rules have their own screen; this form never touches them.
+        $rules = Arr::except(array_intersect_key($data['rules'] ?? [], $tenant::DEFAULT_SETTINGS), self::NOTIFICATION_RULES);
         unset($data['logo'], $data['rules']);
 
         $tenant->fill($data);
@@ -80,5 +86,33 @@ class SettingsController extends Controller
         $tenant->save();
 
         return back()->with('success', 'تم حفظ إعدادات النادي.');
+    }
+
+    public function notifications(TenantContext $tenants): Response
+    {
+        return Inertia::render('Club/Settings/Notifications', [
+            'rules' => Arr::only($tenants->require()->allSettings(), self::NOTIFICATION_RULES),
+        ]);
+    }
+
+    public function updateNotifications(Request $request, TenantContext $tenants): RedirectResponse
+    {
+        $tenant = $tenants->require();
+        $data = $request->validate([
+            'expiry_reminder_days' => ['array', 'max:5'],
+            'expiry_reminder_days.*' => ['integer', 'between:0,60'],
+            'expired_followup_days' => ['array', 'max:5'],
+            'expired_followup_days.*' => ['integer', 'between:1,180'],
+            'notify_class_changes' => ['boolean'],
+        ]);
+
+        $tenant->settings = array_replace($tenant->settings ?? [], [
+            'expiry_reminder_days' => array_values(array_unique(array_map('intval', $data['expiry_reminder_days'] ?? []))),
+            'expired_followup_days' => array_values(array_unique(array_map('intval', $data['expired_followup_days'] ?? []))),
+            'notify_class_changes' => (bool) ($data['notify_class_changes'] ?? false),
+        ]);
+        $tenant->save();
+
+        return back()->with('success', 'تم حفظ قواعد الإشعارات.');
     }
 }
