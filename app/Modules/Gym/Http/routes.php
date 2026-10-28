@@ -92,6 +92,7 @@ Route::post('/pt-sessions/{ptSession}/close', [PtController::class, 'close'])->m
 Route::get('/checkins', [CheckInController::class, 'index'])->middleware('can:checkin.view')->name('checkins.index');
 Route::post('/checkins', [CheckInController::class, 'store'])->middleware(['can:checkin.perform', 'throttle:120,1'])->name('checkins.store');
 Route::post('/devices/staff-credentials', [DeviceController::class, 'storeStaffCredential'])->middleware('can:devices.manage')->name('devices.staff-credentials');
+Route::delete('/devices/staff-credentials/{credential}', [DeviceController::class, 'destroyStaffCredential'])->middleware('can:devices.manage')->name('devices.staff-credentials.destroy');
 Route::resource('devices', DeviceController::class)->except(['show', 'create', 'edit'])->middleware('can:devices.manage');
 Route::post('/devices/{device}/token', [DeviceController::class, 'token'])->middleware('can:devices.manage')->name('devices.token');
 Route::get('/staff-attendance', [StaffAttendanceController::class, 'index'])->middleware('can:staff_attendance.view')->name('staff-attendance.index');

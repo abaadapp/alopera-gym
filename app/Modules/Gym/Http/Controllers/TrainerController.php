@@ -49,6 +49,8 @@ class TrainerController extends Controller
     public function update(Request $request, Trainer $trainer): RedirectResponse
     {
         $data = $this->validated($request, $trainer);
+        // Multipart forms drop empty arrays: a missing key means "no specialties".
+        $data['specialties'] = $data['specialties'] ?? [];
         $trainer->fill(collect($data)->except('photo')->all());
         if ($request->hasFile('photo')) {
             ImageStore::delete($trainer->photo_path);

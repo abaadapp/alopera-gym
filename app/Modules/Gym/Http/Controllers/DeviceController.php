@@ -84,6 +84,14 @@ class DeviceController extends Controller
         return back()->with('success', 'تم ربط بصمة/بطاقة الموظفة.');
     }
 
+    public function destroyStaffCredential(AccessCredential $credential): RedirectResponse
+    {
+        abort_unless($credential->holder_type === 'user', 404);
+        $credential->delete();
+
+        return back()->with('success', 'تم حذف وسيلة دخول الموظفة.');
+    }
+
     /** @return array<string, mixed> */
     private function validated(Request $request): array
     {

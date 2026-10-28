@@ -67,8 +67,13 @@ final class WhatsAppService
 
         $params = $template ? array_map(fn ($name) => (string) ($values[$name] ?? ''), $template->variables ?? []) : [];
 
+        if ($dedupeKey !== null && Message::where('dedupe_key', $dedupeKey)->exists()) {
+            return null; // already sent for this event
+        }
+
         try {
-            $message = Message::create([
+            // Savepoint: a duplicate must not abort the caller's transaction (PostgreSQL aborts the whole block on error).
+            $message = DB::transaction(fn () => Message::create([
                 'member_id' => $member->id,
                 'campaign_id' => $campaignId,
                 'direction' => 'outbound',
@@ -85,7 +90,7 @@ final class WhatsAppService
                 'related_id' => $related?->getKey(),
                 'scheduled_at' => $at,
                 'sent_by' => Auth::guard('web')->id(),
-            ]);
+            ]));
         } catch (UniqueConstraintViolationException) {
             return null; // already sent for this dedupe key
         }

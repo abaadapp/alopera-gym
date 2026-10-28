@@ -66,6 +66,12 @@ class SettingsController extends Controller
         }
 
         $rules = array_intersect_key($data['rules'] ?? [], $tenant::DEFAULT_SETTINGS);
+        // Multipart requests (with a logo) drop empty arrays: missing list means "none".
+        if ($request->has('rules')) {
+            foreach (['expiry_reminder_days', 'expired_followup_days'] as $list) {
+                $rules[$list] ??= [];
+            }
+        }
         unset($data['logo'], $data['rules']);
 
         $tenant->fill($data);

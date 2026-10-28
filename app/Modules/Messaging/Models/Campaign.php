@@ -24,6 +24,8 @@ class Campaign extends Model
 
     protected $guarded = ['id', 'tenant_id'];
 
+    protected $attributes = ['status' => 'draft', 'recipients_count' => 0, 'sent_count' => 0, 'delivered_count' => 0, 'read_count' => 0, 'failed_count' => 0];
+
     protected function casts(): array
     {
         return [

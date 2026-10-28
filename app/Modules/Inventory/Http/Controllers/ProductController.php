@@ -29,7 +29,7 @@ class ProductController extends Controller
                     'category' => $p->category?->name, 'low' => $p->isLowStock(),
                 ]),
             'categories' => ProductCategory::orderBy('name')->get(['id', 'name']),
-            'filters' => $request->only('q', 'low'),
+            'filters' => ['q' => $request->string('q')->toString(), 'low' => $request->boolean('low')],
         ]);
     }
 

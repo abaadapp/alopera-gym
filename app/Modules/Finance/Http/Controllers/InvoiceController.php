@@ -121,6 +121,9 @@ class InvoiceController extends Controller
         if (! $whatsapp->enabled()) {
             return back()->with('error', 'واتساب غير مفعّل. فعّليه من الإعدادات ← الربط.');
         }
+        if (! $invoice->isOpen()) {
+            return back()->with('error', 'لا يوجد مبلغ مستحق على هذه الفاتورة.');
+        }
         $member = $invoice->billable_type === 'member' ? Member::find($invoice->billable_id) : null;
         if (! $member) {
             return back()->with('error', 'الفاتورة غير مرتبطة بمشتركة.');

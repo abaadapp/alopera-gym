@@ -4,6 +4,7 @@ return [
     // Platform-wide defaults. Club-level rules live in tenants.settings (see Tenant::DEFAULT_SETTINGS).
     'platform_currency' => env('PLATFORM_CURRENCY', 'OMR'),
     'platform_admin_email' => env('PLATFORM_ADMIN_EMAIL'),
+    'platform_sales_email' => env('PLATFORM_SALES_EMAIL'),
 
     // Days a club keeps working after its platform subscription lapses.
     'subscription_grace_days' => 7,

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Core\Auth\SystemRoles;
+use App\Core\Tenancy\TenantScope;
 use App\Modules\Gym\Models\Trainer;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -50,14 +51,19 @@ class User extends Authenticatable
         return $this->belongsTo(Tenant::class);
     }
 
+    /**
+     * Loaded without the tenant scope: it is needed at login and on platform
+     * screens before a tenant is set. permissions() still refuses a role that
+     * belongs to another club.
+     */
     public function role(): BelongsTo
     {
-        return $this->belongsTo(Role::class);
+        return $this->belongsTo(Role::class)->withoutGlobalScope(TenantScope::class);
     }
 
     public function branch(): BelongsTo
     {
-        return $this->belongsTo(Branch::class);
+        return $this->belongsTo(Branch::class)->withoutGlobalScope(TenantScope::class);
     }
 
     public function trainer(): HasOne

@@ -78,6 +78,7 @@ class PlanController extends Controller
             'program_ids' => ['array'],
             'program_ids.*' => [TenantRule::exists('gym_programs')],
         ]);
+        $data['features'] ??= [];
         $data['signup_fee'] ??= 0;
         $data['max_freeze_days'] ??= 0;
         $data['max_freezes'] ??= 0;

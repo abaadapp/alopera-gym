@@ -87,7 +87,7 @@ class MemberController extends Controller
     public function show(Request $request, Member $member, OnlinePaymentService $online): Response
     {
         $user = $request->user();
-        $member->load(['branch:id,name']);
+        $member->load(['branch:id,name', 'currentMembership']);
 
         $memberships = Membership::where('member_id', $member->id)->latest('id')->get();
         $invoices = $user->can('invoices.view')

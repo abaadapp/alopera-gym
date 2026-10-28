@@ -67,7 +67,7 @@ class Payment extends Model
 
     public function scopeCompleted(Builder $query): Builder
     {
-        return $query->where('status', self::COMPLETED);
+        return $query->where($query->qualifyColumn('status'), self::COMPLETED);
     }
 
     /** Signed amount for cash-flow sums: refunds count negative. */

@@ -1,0 +1,163 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Role;
+use App\Models\User;
+use App\Modules\Gym\Models\Trainer;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Concerns\BuildsClubs;
+use Tests\TestCase;
+
+/**
+ * Role matrix (spec 1.10 / acceptance "test every role"): permissions are
+ * enforced on the server, not by hiding buttons. See docs/PERMISSIONS.md.
+ */
+class PermissionsTest extends TestCase
+{
+    use BuildsClubs, RefreshDatabase;
+
+    /** @return array<string, array{string, string, int}> */
+    public static function matrix(): array
+    {
+        return [
+            // role, route name, expected status
+            'owner sees settings' => ['owner', 'club.settings.edit', 200],
+            'owner sees backups' => ['owner', 'club.backups.index', 200],
+            'manager sees members' => ['manager', 'club.members.index', 200],
+            'manager cannot edit roles' => ['manager', 'club.roles.index', 403],
+            'manager cannot manage backups' => ['manager', 'club.backups.index', 403],
+            'reception has its screen' => ['reception', 'club.reception', 200],
+            'reception sees members' => ['reception', 'club.members.index', 200],
+            'reception uses POS' => ['reception', 'club.pos.index', 200],
+            'reception cannot see expenses' => ['reception', 'club.expenses.index', 403],
+            'reception cannot see reports' => ['reception', 'club.reports.index', 403],
+            'reception cannot see dues' => ['reception', 'club.dues', 403],
+            'reception cannot open settings' => ['reception', 'club.settings.edit', 403],
+            'reception cannot manage users' => ['reception', 'club.users.index', 403],
+            'reception cannot see audit log' => ['reception', 'club.audit.index', 403],
+            'finance sees invoices' => ['finance', 'club.invoices.index', 200],
+            'finance sees expenses' => ['finance', 'club.expenses.index', 200],
+            'finance sees reports' => ['finance', 'club.reports.index', 200],
+            'finance cannot manage devices' => ['finance', 'club.devices.index', 403],
+            'finance cannot edit timetable screen of programs' => ['finance', 'club.programs.index', 403],
+            'finance cannot open integrations' => ['finance', 'club.integrations.index', 403],
+            'trainer has her screen' => ['trainer', 'club.trainer', 200],
+            'trainer sees timetable' => ['trainer', 'club.schedule.index', 200],
+            'trainer cannot list members' => ['trainer', 'club.members.index', 403],
+            'trainer cannot see invoices' => ['trainer', 'club.invoices.index', 403],
+            'trainer cannot use POS' => ['trainer', 'club.pos.index', 403],
+            'trainer cannot see dashboard' => ['trainer', 'club.dashboard', 403],
+        ];
+    }
+
+    #[DataProvider('matrix')]
+    public function test_role_matrix(string $role, string $route, int $status): void
+    {
+        $club = $this->club();
+        $user = $role === 'owner' ? $this->owner($club) : $this->staff($club, $role);
+
+        $this->actingAs($user)->get(route($route))->assertStatus($status);
+    }
+
+    public function test_reception_cannot_post_to_money_endpoints_it_has_no_permission_for(): void
+    {
+        $club = $this->club();
+        $membership = $this->activeMembership($club, $this->member($club));
+        $reception = $this->staff($club, 'reception');
+        $payment = $this->asTenant($club, fn () => $membership->invoice()->first()->payments()->first());
+
+        $this->actingAs($reception)->post(route('club.payments.refund', $payment->id), ['amount' => 1, 'method' => 'cash', 'reason' => 'x'])->assertForbidden();
+        $this->actingAs($reception)->post(route('club.invoices.void', $membership->invoice_id), ['reason' => 'x'])->assertForbidden();
+        $this->actingAs($reception)->post(route('club.expenses.store'), ['description' => 'x', 'amount' => 5, 'expense_date' => today()->toDateString(), 'payment_method' => 'cash'])->assertForbidden();
+        $this->actingAs($reception)->post(route('club.memberships.cancel', $membership->id), ['reason' => 'x'])->assertForbidden();
+    }
+
+    public function test_manual_discount_requires_plans_permission(): void
+    {
+        $club = $this->club();
+        $member = $this->member($club);
+        $plan = $this->plan($club);
+
+        $this->actingAs($this->staff($club, 'reception'))
+            ->post(route('club.memberships.store', $member->id), ['membership_plan_id' => $plan->id, 'mode' => 'new', 'discount' => 10])
+            ->assertSessionHasErrors('discount');
+    }
+
+    public function test_custom_role_grants_exactly_its_permissions(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+
+        $this->actingAs($owner)->post(route('club.roles.store'), [
+            'name' => 'Viewer', 'permissions' => ['members.view', 'not.a.permission'],
+        ])->assertSessionHasErrors('permissions.1');
+
+        $this->actingAs($owner)->post(route('club.roles.store'), ['name' => 'Viewer', 'permissions' => ['members.view']])->assertSessionHasNoErrors();
+        $role = $this->asTenant($club, fn () => Role::where('name', 'Viewer')->firstOrFail());
+
+        $user = $this->staff($club, $role->key);
+        $this->actingAs($user)->get(route('club.members.index'))->assertOk();
+        $this->actingAs($user)->get(route('club.members.create'))->assertForbidden();
+        $this->actingAs($user)->get(route('club.invoices.index'))->assertForbidden();
+    }
+
+    public function test_owner_role_cannot_be_changed_and_last_owner_cannot_be_demoted(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $ownerRole = $owner->role;
+        $receptionRole = $this->asTenant($club, fn () => Role::where('key', 'reception')->first());
+
+        $this->actingAs($owner)->put(route('club.roles.update', $ownerRole->id), ['name' => 'x', 'permissions' => []]);
+        $this->assertSame(['*'], $ownerRole->fresh()->permissions);
+
+        $this->actingAs($owner)->put(route('club.users.update', $owner->id), ['name' => $owner->name, 'email' => $owner->email, 'role_id' => $receptionRole->id]);
+        $this->assertSame($ownerRole->id, $owner->fresh()->role_id);
+    }
+
+    public function test_trainer_marks_attendance_only_for_her_own_classes(): void
+    {
+        $club = $this->club();
+        $mine = $this->staff($club, 'trainer');
+        $other = $this->staff($club, 'trainer');
+        [$myTrainer, $otherTrainer] = $this->asTenant($club, fn () => [
+            Trainer::create(['name' => 'Mine', 'user_id' => $mine->id]),
+            Trainer::create(['name' => 'Other', 'user_id' => $other->id]),
+        ]);
+
+        $member = $this->member($club);
+        $this->activeMembership($club, $member);
+        $mySession = $this->classSession($club, null, ['trainer_id' => $myTrainer->id, 'starts_at' => now()->addMinutes(10)]);
+        $otherSession = $this->classSession($club, null, ['trainer_id' => $otherTrainer->id, 'starts_at' => now()->addMinutes(10)->addHours(2)]);
+
+        [$myBooking, $otherBooking] = $this->asTenant($club, fn () => [
+            app(\App\Modules\Gym\Services\BookingService::class)->book($member, $mySession),
+            app(\App\Modules\Gym\Services\BookingService::class)->book($member, $otherSession),
+        ]);
+
+        $this->actingAs($mine)->post(route('club.bookings.attendance', $myBooking->id), ['status' => 'attended'])->assertSessionHasNoErrors();
+        $this->actingAs($mine)->post(route('club.bookings.attendance', $otherBooking->id), ['status' => 'attended'])->assertForbidden();
+        $this->actingAs($mine)->get(route('club.trainer.session', $otherSession->id))->assertForbidden();
+    }
+
+    public function test_platform_and_club_areas_are_separate(): void
+    {
+        $club = $this->club();
+        $admin = User::factory()->platformAdmin()->create();
+
+        $this->actingAs($this->owner($club))->get(route('platform.dashboard'))->assertForbidden();
+        $this->actingAs($admin)->get(route('platform.dashboard'))->assertOk();
+        $this->actingAs($admin)->get(route('club.members.index'))->assertRedirect(route('platform.dashboard'));
+    }
+
+    public function test_deactivated_staff_lose_access_immediately(): void
+    {
+        $club = $this->club();
+        $reception = $this->staff($club, 'reception');
+        $reception->forceFill(['is_active' => false])->save();
+
+        $this->actingAs($reception)->get(route('club.reception'))->assertRedirect(route('login'));
+    }
+}

@@ -82,12 +82,12 @@ class Invoice extends Model
 
     public function scopeOpen(Builder $query): Builder
     {
-        return $query->whereIn('status', self::OPEN_STATUSES);
+        return $query->whereIn($query->qualifyColumn('status'), self::OPEN_STATUSES);
     }
 
     public function scopeOverdue(Builder $query): Builder
     {
-        return $query->open()->whereNotNull('due_date')->where('due_date', '<', today());
+        return $query->open()->whereNotNull($query->qualifyColumn('due_date'))->where($query->qualifyColumn('due_date'), '<', today());
     }
 
     public function balance(): string

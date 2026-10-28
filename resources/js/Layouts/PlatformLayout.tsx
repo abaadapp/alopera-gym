@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 import { Building2, FileText, LayoutDashboard, Layers, LogOut, ScrollText, Webhook } from 'lucide-react';
 import { Flash } from '@/Components/ui';
@@ -18,10 +18,15 @@ const items = [
 export default function PlatformLayout({ title, children }: { title: string; children: ReactNode }) {
     const { auth, appName } = useShared();
 
+    // Set on <html> (not a wrapper) so portalled modals get the platform colour too.
+    useEffect(() => {
+        document.documentElement.style.setProperty('--brand', '#3b2a5a');
+    }, []);
+
     return (
         <>
             <Head title={`${title} · المنصة`} />
-            <div className="min-h-screen bg-[#f6f5f8]" style={{ ['--brand' as string]: '#3b2a5a' }}>
+            <div className="min-h-screen bg-[#f6f5f8]">
                 <header className="bg-[#231a33] text-white">
                     <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-8">
                         <div className="flex items-center gap-3">

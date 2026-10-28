@@ -65,6 +65,11 @@ class CmsController extends Controller
             'og_image' => ['nullable', 'image', 'max:'.config('gym.max_image_kb')],
         ]);
 
+        // Multipart requests (with an image) drop empty arrays: missing means "cleared".
+        foreach (['working_hours', 'stats', 'social_links'] as $list) {
+            $data[$list] ??= [];
+        }
+
         $site = SiteSetting::firstOrCreate([]);
         foreach (self::IMAGES as $field) {
             if ($request->hasFile($field)) {

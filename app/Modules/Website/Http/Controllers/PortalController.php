@@ -136,7 +136,10 @@ class PortalController extends Controller
                 ->where('status', ClassSession::SCHEDULED)->where('starts_at', '>', $start)->where('starts_at', '<', $start->addDays($window))
                 ->orderBy('starts_at')->get()
                 ->map(fn ($s) => GymPresenter::session($s) + ['booking_id' => $myBookings[$s->id] ?? null]),
-            'membership' => ($m = $member->currentMembership()->first()) ? GymPresenter::membership($m) : null,
+            'membership' => ($m = Membership::where('member_id', $member->id)
+                ->whereIn('status', [Membership::ACTIVE, Membership::FROZEN, Membership::SCHEDULED])
+                ->orderByRaw("case status when 'active' then 0 when 'frozen' then 1 else 2 end")->orderBy('starts_on')->first())
+                ? GymPresenter::membership($m) : null,
             'cutoffHours' => (int) $tenant->setting('booking_cancel_cutoff_hours', 3),
             'history' => Booking::with('session.program:id,name')->where('member_id', $member->id)->latest('id')->limit(20)->get()
                 ->map(fn ($b) => ['id' => $b->id, 'status' => $b->status, 'program' => $b->session?->program?->name, 'starts_at' => $b->session?->starts_at->format('Y-m-d H:i')]),

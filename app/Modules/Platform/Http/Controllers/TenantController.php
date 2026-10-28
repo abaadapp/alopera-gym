@@ -108,8 +108,12 @@ class TenantController extends Controller
             'city' => ['nullable', 'string', 'max:80'],
         ]);
         $data['domain'] = isset($data['domain']) ? strtolower($data['domain']) : null;
+        $oldDomain = $tenant->domain;
         $tenant->update($data);
-        cache()->forget('custom-domain:'.$data['domain']);
+        foreach (array_filter([$oldDomain, $data['domain']]) as $domain) {
+            cache()->forget('custom-domain:'.$domain);
+            cache()->forget('custom-domain:www.'.$domain);
+        }
 
         return back()->with('success', 'تم حفظ بيانات النادي.');
     }
