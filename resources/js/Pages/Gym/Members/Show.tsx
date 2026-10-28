@@ -8,9 +8,10 @@ import {
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Modal, Select, Stat, Tabs, Textarea } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
-import { date, money, whatsappUrl } from '@/lib/format';
+import { date, money, whatsappUrl, dayCount } from '@/lib/format';
 import { bookingStatus, checkinReason, invoiceStatus, invoiceType, label, memberStatus, membershipKind, membershipStatus, messageStatus, paymentMethod, paymentStatus } from '@/lib/labels';
 import type { Option } from '@/types';
+import { SOURCES } from './Form';
 
 /* ───────────────────────── types ───────────────────────── */
 
@@ -205,7 +206,7 @@ export default function MemberShow(props: Props) {
                                 <Badge tone={statusTone}>{statusLabel}</Badge>
                                 {current && (
                                     <span className="text-sm text-ink/80">
-                                        {current.plan} · حتى {date(current.ends_on)} (<span className="num">{current.days_left}</span> يوم)
+                                        {current.plan} · حتى {date(current.ends_on)} (<span className="num">{dayCount(current.days_left)}</span>)
                                         {current.sessions_left !== null && <> · <span className="num">{current.sessions_left}</span> حصة متبقية</>}
                                     </span>
                                 )}
@@ -300,7 +301,7 @@ function OverviewTab({ member }: { member: MemberDetail }) {
                     <Info label="الجنسية">{member.nationality ?? '—'}</Info>
                     <Info label="الفرع">{member.branch ?? '—'}</Info>
                     <Info label="العنوان">{member.address ?? '—'}</Info>
-                    <Info label="مصدر التسجيل">{member.source ?? '—'}</Info>
+                    <Info label="مصدر التسجيل">{member.source ? (SOURCES[member.source] ?? member.source) : '—'}</Info>
                     <Info label="آخر دخول">{member.last_check_in_at ?? '—'}</Info>
                 </dl>
                 {member.goals && (
@@ -371,7 +372,7 @@ function MembershipsTab({ memberships, events, plans, member, onSell }: Props & 
                                     </div>
                                     <p className="mt-1 text-sm text-muted">
                                         {date(m.starts_on)} ← {date(m.ends_on)}
-                                        {['active', 'frozen'].includes(m.status) && <> · متبقٍ <span className="num">{m.days_left}</span> يوم</>}
+                                        {['active', 'frozen'].includes(m.status) && <> · متبقٍ <span className="num">{dayCount(m.days_left)}</span></>}
                                     </p>
                                 </div>
                                 <div className="text-end">
@@ -477,7 +478,7 @@ function FreezeModal({ membership, onClose }: { membership: MembershipItem | nul
         >
             <form onSubmit={submit} className="space-y-4">
                 <p className="text-sm text-muted">تُلغى الحجوزات القادمة وتُستعاد حصصها، ويُمدَّد تاريخ الانتهاء عند الاستئناف بعدد الأيام الفعلية.</p>
-                <Field label="عدد أيام التجميد" error={form.errors.days} hint={left !== null ? `المتاح: ${left} يوم` : 'اتركيه فارغًا ليبقى التجميد حتى الاستئناف اليدوي'}>
+                <Field label="عدد أيام التجميد" error={form.errors.days} hint={left !== null ? `المتاح: ${dayCount(left)}` : 'اتركيه فارغًا ليبقى التجميد حتى الاستئناف اليدوي'}>
                     <Input type="number" min={1} max={left ?? 365} value={form.data.days} onChange={(e) => form.setData('days', e.target.value)} />
                 </Field>
                 <Field label="السبب" error={form.errors.reason}>

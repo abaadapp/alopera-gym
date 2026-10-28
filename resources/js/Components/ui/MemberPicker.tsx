@@ -19,10 +19,12 @@ export default function MemberPicker({ onSelect, autoFocus, placeholder = 'اب�
     const [q, setQ] = useState('');
     const [hits, setHits] = useState<MemberHit[]>([]);
     const [loading, setLoading] = useState(false);
+    const [searched, setSearched] = useState(''); // the query the current hits answer
 
     useEffect(() => {
         if (q.trim().length < 2) {
             setHits([]);
+            setSearched('');
             return;
         }
         const controller = new AbortController();
@@ -30,7 +32,10 @@ export default function MemberPicker({ onSelect, autoFocus, placeholder = 'اب�
             setLoading(true);
             try {
                 const res = await fetch(route('club.members.search', { q }), { headers: { Accept: 'application/json' }, signal: controller.signal });
-                if (res.ok) setHits(await res.json());
+                if (res.ok) {
+                    setHits(await res.json());
+                    setSearched(q);
+                }
             } catch {
                 /* aborted */
             } finally {
@@ -47,9 +52,10 @@ export default function MemberPicker({ onSelect, autoFocus, placeholder = 'اب�
         <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted" />
             <input className="input ps-9" value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} />
-            {(hits.length > 0 || (loading && q.length >= 2)) && (
+            {(hits.length > 0 || (loading && q.length >= 2) || (!loading && searched !== '' && searched === q)) && (
                 <div className="absolute inset-x-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-xl border border-line bg-white p-1 shadow-xl">
                     {loading && hits.length === 0 && <p className="px-3 py-2 text-sm text-muted">جارٍ البحث…</p>}
+                    {!loading && hits.length === 0 && searched === q && <p className="px-3 py-2 text-sm text-muted">لا توجد نتائج لـ «{q}».</p>}
                     {hits.map((m) => {
                         const [statusLabel, tone] = m.membership ? label(membershipStatus, m.membership.status) : ['بدون عضوية', 'gray' as const];
                         return (

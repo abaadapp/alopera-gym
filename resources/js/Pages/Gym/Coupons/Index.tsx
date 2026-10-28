@@ -93,7 +93,8 @@ function CouponModal({ open, coupon, plans, onClose }: { open: boolean; coupon: 
         value: coupon?.value ?? '',
         min_amount: coupon?.min_amount ?? '0',
         max_uses: coupon?.max_uses ? String(coupon.max_uses) : '',
-        per_member_limit: coupon?.per_member_limit ? String(coupon.per_member_limit) : '1',
+        // New codes default to once per member; an existing unlimited code must stay unlimited when edited.
+        per_member_limit: coupon ? (coupon.per_member_limit ? String(coupon.per_member_limit) : '') : '1',
         plan_ids: coupon?.plan_ids ?? ([] as number[]),
         valid_from: coupon?.valid_from ?? '',
         valid_until: coupon?.valid_until ?? '',

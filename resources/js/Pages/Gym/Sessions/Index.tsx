@@ -43,7 +43,7 @@ function dayLabel(day: string): { weekday: string; date: string } {
 
 const today = new Date().toLocaleDateString('en-CA');
 
-export default function SessionsIndex({ week, sessions, programs, trainers, filters }: { week: string; sessions: SessionItem[]; programs: ProgramOption[]; trainers: Option[]; filters: { trainer_id?: string | number; program_id?: string | number } }) {
+export default function SessionsIndex({ week, sessions, programs, trainers, filters, own_trainer_id }: { week: string; sessions: SessionItem[]; programs: ProgramOption[]; trainers: Option[]; filters: { trainer_id?: string | number; program_id?: string | number }; own_trainer_id: number | null }) {
     const can = useCan();
     const manage = can('classes.manage');
     const [open, setOpen] = useState(false);
@@ -124,11 +124,14 @@ export default function SessionsIndex({ week, sessions, programs, trainers, filt
                                 {items.map((s) => {
                                     const cancelled = s.status === 'cancelled';
                                     const pct = s.capacity ? Math.min(100, (s.booked / s.capacity) * 100) : 0;
+                                    // Trainers open only their own rosters; other classes are shown for reference.
+                                    const linkable = own_trainer_id === null || s.trainer_id === own_trainer_id;
+                                    const Tile = linkable ? Link : 'div';
                                     return (
-                                        <Link
+                                        <Tile
                                             key={s.id}
-                                            href={route('club.sessions.show', s.id)}
-                                            className={cn('block rounded-xl border border-transparent p-2.5 transition hover:shadow-md', cancelled && 'opacity-50')}
+                                            href={linkable ? route('club.sessions.show', s.id) : undefined}
+                                            className={cn('block rounded-xl border border-transparent p-2.5 transition', linkable && 'hover:shadow-md', cancelled && 'opacity-50')}
                                             style={{ background: `${s.color ?? '#db2777'}14`, borderInlineStartColor: s.color ?? undefined, borderInlineStartWidth: 3 }}
                                         >
                                             <div className="flex items-center justify-between gap-1">
@@ -148,7 +151,7 @@ export default function SessionsIndex({ week, sessions, programs, trainers, filt
                                                     </div>
                                                 </div>
                                             )}
-                                        </Link>
+                                        </Tile>
                                     );
                                 })}
                             </div>

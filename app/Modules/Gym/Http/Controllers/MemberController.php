@@ -41,7 +41,7 @@ class MemberController extends Controller
     {
         $status = $request->string('membership')->toString();
 
-        $members = Member::with('currentMembership')
+        $members = Member::with(['currentMembership', 'upcomingMembership'])
             ->search($request->string('q')->toString())
             ->when($status === 'active', fn ($q) => $q->whereHas('memberships', fn ($m) => $m->where('status', Membership::ACTIVE)))
             ->when($status === 'frozen', fn ($q) => $q->whereHas('memberships', fn ($m) => $m->where('status', Membership::FROZEN)))
@@ -59,7 +59,7 @@ class MemberController extends Controller
     /** Quick lookup for reception, POS and pickers. */
     public function search(Request $request): JsonResponse
     {
-        $results = Member::with('currentMembership')->search($request->string('q')->toString())->limit(10)->get()
+        $results = Member::with(['currentMembership', 'upcomingMembership'])->search($request->string('q')->toString())->limit(10)->get()
             ->map(fn (Member $m) => GymPresenter::memberRow($m));
 
         return response()->json($results);
@@ -195,8 +195,8 @@ class MemberController extends Controller
         $rows = function () {
             foreach (Member::with('currentMembership')->orderBy('id')->lazy(500) as $m) {
                 $ms = $m->currentMembership;
-                yield [$m->member_no, $m->full_name, $m->phone, $m->email, $m->status, $m->joined_on?->toDateString(),
-                    $ms?->plan_snapshot['name'] ?? '', $ms?->status ?? '', $ms?->ends_on?->toDateString() ?? '',
+                yield [$m->member_no, $m->full_name, $m->phone, $m->email, Member::STATUS_LABELS[$m->status] ?? $m->status, $m->joined_on?->toDateString(),
+                    $ms?->plan_snapshot['name'] ?? '', $ms ? (Membership::STATUS_LABELS[$ms->status] ?? $ms->status) : '', $ms?->ends_on?->toDateString() ?? '',
                     $m->marketing_opt_in ? 'نعم' : 'لا', $m->last_check_in_at?->format('Y-m-d H:i')];
             }
         };

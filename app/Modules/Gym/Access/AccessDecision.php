@@ -9,7 +9,7 @@ final class AccessDecision
 {
     public const REASONS = [
         'ok' => 'مسموح',
-        'unknown_credential' => 'بطاقة/بصمة غير معروفة',
+        'unknown_credential' => 'رمز/بطاقة/بصمة غير معروفة',
         'member_blocked' => 'حساب المشتركة موقوف',
         'member_inactive' => 'حساب المشتركة غير نشط',
         'no_membership' => 'لا توجد عضوية',

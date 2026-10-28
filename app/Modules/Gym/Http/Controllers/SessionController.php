@@ -37,11 +37,15 @@ class SessionController extends Controller
             'programs' => Program::where('is_active', true)->orderBy('name')->get(['id', 'name', 'color', 'duration_minutes', 'default_capacity']),
             'trainers' => Trainer::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'filters' => $request->only('trainer_id', 'program_id'),
+            'own_trainer_id' => $this->rosterLimitedTo($request),
         ]);
     }
 
-    public function show(ClassSession $session): Response
+    public function show(Request $request, ClassSession $session): Response
     {
+        $limit = $this->rosterLimitedTo($request);
+        abort_if($limit !== null && $session->trainer_id !== $limit, 403);
+
         $session->load(['program:id,name,color', 'trainer:id,name']);
 
         return Inertia::render('Gym/Sessions/Show', [
@@ -54,6 +58,17 @@ class SessionController extends Controller
                 ]),
             'trainers' => Trainer::where('is_active', true)->orderBy('name')->get(['id', 'name']),
         ]);
+    }
+
+    /**
+     * A trainer (without classes.manage) sees the whole timetable but only her own rosters,
+     * the same rule as the trainer panel and attendance marking. Null means no limit.
+     */
+    private function rosterLimitedTo(Request $request): ?int
+    {
+        $user = $request->user();
+
+        return $user->isTrainer() && ! $user->can('classes.manage') ? ($user->trainer?->id ?? 0) : null;
     }
 
     /** One-off session outside the weekly timetable (workshop, extra class). */

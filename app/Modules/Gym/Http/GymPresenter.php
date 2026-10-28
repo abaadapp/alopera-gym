@@ -15,6 +15,7 @@ final class GymPresenter
     public static function memberRow(Member $m): array
     {
         $current = $m->relationLoaded('currentMembership') ? $m->currentMembership : null;
+        $current ??= $m->relationLoaded('upcomingMembership') ? $m->upcomingMembership : null;
 
         return [
             'id' => $m->id,

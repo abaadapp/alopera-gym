@@ -35,6 +35,9 @@ class Member extends Authenticatable implements Billable
 
     public const BLOCKED = 'blocked';
 
+    /** Arabic labels for exports (the UI has its own copy in resources/js/lib/labels.ts). */
+    public const STATUS_LABELS = [self::ACTIVE => 'نشطة', self::INACTIVE => 'غير نشطة', self::BLOCKED => 'موقوفة'];
+
     protected $table = 'gym_members';
 
     protected $guarded = ['id', 'tenant_id', 'qr_token', 'password'];
@@ -85,6 +88,14 @@ class Member extends Authenticatable implements Billable
         return $this->hasOne(Membership::class)
             ->whereIn('status', [Membership::ACTIVE, Membership::FROZEN])
             ->latestOfMany('ends_on');
+    }
+
+    /** A sold membership not running yet (awaiting payment or a future start) — for display in lists. */
+    public function upcomingMembership(): HasOne
+    {
+        return $this->hasOne(Membership::class)
+            ->whereIn('status', [Membership::PENDING, Membership::SCHEDULED])
+            ->latestOfMany();
     }
 
     public function bookings(): HasMany

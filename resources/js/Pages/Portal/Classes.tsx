@@ -61,7 +61,7 @@ export default function Classes({ site, seo, sessions, membership, cutoffHours, 
                 </div>
                 <p className="flex items-start gap-2 rounded-2xl bg-brand-50/70 p-4 text-sm text-brand-900">
                     <Info className="mt-0.5 size-4 shrink-0" />
-                    يمكنك إلغاء الحجز قبل الحصة بـ <span className="num font-semibold">{cutoffHours}</span> ساعات على الأقل لاستعادة الحصة.
+                    <span>يمكنك إلغاء الحجز قبل الحصة بـ <span className="num font-semibold">{cutoffHours}</span> ساعات على الأقل لاستعادة الحصة.</span>
                 </p>
             </div>
 

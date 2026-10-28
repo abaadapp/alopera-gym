@@ -46,6 +46,14 @@ class Membership extends Model
 
     public const KIND_UPGRADE = 'upgrade';
 
+    /** Arabic labels for exports (the UI has its own copy in resources/js/lib/labels.ts). */
+    public const STATUS_LABELS = [
+        self::PENDING => 'بانتظار الدفع', self::SCHEDULED => 'مجدولة', self::ACTIVE => 'نشطة',
+        self::FROZEN => 'مجمّدة', self::EXPIRED => 'منتهية', self::CANCELLED => 'ملغاة',
+    ];
+
+    public const KIND_LABELS = [self::KIND_NEW => 'جديد', self::KIND_RENEWAL => 'تجديد', self::KIND_UPGRADE => 'تغيير باقة'];
+
     protected $table = 'gym_memberships';
 
     protected $guarded = ['id', 'tenant_id'];

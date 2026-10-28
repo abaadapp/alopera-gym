@@ -32,6 +32,20 @@ class ExportsAuditSecurityTest extends TestCase
         $this->assertSame('-5', TableExporter::cell('-5'));
     }
 
+    public function test_memberships_list_exports_with_arabic_status_labels(): void
+    {
+        $club = $this->club();
+        $this->activeMembership($club, $this->member($club));
+        $owner = $this->owner($club);
+
+        $this->actingAs($owner)->get(route('club.memberships.index', ['filter' => 'active', 'format' => 'xlsx']))
+            ->assertOk()->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+        $csv = $this->actingAs($owner)->get(route('club.memberships.index', ['filter' => 'active', 'format' => 'csv']))->assertOk()->streamedContent();
+        $this->assertStringContainsString('نشطة', $csv);
+        $this->assertStringNotContainsString(',active,', $csv);
+    }
+
     public function test_reports_export_as_xlsx_and_financial_exports_need_permission(): void
     {
         $club = $this->club();

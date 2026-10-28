@@ -73,6 +73,23 @@ class PermissionsTest extends TestCase
             ->assertRedirect(route('portal.dashboard', ['club' => $club->slug]));
     }
 
+    public function test_trainer_can_open_only_her_own_class_rosters(): void
+    {
+        $club = $this->club();
+        $mine = $this->staff($club, 'trainer');
+        $other = $this->staff($club, 'trainer');
+        [$myTrainer, $otherTrainer] = $this->asTenant($club, fn () => [
+            Trainer::create(['name' => 'Mine', 'user_id' => $mine->id]),
+            Trainer::create(['name' => 'Other', 'user_id' => $other->id]),
+        ]);
+        $mySession = $this->classSession($club, null, ['trainer_id' => $myTrainer->id]);
+        $otherSession = $this->classSession($club, null, ['trainer_id' => $otherTrainer->id, 'starts_at' => now()->addDays(2)]);
+
+        $this->actingAs($mine)->get(route('club.sessions.show', $mySession))->assertOk();
+        $this->actingAs($mine)->get(route('club.sessions.show', $otherSession))->assertForbidden();
+        $this->actingAs($this->owner($club))->get(route('club.sessions.show', $otherSession))->assertOk();
+    }
+
     public function test_reception_cannot_post_to_money_endpoints_it_has_no_permission_for(): void
     {
         $club = $this->club();

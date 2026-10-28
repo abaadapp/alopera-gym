@@ -21,12 +21,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MembershipController extends Controller
 {
     public function __construct(private readonly MembershipService $service) {}
 
-    public function index(Request $request): Response
+    public function index(Request $request): Response|StreamedResponse
     {
         $filter = $request->string('filter')->toString() ?: 'active';
 
@@ -39,7 +40,8 @@ class MembershipController extends Controller
         if ($request->string('format')->toString() && $request->user()->can('members.export')) {
             $rows = function () use ($query) {
                 foreach ($query->lazy(500) as $m) {
-                    yield [$m->member?->member_no, $m->member?->full_name, $m->member?->phone, $m->plan_snapshot['name'] ?? '', $m->kind, $m->status,
+                    yield [$m->member?->member_no, $m->member?->full_name, $m->member?->phone, $m->plan_snapshot['name'] ?? '',
+                        Membership::KIND_LABELS[$m->kind] ?? $m->kind, Membership::STATUS_LABELS[$m->status] ?? $m->status,
                         $m->starts_on->toDateString(), $m->ends_on->toDateString(), $m->total, $m->sessions_total, $m->sessions_used];
                 }
             };

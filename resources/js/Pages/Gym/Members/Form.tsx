@@ -29,7 +29,7 @@ interface MemberData {
     photo_url: string | null;
 }
 
-const SOURCES: Record<string, string> = {
+export const SOURCES: Record<string, string> = {
     walk_in: 'زيارة مباشرة',
     website: 'الموقع الإلكتروني',
     instagram: 'إنستغرام',
@@ -70,7 +70,13 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
     const submit = (e: FormEvent) => {
         e.preventDefault();
         const url = editing ? route('club.members.update', member.id) : route('club.members.store');
-        form.post(url, { forceFormData: true, preserveScroll: true });
+        form.post(url, {
+            forceFormData: true,
+            // Keep the position only when the form comes back with errors (not on the redirect to the profile).
+            preserveScroll: 'errors',
+            // On phones the submit button sits far below the fields: bring the first error into view.
+            onError: () => requestAnimationFrame(() => document.querySelector('form .text-red-600')?.parentElement?.scrollIntoView({ behavior: 'smooth', block: 'center' })),
+        });
     };
 
     const err = form.errors as Record<string, string | undefined>;

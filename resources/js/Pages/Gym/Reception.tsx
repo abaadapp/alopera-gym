@@ -6,7 +6,7 @@ import {
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, MemberPicker, Modal, PageHeader, Select, type MemberHit } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
-import { date, money, number, time, whatsappUrl } from '@/lib/format';
+import { date, money, number, time, whatsappUrl, dayCount } from '@/lib/format';
 import { checkinReason, label, membershipStatus } from '@/lib/labels';
 
 interface SessionItem {
@@ -165,7 +165,7 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                                 )}
                                 {decision?.membership && (
                                     <p className="text-xs text-muted">
-                                        {decision.membership.plan} · حتى {date(decision.membership.ends_on)} (<span className="num">{decision.membership.days_left}</span> يوم)
+                                        {decision.membership.plan} · حتى {date(decision.membership.ends_on)} (<span className="num">{dayCount(decision.membership.days_left)}</span>)
                                         {decision.membership.sessions_left !== null && <> · <span className="num">{decision.membership.sessions_left}</span> حصة</>}
                                     </p>
                                 )}
@@ -185,7 +185,7 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                                     <p className="text-sm text-muted"><span className="num">{selected.member_no}</span> · <span className="num">{selected.phone_display}</span></p>
                                     <div className="mt-1.5 flex flex-wrap items-center gap-2">
                                         <Badge tone={msTone}>{msLabel}</Badge>
-                                        {ms && <span className="text-sm">{ms.plan} · حتى {date(ms.ends_on)} (<span className="num">{ms.days_left}</span> يوم)</span>}
+                                        {ms && <span className="text-sm">{ms.plan} · حتى {date(ms.ends_on)} (<span className="num">{dayCount(ms.days_left)}</span>)</span>}
                                         {selected.status === 'blocked' && <Badge tone="red">الحساب موقوف</Badge>}
                                     </div>
                                 </div>

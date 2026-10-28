@@ -47,3 +47,12 @@ export function phone(value: string | null | undefined): string {
 export function whatsappUrl(value: string | null | undefined, text = ''): string {
     return `https://wa.me/${value ?? ''}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
 }
+
+/** Day counts with Arabic number agreement: «يوم واحد»، «يومين»، «3 أيام»، «12 يومًا». */
+export function dayCount(value: number | null | undefined): string {
+    const n = Number(value ?? 0);
+    if (n === 1) return 'يوم واحد';
+    if (n === 2) return 'يومين';
+    if (n >= 3 && n <= 10) return `${n} أيام`;
+    return n === 0 ? '0 يوم' : `${n} يومًا`;
+}

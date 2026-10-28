@@ -4,7 +4,7 @@ import { Check, Layers, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, Checkbox, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
-import { money } from '@/lib/format';
+import { money, dayCount } from '@/lib/format';
 import { durationUnit } from '@/lib/labels';
 import type { Option } from '@/types';
 
@@ -68,7 +68,7 @@ export default function PlansIndex({ plans, programs, types }: { plans: Plan[]; 
                             <div className="mt-3 flex flex-wrap gap-1.5">
                                 <Badge tone="brand">{p.type_label}</Badge>
                                 <Badge tone="gray">{p.sessions_limit ? `${p.sessions_limit} حصة` : 'حصص غير محدودة'}</Badge>
-                                {p.freeze_allowed ? <Badge tone="violet">تجميد {p.max_freeze_days > 0 ? `حتى ${p.max_freeze_days} يوم` : 'مفتوح'}</Badge> : <Badge tone="gray">بدون تجميد</Badge>}
+                                {p.freeze_allowed ? <Badge tone="violet">تجميد {p.max_freeze_days > 0 ? `حتى ${dayCount(p.max_freeze_days)}` : 'مفتوح'}</Badge> : <Badge tone="gray">بدون تجميد</Badge>}
                                 {!p.is_public && <Badge tone="amber">غير ظاهرة بالموقع</Badge>}
                                 {!p.is_active && <Badge tone="red">موقوفة</Badge>}
                             </div>

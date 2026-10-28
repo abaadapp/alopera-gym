@@ -3,7 +3,7 @@ import { Download, Ticket } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, EmptyState, PageHeader, Pagination, Select, Tabs } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
-import { date, money } from '@/lib/format';
+import { date, money, dayCount } from '@/lib/format';
 import { label, membershipKind, membershipStatus } from '@/lib/labels';
 import type { Option, Paginated } from '@/types';
 
@@ -96,7 +96,7 @@ export default function MembershipsIndex({ memberships, counts, plans, filters }
                                             <td className="text-xs whitespace-nowrap">{date(m.starts_on)} ← {date(m.ends_on)}</td>
                                             <td>
                                                 {['active', 'frozen'].includes(m.status) ? (
-                                                    <Badge tone={m.days_left <= 3 ? 'red' : m.days_left <= 7 ? 'amber' : 'gray'}><span className="num">{m.days_left}</span> يوم</Badge>
+                                                    <Badge tone={m.days_left <= 3 ? 'red' : m.days_left <= 7 ? 'amber' : 'gray'}><span className="num">{dayCount(m.days_left)}</span></Badge>
                                                 ) : '—'}
                                             </td>
                                             <td className="num text-xs">{m.sessions_total !== null ? `${m.sessions_used}/${m.sessions_total}` : 'غير محدود'}</td>

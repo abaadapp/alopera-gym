@@ -40,9 +40,15 @@ class CouponController extends Controller
 
     public function destroy(Coupon $coupon): RedirectResponse
     {
-        $coupon->used_count > 0 ? $coupon->update(['is_active' => false]) : $coupon->delete();
+        if ($coupon->used_count > 0) {
+            $coupon->update(['is_active' => false]);
 
-        return back()->with('success', 'تم.');
+            return back()->with('success', 'الكود مستخدم سابقًا، فتم إيقافه بدل حذفه.');
+        }
+
+        $coupon->delete();
+
+        return back()->with('success', 'تم حذف كود الخصم.');
     }
 
     /** @return array<string, mixed> */
@@ -51,7 +57,7 @@ class CouponController extends Controller
         $request->merge(['code' => mb_strtoupper(trim((string) $request->input('code')))]);
 
         $data = $request->validate([
-            'code' => ['required', 'alpha_dash', 'max:40', TenantRule::unique('gym_coupons', 'code')->ignore($coupon?->id)],
+            'code' => ['required', 'alpha_dash:ascii', 'max:40', TenantRule::unique('gym_coupons', 'code')->ignore($coupon?->id)],
             'description' => ['nullable', 'string', 'max:255'],
             'type' => ['required', 'in:percent,fixed'],
             'value' => ['required', 'numeric', 'min:0.001', $request->input('type') === 'percent' ? 'max:100' : 'max:99999'],

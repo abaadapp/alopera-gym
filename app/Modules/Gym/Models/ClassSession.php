@@ -19,6 +19,8 @@ class ClassSession extends Model
 
     public const COMPLETED = 'completed';
 
+    public const STATUS_LABELS = [self::SCHEDULED => 'مجدولة', self::CANCELLED => 'ملغاة', self::COMPLETED => 'منتهية'];
+
     protected $table = 'gym_class_sessions';
 
     protected $guarded = ['id', 'tenant_id', 'booked_count'];

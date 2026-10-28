@@ -7,7 +7,7 @@ import type { SiteInfo } from '@/Layouts/SiteLayout';
 import { Badge } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
-import { date, dayName, money, number, time } from '@/lib/format';
+import { date, dayName, money, number, time, dayCount } from '@/lib/format';
 import { label, membershipStatus } from '@/lib/labels';
 import type { SessionData } from '../Site/Schedule';
 
@@ -124,7 +124,7 @@ export default function Dashboard({ site, seo, profile, current, next, upcoming,
 
                     {expiringSoon && (
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                            <p className="flex items-center gap-2 text-sm text-amber-800"><CalendarClock className="size-5" /> عضويتك تنتهي بعد <span className="num font-semibold">{current?.days_left}</span> يوم. جددي الآن دون أن تفقدي أي يوم.</p>
+                            <p className="flex items-center gap-2 text-sm text-amber-800"><CalendarClock className="size-5 shrink-0" /><span>عضويتك تنتهي بعد <span className="num font-semibold">{dayCount(current?.days_left)}</span>. جددي الآن دون أن تفقدي أي يوم.</span></p>
                             <Link href={route('portal.renew')} className="rounded-full bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600">جددي الآن</Link>
                         </div>
                     )}

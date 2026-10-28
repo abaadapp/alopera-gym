@@ -3,6 +3,7 @@
 namespace App\Modules\Gym\Http\Controllers;
 
 use App\Core\Support\ImageStore;
+use App\Core\Support\Phone;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -76,7 +77,7 @@ class TrainerController extends Controller
             'slots.*.weekday' => ['required', 'integer', 'between:0,6'],
             'slots.*.starts_at' => ['required', 'date_format:H:i'],
             'slots.*.ends_at' => ['required', 'date_format:H:i', 'after:slots.*.starts_at'],
-        ]);
+        ], ['slots.*.ends_at.after' => 'وقت النهاية يجب أن يكون بعد وقت البداية.']);
 
         DB::transaction(function () use ($trainer, $data) {
             $trainer->availabilities()->delete();
@@ -93,7 +94,7 @@ class TrainerController extends Controller
     {
         $tenantId = app(TenantContext::class)->require()->id;
 
-        return $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'phone' => ['nullable', 'string', 'max:32'],
             'email' => ['nullable', 'email'],
@@ -108,5 +109,12 @@ class TrainerController extends Controller
             'user_id' => ['nullable', Rule::exists('users', 'id')->where('tenant_id', $tenantId), Rule::unique('gym_trainers', 'user_id')->ignore($trainer?->id)],
             'photo' => ['nullable', 'image', 'max:'.config('gym.max_image_kb')],
         ]);
+
+        // Same format as members (968XXXXXXXX), so the number dials and links to WhatsApp correctly.
+        if (filled($data['phone'] ?? null)) {
+            $data['phone'] = Phone::normalize($data['phone']);
+        }
+
+        return $data;
     }
 }

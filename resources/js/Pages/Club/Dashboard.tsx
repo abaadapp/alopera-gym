@@ -3,7 +3,7 @@ import { AlertTriangle, CalendarClock, CreditCard, LogIn, Snowflake, UserPlus, U
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, BarTrend, Card, CardHeader, EmptyState, PageHeader, StatCard } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
-import { date, money, number, time } from '@/lib/format';
+import { date, money, number, time, dayCount } from '@/lib/format';
 
 interface Props {
     kpis: Record<string, number | string | null>;
@@ -96,7 +96,7 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
                                         <td><Link href={route('club.members.show', m.member_id)} className="font-medium hover:text-brand">{m.member}</Link></td>
                                         <td>{m.plan}</td>
                                         <td>{date(m.ends_on)}</td>
-                                        <td><Badge tone={m.days_left <= 2 ? 'red' : 'amber'}><span className="num">{m.days_left}</span> يوم</Badge></td>
+                                        <td><Badge tone={m.days_left <= 2 ? 'red' : 'amber'}><span className="num">{dayCount(m.days_left)}</span></Badge></td>
                                     </tr>
                                 ))}
                             </tbody>
