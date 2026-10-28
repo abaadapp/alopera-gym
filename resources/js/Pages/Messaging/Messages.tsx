@@ -12,6 +12,7 @@ interface Row {
     type: string;
     to_phone: string | null;
     template_key: string | null;
+    template_label: string | null;
     body: string | null;
     status: string;
     error_code: string | null;
@@ -115,7 +116,7 @@ export default function Messages({ messages, stats, filters }: Props) {
                                                 )}
                                             </td>
                                             <td className="text-xs">
-                                                {m.direction === 'inbound' ? 'واردة' : m.type === 'template' ? `قالب: ${m.template_key}` : 'رد نصي'}
+                                                {m.direction === 'inbound' ? 'واردة' : m.type === 'template' ? `قالب: ${m.template_label ?? m.template_key}` : 'رد نصي'}
                                                 {m.campaign_id && <Badge tone="violet" className="ms-1">حملة</Badge>}
                                             </td>
                                             <td className="max-w-xs">

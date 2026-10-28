@@ -3,7 +3,7 @@ import { router } from '@inertiajs/react';
 import { CalendarRange, Download } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { BarTrend, Button, Card, CardHeader, Delta, EmptyState, HBars, Input, PageHeader } from '@/Components/ui';
-import { useCurrency } from '@/hooks/useShared';
+import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, money, number } from '@/lib/format';
 import { invoiceType, paymentMethod } from '@/lib/labels';
@@ -44,6 +44,7 @@ const lowerIsBetter = new Set(['cancellations', 'freezes', 'expirations', 'expen
 
 export default function ReportsIndex({ report, filters, canFinancial, canExport }: Props) {
     const currency = useCurrency();
+    const can = useCan();
     const [from, setFrom] = useState(filters.from);
     const [to, setTo] = useState(filters.to);
     const c = report.comparison;
@@ -162,7 +163,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
                 </Section>
             )}
 
-            <Section title="العضويات والمشتركات" exports={canExport ? [['memberships', 'العضويات'], ['members', 'المشتركات']] : []} exportLink={exportLink}>
+            <Section title="العضويات والمشتركات" exports={canExport ? [['memberships', 'العضويات'], ...(can('members.export') ? [['members', 'المشتركات'] as [string, string]] : [])] : []} exportLink={exportLink}>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <Kpi label="اشتراكات جديدة" metric={m('new_memberships')} format={fmtNum} metricKey="new_memberships" />
                     <Kpi label="تجديدات" metric={m('renewals')} format={fmtNum} metricKey="renewals" />

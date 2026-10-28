@@ -111,6 +111,7 @@ class WhatsAppTest extends TestCase
             $this->assertNotNull($fresh->marketing_opt_out_at);
             $this->assertSame(2, Message::where('direction', 'outbound')->where('type', 'text')->count(), 'opt-out confirmation + auto reply');
             $this->assertSame(1, AutoReply::first()->hits);
+            $this->assertSame(2, Conversation::first()->unread_count, 'automatic replies leave the chat unread for staff');
         });
     }
 

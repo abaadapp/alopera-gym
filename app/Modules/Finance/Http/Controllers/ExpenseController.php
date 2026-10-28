@@ -9,6 +9,7 @@ use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\ExpenseCategory;
+use App\Modules\Finance\Models\Payment;
 use App\Modules\Inventory\Models\Supplier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -88,7 +89,7 @@ class ExpenseController extends Controller
         $query = $this->filtered($request)->with('category:id,name')->orderBy('expense_date');
         $rows = function () use ($query) {
             foreach ($query->lazy(500) as $e) {
-                yield [$e->number, $e->expense_date->toDateString(), $e->category?->name, $e->description, $e->amount, $e->payment_method, $e->payee, $e->reference];
+                yield [$e->number, $e->expense_date->toDateString(), $e->category?->name, $e->description, $e->amount, Payment::METHOD_LABELS[$e->payment_method] ?? $e->payment_method, $e->payee, $e->reference];
             }
         };
 

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { toast } from 'sonner';
 import { ArrowRight, Banknote, Check, Copy, CreditCard, ExternalLink, FileDown, MessageCircle, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
@@ -98,7 +98,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
     const [statusLabel, statusTone] = label(invoiceStatus, invoice.status);
     const isOpen = invoice.status === 'issued' || invoice.status === 'partially_paid';
     const canVoid = can('invoices.void') && invoice.status !== 'void' && Number(invoice.paid_total) === 0
-        && !invoice.payments.some((p) => p.status === 'pending' || p.status === 'completed');
+        && !invoice.payments.some((p) => p.status === 'pending');
 
     const copy = async (text: string) => {
         try {
@@ -132,7 +132,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
             )}
 
             <div className="grid gap-6 lg:grid-cols-3">
-                <div className="space-y-6 lg:col-span-2">
+                <div className="min-w-0 space-y-6 lg:col-span-2">
                     <Card padded={false}>
                         <div className="flex flex-wrap items-start justify-between gap-4 p-5">
                             <div>
@@ -303,7 +303,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
 
                     {canVoid && (
                         <Card>
-                            <CardHeader title="إلغاء الفاتورة" subtitle="متاح فقط للفواتير بدون دفعات. العضوية المرتبطة بانتظار الدفع تُلغى أيضًا." />
+                            <CardHeader title="إلغاء الفاتورة" subtitle="متاح عندما لا يبقى على الفاتورة مبلغ مدفوع (بعد رد أي دفعة). العضوية المرتبطة بانتظار الدفع تُلغى أيضًا." />
                             <ConfirmAction url={route('club.invoices.void', invoice.id)} title={`إلغاء الفاتورة ${invoice.number}`} reason="سبب الإلغاء" confirmLabel="إلغاء الفاتورة" variant="danger" size="md">
                                 إلغاء الفاتورة
                             </ConfirmAction>
@@ -342,6 +342,12 @@ function RecordPaymentModal({ open, onClose, invoice, currency }: { open: boolea
         notes: '',
         proof: null,
     });
+
+    // The balance shrinks after each payment; reopening the modal must offer what is left now.
+    useEffect(() => {
+        if (open) form.setData((d) => ({ ...d, amount: invoice.balance }));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, invoice.balance]);
 
     const submit = (e: FormEvent) => {
         e.preventDefault();

@@ -117,7 +117,8 @@ final class WhatsAppService
             'sent_by' => Auth::guard('web')->id(),
         ]);
 
-        $conversation->forceFill(['last_message_at' => now(), 'unread_count' => 0])->save();
+        // Only a staff reply means someone read the chat; automatic replies keep it unread.
+        $conversation->forceFill(['last_message_at' => now(), 'unread_count' => Auth::guard('web')->check() ? 0 : $conversation->unread_count])->save();
 
         if ($message->status === Message::QUEUED) {
             SendWhatsAppMessage::dispatch($message->id, $message->tenant_id)->afterCommit();

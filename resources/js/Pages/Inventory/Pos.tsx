@@ -17,6 +17,7 @@ interface Product {
     barcode: string | null;
     sku: string | null;
     category: string | null;
+    image_url: string | null;
 }
 
 interface CartLine {
@@ -33,6 +34,7 @@ export default function Pos({ products }: { products: Product[] }) {
     const [member, setMember] = useState<MemberHit | null>(null);
     const [discount, setDiscount] = useState('');
     const [method, setMethod] = useState<'cash' | 'card'>('cash');
+    const [cardRef, setCardRef] = useState('');
     const [busy, setBusy] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const scanRef = useRef<HTMLInputElement>(null);
@@ -94,6 +96,7 @@ export default function Pos({ products }: { products: Product[] }) {
             {
                 items: cart.map((l) => ({ product_id: l.product.id, quantity: l.quantity })),
                 payment_method: method,
+                card_reference: method === 'card' ? cardRef.trim() : null,
                 member_id: member?.id ?? null,
                 discount: discountValue || 0,
             },
@@ -104,6 +107,7 @@ export default function Pos({ products }: { products: Product[] }) {
                     setMember(null);
                     setDiscount('');
                     setMethod('cash');
+                    setCardRef('');
                     scanRef.current?.focus();
                 },
                 onError: (errs) => {
@@ -167,6 +171,7 @@ export default function Pos({ products }: { products: Product[] }) {
                                         onClick={() => add(p)}
                                         className="card flex min-h-28 flex-col items-start justify-between p-3 text-start transition hover:border-brand-300 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                                     >
+                                        {p.image_url && <img src={p.image_url} alt="" loading="lazy" className="mb-2 h-16 w-full rounded-lg object-cover" />}
                                         <span className="line-clamp-2 text-sm font-medium">{p.name}</span>
                                         <span className="mt-2 flex w-full items-end justify-between gap-2">
                                             <span className="font-semibold text-brand num">{money(p.price, currency)}</span>
@@ -238,13 +243,18 @@ export default function Pos({ products }: { products: Product[] }) {
                                 </button>
                             ))}
                         </div>
+                        {method === 'card' && (
+                            <Field label="رقم العملية من جهاز الشبكة" error={errors.card_reference} required>
+                                <Input dir="ltr" value={cardRef} onChange={(e) => setCardRef(e.target.value)} />
+                            </Field>
+                        )}
                         <dl className="space-y-1 text-sm">
                             <div className="flex justify-between"><dt className="text-muted">المجموع</dt><dd className="num">{money(subtotal, currency)}</dd></div>
                             {discountValue > 0 && <div className="flex justify-between"><dt className="text-muted">الخصم</dt><dd className="num">- {money(discountValue, currency)}</dd></div>}
                             <div className="flex justify-between border-t border-line pt-2 text-lg font-semibold"><dt>الإجمالي</dt><dd className="num">{money(total, currency)}</dd></div>
                         </dl>
                         {errors.items && <p className="text-xs text-red-600">{errors.items}</p>}
-                        <Button size="lg" className="w-full" disabled={cart.length === 0} loading={busy} onClick={checkout}>
+                        <Button size="lg" className="w-full" disabled={cart.length === 0 || (method === 'card' && cardRef.trim() === '')} loading={busy} onClick={checkout}>
                             إتمام البيع
                         </Button>
                         <p className="text-center text-xs text-muted">تُصدر فاتورة مدفوعة ويُخصم المخزون تلقائيًا. <Link href={route('club.invoices.index', { type: 'pos' })} className="text-brand">فواتير نقطة البيع</Link></p>

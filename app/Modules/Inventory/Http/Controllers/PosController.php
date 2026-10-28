@@ -22,7 +22,7 @@ class PosController extends Controller
     {
         return Inertia::render('Inventory/Pos', [
             'products' => Product::with('category:id,name')->where('is_active', true)->orderBy('name')->get()
-                ->map(fn (Product $p) => $p->only('id', 'name', 'price', 'stock_quantity', 'track_stock', 'barcode', 'sku') + ['category' => $p->category?->name]),
+                ->map(fn (Product $p) => $p->only('id', 'name', 'price', 'stock_quantity', 'track_stock', 'barcode', 'sku') + ['category' => $p->category?->name, 'image_url' => $p->imageUrl()]),
         ]);
     }
 
@@ -35,9 +35,10 @@ class PosController extends Controller
             'payment_method' => ['required', 'in:cash,card'],
             'member_id' => ['nullable', TenantRule::exists('gym_members')],
             'discount' => ['nullable', 'numeric', 'min:0'],
-        ]);
+            'card_reference' => ['nullable', 'string', 'max:120', 'required_if:payment_method,card'],
+        ], ['card_reference.required_if' => 'أدخلي رقم العملية من جهاز الشبكة.']);
 
-        $sale = $this->pos->checkout($data['items'], $data['payment_method'], isset($data['member_id']) ? Member::find($data['member_id']) : null, $data['discount'] ?? 0, $request->user()->branch_id);
+        $sale = $this->pos->checkout($data['items'], $data['payment_method'], isset($data['member_id']) ? Member::find($data['member_id']) : null, $data['discount'] ?? 0, $request->user()->branch_id, $data['card_reference'] ?? null);
 
         return back()->with('success', 'تمت عملية البيع '.$sale->number.' بمبلغ '.$sale->total);
     }

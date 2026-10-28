@@ -28,8 +28,9 @@ final class PosService
 
     /**
      * @param  list<array{product_id: int, quantity: float|int}>  $items
+     * @param  string|null  $cardReference  transaction number printed by the bank card terminal
      */
-    public function checkout(array $items, string $method, ?Member $member = null, string|float $discount = 0, ?int $branchId = null): Sale
+    public function checkout(array $items, string $method, ?Member $member = null, string|float $discount = 0, ?int $branchId = null, ?string $cardReference = null): Sale
     {
         if (! in_array($method, ['cash', 'card'], true)) {
             throw new BusinessRuleException('pos.method', 'طريقة الدفع في نقطة البيع: نقدًا أو بطاقة.', 'payment_method');
@@ -38,7 +39,7 @@ final class PosService
             throw new BusinessRuleException('pos.empty', 'السلة فارغة.', 'items');
         }
 
-        return DB::transaction(function () use ($items, $method, $member, $discount, $branchId) {
+        return DB::transaction(function () use ($items, $method, $member, $discount, $branchId, $cardReference) {
             $products = Product::whereIn('id', array_column($items, 'product_id'))->where('is_active', true)->get()->keyBy('id');
             $lines = [];
             $subtotal = '0';
@@ -95,7 +96,8 @@ final class PosService
 
             $invoice = $this->invoices->issue($member, $invoiceLines, ['type' => 'pos', 'branch_id' => $branchId], 'عميل نقدي');
             if ($invoice->isOpen()) {
-                $this->payments->record($invoice, $invoice->balance(), $method === 'card' ? 'card' : 'cash', ['reference' => $sale->number, 'branch_id' => $branchId]);
+                $reference = $method === 'card' && $cardReference ? $cardReference : $sale->number;
+                $this->payments->record($invoice, $invoice->balance(), $method === 'card' ? 'card' : 'cash', ['reference' => $reference, 'branch_id' => $branchId]);
             }
 
             $sale->forceFill(['invoice_id' => $invoice->id, 'tax' => $invoice->tax_total, 'total' => $invoice->total])->save();
@@ -120,6 +122,10 @@ final class PosService
             $payment = Payment::where('invoice_id', $sale->invoice_id)->where('kind', Payment::KIND_PAYMENT)->where('status', Payment::COMPLETED)->first();
             if ($payment) {
                 $this->payments->refund($payment, $payment->amount, $payment->method === 'card' ? 'card' : 'cash', 'إلغاء عملية بيع '.$sale->number.': '.$reason);
+            }
+            // the refunded sale must not stay behind as an open receivable
+            if ($sale->invoice) {
+                $this->invoices->void($sale->invoice, 'إلغاء عملية بيع '.$sale->number.': '.$reason);
             }
 
             $sale->forceFill(['status' => 'voided', 'voided_at' => now()])->save();

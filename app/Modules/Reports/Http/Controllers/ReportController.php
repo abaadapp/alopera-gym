@@ -44,19 +44,19 @@ class ReportController extends Controller
             'memberships' => TableExporter::download('memberships', ['الرقم', 'المشتركة', 'الباقة', 'النوع', 'الحالة', 'من', 'إلى', 'الإجمالي', 'تاريخ التفعيل'],
                 (function () use ($from, $end) {
                     foreach (Membership::with('member:id,full_name,member_no')->whereBetween('created_at', [$from, $end])->orderBy('id')->lazy(500) as $m) {
-                        yield [$m->member?->member_no, $m->member?->full_name, $m->plan_snapshot['name'] ?? '', $m->kind, $m->status, $m->starts_on->toDateString(), $m->ends_on->toDateString(), $m->total, $m->activated_at?->format('Y-m-d H:i')];
+                        yield [$m->member?->member_no, $m->member?->full_name, $m->plan_snapshot['name'] ?? '', Membership::KIND_LABELS[$m->kind] ?? $m->kind, Membership::STATUS_LABELS[$m->status] ?? $m->status, $m->starts_on->toDateString(), $m->ends_on->toDateString(), $m->total, $m->activated_at?->format('Y-m-d H:i')];
                     }
                 })(), $format),
             'revenue' => TableExporter::download('revenue', ['الإيصال', 'التاريخ', 'النوع', 'الطريقة', 'المبلغ', 'الفاتورة', 'العميل', 'المرجع'],
                 (function () use ($from, $end) {
                     foreach (Payment::with('invoice:id,number,customer_name')->completed()->whereBetween('paid_at', [$from, $end])->orderBy('paid_at')->lazy(500) as $p) {
-                        yield [$p->receipt_number, $p->paid_at?->format('Y-m-d H:i'), $p->kind, $p->method, $p->kind === 'refund' ? -1 * (float) $p->amount : (float) $p->amount, $p->invoice?->number, $p->invoice?->customer_name, $p->reference];
+                        yield [$p->receipt_number, $p->paid_at?->format('Y-m-d H:i'), Payment::KIND_LABELS[$p->kind] ?? $p->kind, Payment::METHOD_LABELS[$p->method] ?? $p->method, $p->kind === 'refund' ? -1 * (float) $p->amount : (float) $p->amount, $p->invoice?->number, $p->invoice?->customer_name, $p->reference];
                     }
                 })(), $format),
             'classes' => TableExporter::download('classes', ['التاريخ', 'الوقت', 'البرنامج', 'المدربة', 'السعة', 'المحجوز', 'الحالة'],
                 (function () use ($from, $end) {
                     foreach (ClassSession::with(['program:id,name', 'trainer:id,name'])->whereBetween('starts_at', [$from, $end])->orderBy('starts_at')->lazy(500) as $s) {
-                        yield [$s->starts_at->toDateString(), $s->starts_at->format('H:i'), $s->program?->name, $s->trainer?->name, $s->capacity, $s->booked_count, $s->status];
+                        yield [$s->starts_at->toDateString(), $s->starts_at->format('H:i'), $s->program?->name, $s->trainer?->name, $s->capacity, $s->booked_count, ClassSession::STATUS_LABELS[$s->status] ?? $s->status];
                     }
                 })(), $format),
             'sales' => TableExporter::download('sales', ['التاريخ', 'رقم العملية', 'المنتج', 'الكمية', 'سعر الوحدة', 'الإجمالي', 'التكلفة'],
@@ -86,9 +86,10 @@ class ReportController extends Controller
             'last_month' => [$today->subMonthNoOverflow()->startOfMonth(), $today->subMonthNoOverflow()->endOfMonth()->startOfDay()],
             'quarter' => [$today->firstOfQuarter(), $today],
             'year' => [$today->startOfYear(), $today],
+            // a malformed date in the URL falls back to the default instead of failing
             default => [
-                CarbonImmutable::parse($request->string('from')->toString() ?: $today->startOfMonth()->toDateString()),
-                CarbonImmutable::parse($request->string('to')->toString() ?: $today->toDateString()),
+                rescue(fn () => CarbonImmutable::parse($request->string('from')->toString() ?: $today->startOfMonth()->toDateString())->startOfDay(), $today->startOfMonth(), false),
+                rescue(fn () => CarbonImmutable::parse($request->string('to')->toString() ?: $today->toDateString())->startOfDay(), $today, false),
             ],
         };
 

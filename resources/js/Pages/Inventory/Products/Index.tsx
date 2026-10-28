@@ -23,6 +23,7 @@ interface ProductRow {
     product_category_id: number | null;
     category: string | null;
     low: boolean;
+    image_url: string | null;
 }
 
 interface Movement {
@@ -72,8 +73,17 @@ export default function ProductsIndex({ products, categories, filters }: { produ
                                 {products.data.map((p) => (
                                     <tr key={p.id}>
                                         <td>
-                                            <p className="font-medium">{p.name}</p>
-                                            <p className="text-xs text-muted num">{[p.sku, p.barcode].filter(Boolean).join(' · ') || '—'}</p>
+                                            <div className="flex items-center gap-3">
+                                                {p.image_url ? (
+                                                    <img src={p.image_url} alt="" loading="lazy" className="size-10 shrink-0 rounded-lg object-cover" />
+                                                ) : (
+                                                    <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-canvas text-muted"><Package className="size-4" /></span>
+                                                )}
+                                                <div className="min-w-0">
+                                                    <p className="font-medium">{p.name}</p>
+                                                    <p className="text-xs text-muted num">{[p.sku, p.barcode].filter(Boolean).join(' · ') || '—'}</p>
+                                                </div>
+                                            </div>
                                         </td>
                                         <td>{p.category ?? '—'}</td>
                                         <td className="num">{money(p.price, currency)}</td>
@@ -203,6 +213,7 @@ function ProductModal({ product, categories, onClose }: { product: ProductRow | 
                     <Input type="number" step="1" min="0" dir="ltr" value={form.data.reorder_level} onChange={(e) => form.setData('reorder_level', e.target.value)} />
                 </Field>
                 <Field label="صورة" error={form.errors.image}>
+                    {product?.image_url && <img src={product.image_url} alt="" className="mb-2 size-16 rounded-lg object-cover" />}
                     <Input type="file" accept="image/*" onChange={(e) => form.setData('image', e.target.files?.[0] ?? null)} />
                 </Field>
                 <Field label="الوصف" error={form.errors.description} className="sm:col-span-2">

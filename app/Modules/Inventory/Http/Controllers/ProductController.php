@@ -26,7 +26,7 @@ class ProductController extends Controller
                 ->when($request->boolean('low'), fn ($q) => $q->lowStock())
                 ->orderBy('name')->paginate(30)->withQueryString()
                 ->through(fn (Product $p) => $p->only('id', 'name', 'sku', 'barcode', 'description', 'price', 'cost', 'stock_quantity', 'reorder_level', 'track_stock', 'is_active', 'product_category_id') + [
-                    'category' => $p->category?->name, 'low' => $p->isLowStock(),
+                    'category' => $p->category?->name, 'low' => $p->isLowStock(), 'image_url' => $p->imageUrl(),
                 ]),
             'categories' => ProductCategory::orderBy('name')->get(['id', 'name']),
             'filters' => ['q' => $request->string('q')->toString(), 'low' => $request->boolean('low')],

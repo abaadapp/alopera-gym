@@ -8,6 +8,7 @@ use App\Modules\Finance\Models\Invoice;
 use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Payments\Services\OnlinePaymentService;
 
 /**
  * Builds the values for each event and hands the message to WhatsAppService.
@@ -173,8 +174,13 @@ final class MemberNotifier
         return number_format((float) $amount, 3).' '.$this->tenants->require()->currency;
     }
 
+    /** The online pay page when the club takes online payments; otherwise the invoice page (no dead pay button). */
     public function paymentLink(Invoice $invoice): string
     {
+        if (! app(OnlinePaymentService::class)->available()) {
+            return $this->invoiceLink($invoice);
+        }
+
         return route('site.pay.show', ['club' => $this->tenants->require()->slug, 'token' => $invoice->public_token]);
     }
 

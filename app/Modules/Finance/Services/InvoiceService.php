@@ -124,11 +124,10 @@ final class InvoiceService
                 return $invoice;
             }
 
-            $hasMoney = Payment::where('invoice_id', $invoice->id)
-                ->whereIn('status', [Payment::COMPLETED, Payment::PENDING])
-                ->exists();
+            // Net money counts: a fully refunded invoice can be voided; a transfer awaiting confirmation blocks it.
+            $hasPending = Payment::where('invoice_id', $invoice->id)->where('status', Payment::PENDING)->exists();
 
-            if ($hasMoney) {
+            if (! Money::isZero($invoice->paid_total) || $hasPending) {
                 throw new BusinessRuleException('invoice.has_payments', 'لا يمكن إلغاء فاتورة عليها دفعات. قومي برد المبلغ أولًا.');
             }
 

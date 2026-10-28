@@ -4,6 +4,7 @@ namespace App\Modules\Messaging\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Messaging\Models\Message;
+use App\Modules\Messaging\Services\TemplateCatalog;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -20,6 +21,8 @@ class MessageLogController extends Controller
                 ->when($request->string('template')->toString(), fn ($q, $t) => $q->where('template_key', $t))
                 ->latest('id')->paginate(40)->withQueryString()
                 ->through(fn (Message $m) => $m->only('id', 'direction', 'type', 'to_phone', 'template_key', 'body', 'status', 'error_code', 'error_message', 'campaign_id') + [
+                    // event label for service templates, the Meta template name for campaign templates
+                    'template_label' => $m->template_key ? (TemplateCatalog::EVENTS[$m->template_key]['label'] ?? $m->template_name ?? $m->template_key) : null,
                     'member' => $m->member?->full_name, 'member_id' => $m->member_id,
                     'at' => $m->created_at->format('Y-m-d H:i'), 'sent_at' => $m->sent_at?->format('H:i'),
                     'delivered_at' => $m->delivered_at?->format('H:i'), 'read_at' => $m->read_at?->format('H:i'),

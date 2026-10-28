@@ -29,6 +29,11 @@ class Payment extends Model
 
     public const METHODS = ['cash', 'bank_transfer', 'card', 'paymob', 'other'];
 
+    /** Arabic labels for exports (the UI has its own copy in resources/js/lib/labels.ts). */
+    public const METHOD_LABELS = ['cash' => 'نقدًا', 'bank_transfer' => 'تحويل بنكي', 'card' => 'بطاقة (جهاز الشبكة)', 'paymob' => 'دفع إلكتروني', 'other' => 'أخرى'];
+
+    public const KIND_LABELS = [self::KIND_PAYMENT => 'دفعة', self::KIND_REFUND => 'رد مبلغ'];
+
     protected $guarded = ['id', 'tenant_id'];
 
     protected function casts(): array

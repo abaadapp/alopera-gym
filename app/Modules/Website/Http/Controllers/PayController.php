@@ -67,7 +67,7 @@ class PayController extends Controller
         return response()->json(['status' => $intent->status]);
     }
 
-    public function invoice(string $token, TenantContext $tenants): Response
+    public function invoice(string $token, TenantContext $tenants, OnlinePaymentService $online): Response
     {
         $invoice = $this->invoiceByToken($token)->load(['items', 'payments' => fn ($q) => $q->where('status', 'completed')]);
         $tenant = $tenants->require();
@@ -75,7 +75,7 @@ class PayController extends Controller
         return $this->page('Site/Invoice', [
             'invoice' => $this->present($invoice) + [
                 'payments' => $invoice->payments->map(fn ($p) => $p->only('receipt_number', 'kind', 'method', 'amount') + ['paid_at' => $p->paid_at?->format('Y-m-d H:i')]),
-                'pay_url' => $invoice->isOpen() ? route('site.pay.show', ['token' => $token]) : null,
+                'pay_url' => $invoice->isOpen() && $online->available() ? route('site.pay.show', ['token' => $token]) : null,
             ],
             'club' => $tenant->only('name', 'legal_name', 'phone', 'address') + ['vat_number' => $tenant->setting('vat_number'), 'footer' => $tenant->setting('invoice_footer')],
         ], 'فاتورة '.$invoice->number);
