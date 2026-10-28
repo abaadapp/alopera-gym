@@ -1,18 +1,31 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import { cloneElement, isValidElement, useId, type InputHTMLAttributes, type ReactElement, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
+type ControlProps = { id?: string; 'aria-invalid'?: boolean; 'aria-describedby'?: string };
+
+/** The field's single form control, when it is one we can label (so the label focuses it and screen readers announce it). */
+function labelledControl(children: ReactNode): ReactElement<ControlProps> | null {
+    if (!isValidElement<ControlProps>(children)) return null;
+    const t = children.type;
+    return t === Input || t === Select || t === Textarea || t === 'input' || t === 'select' || t === 'textarea' ? children : null;
+}
+
 export function Field({ label, error, hint, children, className, required }: { label?: ReactNode; error?: string; hint?: ReactNode; children: ReactNode; className?: string; required?: boolean }) {
+    const autoId = useId();
+    const control = labelledControl(children);
+    const id = control ? (control.props.id ?? autoId) : undefined;
+    const noteId = id && (error || hint) ? `${id}-note` : undefined;
     return (
         <div className={className}>
             {label && (
-                <label className="label">
+                <label className="label" htmlFor={id}>
                     {label}
                     {required && <span className="ms-0.5 text-brand">*</span>}
                 </label>
             )}
-            {children}
-            {hint && !error && <p className="mt-1 text-xs text-muted">{hint}</p>}
-            {error && <p className="mt-1 text-xs font-medium text-red-600">{error}</p>}
+            {control ? cloneElement(control, { id, 'aria-invalid': error ? true : undefined, 'aria-describedby': noteId }) : children}
+            {hint && !error && <p id={noteId} className="mt-1 text-xs text-muted">{hint}</p>}
+            {error && <p id={noteId} className="mt-1 text-xs font-medium text-red-600">{error}</p>}
         </div>
     );
 }

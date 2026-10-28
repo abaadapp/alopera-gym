@@ -65,11 +65,27 @@ class MembershipPlan extends Model
         return $end->subDay();
     }
 
+    /** Arabic number agreement: «شهر»، «شهران»، «3 أشهر»، «12 شهرًا». */
     public function durationLabel(): string
     {
-        $units = ['day' => 'يوم', 'week' => 'أسبوع', 'month' => 'شهر', 'year' => 'سنة'];
+        $forms = [
+            'day' => ['يوم', 'يومان', 'أيام', 'يومًا'],
+            'week' => ['أسبوع', 'أسبوعان', 'أسابيع', 'أسبوعًا'],
+            'month' => ['شهر', 'شهران', 'أشهر', 'شهرًا'],
+            'year' => ['سنة', 'سنتان', 'سنوات', 'سنة'],
+        ];
+        $n = (int) $this->duration_value;
+        $f = $forms[$this->duration_unit] ?? null;
+        if (! $f) {
+            return $n.' '.$this->duration_unit;
+        }
 
-        return $this->duration_value.' '.($units[$this->duration_unit] ?? $this->duration_unit);
+        return match (true) {
+            $n === 1 => $f[0],
+            $n === 2 => $f[1],
+            $n >= 3 && $n <= 10 => $n.' '.$f[2],
+            default => $n.' '.$f[3],
+        };
     }
 
     /** @return array<string, mixed> */

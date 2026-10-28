@@ -95,12 +95,14 @@ export default function SiteLayout({ site, children, seoTitle }: { site: SiteInf
                             {site.address && <p className="flex items-center gap-2 text-ink/80"><MapPin className="size-4 text-brand" />{site.address}</p>}
                             {site.social_links?.instagram && <a href={site.social_links.instagram} className="flex items-center gap-2 text-ink/80" target="_blank" rel="noreferrer"><AtSign className="size-4 text-brand" />إنستغرام</a>}
                         </div>
-                        <div className="text-sm">
-                            <p className="mb-2 font-medium">أوقات العمل</p>
-                            {(site.working_hours ?? []).map((w, i) => (
-                                <p key={i} className="flex justify-between gap-4 py-0.5 text-ink/80"><span>{w.days}</span><span>{w.hours}</span></p>
-                            ))}
-                        </div>
+                        {(site.working_hours ?? []).length > 0 && (
+                            <div className="text-sm">
+                                <p className="mb-2 font-medium">أوقات العمل</p>
+                                {(site.working_hours ?? []).map((w, i) => (
+                                    <p key={i} className="flex justify-between gap-4 py-0.5 text-ink/80"><span>{w.days}</span><span>{w.hours}</span></p>
+                                ))}
+                            </div>
+                        )}
                     </div>
                     <p className="border-t border-line py-4 text-center text-xs text-muted">© {new Date().getFullYear()} {tenant?.name}</p>
                 </footer>

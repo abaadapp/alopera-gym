@@ -1,0 +1,5 @@
+@extends('errors.layout')
+
+@section('code', '503')
+@section('title', 'النظام تحت الصيانة')
+@section('message', 'نُجري تحديثًا سريعًا. عودي بعد دقائق.')
