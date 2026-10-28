@@ -26,7 +26,8 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
-    protected $guarded = ['id', 'is_platform_admin'];
+    /** Club membership and role are always assigned explicitly, never mass-assigned from a request. */
+    protected $guarded = ['id', 'is_platform_admin', 'tenant_id', 'role_id'];
 
     protected $attributes = ['is_active' => true, 'is_platform_admin' => false, 'locale' => 'ar'];
 
