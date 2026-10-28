@@ -46,7 +46,7 @@ class TenantController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
-            'slug' => ['nullable', 'alpha_dash', 'max:60', Rule::unique('tenants', 'slug')],
+            'slug' => ['nullable', 'regex:/^[a-z0-9]+(-[a-z0-9]+)*$/', 'max:60', Rule::unique('tenants', 'slug')],
             'email' => ['nullable', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:32'],
             'city' => ['nullable', 'string', 'max:80'],
@@ -55,7 +55,7 @@ class TenantController extends Controller
             'owner_password' => ['required', Password::defaults()],
             'platform_plan_id' => ['required', 'exists:platform_plans,id'],
             'billing_cycle' => ['required', 'in:monthly,yearly'],
-        ]);
+        ], ['slug.regex' => 'المعرّف في الرابط: حروف إنجليزية صغيرة وأرقام وشرطات فقط (مثل alopera-gym).']);
 
         $tenant = $provisioner->provision(
             ['name' => $data['name'], 'slug' => $data['slug'] ?? null, 'email' => $data['email'] ?? null, 'phone' => $data['phone'] ?? null, 'city' => $data['city'] ?? null],

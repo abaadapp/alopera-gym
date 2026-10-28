@@ -29,7 +29,7 @@ export interface SharedProps {
     auth: { user: StaffUser; permissions: string[] } | null;
     tenant: TenantInfo | null;
     member: { id: number; name: string; member_no: string } | null;
-    flash: { success: string | null; error: string | null; token: string | null };
+    flash: { success: string | null; error: string | null; token: string | null; id: string | null };
     errors: Record<string, string>;
     [key: string]: unknown;
 }

@@ -14,6 +14,17 @@ function applyBrand(props: Record<string, unknown>) {
     if (tenant?.secondary_color) root.style.setProperty('--brand-soft', tenant.secondary_color);
 }
 
+/** After a failed submit, bring the first invalid field into view (long forms on phones would otherwise hide it). */
+function revealFirstError() {
+    setTimeout(() => {
+        const field = document.querySelector<HTMLElement>('[aria-invalid="true"]');
+        if (!field) return;
+        const r = field.getBoundingClientRect();
+        if (r.top < 0 || r.bottom > window.innerHeight) field.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        field.focus({ preventScroll: true });
+    }, 50);
+}
+
 createInertiaApp({
     title: (title) => title || 'Alopera Gym',
     resolve: async (name) => {
@@ -24,6 +35,7 @@ createInertiaApp({
     setup({ el, App, props }) {
         applyBrand(props.initialPage.props as Record<string, unknown>);
         router.on('navigate', (event) => applyBrand(event.detail.page.props as Record<string, unknown>));
+        router.on('error', revealFirstError);
         createRoot(el).render(<App {...props} />);
     },
     progress: { color: '#be185d', showSpinner: false },

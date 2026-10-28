@@ -59,6 +59,10 @@ h1, h2, h3, .font-display {
     .overflow-x-auto {
         position: relative;
     }
+    /* Grid cells may shrink below their content: wide tables and code scroll inside instead of widening phones. */
+    .grid > * {
+        min-width: 0;
+    }
 }
 
 @layer components {

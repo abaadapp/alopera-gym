@@ -34,6 +34,8 @@ export default function Button({ variant = 'primary', size = 'md', href, loading
         sizes[size],
         className,
     );
+    // Icon-only links still need an accessible name.
+    const linkProps = { 'aria-label': rest['aria-label'], title: rest.title };
     const content = (
         <>
             {loading ? <Loader2 className="size-4 animate-spin" /> : icon}
@@ -43,14 +45,14 @@ export default function Button({ variant = 'primary', size = 'md', href, loading
 
     if (href && external) {
         return (
-            <a href={href} className={classes} target="_blank" rel="noreferrer">
+            <a href={href} className={classes} target="_blank" rel="noreferrer" {...linkProps}>
                 {content}
             </a>
         );
     }
     if (href) {
         return (
-            <Link href={href} className={classes}>
+            <Link href={href} className={classes} {...linkProps}>
                 {content}
             </Link>
         );

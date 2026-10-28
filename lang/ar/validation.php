@@ -305,7 +305,7 @@ return [
         'valid_from' => 'صالح من',
         'valid_until' => 'صالح حتى',
         'validity_days' => 'مدة الصلاحية',
-        'value' => 'القيمة',
+        'value' => 'الخصم',
         'vendor' => 'الشركة المصنّعة',
         'weekday' => 'اليوم',
         'whatsapp_number' => 'رقم واتساب',

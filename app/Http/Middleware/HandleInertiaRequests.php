@@ -6,6 +6,7 @@ use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -37,6 +38,8 @@ class HandleInertiaRequests extends Middleware
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
                 'token' => $request->session()->get('device_token'),
+                // Unique per response that carries a message, so the same text twice still shows twice.
+                'id' => $request->session()->hasAny(['success', 'error']) ? (string) Str::ulid() : null,
             ],
         ];
     }
