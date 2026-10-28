@@ -11,15 +11,20 @@ import { cn } from '@/lib/cn';
 type Leaf = { label: string; route: string; permission?: string | string[]; match?: string | string[]; roleKey?: string };
 /** A main-menu entry: a page of its own, or a section that opens to one level of pages. */
 type Section = { label: string; icon: ReactNode } & ({ route: string; permission?: string | string[]; match?: string | string[] } | { children: Leaf[] });
+/** A run of sections between two thin separators; the `footer` group sits at the bottom of the menu. */
+type Group = { sections: Section[]; footer?: boolean };
 
 const ic = 'size-[18px] shrink-0';
 
 /** Settings screens live behind the settings hub; none of them appears in the main menu. */
 const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'integrations.manage', 'audit.view', 'backups.manage', 'billing.view', 'website.manage'];
 
-export const NAV: Section[] = [
+export const NAV: Group[] = [
+  { sections: [
     { label: 'لوحة التحكم', route: 'club.dashboard', icon: <LayoutDashboard className={ic} />, permission: 'dashboard.view' },
     { label: 'الاستقبال', route: 'club.reception', icon: <ScanLine className={ic} />, permission: 'checkin.perform' },
+  ] },
+  { sections: [
     { label: 'المشتركات', route: 'club.members.index', icon: <Users className={ic} />, permission: 'members.view', match: 'club.members.*' },
     {
         label: 'العضويات والباقات',
@@ -52,6 +57,8 @@ export const NAV: Section[] = [
             { label: 'حضور الموظفات', route: 'club.staff-attendance.index', permission: 'staff_attendance.view', match: 'club.staff-attendance.*' },
         ],
     },
+  ] },
+  { sections: [
     {
         label: 'المالية',
         icon: <Wallet className={ic} />,
@@ -62,6 +69,9 @@ export const NAV: Section[] = [
             { label: 'المصروفات', route: 'club.expenses.index', permission: 'expenses.manage', match: 'club.expenses.*' },
         ],
     },
+    { label: 'التقارير', route: 'club.reports.index', icon: <BarChart3 className={ic} />, permission: 'reports.view', match: 'club.reports.*' },
+  ] },
+  { sections: [
     {
         label: 'واتساب',
         icon: <MessageCircle className={ic} />,
@@ -73,7 +83,6 @@ export const NAV: Section[] = [
             { label: 'سجل الرسائل', route: 'club.messages.index', permission: 'whatsapp.inbox' },
         ],
     },
-    { label: 'التقارير', route: 'club.reports.index', icon: <BarChart3 className={ic} />, permission: 'reports.view', match: 'club.reports.*' },
     {
         label: 'الموقع الإلكتروني',
         icon: <Globe className={ic} />,
@@ -83,6 +92,8 @@ export const NAV: Section[] = [
             { label: 'رسائل التواصل', route: 'club.website.messages', permission: 'website.manage' },
         ],
     },
+  ] },
+  { footer: true, sections: [
     {
         label: 'الإعدادات',
         route: 'club.settings.index',
@@ -90,6 +101,7 @@ export const NAV: Section[] = [
         permission: SETTINGS_PERMISSIONS,
         match: ['club.settings.*', 'club.branches.*', 'club.users.*', 'club.roles.*', 'club.integrations.*', 'club.audit.*', 'club.backups.*', 'club.billing'],
     },
+  ] },
 ];
 
 const patterns = (item: { route: string; match?: string | string[] }) => (item.match === undefined ? [item.route] : Array.isArray(item.match) ? item.match : [item.match]);
@@ -103,11 +115,14 @@ export default function ClubLayout({ title, children }: { title: string; childre
     const allowed = (permission?: string | string[]) => !permission || (Array.isArray(permission) ? permission.some(can) : can(permission));
     const visible = (leaf: Leaf) => allowed(leaf.permission) && (!leaf.roleKey || auth?.user.role_key === leaf.roleKey || can('classes.manage'));
 
-    const sections = NAV.flatMap((section): Section[] => {
+    const keep = (section: Section): Section[] => {
         if (!('children' in section)) return allowed(section.permission) ? [section] : [];
         const items = section.children.filter(visible);
         return items.length ? [{ ...section, children: items }] : [];
-    });
+    };
+    // A group none of whose sections this user may open disappears with its separator.
+    const groups = NAV.map((g) => ({ ...g, sections: g.sections.flatMap(keep) })).filter((g) => g.sections.length > 0);
+    const sections = groups.flatMap((g) => g.sections);
 
     // The section holding the current page starts open; the others open on demand.
     const [expanded, setExpanded] = useState<Set<string>>(() => new Set(sections.filter((s) => 'children' in s && s.children.some(isActive)).map((s) => s.label)));
@@ -130,85 +145,99 @@ export default function ClubLayout({ title, children }: { title: string; childre
         };
     }, [open]);
 
-    const linkClass = (active: boolean) =>
-        cn('flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition', active ? 'bg-brand font-medium text-white shadow-sm shadow-brand/20' : 'text-ink/80 hover:bg-brand-50 hover:text-ink');
+    /*
+     * A compact menu: 40px rows two pixels apart, quiet grey text, a light grey
+     * rounded fill for the current page and a 3px bar in the club's colour on its
+     * leading edge — no solid brand fill.
+     */
+    const row = 'relative flex w-full items-center gap-3 rounded-[10px] px-3 text-sm transition-colors duration-150';
+    const idle = 'font-medium text-ink/70 hover:bg-ink/[0.045] hover:text-ink';
+    const current =
+        'bg-[#f2f2f0] font-semibold text-ink before:absolute before:-start-3 before:top-1/2 before:h-[18px] before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-brand';
+
+    const renderSection = (section: Section, key: string) => {
+        if (!('children' in section)) {
+            const active = isActive(section);
+            return (
+                <li key={section.label}>
+                    <Link href={route(section.route)} onClick={() => setOpen(false)} aria-current={active ? 'page' : undefined} className={cn(row, 'h-10', active ? current : idle)}>
+                        <span className={cn('contents', active ? '[&>svg]:text-brand' : '[&>svg]:text-ink/55')}>{section.icon}</span>
+                        <span className="truncate">{section.label}</span>
+                    </Link>
+                </li>
+            );
+        }
+        const isOpen = expanded.has(section.label);
+        const holdsActive = section.children.some(isActive);
+        return (
+            <li key={section.label}>
+                <button
+                    type="button"
+                    onClick={() => toggle(section.label)}
+                    aria-expanded={isOpen}
+                    aria-controls={key}
+                    className={cn(row, 'h-10', holdsActive ? 'font-semibold text-ink hover:bg-ink/[0.045]' : idle)}
+                >
+                    <span className={cn('contents', holdsActive ? '[&>svg]:text-brand' : '[&>svg]:text-ink/55')}>{section.icon}</span>
+                    <span className="flex-1 truncate text-start">{section.label}</span>
+                    <ChevronDown className={cn('size-4 shrink-0 text-muted/80 transition-transform duration-200', isOpen && 'rotate-180')} />
+                </button>
+                {/* Closed sections stay in the page (inert) so they can animate open. */}
+                <div id={key} inert={!isOpen} className={cn('grid transition-[grid-template-rows] duration-200', isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+                    {/* The clip reaches into the menu's padding, so a page's colour bar is not cut off. */}
+                    <div className="-mx-3 min-h-0 overflow-hidden px-3">
+                        {/* Pages sit under their section's label: 12px padding + 18px icon + 12px gap. */}
+                        <ul className="space-y-0.5 pt-0.5 pb-1">
+                            {section.children.map((leaf) => {
+                                const active = isActive(leaf);
+                                return (
+                                    <li key={leaf.route}>
+                                        <Link
+                                            href={route(leaf.route)}
+                                            onClick={() => setOpen(false)}
+                                            aria-current={active ? 'page' : undefined}
+                                            className={cn(row, 'h-9 ps-[2.625rem] text-[13px]', active ? current : idle)}
+                                        >
+                                            <span className="truncate">{leaf.label}</span>
+                                        </Link>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
+                </div>
+            </li>
+        );
+    };
 
     const sidebar = (id: string) => (
         <nav className="flex h-full flex-col" aria-label="القائمة الرئيسية">
-            <div className="flex items-center gap-3 px-5 py-5">
+            {/* The club's logo and name, one compact line — the page title carries the rest. */}
+            <div className="flex h-16 shrink-0 items-center gap-2.5 px-4">
                 {tenant?.logo_url ? (
-                    <img src={tenant.logo_url} alt="" className="size-10 rounded-xl object-cover" />
+                    <img src={tenant.logo_url} alt="" className="size-8 shrink-0 rounded-lg object-cover" />
                 ) : (
-                    <div className="grid size-10 place-items-center rounded-xl bg-brand font-display text-lg text-white">{tenant?.name?.[0] ?? 'A'}</div>
+                    <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand font-display text-sm text-white">{tenant?.name?.[0] ?? 'A'}</div>
                 )}
-                <div className="min-w-0">
+                <div className="min-w-0 leading-tight">
                     <p className="truncate font-display text-sm font-semibold text-ink">{tenant?.name}</p>
-                    <p className="truncate text-xs text-muted">{auth?.user.role}</p>
+                    <p className="truncate text-[11px] text-muted">{auth?.user.role}</p>
                 </div>
             </div>
-            <ScrollIntoActive className="flex-1 overflow-y-auto overscroll-contain px-3 pb-6">
-                <ul className="space-y-1">
-                    {sections.map((section, i) => {
-                        if (!('children' in section)) {
-                            const active = isActive(section);
-                            return (
-                                <li key={section.label}>
-                                    <Link href={route(section.route)} onClick={() => setOpen(false)} aria-current={active ? 'page' : undefined} className={linkClass(active)}>
-                                        {section.icon}
-                                        <span className="truncate">{section.label}</span>
-                                    </Link>
-                                </li>
-                            );
-                        }
-                        const isOpen = expanded.has(section.label);
-                        const holdsActive = section.children.some(isActive);
-                        const panel = `${id}-section-${i}`;
-                        return (
-                            <li key={section.label}>
-                                <button
-                                    type="button"
-                                    onClick={() => toggle(section.label)}
-                                    aria-expanded={isOpen}
-                                    aria-controls={panel}
-                                    className={cn(
-                                        'flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm transition',
-                                        holdsActive ? 'font-semibold text-brand-700' : 'text-ink/80 hover:bg-brand-50 hover:text-ink',
-                                        holdsActive && !isOpen && 'bg-brand-50',
-                                    )}
-                                >
-                                    {section.icon}
-                                    <span className="flex-1 truncate text-start">{section.label}</span>
-                                    <ChevronDown className={cn('size-4 shrink-0 text-muted transition-transform duration-200', isOpen && 'rotate-180')} />
-                                </button>
-                                {/* Closed sections stay in the page (inert) so they can animate open. */}
-                                <div id={panel} inert={!isOpen} className={cn('grid transition-[grid-template-rows] duration-200', isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
-                                    <div className="min-h-0 overflow-hidden">
-                                        <ul className="ms-[1.15rem] mt-0.5 mb-1 space-y-0.5 border-s border-line ps-3">
-                                            {section.children.map((leaf) => {
-                                                const active = isActive(leaf);
-                                                return (
-                                                    <li key={leaf.route}>
-                                                        <Link
-                                                            href={route(leaf.route)}
-                                                            onClick={() => setOpen(false)}
-                                                            aria-current={active ? 'page' : undefined}
-                                                            className={cn(
-                                                                'block truncate rounded-lg px-3 py-1.5 text-[13px] transition',
-                                                                active ? 'bg-brand font-medium text-white shadow-sm shadow-brand/20' : 'text-ink/70 hover:bg-brand-50 hover:text-ink',
-                                                            )}
-                                                        >
-                                                            {leaf.label}
-                                                        </Link>
-                                                    </li>
-                                                );
-                                            })}
-                                        </ul>
-                                    </div>
-                                </div>
-                            </li>
-                        );
-                    })}
-                </ul>
+            <ScrollIntoActive className="flex flex-1 flex-col overflow-y-auto overscroll-contain px-3 pt-2 pb-3">
+                {groups.map((group, gi) => (
+                    <ul
+                        key={gi}
+                        className={cn(
+                            'space-y-0.5',
+                            // A thin rule between groups — no headings that add height.
+                            gi > 0 && 'mt-2 border-t border-line pt-2',
+                            group.footer && 'mt-auto',
+                        )}
+                    >
+                        {group.sections.map((section, si) => renderSection(section, `${id}-section-${gi}-${si}`))}
+                    </ul>
+                ))}
             </ScrollIntoActive>
         </nav>
     );
