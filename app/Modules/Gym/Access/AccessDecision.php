@@ -26,8 +26,7 @@ final class AccessDecision
         public readonly string $reason,
         public readonly ?Member $member = null,
         public readonly ?Membership $membership = null,
-    ) {
-    }
+    ) {}
 
     public static function allow(Member $member, Membership $membership): self
     {

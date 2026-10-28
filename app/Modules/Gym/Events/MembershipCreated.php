@@ -10,7 +10,5 @@ class MembershipCreated
 {
     use Dispatchable;
 
-    public function __construct(public readonly Membership $membership)
-    {
-    }
+    public function __construct(public readonly Membership $membership) {}
 }

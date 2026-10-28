@@ -18,9 +18,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class SubscriptionService
 {
-    public function __construct(private readonly AuditLogger $audit)
-    {
-    }
+    public function __construct(private readonly AuditLogger $audit) {}
 
     public function startTrial(Tenant $tenant, PlatformPlan $plan, string $cycle = TenantSubscription::MONTHLY): TenantSubscription
     {

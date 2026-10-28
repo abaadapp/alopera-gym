@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Core\Export\TableExporter;
 use App\Models\AuditLog;
-use App\Modules\Gym\Services\MembershipService;
+use App\Models\TenantIntegration;
+use App\Modules\Gym\Models\Membership;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
 
@@ -50,7 +52,7 @@ class ExportsAuditSecurityTest extends TestCase
         $plan = $this->plan($club);
 
         $this->actingAs($owner)->post(route('club.memberships.store', $member->id), ['membership_plan_id' => $plan->id, 'mode' => 'new']);
-        $membership = $this->asTenant($club, fn () => \App\Modules\Gym\Models\Membership::first());
+        $membership = $this->asTenant($club, fn () => Membership::first());
         $this->actingAs($owner)->post(route('club.memberships.cancel', $membership->id), ['reason' => 'test']);
 
         $this->asTenant($club, function () use ($owner) {
@@ -77,7 +79,7 @@ class ExportsAuditSecurityTest extends TestCase
             'is_enabled' => true, 'mode' => 'test', 'credentials' => ['secret_key' => 'sk_live_very_secret', 'hmac_secret' => 'hmac-very-secret'],
         ])->assertSessionHas('success');
 
-        $raw = \Illuminate\Support\Facades\DB::table('tenant_integrations')->where('tenant_id', $club->id)->value('credentials');
+        $raw = DB::table('tenant_integrations')->where('tenant_id', $club->id)->value('credentials');
         $this->assertStringNotContainsString('sk_live_very_secret', $raw);
 
         $page = $this->actingAs($owner)->get(route('club.integrations.index'))->getContent();
@@ -86,7 +88,7 @@ class ExportsAuditSecurityTest extends TestCase
 
         // A blank field keeps the stored secret.
         $this->actingAs($owner)->put(route('club.integrations.update', 'paymob'), ['is_enabled' => true, 'mode' => 'live', 'credentials' => ['secret_key' => '']]);
-        $this->assertSame('sk_live_very_secret', $this->asTenant($club, fn () => \App\Models\TenantIntegration::first()->credential('secret_key')));
+        $this->assertSame('sk_live_very_secret', $this->asTenant($club, fn () => TenantIntegration::first()->credential('secret_key')));
     }
 
     public function test_login_is_rate_limited(): void

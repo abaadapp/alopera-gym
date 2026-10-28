@@ -12,10 +12,12 @@ use App\Models\Branch;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Http\GymPresenter;
+use App\Modules\Gym\Models\AccessCredential;
 use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\CheckIn;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\MembershipEvent;
 use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Models\PtPackage;
 use App\Modules\Gym\Models\Trainer;
@@ -33,9 +35,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MemberController extends Controller
 {
-    public function __construct(private readonly MemberService $members)
-    {
-    }
+    public function __construct(private readonly MemberService $members) {}
 
     public function index(Request $request): Response
     {
@@ -112,7 +112,7 @@ class MemberController extends Controller
                 'balance' => Money::normalize(Invoice::where('billable_type', 'member')->where('billable_id', $member->id)->open()->get()->sum(fn ($i) => (float) $i->balance())),
             ],
             'memberships' => $memberships->map(fn ($m) => GymPresenter::membership($m)),
-            'events' => \App\Modules\Gym\Models\MembershipEvent::whereIn('membership_id', $memberships->pluck('id'))->with('user:id,name')->latest('id')->limit(30)->get()
+            'events' => MembershipEvent::whereIn('membership_id', $memberships->pluck('id'))->with('user:id,name')->latest('id')->limit(30)->get()
                 ->map(fn ($e) => ['type' => $e->type, 'data' => $e->data, 'user' => $e->user?->name, 'at' => $e->created_at->format('Y-m-d H:i'), 'membership_id' => $e->membership_id]),
             'invoices' => $invoices,
             'payments' => $payments,
@@ -126,7 +126,7 @@ class MemberController extends Controller
                 ->map(fn ($n) => $n->only('id', 'channel', 'direction', 'body') + ['user' => $n->user?->name, 'at' => $n->created_at->format('Y-m-d H:i'), 'follow_up_on' => $n->follow_up_on?->toDateString()]),
             'messages' => $user->can('whatsapp.inbox') ? Message::where('member_id', $member->id)->latest('id')->limit(50)->get()
                 ->map(fn ($m) => $m->only('id', 'direction', 'type', 'template_key', 'body', 'status', 'error_code') + ['at' => $m->created_at->format('Y-m-d H:i')]) : [],
-            'credentials' => \App\Modules\Gym\Models\AccessCredential::where('holder_type', 'member')->where('holder_id', $member->id)->get(['id', 'type', 'identifier', 'label', 'is_active']),
+            'credentials' => AccessCredential::where('holder_type', 'member')->where('holder_id', $member->id)->get(['id', 'type', 'identifier', 'label', 'is_active']),
             'pt' => $member->ptSubscriptions()->with(['package:id,name', 'trainer:id,name'])->latest()->get()
                 ->map(fn ($s) => $s->only('id', 'status', 'sessions_total', 'sessions_used', 'price') + ['package' => $s->package?->name, 'trainer' => $s->trainer?->name, 'expires_on' => $s->expires_on?->toDateString()]),
             'plans' => MembershipPlan::active()->with('programs:id')->orderBy('sort')->get()->map(fn ($p) => GymPresenter::plan($p)),

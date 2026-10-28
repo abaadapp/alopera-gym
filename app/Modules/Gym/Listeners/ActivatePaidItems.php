@@ -19,8 +19,7 @@ final class ActivatePaidItems
     public function __construct(
         private readonly MembershipService $memberships,
         private readonly PtService $pt,
-    ) {
-    }
+    ) {}
 
     public function handlePaid(InvoicePaid $event): void
     {

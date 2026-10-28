@@ -3,13 +3,13 @@
 namespace Tests\Feature;
 
 use App\Core\Support\BusinessRuleException;
+use App\Core\Tenancy\TenantContext;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Gym\Access\AccessControlService;
 use App\Modules\Gym\Models\Coupon;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Services\MembershipService;
-use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
@@ -241,7 +241,7 @@ class MembershipLifecycleTest extends TestCase
             }
 
             $this->expectException(BusinessRuleException::class);
-            $this->svc()->sell($this->member(app(\App\Core\Tenancy\TenantContext::class)->require()), $other, ['coupon_code' => 'WELCOME10']);
+            $this->svc()->sell($this->member(app(TenantContext::class)->require()), $other, ['coupon_code' => 'WELCOME10']);
         });
     }
 

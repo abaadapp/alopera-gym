@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Modules\Gym\Models\Member;
 
 return [
 
@@ -76,7 +77,7 @@ return [
 
         'members' => [
             'driver' => 'eloquent',
-            'model' => App\Modules\Gym\Models\Member::class,
+            'model' => Member::class,
         ],
 
         // 'users' => [

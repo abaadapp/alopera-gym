@@ -13,7 +13,6 @@ use App\Modules\Gym\Events\MembershipCreated;
 use App\Modules\Gym\Events\MembershipExpired;
 use App\Modules\Gym\Events\MembershipFrozen;
 use App\Modules\Gym\Events\MembershipResumed;
-use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\MembershipPlan;
@@ -34,8 +33,7 @@ final class MembershipService
         private readonly CouponService $coupons,
         private readonly BookingService $bookings,
         private readonly AuditLogger $audit,
-    ) {
-    }
+    ) {}
 
     /**
      * Sell a membership: creates it as `pending` and issues its invoice.

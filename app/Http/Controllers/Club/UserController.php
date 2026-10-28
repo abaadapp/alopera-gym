@@ -21,9 +21,7 @@ use Inertia\Response;
 /** Club staff accounts. Every query is explicitly limited to the current club. */
 class UserController extends Controller
 {
-    public function __construct(private readonly TenantContext $tenants)
-    {
-    }
+    public function __construct(private readonly TenantContext $tenants) {}
 
     public function index(): Response
     {

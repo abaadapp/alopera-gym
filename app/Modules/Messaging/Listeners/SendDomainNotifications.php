@@ -5,19 +5,19 @@ namespace App\Modules\Messaging\Listeners;
 use App\Modules\Finance\Events\PaymentRecorded;
 use App\Modules\Finance\Events\TransferSubmitted;
 use App\Modules\Finance\Models\Invoice;
-use App\Modules\Gym\Events\ClassSessionChanged;
-use App\Modules\Gym\Models\Booking;
-use App\Modules\Payments\Events\OnlinePaymentFailed;
 use App\Modules\Gym\Events\BookingCancelled;
 use App\Modules\Gym\Events\BookingConfirmed;
+use App\Modules\Gym\Events\ClassSessionChanged;
 use App\Modules\Gym\Events\MemberRegistered;
 use App\Modules\Gym\Events\MembershipActivated;
 use App\Modules\Gym\Events\MembershipCreated;
 use App\Modules\Gym\Events\MembershipExpired;
 use App\Modules\Gym\Events\MembershipFrozen;
 use App\Modules\Gym\Events\MembershipResumed;
+use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Messaging\Services\MemberNotifier;
+use App\Modules\Payments\Events\OnlinePaymentFailed;
 use Illuminate\Events\Dispatcher;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -28,9 +28,7 @@ use Throwable;
  */
 final class SendDomainNotifications
 {
-    public function __construct(private readonly MemberNotifier $notifier)
-    {
-    }
+    public function __construct(private readonly MemberNotifier $notifier) {}
 
     public function subscribe(Dispatcher $events): array
     {

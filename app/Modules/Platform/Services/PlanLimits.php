@@ -12,9 +12,7 @@ use App\Modules\Gym\Models\Member;
 /** Enforces the limits of the club's platform plan (members, staff, branches). */
 final class PlanLimits
 {
-    public function __construct(private readonly TenantContext $tenants)
-    {
-    }
+    public function __construct(private readonly TenantContext $tenants) {}
 
     public function plan(): ?PlatformPlan
     {

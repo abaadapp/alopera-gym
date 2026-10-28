@@ -9,7 +9,5 @@ class InvoiceVoided
 {
     use Dispatchable;
 
-    public function __construct(public readonly Invoice $invoice)
-    {
-    }
+    public function __construct(public readonly Invoice $invoice) {}
 }

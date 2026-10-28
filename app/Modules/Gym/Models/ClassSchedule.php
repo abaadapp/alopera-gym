@@ -5,11 +5,12 @@ namespace App\Modules\Gym\Models;
 use App\Core\Audit\Auditable;
 use App\Core\Tenancy\BelongsToTenant;
 use App\Models\Branch;
+use App\Modules\Gym\Services\ScheduleService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/** Weekly recurring slot. {@see \App\Modules\Gym\Services\ScheduleService} turns it into sessions. */
+/** Weekly recurring slot. {@see ScheduleService} turns it into sessions. */
 class ClassSchedule extends Model
 {
     use Auditable, BelongsToTenant;

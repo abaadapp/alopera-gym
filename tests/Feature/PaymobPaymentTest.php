@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Core\Support\BusinessRuleException;
 use App\Models\Tenant;
 use App\Models\TenantIntegration;
 use App\Modules\Finance\Models\Invoice;
@@ -90,7 +91,7 @@ class PaymobPaymentTest extends TestCase
         $member = $this->member($club);
         $membership = $this->asTenant($club, fn () => app(MembershipService::class)->sell($member, $this->plan($club)));
 
-        $this->expectException(\App\Core\Support\BusinessRuleException::class);
+        $this->expectException(BusinessRuleException::class);
         $this->asTenant($club, fn () => app(OnlinePaymentService::class)->start($membership->invoice));
     }
 

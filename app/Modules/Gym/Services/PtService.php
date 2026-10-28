@@ -23,8 +23,7 @@ final class PtService
     public function __construct(
         private readonly InvoiceService $invoices,
         private readonly AuditLogger $audit,
-    ) {
-    }
+    ) {}
 
     public function sell(Member $member, PtPackage $package, ?Trainer $trainer = null): PtSubscription
     {

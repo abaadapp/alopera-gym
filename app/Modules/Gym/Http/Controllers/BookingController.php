@@ -13,9 +13,7 @@ use Illuminate\Http\Request;
 
 class BookingController extends Controller
 {
-    public function __construct(private readonly BookingService $bookings)
-    {
-    }
+    public function __construct(private readonly BookingService $bookings) {}
 
     public function store(Request $request, ClassSession $session): RedirectResponse
     {

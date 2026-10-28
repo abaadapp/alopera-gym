@@ -10,8 +10,7 @@ final class GatewayResult
         public readonly ?string $errorCode = null,
         public readonly ?string $errorMessage = null,
         public readonly bool $retryable = false,
-    ) {
-    }
+    ) {}
 
     public static function sent(string $messageId): self
     {

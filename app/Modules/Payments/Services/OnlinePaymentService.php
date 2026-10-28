@@ -33,8 +33,7 @@ final class OnlinePaymentService
         private readonly PaymobClient $paymob,
         private readonly PaymentService $payments,
         private readonly AuditLogger $audit,
-    ) {
-    }
+    ) {}
 
     public function integration(): ?TenantIntegration
     {

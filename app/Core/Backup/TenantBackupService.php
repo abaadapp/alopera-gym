@@ -5,6 +5,7 @@ namespace App\Core\Backup;
 use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
 use App\Models\Tenant;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
@@ -29,11 +30,9 @@ final class TenantBackupService
 
     public const KEEP = 14;
 
-    public function __construct(private readonly AuditLogger $audit)
-    {
-    }
+    public function __construct(private readonly AuditLogger $audit) {}
 
-    public function disk(): \Illuminate\Contracts\Filesystem\Filesystem
+    public function disk(): Filesystem
     {
         return Storage::disk(config('gym.backup_disk', 'local'));
     }

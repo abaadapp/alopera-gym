@@ -18,8 +18,7 @@ final class MemberNotifier
     public function __construct(
         private readonly WhatsAppService $whatsapp,
         private readonly TenantContext $tenants,
-    ) {
-    }
+    ) {}
 
     public function welcome(Member $member): void
     {

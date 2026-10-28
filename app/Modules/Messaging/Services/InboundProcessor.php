@@ -26,8 +26,7 @@ final class InboundProcessor
         private readonly TenantContext $tenants,
         private readonly WhatsAppService $whatsapp,
         private readonly AuditLogger $audit,
-    ) {
-    }
+    ) {}
 
     /** @param array<string, mixed> $payload */
     public function handle(array $payload): int

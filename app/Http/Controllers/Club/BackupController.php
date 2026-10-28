@@ -14,9 +14,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BackupController extends Controller
 {
-    public function __construct(private readonly TenantBackupService $backups, private readonly TenantContext $tenants)
-    {
-    }
+    public function __construct(private readonly TenantBackupService $backups, private readonly TenantContext $tenants) {}
 
     public function index(): Response
     {

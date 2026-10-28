@@ -9,7 +9,5 @@ class OnlinePaymentFailed
 {
     use Dispatchable;
 
-    public function __construct(public readonly PaymentIntent $intent)
-    {
-    }
+    public function __construct(public readonly PaymentIntent $intent) {}
 }

@@ -13,9 +13,7 @@ use Illuminate\Support\Facades\DB;
 
 final class MemberService
 {
-    public function __construct(private readonly PlanLimits $limits)
-    {
-    }
+    public function __construct(private readonly PlanLimits $limits) {}
 
     /** @param array<string, mixed> $data validated attributes */
     public function create(array $data, ?string $password = null): Member

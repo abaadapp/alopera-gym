@@ -2,6 +2,7 @@
 
 namespace App\Modules\Messaging\Http\Controllers;
 
+use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Messaging\Models\Conversation;
@@ -72,12 +73,12 @@ class InboxController extends Controller
 
         $message = $whatsapp->queueTemplate($member, $template->key, [
             'member_name' => explode(' ', $member->full_name)[0],
-            'club_name' => app(\App\Core\Tenancy\TenantContext::class)->require()->name,
+            'club_name' => app(TenantContext::class)->require()->name,
             'member_no' => $member->member_no,
             'plan_name' => (string) ($membership?->plan_snapshot['name'] ?? ''),
             'ends_on' => $membership?->ends_on?->format('Y/m/d') ?? '',
             'starts_on' => $membership?->starts_on?->format('Y/m/d') ?? '',
-            'renew_link' => route('portal.renew', ['club' => app(\App\Core\Tenancy\TenantContext::class)->require()->slug]),
+            'renew_link' => route('portal.renew', ['club' => app(TenantContext::class)->require()->slug]),
         ], null, 'manual:'.$template->key.':'.$member->id.':'.now()->timestamp);
 
         if (! $message) {

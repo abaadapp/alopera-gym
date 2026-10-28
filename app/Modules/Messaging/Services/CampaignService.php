@@ -16,8 +16,7 @@ final class CampaignService
         private readonly AudienceBuilder $audiences,
         private readonly WhatsAppService $whatsapp,
         private readonly TenantContext $tenants,
-    ) {
-    }
+    ) {}
 
     public function launch(Campaign $campaign): void
     {

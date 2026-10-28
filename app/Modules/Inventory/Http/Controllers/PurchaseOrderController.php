@@ -15,9 +15,7 @@ use Inertia\Response;
 
 class PurchaseOrderController extends Controller
 {
-    public function __construct(private readonly PurchaseService $purchases)
-    {
-    }
+    public function __construct(private readonly PurchaseService $purchases) {}
 
     public function index(Request $request): Response
     {

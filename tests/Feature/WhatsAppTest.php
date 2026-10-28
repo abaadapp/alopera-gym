@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Tenant;
 use App\Models\TenantIntegration;
-use App\Modules\Gym\Models\Member;
 use App\Modules\Messaging\Models\AutoReply;
 use App\Modules\Messaging\Models\Campaign;
 use App\Modules\Messaging\Models\Conversation;

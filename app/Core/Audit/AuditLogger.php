@@ -21,9 +21,7 @@ final class AuditLogger
     /** @var array{type: string, id: int|null, name: string|null}|null */
     private ?array $actorOverride = null;
 
-    public function __construct(private readonly TenantContext $tenants)
-    {
-    }
+    public function __construct(private readonly TenantContext $tenants) {}
 
     /**
      * @param  array<string, mixed>  $properties

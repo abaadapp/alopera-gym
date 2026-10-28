@@ -14,9 +14,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class ScheduleService
 {
-    public function __construct(private readonly TenantContext $tenants)
-    {
-    }
+    public function __construct(private readonly TenantContext $tenants) {}
 
     /** Refuse a slot that double-books the trainer on the same weekday. */
     public function assertNoTrainerClash(array $data, ?int $ignoreId = null): void

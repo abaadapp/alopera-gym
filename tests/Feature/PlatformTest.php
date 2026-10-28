@@ -7,6 +7,7 @@ use App\Models\PlatformInvoice;
 use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Modules\Finance\Models\Invoice;
 use App\Modules\Gym\Services\MemberService;
 use App\Modules\Messaging\Models\MessageTemplate;
 use App\Modules\Platform\Services\SubscriptionService;
@@ -93,6 +94,6 @@ class PlatformTest extends TestCase
         $this->activeMembership($club, $this->member($club));
 
         $this->assertSame(0, PlatformInvoice::count());
-        $this->assertSame(1, $this->asTenant($club, fn () => \App\Modules\Finance\Models\Invoice::count()));
+        $this->assertSame(1, $this->asTenant($club, fn () => Invoice::count()));
     }
 }

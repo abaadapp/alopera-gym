@@ -16,9 +16,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PaymentController extends Controller
 {
-    public function __construct(private readonly PaymentService $payments)
-    {
-    }
+    public function __construct(private readonly PaymentService $payments) {}
 
     public function index(Request $request): Response
     {

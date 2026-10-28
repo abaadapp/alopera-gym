@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Core\Auth\SystemRoles;
+use App\Core\Support\NumberSequence;
 use App\Core\Tenancy\TenantContext;
 use App\Models\PlatformPlan;
 use App\Models\Role;
@@ -30,12 +31,14 @@ use App\Modules\Gym\Services\MembershipService;
 use App\Modules\Gym\Services\PtService;
 use App\Modules\Gym\Services\ScheduleService;
 use App\Modules\Inventory\Models\Product;
+use App\Modules\Inventory\Models\ProductCategory;
 use App\Modules\Inventory\Models\Supplier;
 use App\Modules\Inventory\Services\PosService;
 use App\Modules\Inventory\Services\PurchaseService;
 use App\Modules\Messaging\Models\AutoReply;
 use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Models\Message;
+use App\Modules\Messaging\Models\MessageTemplate;
 use App\Modules\Messaging\Services\TemplateCatalog;
 use App\Modules\Platform\Services\SubscriptionService;
 use App\Modules\Platform\Services\TenantProvisioner;
@@ -295,7 +298,7 @@ class AloperaDemoSeeder extends Seeder
             'is_enabled' => true, 'mode' => 'test', 'credentials' => [], 'settings' => ['display_phone' => '+968 2400 0000'],
         ]);
         TemplateCatalog::seedDefaults(approved: true);
-        \App\Modules\Messaging\Models\MessageTemplate::query()->update(['status' => 'approved']);
+        MessageTemplate::query()->update(['status' => 'approved']);
 
         AutoReply::create(['keyword' => 'الأسعار', 'reply' => 'أهلًا بكِ 🌸 أسعار باقاتنا هنا: الموقع ← الباقات. يسعدنا خدمتك!']);
         AutoReply::create(['keyword' => 'الدوام', 'reply' => 'أوقات العمل: السبت–الخميس 6 صباحًا – 11 مساءً، الجمعة 4 – 10 مساءً.']);
@@ -335,7 +338,7 @@ class AloperaDemoSeeder extends Seeder
         $products = [];
         foreach ($rows as $i => [$name, $price, $cost, $cat]) {
             $p = new Product(['name' => $name, 'price' => $price, 'sku' => 'ALP-'.str_pad((string) ($i + 1), 3, '0', STR_PAD_LEFT), 'reorder_level' => 5]);
-            $p->product_category_id = \App\Modules\Inventory\Models\ProductCategory::firstOrCreate(['name' => $cat])->id;
+            $p->product_category_id = ProductCategory::firstOrCreate(['name' => $cat])->id;
             $p->save();
             $products[] = [$p, $cost];
         }
@@ -528,7 +531,7 @@ class AloperaDemoSeeder extends Seeder
             $rows = [['إيجار', 'إيجار المقر', 850], ['رواتب', 'رواتب المدربات والموظفات', 2400], ['كهرباء ومياه', 'فاتورة الكهرباء والمياه', 180 + $m * 15], ['تسويق وإعلانات', 'إعلانات إنستغرام', 120]];
             foreach ($rows as $i => [$cat, $desc, $amount]) {
                 $this->travel($month->copy()->addDays(2 + $i), fn () => Expense::create([
-                    'expense_category_id' => $cats[$cat] ?? null, 'number' => \App\Core\Support\NumberSequence::next('expense'),
+                    'expense_category_id' => $cats[$cat] ?? null, 'number' => NumberSequence::next('expense'),
                     'description' => $desc.' — '.$month->translatedFormat('F'), 'amount' => $amount, 'expense_date' => today(), 'payment_method' => 'bank_transfer',
                 ]));
             }

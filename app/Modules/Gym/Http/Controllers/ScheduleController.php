@@ -17,9 +17,7 @@ use Inertia\Response;
 /** The weekly class timetable. */
 class ScheduleController extends Controller
 {
-    public function __construct(private readonly ScheduleService $schedule)
-    {
-    }
+    public function __construct(private readonly ScheduleService $schedule) {}
 
     public function index(): Response
     {

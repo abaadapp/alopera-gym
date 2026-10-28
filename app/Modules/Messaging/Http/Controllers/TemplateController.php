@@ -3,7 +3,6 @@
 namespace App\Modules\Messaging\Http\Controllers;
 
 use App\Core\Tenancy\TenantContext;
-use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Messaging\Models\AutoReply;
 use App\Modules\Messaging\Models\MessageTemplate;

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Role;
 use App\Models\User;
 use App\Modules\Gym\Models\Trainer;
+use App\Modules\Gym\Services\BookingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\BuildsClubs;
@@ -133,8 +134,8 @@ class PermissionsTest extends TestCase
         $otherSession = $this->classSession($club, null, ['trainer_id' => $otherTrainer->id, 'starts_at' => now()->addMinutes(10)->addHours(2)]);
 
         [$myBooking, $otherBooking] = $this->asTenant($club, fn () => [
-            app(\App\Modules\Gym\Services\BookingService::class)->book($member, $mySession),
-            app(\App\Modules\Gym\Services\BookingService::class)->book($member, $otherSession),
+            app(BookingService::class)->book($member, $mySession),
+            app(BookingService::class)->book($member, $otherSession),
         ]);
 
         $this->actingAs($mine)->post(route('club.bookings.attendance', $myBooking->id), ['status' => 'attended'])->assertSessionHasNoErrors();

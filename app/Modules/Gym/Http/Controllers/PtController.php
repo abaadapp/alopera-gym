@@ -19,9 +19,7 @@ use Inertia\Response;
 /** Personal training: subscriptions and their sessions. */
 class PtController extends Controller
 {
-    public function __construct(private readonly PtService $pt)
-    {
-    }
+    public function __construct(private readonly PtService $pt) {}
 
     public function index(Request $request): Response
     {

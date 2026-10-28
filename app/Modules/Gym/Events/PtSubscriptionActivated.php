@@ -9,7 +9,5 @@ class PtSubscriptionActivated
 {
     use Dispatchable;
 
-    public function __construct(public readonly PtSubscription $subscription)
-    {
-    }
+    public function __construct(public readonly PtSubscription $subscription) {}
 }

@@ -16,9 +16,7 @@ use Inertia\Response;
 /** Simple front-desk point of sale. */
 class PosController extends Controller
 {
-    public function __construct(private readonly PosService $pos)
-    {
-    }
+    public function __construct(private readonly PosService $pos) {}
 
     public function index(): Response
     {

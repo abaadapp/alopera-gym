@@ -26,8 +26,7 @@ final class BookingService
     public function __construct(
         private readonly TenantContext $tenants,
         private readonly AuditLogger $audit,
-    ) {
-    }
+    ) {}
 
     public function book(Member $member, ClassSession $session, string $source = 'reception'): Booking
     {

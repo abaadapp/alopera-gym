@@ -2,9 +2,9 @@
 
 namespace App\Core\Tenancy;
 
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Exists;
 use Illuminate\Validation\Rules\Unique;
-use Illuminate\Validation\Rule;
 
 /**
  * Validation rules that only see the current tenant's rows.

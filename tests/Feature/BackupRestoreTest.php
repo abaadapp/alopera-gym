@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Core\Backup\TenantBackupService;
 use App\Core\Support\BusinessRuleException;
+use App\Core\Tenancy\TenantContext;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
@@ -40,7 +41,7 @@ class BackupRestoreTest extends TestCase
         // Damage: rename, add a member, cancel the membership.
         $this->asTenant($club, function () use ($member) {
             $member->update(['full_name' => 'Changed']);
-            $this->member(app(\App\Core\Tenancy\TenantContext::class)->require());
+            $this->member(app(TenantContext::class)->require());
             Membership::query()->update(['status' => 'cancelled']);
         });
 
@@ -52,7 +53,7 @@ class BackupRestoreTest extends TestCase
             $this->assertSame('Original Name', $member->fresh()->full_name);
             $this->assertSame('active', Membership::first()->status);
             // Sequences continue after restore (no duplicate key on the next insert).
-            $this->member(app(\App\Core\Tenancy\TenantContext::class)->require());
+            $this->member(app(TenantContext::class)->require());
         });
         $this->assertSame(1, $this->asTenant($other, fn () => Member::count()), 'Other clubs are untouched.');
     }

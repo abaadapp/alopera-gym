@@ -24,9 +24,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class AccessControlService
 {
-    public function __construct(private readonly TenantContext $tenants)
-    {
-    }
+    public function __construct(private readonly TenantContext $tenants) {}
 
     public function evaluate(?Member $member, ?CarbonImmutable $today = null): AccessDecision
     {

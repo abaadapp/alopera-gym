@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Core\Support\BusinessRuleException;
 use App\Modules\Gym\Access\AccessControlService;
 use App\Modules\Gym\Models\Booking;
+use App\Modules\Gym\Models\ClassSchedule;
 use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Services\BookingService;
@@ -208,7 +209,7 @@ class BookingTest extends TestCase
         $program = $this->program($club);
 
         $this->asTenant($club, function () use ($program) {
-            \App\Modules\Gym\Models\ClassSchedule::create([
+            ClassSchedule::create([
                 'program_id' => $program->id, 'weekday' => now()->addDays(2)->dayOfWeek, 'starts_at' => '18:00',
                 'duration_minutes' => 60, 'capacity' => 12, 'valid_from' => today(),
             ]);

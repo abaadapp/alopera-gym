@@ -29,8 +29,7 @@ final class WhatsAppService
     public function __construct(
         private readonly TenantContext $tenants,
         private readonly WhatsAppGateway $gateway,
-    ) {
-    }
+    ) {}
 
     public function integration(): ?TenantIntegration
     {

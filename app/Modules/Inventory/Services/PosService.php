@@ -24,8 +24,7 @@ final class PosService
         private readonly StockService $stock,
         private readonly InvoiceService $invoices,
         private readonly PaymentService $payments,
-    ) {
-    }
+    ) {}
 
     /**
      * @param  list<array{product_id: int, quantity: float|int}>  $items

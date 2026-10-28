@@ -29,8 +29,7 @@ final class TenantProvisioner
         private readonly TenantContext $tenants,
         private readonly SubscriptionService $subscriptions,
         private readonly AuditLogger $audit,
-    ) {
-    }
+    ) {}
 
     /**
      * @param  array{name: string, slug?: string|null, email?: string|null, phone?: string|null, city?: string|null, primary_color?: string|null, secondary_color?: string|null}  $club

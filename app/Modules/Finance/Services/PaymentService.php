@@ -23,9 +23,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class PaymentService
 {
-    public function __construct(private readonly AuditLogger $audit)
-    {
-    }
+    public function __construct(private readonly AuditLogger $audit) {}
 
     /**
      * Record money received at the desk.

@@ -25,7 +25,5 @@ abstract class ModuleServiceProvider extends ServiceProvider
         $this->bootModule();
     }
 
-    protected function bootModule(): void
-    {
-    }
+    protected function bootModule(): void {}
 }

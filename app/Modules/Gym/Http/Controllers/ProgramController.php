@@ -3,7 +3,6 @@
 namespace App\Modules\Gym\Http\Controllers;
 
 use App\Core\Support\ImageStore;
-use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Gym\Models\Program;
 use Illuminate\Http\RedirectResponse;

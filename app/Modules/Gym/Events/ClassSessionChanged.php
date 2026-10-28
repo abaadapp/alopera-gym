@@ -10,7 +10,5 @@ class ClassSessionChanged
 {
     use Dispatchable;
 
-    public function __construct(public readonly ClassSession $session, public readonly string $change)
-    {
-    }
+    public function __construct(public readonly ClassSession $session, public readonly string $change) {}
 }

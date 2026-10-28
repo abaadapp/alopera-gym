@@ -9,7 +9,5 @@ class BookingConfirmed
 {
     use Dispatchable;
 
-    public function __construct(public readonly Booking $booking)
-    {
-    }
+    public function __construct(public readonly Booking $booking) {}
 }

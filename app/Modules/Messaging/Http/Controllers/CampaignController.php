@@ -19,9 +19,7 @@ use Inertia\Response;
 
 class CampaignController extends Controller
 {
-    public function __construct(private readonly CampaignService $campaigns, private readonly AudienceBuilder $audiences)
-    {
-    }
+    public function __construct(private readonly CampaignService $campaigns, private readonly AudienceBuilder $audiences) {}
 
     public function index(): Response
     {

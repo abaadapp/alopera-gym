@@ -3,6 +3,7 @@
 namespace App\Modules\Gym\Http\Controllers;
 
 use App\Core\Support\BusinessRuleException;
+use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Gym\Events\ClassSessionChanged;
@@ -133,7 +134,7 @@ class SessionController extends Controller
             'ends_at' => $start->addMinutes($duration),
         ])->save();
 
-        if ($changes && app(\App\Core\Tenancy\TenantContext::class)->require()->setting('notify_class_changes', true)) {
+        if ($changes && app(TenantContext::class)->require()->setting('notify_class_changes', true)) {
             ClassSessionChanged::dispatch($session, implode('، ', $changes));
         }
 

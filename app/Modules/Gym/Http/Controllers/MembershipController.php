@@ -12,6 +12,7 @@ use App\Modules\Gym\Models\Coupon;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\MembershipPlan;
+use App\Modules\Gym\Services\CouponService;
 use App\Modules\Gym\Services\MembershipService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -23,9 +24,7 @@ use Inertia\Response;
 
 class MembershipController extends Controller
 {
-    public function __construct(private readonly MembershipService $service)
-    {
-    }
+    public function __construct(private readonly MembershipService $service) {}
 
     public function index(Request $request): Response
     {
@@ -83,7 +82,7 @@ class MembershipController extends Controller
         $couponError = null;
         if (! empty($data['coupon_code'])) {
             try {
-                $coupon = DB::transaction(fn () => app(\App\Modules\Gym\Services\CouponService::class)->validate($data['coupon_code'], $member, $plan, Money::sub($plan->price, $credit)));
+                $coupon = DB::transaction(fn () => app(CouponService::class)->validate($data['coupon_code'], $member, $plan, Money::sub($plan->price, $credit)));
                 $discount = $coupon->discountFor(Money::sub($plan->price, $credit));
             } catch (BusinessRuleException $e) {
                 $couponError = $e->getMessage();

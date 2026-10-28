@@ -12,9 +12,7 @@ use Symfony\Component\HttpFoundation\Response;
 /** Access-control hardware authenticates with `Authorization: Bearer <device token>`. */
 class AuthenticateDevice
 {
-    public function __construct(private readonly TenantContext $tenants)
-    {
-    }
+    public function __construct(private readonly TenantContext $tenants) {}
 
     public function handle(Request $request, Closure $next): Response
     {

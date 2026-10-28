@@ -23,8 +23,7 @@ final class InvoiceService
     public function __construct(
         private readonly TenantContext $tenants,
         private readonly AuditLogger $audit,
-    ) {
-    }
+    ) {}
 
     /**
      * Issue an invoice.

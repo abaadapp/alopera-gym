@@ -9,7 +9,5 @@ class BookingCancelled
 {
     use Dispatchable;
 
-    public function __construct(public readonly Booking $booking, public readonly ?string $reason = null)
-    {
-    }
+    public function __construct(public readonly Booking $booking, public readonly ?string $reason = null) {}
 }

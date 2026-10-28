@@ -12,9 +12,7 @@ use Illuminate\Support\Facades\DB;
 
 final class PurchaseService
 {
-    public function __construct(private readonly StockService $stock)
-    {
-    }
+    public function __construct(private readonly StockService $stock) {}
 
     /** @param list<array{product_id: int, quantity: float, unit_cost: float|string}> $items */
     public function create(Supplier $supplier, array $items, array $data = []): PurchaseOrder
