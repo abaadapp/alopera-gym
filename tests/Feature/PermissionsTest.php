@@ -181,6 +181,7 @@ class PermissionsTest extends TestCase
 
     public function test_platform_and_club_areas_are_separate(): void
     {
+        config(['gym.modules.platform_panel' => true]);
         $club = $this->club();
         $admin = User::factory()->platformAdmin()->create();
 

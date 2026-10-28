@@ -19,7 +19,7 @@ class RoleController extends Controller
             'roles' => Role::withCount('users')->orderBy('id')->get()->map(fn (Role $r) => $r->only('id', 'key', 'name', 'description', 'is_system', 'is_locked', 'users_count') + [
                 'permissions' => $r->expandedPermissions(),
             ]),
-            'groups' => collect(PermissionRegistry::groups())->map(fn ($g, $key) => ['key' => $key, 'label' => $g['label'], 'permissions' => collect($g['permissions'])->map(fn ($label, $perm) => ['key' => $perm, 'label' => $label])->values()])->values(),
+            'groups' => collect(PermissionRegistry::editorGroups())->map(fn ($g, $key) => ['key' => $key, 'label' => $g['label'], 'permissions' => collect($g['permissions'])->map(fn ($label, $perm) => ['key' => $perm, 'label' => $label])->values()])->values(),
         ]);
     }
 

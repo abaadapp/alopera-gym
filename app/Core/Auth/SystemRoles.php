@@ -32,7 +32,7 @@ final class SystemRoles
                 'name' => 'الإدارة',
                 'description' => 'إدارة النادي اليومية دون النسخ الاحتياطي والأدوار.',
                 'permissions' => array_values(array_diff(PermissionRegistry::all(), [
-                    'roles.manage', 'backups.manage', 'billing.view', 'integrations.manage', 'members.delete',
+                    'roles.manage', 'backups.manage', 'billing.view', 'integrations.manage', 'members.delete', ...PermissionRegistry::OWNER_ONLY,
                 ])),
                 'home' => 'club.dashboard',
             ],

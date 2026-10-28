@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Accounting\AccountingServiceProvider;
 use App\Modules\Finance\FinanceServiceProvider;
 use App\Modules\Gym\GymServiceProvider;
 use App\Modules\Inventory\InventoryServiceProvider;
@@ -10,6 +11,7 @@ use App\Providers\AppServiceProvider;
 
 return [
     AppServiceProvider::class,
+    AccountingServiceProvider::class,
     FinanceServiceProvider::class,
     GymServiceProvider::class,
     InventoryServiceProvider::class,

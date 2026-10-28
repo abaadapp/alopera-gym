@@ -20,6 +20,14 @@ class PlatformTest extends TestCase
 {
     use BuildsClubs, RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // The platform owner's screens and the marketing page are off by default (clubs are managed with
+        // php artisan clubs); these tests cover them for when they are switched back on.
+        config(['gym.modules.platform_panel' => true, 'gym.modules.marketing_site' => true]);
+    }
+
     public function test_super_admin_creates_a_ready_to_use_club(): void
     {
         $admin = User::factory()->platformAdmin()->create();

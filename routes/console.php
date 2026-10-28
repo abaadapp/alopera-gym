@@ -12,5 +12,6 @@ Schedule::command('gym:sessions')->hourly()->withoutOverlapping()->onOneServer()
 Schedule::command('gym:send-reminders')->dailyAt('10:00')->withoutOverlapping()->onOneServer();
 Schedule::command('messaging:dispatch-scheduled')->everyMinute()->withoutOverlapping()->onOneServer();
 Schedule::command('platform:billing')->dailyAt('01:00')->withoutOverlapping()->onOneServer();
+Schedule::command('accounting:sync')->dailyAt('02:30')->withoutOverlapping()->onOneServer();
 Schedule::command('backup:tenants')->dailyAt('03:00')->withoutOverlapping()->onOneServer();
 Schedule::command('queue:prune-failed --hours=720')->daily();

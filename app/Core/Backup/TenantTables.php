@@ -25,6 +25,7 @@ final class TenantTables
         'expenses', 'purchase_orders', 'purchase_order_items', 'sales', 'sale_items', 'stock_movements',
         'message_templates', 'conversations', 'campaigns', 'messages', 'auto_replies',
         'payment_intents',
+        'gym_accounts', 'gym_journal_entries', 'gym_journal_lines',
     ];
 
     /** Tenant-related tables deliberately left out, with the reason. */
@@ -40,6 +41,11 @@ final class TenantTables
         'gym_plan_program' => ['membership_plan_id', 'gym_membership_plans'],
     ];
 
-    /** Tables whose rows reference earlier rows of the same table; inserted in id order. */
-    public const SELF_REFERENCING = ['payments', 'gym_memberships'];
+    /** Tables whose rows reference earlier rows of the same table (that column): inserted in id order, the column cleared before deleting. */
+    public const SELF_REFERENCING = [
+        'payments' => 'refund_of_id',
+        'gym_memberships' => 'previous_membership_id',
+        'gym_accounts' => 'parent_id',
+        'gym_journal_entries' => 'reverses_id',
+    ];
 }

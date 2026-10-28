@@ -17,6 +17,10 @@ return [
     // and data stay untouched, but its screens and routes are unavailable and its permissions are not granted.
     'modules' => [
         'inventory' => (bool) env('GYM_INVENTORY_MODULE', false),
+        // The platform owner's screens (/platform) and the platform's marketing page (/) are switched off: clubs are
+        // managed from the command line (php artisan clubs:list), and / opens the staff sign-in. Code and data stay.
+        'platform_panel' => (bool) env('GYM_PLATFORM_PANEL', false),
+        'marketing_site' => (bool) env('GYM_MARKETING_SITE', false),
     ],
 
     // Upload limits (kilobytes)

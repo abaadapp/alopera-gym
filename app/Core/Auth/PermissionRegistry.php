@@ -89,6 +89,12 @@ final class PermissionRegistry
         ]],
     ];
 
+    /**
+     * Permissions only the club owner holds (her role is "*"): never granted through another role, whatever is
+     * stored on it or sent by the role editor. The club website is the owner's alone.
+     */
+    public const OWNER_ONLY = ['website.manage'];
+
     /** Permission groups that belong to an optional module (config gym.modules.<module>). */
     private const MODULE_GROUPS = ['inventory' => 'inventory'];
 
@@ -156,6 +162,18 @@ final class PermissionRegistry
      */
     public static function sanitize(array $permissions): array
     {
-        return array_values(array_intersect(self::all(), $permissions));
+        return array_values(array_diff(array_intersect(self::all(), $permissions), self::OWNER_ONLY));
+    }
+
+    /**
+     * The groups as the role editor shows them: owner-only permissions are not offered.
+     *
+     * @return array<string, array{label: string, permissions: array<string, string>}>
+     */
+    public static function editorGroups(): array
+    {
+        $groups = array_map(fn (array $group) => ['label' => $group['label'], 'permissions' => array_diff_key($group['permissions'], array_flip(self::OWNER_ONLY))], self::groups());
+
+        return array_filter($groups, fn (array $group) => $group['permissions'] !== []);
     }
 }

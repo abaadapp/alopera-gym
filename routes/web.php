@@ -9,9 +9,9 @@ use Illuminate\Support\Facades\Route;
 
 /*
 | Route map
-|   /                 platform landing
+|   /                 platform landing (off unless GYM_MARKETING_SITE=true: opens the staff sign-in)
 |   /login            staff sign-in (platform admins and club staff)
-|   /platform/*       super admin (platform owner)
+|   /platform/*       super admin (off unless GYM_PLATFORM_PANEL=true; clubs are managed with php artisan clubs:*)
 |   /app/*            club panel — tenant = the signed-in user's club
 |   /c/{club}/*       club website and member portal — tenant = slug
 |   /webhooks/*       Paymob and WhatsApp callbacks (signature-verified)
@@ -31,7 +31,7 @@ Route::middleware('guest')->group(function () {
 
 Route::post('/logout', [LoginController::class, 'destroy'])->middleware('auth')->name('logout');
 
-Route::prefix('platform')->name('platform.')->middleware(['auth', 'platform'])
+Route::prefix('platform')->name('platform.')->middleware(['module:platform_panel', 'auth', 'platform'])
     ->group(app_path('Modules/Platform/Http/routes.php'));
 
 Route::prefix('app')->name('club.')->middleware(['auth', 'tenant.user', 'tenant.active'])->group(function () {

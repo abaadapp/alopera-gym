@@ -21,6 +21,9 @@ final class NumberSequence
         'sale' => ['prefix' => 'POS-', 'pad' => 6, 'yearly' => true],
         'purchase_order' => ['prefix' => 'PO-', 'pad' => 5, 'yearly' => true],
         'expense' => ['prefix' => 'EX-', 'pad' => 5, 'yearly' => true],
+        'journal' => ['prefix' => 'JV-', 'pad' => 6, 'yearly' => true],
+        'payroll_run' => ['prefix' => 'PR-', 'pad' => 5, 'yearly' => false],
+        'payroll_payout' => ['prefix' => 'SP-', 'pad' => 5, 'yearly' => true],
     ];
 
     public static function next(string $key, ?int $tenantId = null): string

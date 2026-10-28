@@ -154,7 +154,7 @@ final class TenantBackupService
             $counts = [];
             foreach (TenantTables::ORDER as $table) {
                 $rows = $data[$table] ?? [];
-                if (in_array($table, TenantTables::SELF_REFERENCING, true)) {
+                if (isset(TenantTables::SELF_REFERENCING[$table])) {
                     usort($rows, fn ($a, $b) => $a['id'] <=> $b['id']);
                 }
                 foreach (array_chunk($rows, 500) as $chunk) {
@@ -205,9 +205,8 @@ final class TenantBackupService
             return;
         }
 
-        if (in_array($table, TenantTables::SELF_REFERENCING, true)) {
-            $column = $table === 'payments' ? 'refund_of_id' : 'previous_membership_id';
-            DB::table($table)->where('tenant_id', $tenant->id)->update([$column => null]);
+        if (isset(TenantTables::SELF_REFERENCING[$table])) {
+            DB::table($table)->where('tenant_id', $tenant->id)->update([TenantTables::SELF_REFERENCING[$table] => null]);
         }
 
         DB::table($table)->where('tenant_id', $tenant->id)->delete();
