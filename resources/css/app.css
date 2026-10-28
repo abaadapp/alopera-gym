@@ -33,6 +33,24 @@
     --brand-soft: #f9a8d4;
 }
 
+/*
+ * Control panels (AdminScope): a neutral palette in place of the brand-tinted one — grey lines and canvas,
+ * near-black text. The club's colour stays the accent (primary buttons, the current menu item, active tabs).
+ * The public website, the portal, the sign-in pages and the marketing page are outside the scope.
+ */
+.admin-ui {
+    --color-ink: #111111;
+    --color-muted: #6b7280;
+    --color-line: #e8e8e8;
+    --color-canvas: #f7f8f9;
+    color: var(--color-ink);
+    letter-spacing: -0.011em;
+    -webkit-font-smoothing: antialiased;
+}
+body:has(.admin-ui) {
+    background-color: #f7f8f9;
+}
+
 html {
     -webkit-tap-highlight-color: transparent;
 }
@@ -94,6 +112,20 @@ h1, h2, h3, .font-display {
     }
     .table-base tbody tr:hover {
         @apply bg-brand-50/60;
+    }
+    /* Control panels: a lighter card shadow, 10px fields with a grey focus ring, and a grey row hover. */
+    .admin-ui .card {
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+    .admin-ui .input {
+        @apply rounded-[10px];
+    }
+    .admin-ui .input:focus {
+        border-color: #d1d5db;
+        box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+    }
+    .admin-ui .table-base tbody tr:hover {
+        background-color: #fafafa;
     }
     /* Phones: rows stay one line high (numbers, phones and names never break) and the table scrolls
        sideways inside its card. Cells sized with max-w-* hold free text and keep wrapping. */

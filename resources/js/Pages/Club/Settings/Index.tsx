@@ -57,7 +57,7 @@ export default function SettingsIndex() {
                                 <Link
                                     key={name}
                                     href={route(name)}
-                                    className="group flex items-center gap-4 rounded-2xl border border-line bg-white p-5 shadow-[0_1px_2px_rgba(42,31,45,0.04)] transition hover:border-brand-200 hover:bg-brand-50/40 hover:shadow-md hover:shadow-brand/5 focus-visible:ring-4 focus-visible:ring-brand/15 focus-visible:outline-none"
+                                    className="group flex items-center gap-4 rounded-2xl border border-line bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-[#dcdcdc] hover:shadow-[0_8px_30px_-12px_rgba(17,17,17,0.14)] focus-visible:ring-4 focus-visible:ring-brand/15 focus-visible:outline-none"
                                 >
                                     <span className="grid size-13 shrink-0 place-items-center rounded-[14px] bg-brand-50 text-brand transition-colors group-hover:bg-brand group-hover:text-white">
                                         <Icon className="size-6" />

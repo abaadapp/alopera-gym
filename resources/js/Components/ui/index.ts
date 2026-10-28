@@ -1,3 +1,4 @@
+export { default as AdminScope, useAdmin } from './AdminScope';
 export { default as Button } from './Button';
 export { Field, Input, Textarea, Select, Checkbox, Toggle } from './Form';
 export { Card, CardHeader, PageHeader, Badge, StatCard, EmptyState, Stat } from './Card';

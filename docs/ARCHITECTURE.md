@@ -23,7 +23,9 @@ app/
     ├── Reports/          المؤشرات والتقارير والتصدير
     └── Platform/         خدمات المنصة: إنشاء الأندية، حدود الباقة، اشتراكات SaaS
 resources/js/
-├── Components/ui/        مكونات الواجهة المشتركة
+├── Components/ui/        مكونات الواجهة المشتركة (AdminScope يعطيها مظهر لوحات التحكم داخل اللوحات فقط)
+├── Components/           PanelShell (إطار لوحتي النادي والمنصة) · SectionTabs (تبويبات الأقسام)
+├── lib/nav.ts            أقسام لوحة النادي وتبويباتها وصلاحياتها
 ├── Layouts/              ClubLayout · PlatformLayout · SiteLayout · PortalLayout · AuthLayout
 └── Pages/                82 صفحة Inertia مطابقة لمسارات المتحكمات
 ```

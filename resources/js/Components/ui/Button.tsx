@@ -2,6 +2,7 @@ import { Link } from '@inertiajs/react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { useAdmin } from './AdminScope';
 
 const variants = {
     primary: 'bg-brand text-white hover:bg-brand-600 shadow-sm shadow-brand/20',
@@ -18,6 +19,22 @@ const sizes = {
     lg: 'h-12 px-6 text-base gap-2 rounded-xl',
 };
 
+/* Control panels (AdminScope): quiet neutral buttons with a 10px radius; the primary keeps the club's colour. */
+const adminVariants: Record<keyof typeof variants, string> = {
+    primary: 'bg-brand text-white hover:bg-brand-600',
+    secondary: 'bg-[#f2f2f0] text-ink hover:bg-[#e9e9e6]',
+    outline: 'border border-[#dcdcdc] bg-white text-ink hover:bg-[#fafafa]',
+    ghost: 'text-[#4b4b4b] hover:bg-ink/[0.045] hover:text-ink',
+    danger: 'bg-[#dc2626] text-white hover:bg-[#b91c1c]',
+    success: 'bg-[#059669] text-white hover:bg-[#047857]',
+};
+
+const adminSizes: Record<keyof typeof sizes, string> = {
+    sm: 'h-8 px-3 text-[13px] gap-1.5 rounded-[10px]',
+    md: 'h-10 px-4 text-sm gap-2 rounded-[10px]',
+    lg: 'h-12 px-6 text-[15px] gap-2 rounded-[10px]',
+};
+
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
     variant?: keyof typeof variants;
     size?: keyof typeof sizes;
@@ -28,10 +45,11 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 export default function Button({ variant = 'primary', size = 'md', href, loading, icon, className, children, disabled, external, ...rest }: Props) {
+    const admin = useAdmin();
     const classes = cn(
         'inline-flex shrink-0 items-center justify-center font-medium whitespace-nowrap transition disabled:cursor-not-allowed disabled:opacity-60',
-        variants[variant],
-        sizes[size],
+        admin ? adminVariants[variant] : variants[variant],
+        admin ? adminSizes[size] : sizes[size],
         className,
     );
     // Icon-only links still need an accessible name.

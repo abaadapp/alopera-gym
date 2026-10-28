@@ -11,11 +11,11 @@ export default function Tabs<T extends string>({ tabs, value, onChange, classNam
                     onClick={() => onChange(tab.key)}
                     className={cn(
                         'relative -mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition',
-                        value === tab.key ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink',
+                        value === tab.key ? 'border-brand text-ink' : 'border-transparent text-muted hover:text-ink',
                     )}
                 >
                     {tab.label}
-                    {tab.count != null && <span className="rounded-full bg-brand-50 px-1.5 text-xs text-brand-700 num">{tab.count}</span>}
+                    {tab.count != null && <span className="rounded-full bg-[#f2f2f0] px-1.5 text-xs text-[#4b4b4b] num">{tab.count}</span>}
                 </button>
             ))}
         </div>

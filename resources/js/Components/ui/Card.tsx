@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Link } from '@inertiajs/react';
 import SectionTabs from '@/Components/SectionTabs';
 import { cn } from '@/lib/cn';
+import { useAdmin } from './AdminScope';
 
 export function Card({ children, className, padded = true }: { children: ReactNode; className?: string; padded?: boolean }) {
     return <div className={cn('card', padded && 'p-5', className)}>{children}</div>;
@@ -11,8 +12,8 @@ export function CardHeader({ title, subtitle, actions, className }: { title: Rea
     return (
         <div className={cn('mb-4 flex flex-wrap items-start justify-between gap-3', className)}>
             <div>
-                <h3 className="text-base font-semibold text-ink">{title}</h3>
-                {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
+                <h3 className="text-[15px] font-semibold text-ink">{title}</h3>
+                {subtitle && <p className="mt-0.5 text-[13px] text-muted">{subtitle}</p>}
             </div>
             {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
@@ -26,8 +27,8 @@ export function PageHeader({ title, subtitle, actions, back }: { title: ReactNod
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div className="min-w-0">
                     {back}
-                    <h1 className="truncate text-2xl font-semibold text-ink">{title}</h1>
-                    {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
+                    <h1 className="truncate text-[22px] font-bold tracking-tight text-ink">{title}</h1>
+                    {subtitle && <p className="mt-0.5 text-[13px] text-muted">{subtitle}</p>}
                 </div>
                 {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
             </div>
@@ -47,13 +48,15 @@ const tones = {
 };
 
 export function Badge({ children, tone = 'gray', className }: { children: ReactNode; tone?: keyof typeof tones; className?: string }) {
-    return <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap', tones[tone], className)}>{children}</span>;
+    // In a control panel the neutral badge is grey, not warm stone.
+    const admin = useAdmin();
+    return <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap', admin && tone === 'gray' ? 'bg-[#f2f2f0] text-[#4b4b4b]' : tones[tone], className)}>{children}</span>;
 }
 
 export function StatCard({ label, value, hint, icon, tone = 'brand', href }: { label: ReactNode; value: ReactNode; hint?: ReactNode; icon?: ReactNode; tone?: keyof typeof tones; href?: string }) {
     const body = (
         // Two to a row on phones: icon above the figures; side by side from sm up.
-        <div className="card flex h-full flex-col items-start gap-3 p-4 transition hover:border-brand-200 sm:flex-row sm:gap-4 sm:p-5">
+        <div className="card flex h-full flex-col items-start gap-3 p-4 transition hover:border-[#dcdcdc] sm:flex-row sm:gap-4 sm:p-5">
             {icon && <div className={cn('grid size-9 shrink-0 place-items-center rounded-xl sm:size-11', tones[tone])}>{icon}</div>}
             <div className="min-w-0">
                 <p className="text-sm text-muted">{label}</p>
