@@ -10,27 +10,29 @@ type Row = { id: number; user: string | null; method: string; device: string | n
 
 const METHODS: Record<string, string> = { manual: 'يدوي من اللوحة', fingerprint: 'بصمة', card: 'بطاقة', pin: 'رمز PIN' };
 
-export default function StaffAttendanceIndex({ rows, staff, filters }: { rows: Paginated<Row>; staff: Option[]; filters: { from: string; to: string; user_id: number | null } }) {
+type Summary = { user: string | null; days: number; hours: number; open: number; records: number };
+
+export default function StaffAttendanceIndex({ rows, summary, staff, filters }: { rows: Paginated<Row>; summary: Summary[]; staff: Option[]; filters: { from: string; to: string; user_id: number | null } }) {
     const [from, setFrom] = useState(filters.from);
     const [to, setTo] = useState(filters.to);
     const [userId, setUserId] = useState<string>(filters.user_id ? String(filters.user_id) : '');
 
     const apply = () => router.get(route('club.staff-attendance.index'), { from, to, user_id: userId || undefined }, { preserveState: true });
 
-    const pageHours = rows.data.reduce((sum, r) => sum + (r.hours ?? 0), 0);
-    const open = rows.data.filter((r) => !r.out).length;
+    const totalHours = summary.reduce((sum, s) => sum + s.hours, 0);
+    const open = summary.reduce((sum, s) => sum + s.open, 0);
 
     return (
-        <ClubLayout title="حضور الموظفات">
+        <ClubLayout title="الحضور والانصراف">
             <PageHeader
-                title="حضور وانصراف الموظفات"
-                subtitle="سجل موحّد من أجهزة البصمة والتسجيل اليدوي"
+                title="الحضور والانصراف"
+                subtitle="حضور الموظفين من أجهزة البصمة والتسجيل اليدوي — منفصل عن دخول المشتركات"
                 actions={<Button icon={<LogIn className="size-4" />} onClick={() => router.post(route('club.staff-attendance.punch'), {}, { preserveScroll: true })}>تسجيل حضوري/انصرافي</Button>}
             />
 
             <div className="mb-4 grid gap-4 sm:grid-cols-3">
                 <StatCard label="سجلات الفترة" value={number(rows.total)} icon={<UserRoundCheck className="size-5" />} />
-                <StatCard label="ساعات (هذه الصفحة)" value={number(pageHours, 1)} icon={<Clock className="size-5" />} tone="blue" />
+                <StatCard label="ساعات العمل في الفترة" value={number(totalHours, 1)} icon={<Clock className="size-5" />} tone="blue" />
                 <StatCard label="لم تُسجّل انصرافها" value={number(open)} icon={<Fingerprint className="size-5" />} tone="amber" />
             </div>
 
@@ -46,6 +48,28 @@ export default function StaffAttendanceIndex({ rows, staff, filters }: { rows: P
                     <Button variant="secondary" icon={<Search className="size-4" />} onClick={apply}>عرض</Button>
                 </div>
             </Card>
+
+            {summary.length > 0 && (
+                <Card padded={false} className="mb-4">
+                    <div className="p-5 pb-2"><h3 className="text-[15px] font-semibold">ملخص الفترة لكل موظفة</h3></div>
+                    <div className="overflow-x-auto">
+                        <table className="table-base">
+                            <thead><tr><th>الموظفة</th><th>أيام الحضور</th><th>ساعات العمل</th><th>السجلات</th><th>بلا انصراف</th></tr></thead>
+                            <tbody>
+                                {summary.map((s, i) => (
+                                    <tr key={i}>
+                                        <td className="font-medium">{s.user ?? '—'}</td>
+                                        <td className="num">{s.days}</td>
+                                        <td className="num">{number(s.hours, 1)}</td>
+                                        <td className="num">{s.records}</td>
+                                        <td>{s.open ? <Badge tone="amber">{s.open}</Badge> : <span className="text-muted">—</span>}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
 
             <Card padded={false}>
                 {rows.data.length === 0 ? (

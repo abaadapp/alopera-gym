@@ -33,6 +33,7 @@ class SiteController extends Controller
         $site = $this->site();
 
         return $this->page('Site/Home', [
+            'sections' => $site->visibleSections(),
             'hero' => [
                 'title' => $site->hero_title ?: $tenant->name,
                 'subtitle' => $site->hero_subtitle,

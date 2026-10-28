@@ -1,6 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
-import { BarChart3, DoorOpen, Dumbbell, Globe, LayoutDashboard, MessageCircle, ScanLine, Settings, Ticket, Users, Wallet } from 'lucide-react';
+import { BarChart3, Briefcase, DoorOpen, Dumbbell, Globe, LayoutDashboard, MessageCircle, ScanLine, Settings, Ticket, Users, Wallet } from 'lucide-react';
 import { useCan, useShared } from '@/hooks/useShared';
 
 /**
@@ -51,12 +51,11 @@ export const NAV: NavGroup[] = [
                 ],
             },
             {
-                label: 'الدخول والحضور',
+                label: 'دخول المشتركات والحضور',
                 icon: DoorOpen,
                 tabs: [
                     { label: 'سجل الدخول', route: 'club.checkins.index', permission: 'checkin.view', match: 'club.checkins.*' },
                     { label: 'أجهزة الدخول', route: 'club.devices.index', permission: 'devices.manage', match: 'club.devices.*' },
-                    { label: 'حضور الموظفات', route: 'club.staff-attendance.index', permission: 'staff_attendance.view', match: 'club.staff-attendance.*' },
                 ],
             },
         ],
@@ -67,10 +66,42 @@ export const NAV: NavGroup[] = [
                 label: 'المالية',
                 icon: Wallet,
                 tabs: [
+                    { label: 'الملخص المالي', route: 'club.finance.summary', permission: 'accounting.view' },
+                    { label: 'الحركة المالية', route: 'club.finance.movement', permission: 'accounting.view' },
+                    { label: 'الحسابات البنكية', route: 'club.finance.banks', permission: 'accounting.view' },
                     { label: 'الفواتير', route: 'club.invoices.index', permission: 'invoices.view', match: ['club.invoices.*', 'club.credit-notes.*'] },
-                    { label: 'المدفوعات والإيصالات', route: 'club.payments.index', permission: 'invoices.view', match: 'club.payments.*' },
+                    { label: 'المدفوعات والتحصيل', route: 'club.payments.index', permission: 'invoices.view', match: 'club.payments.*' },
                     { label: 'المستحقات', route: 'club.dues', permission: 'dues.view' },
                     { label: 'المصروفات', route: 'club.expenses.index', permission: 'expenses.manage', match: 'club.expenses.*' },
+                    { label: 'شجرة الحسابات', route: 'club.finance.accounts', permission: 'accounting.view' },
+                    { label: 'القيود اليومية', route: 'club.finance.journal', permission: 'accounting.view' },
+                    { label: 'التقارير المالية', route: 'club.finance.statements', permission: 'accounting.view' },
+                ],
+            },
+            {
+                label: 'الرواتب والموظفين',
+                icon: Briefcase,
+                tabs: [
+                    { label: 'الموظفون', route: 'club.employees.index', permission: 'employees.view', match: 'club.employees.*' },
+                    { label: 'مسيرات الرواتب', route: 'club.payroll.index', permission: ['payroll.prepare', 'payroll.approve', 'payroll.pay', 'payroll.reports'], match: 'club.payroll.print' },
+                    { label: 'صرف الرواتب', route: 'club.payroll.payouts', permission: ['payroll.pay', 'payroll.reports'] },
+                    { label: 'الحضور والانصراف', route: 'club.staff-attendance.index', permission: 'staff_attendance.view', match: 'club.staff-attendance.*' },
+                    { label: 'المسميات الوظيفية', route: 'club.job-titles.index', permission: 'employees.view', match: 'club.job-titles.*' },
+                ],
+            },
+        ],
+    },
+    {
+        sections: [
+            {
+                label: 'محادثات واتساب',
+                icon: MessageCircle,
+                tabs: [
+                    { label: 'المحادثات', route: 'club.inbox.index', permission: 'whatsapp.inbox', match: 'club.inbox.*' },
+                    { label: 'الحملات', route: 'club.campaigns.index', permission: 'campaigns.manage', match: 'club.campaigns.*' },
+                    { label: 'القوالب', route: 'club.templates.index', permission: 'templates.manage', match: 'club.templates.*' },
+                    { label: 'الأتمتة', route: 'club.automation.index', permission: 'templates.manage' },
+                    { label: 'سجل الرسائل', route: 'club.messages.index', permission: 'whatsapp.inbox' },
                 ],
             },
             {
@@ -84,26 +115,14 @@ export const NAV: NavGroup[] = [
                 ],
                 match: ['club.reports.*'],
             },
-        ],
-    },
-    {
-        sections: [
-            {
-                label: 'واتساب',
-                icon: MessageCircle,
-                tabs: [
-                    { label: 'المحادثات', route: 'club.inbox.index', permission: 'whatsapp.inbox', match: 'club.inbox.*' },
-                    { label: 'الحملات', route: 'club.campaigns.index', permission: 'campaigns.manage', match: 'club.campaigns.*' },
-                    { label: 'القوالب', route: 'club.templates.index', permission: 'templates.manage', match: 'club.templates.*' },
-                    { label: 'الأتمتة', route: 'club.automation.index', permission: 'templates.manage' },
-                    { label: 'سجل الرسائل', route: 'club.messages.index', permission: 'whatsapp.inbox' },
-                ],
-            },
             {
                 label: 'الموقع الإلكتروني',
                 icon: Globe,
+                // The club owner's alone (website.manage is never granted through another role).
                 tabs: [
                     { label: 'المحتوى', route: 'club.website.edit', permission: 'website.manage' },
+                    { label: 'أقسام الموقع', route: 'club.website.sections', permission: 'website.manage' },
+                    { label: 'الهوية والألوان', route: 'club.website.branding', permission: 'website.manage' },
                     { label: 'الأخبار والعروض', route: 'club.website.posts.index', permission: 'website.manage', match: 'club.website.posts.*' },
                     { label: 'رسائل التواصل', route: 'club.website.messages', permission: 'website.manage' },
                 ],
@@ -121,6 +140,14 @@ export const NAV: NavGroup[] = [
             },
         ],
     },
+];
+
+/** Pages that are not sections of the menu but sit side by side as tabs (inside settings). */
+export const PAGE_GROUPS: NavTab[][] = [
+    [
+        { label: 'المستخدمون', route: 'club.users.index', permission: 'users.manage' },
+        { label: 'الأدوار والصلاحيات', route: 'club.roles.index', permission: 'roles.manage' },
+    ],
 ];
 
 const list = (value?: string | string[]) => (value === undefined ? [] : Array.isArray(value) ? value : [value]);
@@ -157,7 +184,7 @@ export function useNavigation() {
         }),
     })).filter((group) => group.sections.length > 0);
 
-    return { groups, query, onTab };
+    return { groups, query, onTab, visible };
 }
 
 /**
@@ -166,8 +193,8 @@ export function useNavigation() {
  * its parameter shows its first visible view.
  */
 export function useSectionTabs(): { tabs: NavTab[]; active: NavTab | undefined; query: URLSearchParams } {
-    const { groups, query, onTab } = useNavigation();
+    const { groups, query, onTab, visible } = useNavigation();
     const section = groups.flatMap((group) => group.sections).find((s) => s.tabs.some((tab) => route().current(tab.route)));
-    const tabs = section?.tabs ?? [];
+    const tabs = section?.tabs ?? PAGE_GROUPS.map((g) => g.filter(visible)).find((g) => g.some((tab) => route().current(tab.route))) ?? [];
     return { tabs, active: tabs.find(onTab) ?? tabs.find((tab) => route().current(tab.route)), query };
 }

@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode } from 'react';
 import { Link } from '@inertiajs/react';
 import { ArrowLeft, CalendarCheck, CreditCard, Heart, Megaphone, Newspaper, ShieldCheck, Sparkles } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
@@ -21,6 +22,7 @@ export interface PostData {
 interface Props {
     site: SiteInfo;
     seo: { title: string };
+    sections: string[];
     hero: { title: string; subtitle: string | null; image_url: string | null; cta: string; badge: string | null };
     features: { title: string; text: string }[];
     about: { title: string | null; body: string | null; image_url: string | null };
@@ -58,9 +60,118 @@ export function PostCard({ post }: { post: PostData }) {
 
 const FEATURE_ICONS = [CalendarCheck, CreditCard, ShieldCheck];
 
-export default function Home({ site, seo, hero, features, about, stats, plans, programs, trainers, offers, news, gallery }: Props) {
+export default function Home({ site, seo, sections, hero, features, about, stats, plans, programs, trainers, offers, news, gallery }: Props) {
     const currency = useCurrency();
     const { tenant } = useShared();
+
+    // Each home section, shown in the order the owner set (websites → أقسام الموقع); by default, this order.
+    const blocks: Record<string, ReactNode> = {
+        // Why us
+        features: features.length > 0 && (
+                    <section className="mx-auto max-w-6xl px-4 py-14">
+                        <div className="grid gap-4 sm:grid-cols-3">
+                            {features.map(({ title, text }, i) => {
+                                const Icon = FEATURE_ICONS[i % FEATURE_ICONS.length];
+                                return (
+                                    <div key={i} className="rounded-3xl border border-line bg-white p-6 shadow-sm">
+                                        <span className="grid size-12 place-items-center rounded-2xl bg-brand-50 text-brand"><Icon className="size-6" /></span>
+                                        <h3 className="mt-4 font-display text-lg font-semibold">{title}</h3>
+                                        <p className="mt-1.5 text-sm leading-7 text-muted">{text}</p>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+                ),
+        // About
+        about: (about.title || about.body) && (
+                    <section className={`mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 ${about.image_url ? 'lg:grid-cols-2' : ''}`}>
+                        <div className={about.image_url ? 'order-2 lg:order-1' : 'rounded-[2rem] border border-line bg-white p-8 shadow-sm sm:p-12'}>
+                            <p className="mb-2 text-sm font-medium text-brand">من نحن</p>
+                            <h2 className="font-display text-3xl font-semibold sm:text-4xl">{about.title ?? 'عن النادي'}</h2>
+                            {about.body && <p className="mt-5 max-w-3xl leading-8 whitespace-pre-line text-muted">{about.body}</p>}
+                        </div>
+                        {about.image_url && (
+                            <div className="order-1 aspect-[4/3] overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand-50 to-brand-100 lg:order-2">
+                                <img src={about.image_url} alt={about.title ?? ''} loading="lazy" width={720} height={540} className="size-full object-cover" />
+                            </div>
+                        )}
+                    </section>
+                ),
+        // Offers
+        offers: offers.length > 0 && (
+                    <section className="mx-auto max-w-6xl px-4 py-14">
+                        <SectionTitle eyebrow="عروض حصرية" title="عروضنا الحالية" />
+                        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{offers.map((p) => <PostCard key={p.id} post={p} />)}</div>
+                    </section>
+                ),
+        // Plans
+        plans: plans.length > 0 && (
+                    <section className="bg-gradient-to-b from-transparent via-brand-50/60 to-transparent py-16">
+                        <div className="mx-auto max-w-6xl px-4">
+                            <SectionTitle eyebrow="الباقات" title="اختاري باقتك" subtitle="أسعار واضحة بلا مفاجآت، وتفعيل فوري بعد الدفع." />
+                            <div className="grid gap-6 pt-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {plans.map((plan) => (
+                                    <PlanCard key={plan.id} plan={plan} currency={currency} cta={site.signup_enabled ? { label: 'اشتركي الآن', href: route('site.join', { plan: plan.id }) } : undefined} />
+                                ))}
+                            </div>
+                            <p className="mt-8 text-center">
+                                <Link href={route('site.plans')} className="inline-flex items-center gap-1.5 text-sm font-medium text-brand hover:underline">كل الباقات والأسعار <ArrowLeft className="size-4" /></Link>
+                            </p>
+                        </div>
+                    </section>
+                ),
+        // Programs
+        programs: programs.length > 0 && (
+                    <section className="mx-auto max-w-6xl px-4 py-14">
+                        <SectionTitle eyebrow="البرامج" title="برامج تناسب كل هدف" />
+                        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{programs.map((p) => <ProgramCard key={p.id} program={p} />)}</div>
+                        <p className="mt-8 text-center">
+                            <Link href={route('site.programs')} className="inline-flex items-center gap-1.5 text-sm font-medium text-brand hover:underline">كل البرامج <ArrowLeft className="size-4" /></Link>
+                        </p>
+                    </section>
+                ),
+        // Trainers
+        trainers: trainers.length > 0 && (
+                    <section className="mx-auto max-w-6xl px-4 py-14">
+                        <SectionTitle eyebrow="المدربات" title="فريق يرافقكِ بشغف" />
+                        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">{trainers.map((t) => <TrainerCard key={t.id} trainer={t} compact />)}</div>
+                    </section>
+                ),
+        // Gallery
+        gallery: gallery.length > 0 && (
+                    <section className="mx-auto max-w-6xl px-4 py-14">
+                        <SectionTitle eyebrow="معرض الصور" title="أجواء النادي" />
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                            {gallery.map((g, i) => (
+                                <div key={i} className={`overflow-hidden rounded-2xl bg-brand-50 ${i === 0 ? 'col-span-2 row-span-2' : ''}`}>
+                                    {g.url && <img src={g.url} alt={g.title ?? ''} loading="lazy" width={480} height={480} className="aspect-square size-full object-cover" />}
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                ),
+        // News
+        news: news.length > 0 && (
+                    <section className="mx-auto max-w-6xl px-4 py-14">
+                        <SectionTitle eyebrow="آخر الأخبار" title="من النادي" />
+                        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{news.map((p) => <PostCard key={p.id} post={p} />)}</div>
+                    </section>
+                ),
+        // CTA
+        cta: site.signup_enabled && (
+                    <section className="mx-auto max-w-6xl px-4 py-10">
+                        <div className="relative overflow-hidden rounded-[2.5rem] bg-brand px-6 py-14 text-center text-white sm:px-14">
+                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.18),transparent_45%),radial-gradient(circle_at_85%_80%,rgba(255,255,255,0.12),transparent_40%)]" />
+                            <h2 className="relative font-display text-3xl font-semibold sm:text-4xl">ابدئي رحلتك اليوم</h2>
+                            <p className="relative mx-auto mt-3 max-w-lg text-white/85">سجّلي خلال دقيقة، ادفعي أونلاين، وابدئي حجز حصصك فورًا.</p>
+                            <Link href={route('site.join')} className="relative mt-8 inline-flex items-center gap-2 rounded-full bg-white px-8 py-3.5 font-medium text-brand-700 shadow-lg hover:bg-brand-50">
+                                اشتركي الآن <ArrowLeft className="size-4" />
+                            </Link>
+                        </div>
+                    </section>
+                ),
+    };
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
@@ -114,119 +225,7 @@ export default function Home({ site, seo, hero, features, about, stats, plans, p
                 </div>
             </section>
 
-            {/* Why us */}
-            {features.length > 0 && (
-                <section className="mx-auto max-w-6xl px-4 py-14">
-                    <div className="grid gap-4 sm:grid-cols-3">
-                        {features.map(({ title, text }, i) => {
-                            const Icon = FEATURE_ICONS[i % FEATURE_ICONS.length];
-                            return (
-                                <div key={i} className="rounded-3xl border border-line bg-white p-6 shadow-sm">
-                                    <span className="grid size-12 place-items-center rounded-2xl bg-brand-50 text-brand"><Icon className="size-6" /></span>
-                                    <h3 className="mt-4 font-display text-lg font-semibold">{title}</h3>
-                                    <p className="mt-1.5 text-sm leading-7 text-muted">{text}</p>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </section>
-            )}
-
-            {/* About */}
-            {(about.title || about.body) && (
-                <section className={`mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 ${about.image_url ? 'lg:grid-cols-2' : ''}`}>
-                    <div className={about.image_url ? 'order-2 lg:order-1' : 'rounded-[2rem] border border-line bg-white p-8 shadow-sm sm:p-12'}>
-                        <p className="mb-2 text-sm font-medium text-brand">من نحن</p>
-                        <h2 className="font-display text-3xl font-semibold sm:text-4xl">{about.title ?? 'عن النادي'}</h2>
-                        {about.body && <p className="mt-5 max-w-3xl leading-8 whitespace-pre-line text-muted">{about.body}</p>}
-                    </div>
-                    {about.image_url && (
-                        <div className="order-1 aspect-[4/3] overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand-50 to-brand-100 lg:order-2">
-                            <img src={about.image_url} alt={about.title ?? ''} loading="lazy" width={720} height={540} className="size-full object-cover" />
-                        </div>
-                    )}
-                </section>
-            )}
-
-            {/* Offers */}
-            {offers.length > 0 && (
-                <section className="mx-auto max-w-6xl px-4 py-14">
-                    <SectionTitle eyebrow="عروض حصرية" title="عروضنا الحالية" />
-                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{offers.map((p) => <PostCard key={p.id} post={p} />)}</div>
-                </section>
-            )}
-
-            {/* Plans */}
-            {plans.length > 0 && (
-                <section className="bg-gradient-to-b from-transparent via-brand-50/60 to-transparent py-16">
-                    <div className="mx-auto max-w-6xl px-4">
-                        <SectionTitle eyebrow="الباقات" title="اختاري باقتك" subtitle="أسعار واضحة بلا مفاجآت، وتفعيل فوري بعد الدفع." />
-                        <div className="grid gap-6 pt-3 sm:grid-cols-2 lg:grid-cols-3">
-                            {plans.map((plan) => (
-                                <PlanCard key={plan.id} plan={plan} currency={currency} cta={site.signup_enabled ? { label: 'اشتركي الآن', href: route('site.join', { plan: plan.id }) } : undefined} />
-                            ))}
-                        </div>
-                        <p className="mt-8 text-center">
-                            <Link href={route('site.plans')} className="inline-flex items-center gap-1.5 text-sm font-medium text-brand hover:underline">كل الباقات والأسعار <ArrowLeft className="size-4" /></Link>
-                        </p>
-                    </div>
-                </section>
-            )}
-
-            {/* Programs */}
-            {programs.length > 0 && (
-                <section className="mx-auto max-w-6xl px-4 py-14">
-                    <SectionTitle eyebrow="البرامج" title="برامج تناسب كل هدف" />
-                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{programs.map((p) => <ProgramCard key={p.id} program={p} />)}</div>
-                    <p className="mt-8 text-center">
-                        <Link href={route('site.programs')} className="inline-flex items-center gap-1.5 text-sm font-medium text-brand hover:underline">كل البرامج <ArrowLeft className="size-4" /></Link>
-                    </p>
-                </section>
-            )}
-
-            {/* Trainers */}
-            {trainers.length > 0 && (
-                <section className="mx-auto max-w-6xl px-4 py-14">
-                    <SectionTitle eyebrow="المدربات" title="فريق يرافقكِ بشغف" />
-                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">{trainers.map((t) => <TrainerCard key={t.id} trainer={t} compact />)}</div>
-                </section>
-            )}
-
-            {/* Gallery */}
-            {gallery.length > 0 && (
-                <section className="mx-auto max-w-6xl px-4 py-14">
-                    <SectionTitle eyebrow="معرض الصور" title="أجواء النادي" />
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        {gallery.map((g, i) => (
-                            <div key={i} className={`overflow-hidden rounded-2xl bg-brand-50 ${i === 0 ? 'col-span-2 row-span-2' : ''}`}>
-                                {g.url && <img src={g.url} alt={g.title ?? ''} loading="lazy" width={480} height={480} className="aspect-square size-full object-cover" />}
-                            </div>
-                        ))}
-                    </div>
-                </section>
-            )}
-
-            {/* News */}
-            {news.length > 0 && (
-                <section className="mx-auto max-w-6xl px-4 py-14">
-                    <SectionTitle eyebrow="آخر الأخبار" title="من النادي" />
-                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">{news.map((p) => <PostCard key={p.id} post={p} />)}</div>
-                </section>
-            )}
-
-            {/* CTA */}
-            {site.signup_enabled && (
-                <section className="mx-auto max-w-6xl px-4 py-10">
-                    <div className="relative overflow-hidden rounded-[2.5rem] bg-brand px-6 py-14 text-center text-white sm:px-14">
-                        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.18),transparent_45%),radial-gradient(circle_at_85%_80%,rgba(255,255,255,0.12),transparent_40%)]" />
-                        <h2 className="relative font-display text-3xl font-semibold sm:text-4xl">ابدئي رحلتك اليوم</h2>
-                        <p className="relative mx-auto mt-3 max-w-lg text-white/85">سجّلي خلال دقيقة، ادفعي أونلاين، وابدئي حجز حصصك فورًا.</p>
-                        <Link href={route('site.join')} className="relative mt-8 inline-flex items-center gap-2 rounded-full bg-white px-8 py-3.5 font-medium text-brand-700 shadow-lg hover:bg-brand-50">
-                            اشتركي الآن <ArrowLeft className="size-4" />
-                        </Link>
-                    </div>
-                </section>
-            )}
+            {sections.map((key) => <Fragment key={key}>{blocks[key]}</Fragment>)}
         </SiteLayout>
     );
 }

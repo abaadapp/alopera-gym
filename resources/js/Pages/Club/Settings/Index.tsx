@@ -1,10 +1,10 @@
 import { Link } from '@inertiajs/react';
-import { BellRing, Building2, ChevronLeft, Database, Globe, KeyRound, Receipt, ScrollText, Settings, ShieldCheck, Users, type LucideIcon } from 'lucide-react';
+import { BellRing, Building2, ChevronLeft, Clock, Database, KeyRound, Landmark, ScrollText, Settings, ShieldCheck, type LucideIcon } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { PageHeader } from '@/Components/ui';
 import { useCan } from '@/hooks/useShared';
 
-type Entry = { title: string; description: string; route: string; permission: string; icon: LucideIcon };
+type Entry = { title: string; description: string; route: string; permission: string | string[]; icon: LucideIcon };
 
 /** Every settings screen, grouped. A card shows only when the user may open it (the server checks again). */
 const SECTIONS: { title: string; items: Entry[] }[] = [
@@ -13,36 +13,36 @@ const SECTIONS: { title: string; items: Entry[] }[] = [
         items: [
             { title: 'إعدادات النادي', description: 'الاسم والشعار والألوان، قواعد الحجز والحضور، الفواتير والضريبة', route: 'club.settings.edit', permission: 'settings.manage', icon: Settings },
             { title: 'الفروع', description: 'فروع النادي وعناوينها وأرقام التواصل', route: 'club.branches.index', permission: 'branches.manage', icon: Building2 },
-            { title: 'إعدادات الموقع الإلكتروني', description: 'نصوص الموقع وصوره وبيانات التواصل والظهور في محركات البحث', route: 'club.website.edit', permission: 'website.manage', icon: Globe },
-        ],
-    },
-    {
-        title: 'الفريق والصلاحيات',
-        items: [
-            { title: 'المستخدمون', description: 'حسابات الموظفات وأدوارهن وتفعيل الدخول', route: 'club.users.index', permission: 'users.manage', icon: Users },
-            { title: 'الأدوار والصلاحيات', description: 'ما يراه كل دور وما يستطيع تنفيذه', route: 'club.roles.index', permission: 'roles.manage', icon: ShieldCheck },
+            { title: 'المستخدمون والصلاحيات', description: 'حسابات الدخول وأدوارها، وما يراه كل دور وما يستطيع تنفيذه', route: 'club.users.index', permission: ['users.manage', 'roles.manage'], icon: ShieldCheck },
         ],
     },
     {
         title: 'الربط والإشعارات',
         items: [
-            { title: 'الربط والتكاملات', description: 'بوابة الدفع الإلكتروني وواتساب للأعمال', route: 'club.integrations.index', permission: 'integrations.manage', icon: KeyRound },
-            { title: 'الإشعارات والقوالب', description: 'تذكيرات انتهاء العضوية والمتابعة وإشعارات الحصص', route: 'club.settings.notifications', permission: 'settings.manage', icon: BellRing },
+            { title: 'الربط مع واتساب وPaymob', description: 'واتساب للأعمال وبوابة الدفع الإلكتروني للمشتركات', route: 'club.integrations.index', permission: 'integrations.manage', icon: KeyRound },
+            { title: 'الإشعارات', description: 'تذكيرات انتهاء العضوية والمتابعة وإشعارات الحصص', route: 'club.settings.notifications', permission: 'settings.manage', icon: BellRing },
         ],
     },
     {
-        title: 'البيانات والاشتراك',
+        title: 'المالية والرواتب',
+        items: [
+            { title: 'الإعدادات المالية', description: 'الحساب الذي تذهب إليه كل طريقة دفع: الصندوق والبنك والبطاقات وPaymob', route: 'club.settings.finance', permission: 'accounting.manage', icon: Landmark },
+            { title: 'إعدادات الرواتب والحضور', description: 'ساعات العمل والساعة الإضافية وحساب صرف الرواتب ومهلة البصمة المكررة', route: 'club.settings.payroll', permission: 'settings.manage', icon: Clock },
+        ],
+    },
+    {
+        title: 'البيانات',
         items: [
             { title: 'النسخ الاحتياطي', description: 'نسخة كاملة من بيانات النادي، تنزيلها واستعادتها', route: 'club.backups.index', permission: 'backups.manage', icon: Database },
             { title: 'سجل العمليات', description: 'من فعل ماذا ومتى، في سجل لا يُعدّل', route: 'club.audit.index', permission: 'audit.view', icon: ScrollText },
-            { title: 'اشتراك المنصة', description: 'باقة النادي في المنصة وفواتيرها', route: 'club.billing', permission: 'billing.view', icon: Receipt },
         ],
     },
 ];
 
 export default function SettingsIndex() {
     const can = useCan();
-    const sections = SECTIONS.map((s) => ({ ...s, items: s.items.filter((e) => can(e.permission)) })).filter((s) => s.items.length > 0);
+    const allowed = (p: string | string[]) => (Array.isArray(p) ? p.some(can) : can(p));
+    const sections = SECTIONS.map((s) => ({ ...s, items: s.items.filter((e) => allowed(e.permission)) })).filter((s) => s.items.length > 0);
 
     return (
         <ClubLayout title="الإعدادات">
@@ -56,7 +56,8 @@ export default function SettingsIndex() {
                             {section.items.map(({ title, description, route: name, icon: Icon }) => (
                                 <Link
                                     key={name}
-                                    href={route(name)}
+                                    // Users & roles share a card: it opens the users page, or roles for whoever only manages roles.
+                                    href={route(name === 'club.users.index' && !can('users.manage') ? 'club.roles.index' : name)}
                                     className="group flex items-center gap-4 rounded-2xl border border-line bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-[#dcdcdc] hover:shadow-[0_8px_30px_-12px_rgba(17,17,17,0.14)] focus-visible:ring-4 focus-visible:ring-brand/15 focus-visible:outline-none"
                                 >
                                     <span className="grid size-13 shrink-0 place-items-center rounded-[14px] bg-brand-50 text-brand transition-colors group-hover:bg-brand group-hover:text-white">
