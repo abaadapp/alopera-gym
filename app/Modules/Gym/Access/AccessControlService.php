@@ -171,10 +171,23 @@ final class AccessControlService
             : Member::find($credential->holder_id);
     }
 
-    /** Staff clock in / out by alternating punches within the day. */
+    /**
+     * Staff clock in / out by alternating punches within the day. Punches are serialised per person (her user row
+     * is locked), and a punch within the duplicate window of her last one — a double scan on the reader — is
+     * ignored, so it can neither open a second record nor clock her out the moment she clocked in.
+     */
     public function staffPunch(User $user, ?AccessDevice $device = null, string $method = 'manual'): StaffAttendance
     {
         return DB::transaction(function () use ($user, $device, $method) {
+            User::whereKey($user->id)->lockForUpdate()->first();
+
+            $window = (int) ($this->tenants->require()->settings['payroll']['punch_window_seconds'] ?? 60);
+            $last = StaffAttendance::where('user_id', $user->id)->latest('clock_in_at')->first();
+            $lastPunch = $last ? max($last->clock_in_at, $last->clock_out_at ?? $last->clock_in_at) : null;
+            if ($last && $window > 0 && abs($lastPunch->diffInSeconds(now())) < $window) {
+                return $last;
+            }
+
             $open = StaffAttendance::where('user_id', $user->id)
                 ->whereNull('clock_out_at')
                 ->where('clock_in_at', '>=', now()->startOfDay())

@@ -44,7 +44,6 @@ final class PermissionRegistry
             'checkin.perform' => 'تسجيل دخول المشتركات',
             'checkin.view' => 'عرض سجل الدخول',
             'devices.manage' => 'إدارة أجهزة الدخول',
-            'staff_attendance.view' => 'عرض حضور الموظفات',
         ]],
         'finance' => ['label' => 'المالية', 'permissions' => [
             'invoices.view' => 'عرض الفواتير',
@@ -56,6 +55,20 @@ final class PermissionRegistry
             'payments.refund' => 'رد المبالغ',
             'expenses.manage' => 'المصروفات',
             'dues.view' => 'المستحقات والمتأخرات',
+        ]],
+        'accounting' => ['label' => 'المحاسبة', 'permissions' => [
+            'accounting.view' => 'الملخص المالي والحسابات والقيود والتقارير المالية',
+            'accounting.manage' => 'الحسابات البنكية والقيود اليدوية والإعدادات المالية',
+        ]],
+        'payroll' => ['label' => 'الرواتب والموظفين', 'permissions' => [
+            'employees.view' => 'عرض ملفات الموظفين',
+            'employees.manage' => 'إضافة الموظفين وتعديل ملفاتهم والمسميات الوظيفية',
+            'payroll.salaries' => 'عرض الرواتب والبيانات البنكية (سري)',
+            'payroll.prepare' => 'إعداد مسيرات الرواتب',
+            'payroll.approve' => 'اعتماد مسيرات الرواتب',
+            'payroll.pay' => 'صرف الرواتب',
+            'payroll.reports' => 'كشوف وتقارير الرواتب',
+            'staff_attendance.view' => 'حضور وانصراف الموظفين',
         ]],
         'inventory' => ['label' => 'المخزون والمبيعات', 'permissions' => [
             'pos.sell' => 'نقطة البيع',

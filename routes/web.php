@@ -38,6 +38,8 @@ Route::prefix('app')->name('club.')->middleware(['auth', 'tenant.user', 'tenant.
     require app_path('Http/club-routes.php');
     require app_path('Modules/Gym/Http/routes.php');
     require app_path('Modules/Finance/Http/routes.php');
+    require app_path('Modules/Accounting/Http/routes.php');
+    require app_path('Modules/Payroll/Http/routes.php');
     // Sales & inventory: off unless GYM_INVENTORY_MODULE=true (tables and data are kept).
     Route::middleware('module:inventory')->group(app_path('Modules/Inventory/Http/routes.php'));
     require app_path('Modules/Messaging/Http/routes.php');

@@ -33,6 +33,8 @@ final class SystemRoles
                 'description' => 'إدارة النادي اليومية دون النسخ الاحتياطي والأدوار.',
                 'permissions' => array_values(array_diff(PermissionRegistry::all(), [
                     'roles.manage', 'backups.manage', 'billing.view', 'integrations.manage', 'members.delete', ...PermissionRegistry::OWNER_ONLY,
+                    // Salaries stay confidential, approved by the owner and paid by finance.
+                    'payroll.salaries', 'payroll.approve', 'payroll.pay', 'accounting.manage',
                 ])),
                 'home' => 'club.dashboard',
             ],
@@ -51,12 +53,14 @@ final class SystemRoles
             ],
             self::FINANCE => [
                 'name' => 'المالية',
-                'description' => 'الفواتير والتحصيل والمصروفات والتقارير المالية.',
+                'description' => 'الفواتير والتحصيل والمصروفات والحسابات، وإعداد الرواتب وصرفها بعد اعتماد المالكة.',
                 'permissions' => [
                     'dashboard.view', 'members.view', 'memberships.view',
                     'invoices.view', 'invoices.manage', 'invoices.void', 'invoices.credit',
                     'payments.record', 'payments.confirm', 'payments.refund',
                     'expenses.manage', 'dues.view',
+                    'accounting.view', 'accounting.manage',
+                    'employees.view', 'payroll.salaries', 'payroll.prepare', 'payroll.pay', 'payroll.reports',
                     'products.manage', 'suppliers.manage', 'purchases.manage', 'pos.sell',
                     'reports.view', 'reports.financial', 'reports.export',
                 ],

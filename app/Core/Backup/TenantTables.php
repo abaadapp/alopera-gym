@@ -26,6 +26,7 @@ final class TenantTables
         'message_templates', 'conversations', 'campaigns', 'messages', 'auto_replies',
         'payment_intents',
         'gym_accounts', 'gym_journal_entries', 'gym_journal_lines',
+        'gym_job_titles', 'gym_employees', 'gym_payroll_runs', 'gym_payroll_payouts', 'gym_payroll_items',
     ];
 
     /** Tenant-related tables deliberately left out, with the reason. */
