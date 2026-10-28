@@ -38,6 +38,7 @@ final class PermissionRegistry
             'bookings.manage' => 'حجز الحصص للمشتركات وإلغاؤها',
             'attendance.mark' => 'تسجيل الحضور والغياب في الحصص',
             'pt.manage' => 'إدارة الجلسات الفردية',
+            'pt.close_early' => 'إغلاق الجلسات الفردية قبل موعدها',
         ]],
         'access' => ['label' => 'الدخول والحضور', 'permissions' => [
             'checkin.perform' => 'تسجيل دخول المشتركات',
@@ -49,6 +50,7 @@ final class PermissionRegistry
             'invoices.view' => 'عرض الفواتير',
             'invoices.manage' => 'إصدار الفواتير',
             'invoices.void' => 'إلغاء الفواتير',
+            'invoices.credit' => 'إصدار الإشعارات الدائنة',
             'payments.record' => 'تسجيل الدفعات',
             'payments.confirm' => 'تأكيد التحويلات البنكية',
             'payments.refund' => 'رد المبالغ',

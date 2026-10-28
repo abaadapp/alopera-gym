@@ -5,7 +5,9 @@ namespace App\Modules\Inventory\Services;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
+use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Finance\Services\CreditNoteService;
 use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Gym\Models\Member;
@@ -24,6 +26,7 @@ final class PosService
         private readonly StockService $stock,
         private readonly InvoiceService $invoices,
         private readonly PaymentService $payments,
+        private readonly CreditNoteService $credits,
     ) {}
 
     /**
@@ -119,13 +122,13 @@ final class PosService
                 $this->stock->move($item->product, (float) $item->quantity, 'void', $sale, $reason);
             }
 
-            $payment = Payment::where('invoice_id', $sale->invoice_id)->where('kind', Payment::KIND_PAYMENT)->where('status', Payment::COMPLETED)->first();
-            if ($payment) {
-                $this->payments->refund($payment, $payment->amount, $payment->method === 'card' ? 'card' : 'cash', 'إلغاء عملية بيع '.$sale->number.': '.$reason);
-            }
-            // the refunded sale must not stay behind as an open receivable
-            if ($sale->invoice) {
-                $this->invoices->void($sale->invoice, 'إلغاء عملية بيع '.$sale->number.': '.$reason);
+            // A full credit note keeps the original invoice, cancels what it is worth and pays the money
+            // back the way it came; the sale leaves no open receivable behind.
+            $invoice = $sale->invoice_id ? Invoice::find($sale->invoice_id) : null;
+            if ($invoice && ! Money::isZero($invoice->netTotal())) {
+                $payment = Payment::where('invoice_id', $invoice->id)->where('kind', Payment::KIND_PAYMENT)->where('status', Payment::COMPLETED)->first();
+                $this->credits->issue($invoice, $invoice->netTotal(), 'إلغاء عملية بيع '.$sale->number.': '.$reason,
+                    ['method' => $payment?->method === 'card' ? 'card' : 'cash', 'reference' => $payment?->reference]);
             }
 
             $sale->forceFill(['status' => 'voided', 'voided_at' => now()])->save();

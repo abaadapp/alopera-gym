@@ -16,7 +16,7 @@ final class TenantTables
         'gym_programs', 'gym_membership_plans', 'gym_plan_program', 'gym_coupons',
         'gym_trainers', 'gym_trainer_availabilities',
         'gym_members',
-        'invoices', 'invoice_items', 'payments',
+        'invoices', 'invoice_items', 'credit_notes', 'payments',
         'gym_memberships', 'gym_coupon_redemptions', 'gym_membership_freezes', 'gym_membership_events',
         'gym_member_documents', 'gym_member_notes',
         'gym_class_schedules', 'gym_class_sessions', 'gym_bookings',

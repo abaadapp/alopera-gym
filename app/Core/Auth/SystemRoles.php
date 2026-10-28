@@ -54,7 +54,7 @@ final class SystemRoles
                 'description' => 'الفواتير والتحصيل والمصروفات والمشتريات والتقارير المالية.',
                 'permissions' => [
                     'dashboard.view', 'members.view', 'memberships.view',
-                    'invoices.view', 'invoices.manage', 'invoices.void',
+                    'invoices.view', 'invoices.manage', 'invoices.void', 'invoices.credit',
                     'payments.record', 'payments.confirm', 'payments.refund',
                     'expenses.manage', 'dues.view',
                     'products.manage', 'suppliers.manage', 'purchases.manage', 'pos.sell',

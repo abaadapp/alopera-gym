@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { toast } from 'sonner';
-import { ArrowRight, Banknote, Check, Copy, CreditCard, ExternalLink, FileDown, MessageCircle, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
+import { ArrowRight, Banknote, Check, Copy, CreditCard, ExternalLink, FileDown, FileMinus, MessageCircle, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Stat, Textarea } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
@@ -33,6 +33,17 @@ interface PaymentRow {
     has_proof: boolean;
 }
 
+interface CreditNoteRow {
+    id: number;
+    number: string;
+    amount: string;
+    refunded_total: string;
+    refundable: string;
+    reason: string;
+    issued_at: string;
+    creator: string | null;
+}
+
 interface Invoice {
     id: number;
     number: string;
@@ -45,7 +56,10 @@ interface Invoice {
     tax_total: string;
     tax_rate: string;
     total: string;
+    credited_total: string;
+    net_total: string;
     paid_total: string;
+    refund_due: string;
     currency: string;
     billable_type: string | null;
     billable_id: number | null;
@@ -59,6 +73,7 @@ interface Invoice {
     paid_at: string | null;
     items: Item[];
     payments: PaymentRow[];
+    credit_notes: CreditNoteRow[];
     pay_link: string | null;
     public_link: string;
 }
@@ -94,7 +109,9 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
     const can = useCan();
     const currency = useCurrency() || invoice.currency;
     const [payOpen, setPayOpen] = useState(false);
-    const [refundFor, setRefundFor] = useState<PaymentRow | null>(null);
+    const [creditOpen, setCreditOpen] = useState(false);
+    const [refundNote, setRefundNote] = useState<CreditNoteRow | null>(null);
+    const canCredit = can('invoices.credit') && invoice.status !== 'void' && Number(invoice.net_total) > 0;
     const [statusLabel, statusTone] = label(invoiceStatus, invoice.status);
     const isOpen = invoice.status === 'issued' || invoice.status === 'partially_paid';
     const canVoid = can('invoices.void') && invoice.status !== 'void' && Number(invoice.paid_total) === 0
@@ -175,8 +192,15 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                                 {Number(invoice.discount_total) > 0 && <Row label="الخصومات" value={`- ${money(invoice.discount_total, currency)}`} />}
                                 {Number(invoice.tax_total) > 0 && <Row label={`ضريبة القيمة المضافة (${Number(invoice.tax_rate)}%)`} value={money(invoice.tax_total, currency)} />}
                                 <Row label="الإجمالي" value={money(invoice.total, currency)} strong />
+                                {Number(invoice.credited_total) > 0 && (
+                                    <>
+                                        <Row label="إشعارات دائنة" value={`- ${money(invoice.credited_total, currency)}`} />
+                                        <Row label="صافي الفاتورة" value={money(invoice.net_total, currency)} strong />
+                                    </>
+                                )}
                                 <Row label="المدفوع" value={money(invoice.paid_total, currency)} />
                                 {invoice.status !== 'void' && <Row label="المتبقي" value={money(invoice.balance, currency)} strong tone={Number(invoice.balance) > 0 ? 'text-red-600' : 'text-emerald-600'} />}
+                                {Number(invoice.refund_due) > 0 && <Row label="مستحق ردّه للعميلة" value={money(invoice.refund_due, currency)} tone="text-amber-700" />}
                             </dl>
                         </div>
                         {(invoice.notes || club.footer) && (
@@ -205,7 +229,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                                             <div className="min-w-0 flex-1">
                                                 <p className="text-sm font-medium">
                                                     {p.kind === 'refund' ? 'رد مبلغ' : paymentMethod[p.method] ?? p.method}
-                                                    <span className={cn('ms-2 num', p.kind === 'refund' && 'text-red-600')}>{p.kind === 'refund' ? '- ' : ''}{money(p.amount, currency)}</span>
+                                                    <span className={cn('ms-2 inline-block num', p.kind === 'refund' && 'text-red-600')}>{p.kind === 'refund' ? '- ' : ''}{money(p.amount, currency)}</span>
                                                 </p>
                                                 <p className="text-xs text-muted">
                                                     {p.paid_at ?? '—'}
@@ -234,9 +258,6 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                                                         </ConfirmAction>
                                                     </>
                                                 )}
-                                                {p.status === 'completed' && p.kind === 'payment' && can('payments.refund') && (
-                                                    <Button variant="outline" size="sm" icon={<Undo2 className="size-3.5" />} onClick={() => setRefundFor(p)}>رد</Button>
-                                                )}
                                             </div>
                                         </li>
                                     );
@@ -244,9 +265,45 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                             </ul>
                         )}
                     </Card>
+
+                    {invoice.credit_notes.length > 0 && (
+                        <Card padded={false}>
+                            <div className="p-5 pb-3">
+                                <CardHeader title="الإشعارات الدائنة" subtitle="تخفّض صافي الفاتورة دون تعديلها؛ رد المال خطوة منفصلة" className="mb-0" />
+                            </div>
+                            <ul className="divide-y divide-line">
+                                {invoice.credit_notes.map((n) => (
+                                    <li key={n.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                                        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-700"><FileMinus className="size-4" /></span>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-medium">
+                                                <span className="num">{n.number}</span>
+                                                <span className="ms-2 inline-block num text-amber-700">- {money(n.amount, currency)}</span>
+                                            </p>
+                                            <p className="text-xs text-muted">{n.issued_at}{n.creator && <> · {n.creator}</>} · {n.reason}</p>
+                                            {Number(n.refunded_total) > 0 && <p className="mt-0.5 text-xs text-emerald-700">رُدّ للعميلة: <span className="num">{money(n.refunded_total, currency)}</span></p>}
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            <Button variant="ghost" size="sm" href={route('club.credit-notes.print', n.id)} external icon={<Printer className="size-3.5" />}>طباعة</Button>
+                                            {Number(n.refundable) > 0 && Number(invoice.refund_due) > 0 && can('payments.refund') && (
+                                                <Button variant="outline" size="sm" icon={<Undo2 className="size-3.5" />} onClick={() => setRefundNote(n)}>رد المبلغ</Button>
+                                            )}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        </Card>
+                    )}
                 </div>
 
                 <div className="space-y-6">
+                    {canCredit && (
+                        <Card>
+                            <CardHeader title="استرداد أو تخفيض" subtitle="إشعار دائن مرقّم يخفّض صافي الفاتورة مع إبقاء الفاتورة الأصلية كما هي." />
+                            <Button variant="outline" icon={<FileMinus className="size-4" />} onClick={() => setCreditOpen(true)}>إصدار إشعار دائن</Button>
+                        </Card>
+                    )}
+
                     <Card>
                         <CardHeader title="المشاركة والدفع الإلكتروني" />
                         <div className="space-y-3 text-sm">
@@ -313,7 +370,8 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
             </div>
 
             <RecordPaymentModal open={payOpen} onClose={() => setPayOpen(false)} invoice={invoice} currency={currency} />
-            <RefundModal payment={refundFor} onClose={() => setRefundFor(null)} currency={currency} />
+            <CreditNoteModal open={creditOpen} onClose={() => setCreditOpen(false)} invoice={invoice} currency={currency} canRefund={can('payments.refund')} />
+            <CreditRefundModal note={refundNote} invoice={invoice} onClose={() => setRefundNote(null)} currency={currency} />
         </ClubLayout>
     );
 }
@@ -422,13 +480,22 @@ function RecordPaymentModal({ open, onClose, invoice, currency }: { open: boolea
     );
 }
 
-function RefundModal({ payment, onClose, currency }: { payment: PaymentRow | null; onClose: () => void; currency: string }) {
-    const form = useForm({ amount: '', method: 'cash', reason: '' });
+const refundMethods = [
+    { key: 'cash', label: 'نقدًا' },
+    { key: 'bank_transfer', label: 'تحويل بنكي' },
+    { key: 'card', label: 'بطاقة (جهاز الشبكة)' },
+    { key: 'other', label: 'أخرى' },
+];
+
+function CreditNoteModal({ open, onClose, invoice, currency, canRefund }: { open: boolean; onClose: () => void; invoice: Invoice; currency: string; canRefund: boolean }) {
+    const paid = Number(invoice.paid_total) > 0;
+    const form = useForm({ amount: '', reason: '', refund_now: paid && canRefund, method: 'cash', reference: '' });
+    // What the customer would be owed after this note: paid minus the new net total.
+    const owed = Math.max(0, Number(invoice.paid_total) - (Number(invoice.net_total) - Number(form.data.amount || 0)));
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        if (!payment) return;
-        form.post(route('club.payments.refund', payment.id), {
+        form.post(route('club.credit-notes.store', invoice.id), {
             preserveScroll: true,
             onSuccess: () => {
                 form.reset();
@@ -439,38 +506,105 @@ function RefundModal({ payment, onClose, currency }: { payment: PaymentRow | nul
 
     return (
         <Modal
-            open={payment !== null}
+            open={open}
+            onClose={onClose}
+            title="إصدار إشعار دائن"
+            footer={
+                <>
+                    <Button variant="ghost" onClick={onClose}>تراجع</Button>
+                    <Button type="submit" form="credit-form" loading={form.processing}>إصدار الإشعار</Button>
+                </>
+            }
+        >
+            <form id="credit-form" onSubmit={submit} className="space-y-4">
+                <div className="rounded-xl bg-brand-50 px-4 py-3 text-sm">
+                    صافي الفاتورة الحالي: <span className="font-semibold num">{money(invoice.net_total, currency)}</span>
+                    {paid && <> · المدفوع: <span className="num">{money(invoice.paid_total, currency)}</span></>}
+                </div>
+                <Field label="قيمة الإشعار" error={form.errors.amount} required>
+                    <Input type="number" step="0.001" min="0.001" max={invoice.net_total} dir="ltr" value={form.data.amount} onChange={(e) => form.setData('amount', e.target.value)} required />
+                </Field>
+                <Field label="السبب" error={form.errors.reason} required>
+                    <Textarea rows={2} value={form.data.reason} onChange={(e) => form.setData('reason', e.target.value)} required />
+                </Field>
+                {paid && canRefund && (
+                    <div className="space-y-3 rounded-xl border border-line p-3">
+                        <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" className="size-4 accent-[var(--brand)]" checked={form.data.refund_now} onChange={(e) => form.setData('refund_now', e.target.checked)} />
+                            رد المبلغ للعميلة الآن
+                            {owed > 0 && <span className="text-muted">(<span className="num">{money(owed, currency)}</span>)</span>}
+                        </label>
+                        {form.data.refund_now && (
+                            <>
+                                <Field label="طريقة الرد" error={form.errors.method}>
+                                    <Select value={form.data.method} onChange={(e) => form.setData('method', e.target.value)}>
+                                        {refundMethods.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+                                    </Select>
+                                </Field>
+                                <Field label={form.data.method === 'card' ? 'رقم العملية من جهاز الشبكة' : 'مرجع (اختياري)'} error={form.errors.reference} required={form.data.method === 'card'}>
+                                    <Input dir="ltr" value={form.data.reference} onChange={(e) => form.setData('reference', e.target.value)} required={form.data.method === 'card'} />
+                                </Field>
+                            </>
+                        )}
+                        {!form.data.refund_now && <p className="text-xs text-muted">يمكن رد المبلغ لاحقًا من قائمة الإشعارات الدائنة.</p>}
+                    </div>
+                )}
+                <p className="text-xs text-muted">الإشعار لا يلغي العضوية تلقائيًا. ألغي العضوية من ملف المشتركة إذا لزم.</p>
+            </form>
+        </Modal>
+    );
+}
+
+function CreditRefundModal({ note, invoice, onClose, currency }: { note: CreditNoteRow | null; invoice: Invoice; onClose: () => void; currency: string }) {
+    const form = useForm({ amount: '', method: 'cash', reference: '' });
+    const available = note ? Math.min(Number(note.refundable), Number(invoice.refund_due)).toFixed(3) : '0';
+
+    useEffect(() => {
+        if (note) form.setData((d) => ({ ...d, amount: available }));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [note?.id, available]);
+
+    const submit = (e: FormEvent) => {
+        e.preventDefault();
+        if (!note) return;
+        form.post(route('club.credit-notes.refund', note.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                form.reset();
+                onClose();
+            },
+        });
+    };
+
+    return (
+        <Modal
+            open={note !== null}
             onClose={onClose}
             title="رد مبلغ"
             size="sm"
             footer={
                 <>
                     <Button variant="ghost" onClick={onClose}>تراجع</Button>
-                    <Button type="submit" form="refund-form" variant="danger" loading={form.processing}>تسجيل الرد</Button>
+                    <Button type="submit" form="credit-refund-form" variant="danger" loading={form.processing}>تسجيل الرد</Button>
                 </>
             }
         >
-            {payment && (
-                <form id="refund-form" onSubmit={submit} className="space-y-4">
+            {note && (
+                <form id="credit-refund-form" onSubmit={submit} className="space-y-4">
                     <p className="text-sm text-muted">
-                        الدفعة الأصلية: <span className="num">{money(payment.amount, currency)}</span>
-                        {payment.receipt_number && <> · <span className="num">{payment.receipt_number}</span></>}
+                        الإشعار <span className="num">{note.number}</span> · المتاح للرد: <span className="num font-medium text-ink">{money(available, currency)}</span>
                     </p>
                     <Field label="مبلغ الرد" error={form.errors.amount} required>
-                        <Input type="number" step="0.001" min="0.001" max={payment.amount} dir="ltr" value={form.data.amount} onChange={(e) => form.setData('amount', e.target.value)} placeholder={payment.amount} required />
+                        <Input type="number" step="0.001" min="0.001" max={available} dir="ltr" value={form.data.amount} onChange={(e) => form.setData('amount', e.target.value)} required />
                     </Field>
                     <Field label="طريقة الرد" error={form.errors.method}>
                         <Select value={form.data.method} onChange={(e) => form.setData('method', e.target.value)}>
-                            <option value="cash">نقدًا</option>
-                            <option value="bank_transfer">تحويل بنكي</option>
-                            <option value="card">بطاقة</option>
-                            <option value="other">أخرى</option>
+                            {refundMethods.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
                         </Select>
                     </Field>
-                    <Field label="السبب" error={form.errors.reason} required>
-                        <Textarea rows={2} value={form.data.reason} onChange={(e) => form.setData('reason', e.target.value)} required />
+                    <Field label={form.data.method === 'card' ? 'رقم العملية من جهاز الشبكة' : 'مرجع (اختياري)'} error={form.errors.reference} required={form.data.method === 'card'}>
+                        <Input dir="ltr" value={form.data.reference} onChange={(e) => form.setData('reference', e.target.value)} required={form.data.method === 'card'} />
                     </Field>
-                    <p className="text-xs text-muted">الرد لا يلغي العضوية تلقائيًا. ألغي العضوية من ملف المشتركة إذا لزم.</p>
                 </form>
             )}
         </Modal>

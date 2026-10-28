@@ -95,9 +95,7 @@ class PermissionsTest extends TestCase
         $club = $this->club();
         $membership = $this->activeMembership($club, $this->member($club));
         $reception = $this->staff($club, 'reception');
-        $payment = $this->asTenant($club, fn () => $membership->invoice()->first()->payments()->first());
-
-        $this->actingAs($reception)->post(route('club.payments.refund', $payment->id), ['amount' => 1, 'method' => 'cash', 'reason' => 'x'])->assertForbidden();
+        $this->actingAs($reception)->post(route('club.credit-notes.store', $membership->invoice_id), ['amount' => 1, 'reason' => 'x', 'refund_now' => true, 'method' => 'cash'])->assertForbidden();
         $this->actingAs($reception)->post(route('club.invoices.void', $membership->invoice_id), ['reason' => 'x'])->assertForbidden();
         $this->actingAs($reception)->post(route('club.expenses.store'), ['description' => 'x', 'amount' => 5, 'expense_date' => today()->toDateString(), 'payment_method' => 'cash'])->assertForbidden();
         $this->actingAs($reception)->post(route('club.memberships.cancel', $membership->id), ['reason' => 'x'])->assertForbidden();

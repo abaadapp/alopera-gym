@@ -76,18 +76,6 @@ class PaymentController extends Controller
         return back()->with('success', 'تم رفض التحويل.');
     }
 
-    public function refund(Request $request, Payment $payment): RedirectResponse
-    {
-        $data = $request->validate([
-            'amount' => ['required', 'numeric', 'min:0.001'],
-            'method' => ['required', 'in:cash,bank_transfer,card,other'],
-            'reason' => ['required', 'string', 'max:255'],
-        ]);
-        $this->payments->refund($payment, $data['amount'], $data['method'], $data['reason']);
-
-        return back()->with('success', 'تم تسجيل رد المبلغ.');
-    }
-
     public function receipt(Payment $payment, TenantContext $tenants): Response
     {
         abort_if($payment->status !== Payment::COMPLETED, 404);

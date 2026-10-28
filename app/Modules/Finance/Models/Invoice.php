@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 /**
  * @property string $total
+ * @property string $credited_total
  * @property string $paid_total
  */
 class Invoice extends Model
@@ -31,11 +32,14 @@ class Invoice extends Model
 
     public const VOID = 'void';
 
+    /** Its whole value was cancelled by credit notes (the original invoice is kept). */
+    public const CREDITED = 'credited';
+
     public const OPEN_STATUSES = [self::ISSUED, self::PARTIALLY_PAID];
 
     protected $guarded = ['id', 'tenant_id'];
 
-    protected $attributes = ['paid_total' => 0, 'discount_total' => 0, 'tax_total' => 0, 'tax_rate' => 0];
+    protected $attributes = ['paid_total' => 0, 'credited_total' => 0, 'discount_total' => 0, 'tax_total' => 0, 'tax_rate' => 0];
 
     protected $hidden = ['public_token'];
 
@@ -49,6 +53,7 @@ class Invoice extends Model
             'tax_rate' => 'decimal:2',
             'tax_total' => 'decimal:3',
             'total' => 'decimal:3',
+            'credited_total' => 'decimal:3',
             'paid_total' => 'decimal:3',
             'paid_at' => 'datetime',
             'voided_at' => 'datetime',
@@ -68,6 +73,11 @@ class Invoice extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class)->latest('id');
+    }
+
+    public function creditNotes(): HasMany
+    {
+        return $this->hasMany(CreditNote::class)->latest('id');
     }
 
     public function branch(): BelongsTo
@@ -90,9 +100,38 @@ class Invoice extends Model
         return $query->open()->whereNotNull($query->qualifyColumn('due_date'))->where($query->qualifyColumn('due_date'), '<', today());
     }
 
+    /** What the invoice is worth after credit notes. */
+    public function netTotal(): string
+    {
+        return Money::sub($this->total, $this->credited_total);
+    }
+
+    /** Still to be paid (never negative). */
     public function balance(): string
     {
-        return Money::sub($this->total, $this->paid_total);
+        return Money::max('0', Money::sub($this->netTotal(), $this->paid_total));
+    }
+
+    /** Paid more than the invoice is now worth (after a credit note): owed back to the customer. */
+    public function refundDue(): string
+    {
+        return Money::max('0', Money::sub($this->paid_total, $this->netTotal()));
+    }
+
+    /** The status that follows from total, credit notes and payments (void stays void). */
+    public function settledStatus(): string
+    {
+        if ($this->status === self::VOID) {
+            return self::VOID;
+        }
+        if (Money::isZero($this->netTotal())) {
+            return self::CREDITED;
+        }
+        if (Money::cmp($this->paid_total, $this->netTotal()) >= 0) {
+            return self::PAID;
+        }
+
+        return Money::isZero($this->paid_total) ? self::ISSUED : self::PARTIALLY_PAID;
     }
 
     public function isOpen(): bool

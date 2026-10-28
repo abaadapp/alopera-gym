@@ -36,8 +36,10 @@ class InvoiceController extends Controller
     /** @return array<string, mixed> */
     public static function row(Invoice $i): array
     {
-        return $i->only('id', 'number', 'type', 'status', 'customer_name', 'customer_phone', 'subtotal', 'discount_total', 'tax_total', 'total', 'paid_total', 'currency', 'billable_type', 'billable_id') + [
+        return $i->only('id', 'number', 'type', 'status', 'customer_name', 'customer_phone', 'subtotal', 'discount_total', 'tax_total', 'total', 'credited_total', 'paid_total', 'currency', 'billable_type', 'billable_id') + [
+            'net_total' => $i->netTotal(),
             'balance' => $i->balance(),
+            'refund_due' => $i->refundDue(),
             'issue_date' => $i->issue_date->toDateString(),
             'due_date' => $i->due_date?->toDateString(),
             'overdue' => $i->isOpen() && $i->due_date && $i->due_date->lt(today()),
@@ -72,7 +74,7 @@ class InvoiceController extends Controller
 
     public function show(Request $request, Invoice $invoice, OnlinePaymentService $online, TenantContext $tenants): Response
     {
-        $invoice->load(['items', 'payments.receiver:id,name', 'creator:id,name']);
+        $invoice->load(['items', 'payments.receiver:id,name', 'creator:id,name', 'creditNotes.creator:id,name']);
 
         return Inertia::render('Finance/Invoices/Show', [
             'invoice' => self::row($invoice) + [
@@ -81,6 +83,9 @@ class InvoiceController extends Controller
                 'items' => $invoice->items->map(fn ($i) => $i->only('id', 'description', 'quantity', 'unit_price', 'discount', 'line_total')),
                 'payments' => $invoice->payments->map(fn ($p) => $p->only('id', 'receipt_number', 'kind', 'method', 'status', 'amount', 'reference', 'notes', 'rejection_reason') + [
                     'paid_at' => $p->paid_at?->format('Y-m-d H:i'), 'receiver' => $p->receiver?->name, 'has_proof' => $p->proof_path !== null,
+                ]),
+                'credit_notes' => $invoice->creditNotes->map(fn ($n) => $n->only('id', 'number', 'amount', 'refunded_total', 'reason') + [
+                    'refundable' => $n->refundable(), 'issued_at' => $n->created_at->format('Y-m-d H:i'), 'creator' => $n->creator?->name,
                 ]),
                 'pay_link' => $invoice->isOpen() ? app(MemberNotifier::class)->paymentLink($invoice) : null,
                 'public_link' => app(MemberNotifier::class)->invoiceLink($invoice),
@@ -94,7 +99,7 @@ class InvoiceController extends Controller
 
     public function print(Invoice $invoice, TenantContext $tenants): Response
     {
-        $invoice->load(['items', 'payments' => fn ($q) => $q->where('status', 'completed')]);
+        $invoice->load(['items', 'creditNotes', 'payments' => fn ($q) => $q->where('status', 'completed')]);
         $tenant = $tenants->require();
 
         return Inertia::render('Finance/Invoices/Print', [
@@ -102,6 +107,7 @@ class InvoiceController extends Controller
                 'notes' => $invoice->notes,
                 'items' => $invoice->items->map(fn ($i) => $i->only('description', 'quantity', 'unit_price', 'discount', 'line_total')),
                 'payments' => $invoice->payments->map(fn ($p) => $p->only('receipt_number', 'kind', 'method', 'amount') + ['paid_at' => $p->paid_at?->format('Y-m-d H:i')]),
+                'credit_notes' => $invoice->creditNotes->map(fn ($n) => $n->only('number', 'amount', 'reason') + ['issued_at' => $n->created_at->toDateString()]),
             ],
             'club' => $tenant->only('name', 'legal_name', 'phone', 'email', 'address') + ['logo_url' => $tenant->logoUrl(), 'vat_number' => $tenant->setting('vat_number'), 'footer' => $tenant->setting('invoice_footer')],
         ]);

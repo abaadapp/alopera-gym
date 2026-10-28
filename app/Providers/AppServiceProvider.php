@@ -7,12 +7,14 @@ use App\Core\Auth\PermissionRegistry;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\PtSession;
 use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\PurchaseOrder;
@@ -53,10 +55,12 @@ class AppServiceProvider extends ServiceProvider
             'member' => Member::class,
             'membership' => Membership::class,
             'pt_subscription' => PtSubscription::class,
+            'pt_session' => PtSession::class,
             'booking' => Booking::class,
             'class_session' => ClassSession::class,
             'invoice' => Invoice::class,
             'payment' => Payment::class,
+            'credit_note' => CreditNote::class,
             'product' => Product::class,
             'sale' => Sale::class,
             'purchase_order' => PurchaseOrder::class,

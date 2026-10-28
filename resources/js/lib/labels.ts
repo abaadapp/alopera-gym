@@ -19,6 +19,7 @@ export const invoiceStatus: Record<string, [string, Tone]> = {
     partially_paid: ['مدفوعة جزئيًا', 'blue'],
     paid: ['مدفوعة', 'green'],
     void: ['ملغاة', 'red'],
+    credited: ['ملغاة بإشعار دائن', 'gray'],
 };
 
 export const invoiceType: Record<string, string> = { membership: 'عضوية', pt: 'تدريب شخصي', pos: 'نقطة بيع', other: 'أخرى' };
@@ -80,6 +81,7 @@ export const durationUnit: Record<string, string> = { day: 'يوم', week: 'أس
 
 export const checkinReason: Record<string, string> = {
     ok: 'مسموح',
+    duplicate_scan: 'مكرر — لم يُحتسب',
     unknown_credential: 'غير معروفة',
     member_blocked: 'الحساب موقوف',
     member_inactive: 'الحساب غير نشط',

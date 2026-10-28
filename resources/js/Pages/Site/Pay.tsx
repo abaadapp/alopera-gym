@@ -15,6 +15,7 @@ export interface PublicInvoice {
     tax_total: string;
     tax_rate: string;
     total: string;
+    credited_total: string;
     paid_total: string;
     currency: string;
     balance: string;
@@ -29,6 +30,7 @@ export function InvoiceTotals({ invoice, currency }: { invoice: PublicInvoice; c
             {Number(invoice.discount_total) > 0 && <div className="flex justify-between"><dt className="text-muted">الخصم</dt><dd className="num text-emerald-700">− {money(invoice.discount_total, currency)}</dd></div>}
             {Number(invoice.tax_total) > 0 && <div className="flex justify-between"><dt className="text-muted">الضريبة (<span className="num">{Number(invoice.tax_rate)}%</span>)</dt><dd className="num">{money(invoice.tax_total, currency)}</dd></div>}
             <div className="flex justify-between border-t border-line pt-2 font-semibold"><dt>الإجمالي</dt><dd className="num">{money(invoice.total, currency)}</dd></div>
+            {Number(invoice.credited_total) > 0 && <div className="flex justify-between"><dt className="text-muted">إشعارات دائنة</dt><dd className="num text-emerald-700">− {money(invoice.credited_total, currency)}</dd></div>}
             {Number(invoice.paid_total) > 0 && <div className="flex justify-between"><dt className="text-muted">المدفوع</dt><dd className="num">{money(invoice.paid_total, currency)}</dd></div>}
             <div className="flex justify-between text-base font-semibold text-brand-700"><dt>المتبقي</dt><dd className="num">{money(invoice.balance, currency)}</dd></div>
         </dl>

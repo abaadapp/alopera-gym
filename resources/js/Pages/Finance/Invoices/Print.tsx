@@ -15,14 +15,18 @@ interface Props {
         discount_total: string;
         tax_total: string;
         total: string;
+        credited_total: string;
+        net_total: string;
         paid_total: string;
         balance: string;
+        refund_due: string;
         currency: string;
         issue_date: string;
         due_date: string | null;
         notes: string | null;
         items: { description: string; quantity: string; unit_price: string; discount: string; line_total: string }[];
         payments: { receipt_number: string | null; kind: string; method: string; amount: string; paid_at: string | null }[];
+        credit_notes: { number: string; amount: string; reason: string; issued_at: string }[];
     };
     club: { name: string; legal_name: string | null; phone: string | null; email: string | null; address: string | null; logo_url: string | null; vat_number: string | null; footer: string | null };
 }
@@ -113,10 +117,35 @@ export default function InvoicePrint({ invoice, club }: Props) {
                             {Number(invoice.discount_total) > 0 && <PrintRow label="الخصومات" value={`- ${money(invoice.discount_total, currency)}`} />}
                             {Number(invoice.tax_total) > 0 && <PrintRow label="ضريبة القيمة المضافة" value={money(invoice.tax_total, currency)} />}
                             <PrintRow label="الإجمالي" value={money(invoice.total, currency)} strong />
+                            {Number(invoice.credited_total) > 0 && (
+                                <>
+                                    <PrintRow label="إشعارات دائنة" value={`- ${money(invoice.credited_total, currency)}`} />
+                                    <PrintRow label="صافي الفاتورة" value={money(invoice.net_total, currency)} strong />
+                                </>
+                            )}
                             <PrintRow label="المدفوع" value={money(invoice.paid_total, currency)} />
                             {invoice.status !== 'void' && <PrintRow label="المتبقي" value={money(invoice.balance, currency)} strong />}
+                            {Number(invoice.refund_due) > 0 && <PrintRow label="مستحق للعميلة" value={money(invoice.refund_due, currency)} />}
                         </dl>
                     </section>
+
+                    {invoice.credit_notes.length > 0 && (
+                        <section className="mt-8">
+                            <p className="mb-2 font-semibold">الإشعارات الدائنة</p>
+                            <table className="w-full text-xs">
+                                <tbody>
+                                    {invoice.credit_notes.map((n) => (
+                                        <tr key={n.number} className="border-b border-line">
+                                            <td className="py-1.5 num">{n.number}</td>
+                                            <td className="py-1.5">{n.reason}</td>
+                                            <td className="py-1.5">{date(n.issued_at)}</td>
+                                            <td className="py-1.5 text-end num">- {money(n.amount, currency)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </section>
+                    )}
 
                     {invoice.payments.length > 0 && (
                         <section className="mt-8">

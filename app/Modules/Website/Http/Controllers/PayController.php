@@ -84,7 +84,7 @@ class PayController extends Controller
     /** @return array<string, mixed> */
     private function present(Invoice $invoice): array
     {
-        return $invoice->only('number', 'status', 'customer_name', 'subtotal', 'discount_total', 'tax_total', 'tax_rate', 'total', 'paid_total', 'currency') + [
+        return $invoice->only('number', 'status', 'customer_name', 'subtotal', 'discount_total', 'tax_total', 'tax_rate', 'total', 'credited_total', 'paid_total', 'currency') + [
             'balance' => $invoice->balance(),
             'issue_date' => $invoice->issue_date->toDateString(),
             'items' => $invoice->items->map(fn ($i) => $i->only('description', 'quantity', 'unit_price', 'discount', 'line_total')),

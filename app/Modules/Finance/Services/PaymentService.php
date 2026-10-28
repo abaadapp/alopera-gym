@@ -9,6 +9,7 @@ use App\Core\Support\NumberSequence;
 use App\Modules\Finance\Events\InvoicePaid;
 use App\Modules\Finance\Events\PaymentRecorded;
 use App\Modules\Finance\Events\TransferSubmitted;
+use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -174,50 +175,60 @@ final class PaymentService
         return ['payment' => $payment, 'created' => $payment->wasRecentlyCreated];
     }
 
-    /** Give money back. The refund is its own row; the original payment is never edited. */
-    public function refund(Payment $payment, string|float $amount, string $method, string $reason): Payment
+    /**
+     * Money paid back to the customer. Always against a credit note (which already reduced what
+     * the invoice is worth) and never more than the note still covers or than was overpaid, both
+     * checked under row locks — so a double click or a second cashier cannot refund twice.
+     */
+    public function refund(CreditNote $note, string|float $amount, string $method, ?string $reference = null): Payment
     {
-        return DB::transaction(function () use ($payment, $amount, $method, $reason) {
-            $payment = Payment::whereKey($payment->id)->lockForUpdate()->firstOrFail();
+        if (! in_array($method, ['cash', 'bank_transfer', 'card', 'other'], true)) {
+            throw new BusinessRuleException('refund.method', 'طريقة رد غير مدعومة.', 'method');
+        }
 
-            if ($payment->kind !== Payment::KIND_PAYMENT || $payment->status !== Payment::COMPLETED) {
-                throw new BusinessRuleException('refund.invalid', 'يمكن الرد فقط من دفعة مكتملة.');
+        return DB::transaction(function () use ($note, $amount, $method, $reference) {
+            $invoice = Invoice::whereKey($note->invoice_id)->lockForUpdate()->firstOrFail();
+            $note = CreditNote::whereKey($note->id)->lockForUpdate()->firstOrFail();
+
+            if (Money::toMinor($amount) <= 0) {
+                throw new BusinessRuleException('refund.amount', 'مبلغ الرد يجب أن يكون أكبر من صفر.', 'amount');
             }
 
-            $alreadyRefunded = Payment::where('refund_of_id', $payment->id)->where('status', Payment::COMPLETED)->sum('amount');
-            $refundable = Money::sub($payment->amount, $alreadyRefunded);
-
-            if (Money::toMinor($amount) <= 0 || Money::cmp($amount, $refundable) > 0) {
-                throw new BusinessRuleException('refund.amount', 'مبلغ الرد أكبر من المتاح ('.$refundable.').', 'amount');
+            $available = Money::cmp($note->refundable(), $invoice->refundDue()) <= 0 ? $note->refundable() : $invoice->refundDue();
+            if (Money::isZero($available)) {
+                throw new BusinessRuleException('refund.nothing', 'لا يوجد مبلغ متاح للرد على هذا الإشعار.', 'amount');
+            }
+            if (Money::cmp($amount, $available) > 0) {
+                throw new BusinessRuleException('refund.amount', 'مبلغ الرد أكبر من المتاح ('.$available.').', 'amount');
             }
 
-            $invoice = Invoice::whereKey($payment->invoice_id)->lockForUpdate()->firstOrFail();
+            $source = Payment::where('invoice_id', $invoice->id)->where('kind', Payment::KIND_PAYMENT)
+                ->where('status', Payment::COMPLETED)->latest('id')->first();
 
             $refund = Payment::create([
-                'branch_id' => $payment->branch_id,
+                'branch_id' => $note->branch_id ?? $invoice->branch_id,
                 'invoice_id' => $invoice->id,
-                'payer_type' => $payment->payer_type,
-                'payer_id' => $payment->payer_id,
-                'receipt_number' => NumberSequence::next('receipt'),
+                'payer_type' => $invoice->billable_type,
+                'payer_id' => $invoice->billable_id,
+                'receipt_number' => NumberSequence::next('receipt', $invoice->tenant_id),
                 'kind' => Payment::KIND_REFUND,
                 'method' => $method,
                 'status' => Payment::COMPLETED,
                 'amount' => Money::normalize($amount),
-                'currency' => $payment->currency,
-                'notes' => $reason,
-                'refund_of_id' => $payment->id,
+                'currency' => $invoice->currency,
+                'reference' => $reference,
+                'notes' => 'رد مقابل الإشعار الدائن '.$note->number.': '.$note->reason,
+                'refund_of_id' => $source?->id,
+                'credit_note_id' => $note->id,
                 'paid_at' => now(),
                 'received_by' => Auth::guard('web')->id(),
             ]);
 
-            $paid = Money::sub($invoice->paid_total, $amount);
-            $invoice->forceFill([
-                'paid_total' => $paid,
-                'status' => Money::isZero($paid) ? Invoice::ISSUED : (Money::cmp($paid, $invoice->total) >= 0 ? Invoice::PAID : Invoice::PARTIALLY_PAID),
-                'paid_at' => Money::cmp($paid, $invoice->total) >= 0 ? $invoice->paid_at : null,
-            ])->save();
+            $note->forceFill(['refunded_total' => Money::add($note->refunded_total, $amount)])->save();
+            $invoice->forceFill(['paid_total' => Money::sub($invoice->paid_total, $amount)]);
+            $invoice->forceFill(['status' => $invoice->settledStatus()])->save();
 
-            $this->audit->log('payment.refunded', $refund, ['original' => $payment->receipt_number, 'reason' => $reason]);
+            $this->audit->log('payment.refunded', $refund, ['credit_note' => $note->number, 'invoice' => $invoice->number, 'amount' => $refund->amount]);
 
             return $refund;
         });
@@ -255,11 +266,10 @@ final class PaymentService
             'receipt_number' => $payment->receipt_number ?? NumberSequence::next('receipt', $invoice->tenant_id),
         ])->save();
 
-        $paid = Money::add($invoice->paid_total, $payment->amount);
-        $fullyPaid = Money::cmp($paid, $invoice->total) >= 0;
+        $invoice->forceFill(['paid_total' => Money::add($invoice->paid_total, $payment->amount)]);
+        $fullyPaid = $invoice->settledStatus() === Invoice::PAID;
 
         $invoice->forceFill([
-            'paid_total' => $paid,
             'status' => $fullyPaid ? Invoice::PAID : Invoice::PARTIALLY_PAID,
             'paid_at' => $fullyPaid ? now() : null,
         ])->save();

@@ -55,8 +55,11 @@ class PosInventoryTest extends TestCase
 
             app(PosService::class)->void($sale, 'mistake');
             $this->assertSame('5.000', $bar->fresh()->stock_quantity);
-            $this->assertSame('0.000', $invoice->fresh()->paid_total);
-            $this->assertSame(Invoice::VOID, $invoice->fresh()->status, 'a voided sale leaves no open receivable');
+            $invoice = $invoice->fresh();
+            $this->assertSame('0.000', $invoice->paid_total);
+            $this->assertSame('2.000', $invoice->total, 'the original invoice is kept');
+            $this->assertSame(Invoice::CREDITED, $invoice->status, 'a voided sale leaves no open receivable');
+            $this->assertSame('2.000', $invoice->creditNotes()->first()->refunded_total);
             $this->assertSame('voided', $sale->fresh()->status);
         });
     }
