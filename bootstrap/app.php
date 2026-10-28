@@ -11,6 +11,7 @@ use App\Http\Middleware\ResolveCustomDomain;
 use App\Http\Middleware\ResolveSiteTenant;
 use App\Http\Middleware\ResolveTenantFromUser;
 use App\Http\Middleware\SecurityHeaders;
+use App\Models\User;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -49,6 +50,15 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->redirectGuestsTo(function (Request $request) {
             return $request->routeIs('portal.*') ? route('portal.login', ['club' => $request->route('club') ?? $request->segment(2)]) : route('login');
+        });
+
+        // Signed-in users opening a login page go to their own dashboard, not the marketing page.
+        $middleware->redirectUsersTo(function (Request $request) {
+            if ($request->routeIs('portal.*')) {
+                return route('portal.dashboard', ['club' => $request->route('club') ?? $request->segment(2)]);
+            }
+
+            return $request->user() instanceof User ? route($request->user()->homeRoute()) : '/';
         });
 
         $middleware->validateCsrfTokens(except: ['webhooks/*']);

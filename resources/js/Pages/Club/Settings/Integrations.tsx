@@ -45,7 +45,7 @@ export default function Integrations({ integrations, endpoints, paymob_ready, wh
                 </p>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
                 <ProviderCard
                     provider="whatsapp"
                     title="WhatsApp Business Platform"
@@ -196,7 +196,7 @@ function CopyRow({ label, value }: { label: string; value: string }) {
         <div>
             <p className="mb-1 text-xs text-muted">{label}</p>
             <div className="flex items-center gap-2 rounded-xl border border-line bg-canvas px-3 py-2">
-                <code className="flex-1 truncate text-xs" dir="ltr">{value}</code>
+                <code className="min-w-0 flex-1 truncate text-xs" dir="ltr">{value}</code>
                 <button
                     type="button"
                     className="grid size-7 shrink-0 place-items-center rounded-lg hover:bg-white"

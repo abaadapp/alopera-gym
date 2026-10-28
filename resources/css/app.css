@@ -53,9 +53,18 @@ h1, h2, h3, .font-display {
     font-variant-numeric: tabular-nums;
 }
 
+@layer base {
+    /* Absolutely positioned descendants (sr-only labels in table rows) must stay inside horizontal
+       scrollers; otherwise, in RTL, they widen the whole page on phones. */
+    .overflow-x-auto {
+        position: relative;
+    }
+}
+
 @layer components {
     .card {
-        @apply rounded-2xl border border-line bg-white shadow-[0_1px_2px_rgba(42,31,45,0.04)];
+        /* min-w-0: a card in a grid/flex row may hold a wide table; it scrolls instead of widening the page. */
+        @apply min-w-0 rounded-2xl border border-line bg-white shadow-[0_1px_2px_rgba(42,31,45,0.04)];
     }
     .input {
         @apply block w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none transition

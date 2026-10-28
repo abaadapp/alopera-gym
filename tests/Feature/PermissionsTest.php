@@ -62,6 +62,17 @@ class PermissionsTest extends TestCase
         $this->actingAs($user)->get(route($route))->assertStatus($status);
     }
 
+    public function test_signed_in_users_opening_a_login_page_go_to_their_own_home(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $this->actingAs($owner)->get(route('login'))->assertRedirect(route($owner->homeRoute()));
+
+        $member = $this->member($club, ['password' => 'password1']);
+        $this->actingAs($member, 'member')->get(route('portal.login', ['club' => $club->slug]))
+            ->assertRedirect(route('portal.dashboard', ['club' => $club->slug]));
+    }
+
     public function test_reception_cannot_post_to_money_endpoints_it_has_no_permission_for(): void
     {
         $club = $this->club();

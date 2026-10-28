@@ -167,7 +167,7 @@ export default function DevicesIndex({ devices, staffCredentials, staff, branche
                 )}
             </Card>
 
-            <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <div className="mt-6 grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
                 <Card>
                     <CardHeader title="بصمات وبطاقات الموظفات" subtitle="اربطي رقم المستخدمة في جهاز البصمة (أو رقم البطاقة) بحسابها لتسجيل الحضور والانصراف" />
                     <form onSubmit={addCredential} className="grid gap-3 sm:grid-cols-2">
@@ -218,7 +218,7 @@ export default function DevicesIndex({ devices, staffCredentials, staff, branche
                         <li>
                             يرسل الجهاز عند كل قراءة طلب <span className="font-mono text-xs" dir="ltr">POST</span> إلى:
                             <code className="mt-1 flex items-center justify-between gap-2 rounded-lg bg-canvas px-3 py-2 font-mono text-xs" dir="ltr">
-                                <span className="truncate">{apiBase}/access</span>
+                                <span className="min-w-0 truncate">{apiBase}/access</span>
                                 <button type="button" onClick={() => copy(`${apiBase}/access`)} aria-label="نسخ"><Copy className="size-3.5" /></button>
                             </code>
                         </li>
