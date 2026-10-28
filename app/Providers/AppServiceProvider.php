@@ -23,6 +23,7 @@ use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -47,6 +48,11 @@ class AppServiceProvider extends ServiceProvider
 
         // migrate:fresh / migrate:refresh / migrate:reset / db:wipe refuse to run in production.
         DB::prohibitDestructiveCommands($this->app->isProduction());
+
+        // `composer dev`: the worker listens on both queues (WhatsApp goes through "notifications")
+        // and the scheduler runs memberships, reminders and class generation, as in production.
+        DevCommands::artisan('queue:listen --queue=notifications,default --tries=3 --timeout=0', 'queue');
+        DevCommands::artisan('schedule:work', 'scheduler');
 
         // Short, stable aliases in *_type columns — no PHP class names in the database.
         Relation::enforceMorphMap([

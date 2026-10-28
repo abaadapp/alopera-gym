@@ -50,14 +50,15 @@ php artisan key:generate
 createdb alopera_gym
 createdb alopera_gym_testing  # لقاعدة الاختبارات
 
-php artisan migrate --seed    # ينشئ بيانات Alopera التجريبية
+php artisan migrate --seed    # ينشئ بيانات Alopera التجريبية (مرة واحدة فقط)
 php artisan storage:link
-npm run build                 # أو npm run dev أثناء التطوير
 
-php artisan serve             # http://localhost:8000
-php artisan queue:work --queue=notifications,default   # رسائل واتساب والحملات
-php artisan schedule:work     # المهام المجدولة (العضويات، التذكيرات، الحصص، النسخ الاحتياطي)
+composer dev                  # أمر واحد للتطوير: الخادم + Vite + الطابور + المجدول + السجلات — Ctrl+C للإيقاف
 ```
+
+`composer dev` يشغّل معًا: `php artisan serve` (http://localhost:8000)، `npm run dev` (Vite مع التحديث الفوري)،
+عامل الطابور على `notifications,default` (رسائل واتساب والحملات)، `schedule:work` (العضويات، التذكيرات، الحصص، النسخ
+الاحتياطي)، و`pail` لعرض السجلات. لتشغيل نسخة مبنية بدل Vite: `npm run build` ثم `php artisan serve`.
 
 ### حسابات البيانات التجريبية (محليًا فقط)
 
