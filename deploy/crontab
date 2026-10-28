@@ -1,0 +1,5 @@
+# crontab -u deploy deploy/crontab
+# Laravel scheduler: memberships, reminders, sessions, scheduled WhatsApp, platform billing, backups.
+* * * * * cd /var/www/alopera-gym/current && php artisan schedule:run >> /dev/null 2>&1
+# Platform-wide database dump to DigitalOcean Spaces (in addition to per-club archives at 03:00).
+30 2 * * * /var/www/alopera-gym/current/scripts/backup-database.sh >> /var/www/alopera-gym/shared/storage/logs/backup.log 2>&1
