@@ -231,6 +231,21 @@ class PayrollTest extends TestCase
         });
     }
 
+    public function test_every_payroll_screen_opens_through_the_cycle(): void
+    {
+        $club = $this->club();
+        $this->employee($club);
+        $owner = $this->owner($club);
+        $run = $this->openRun($club);
+        $item = $this->asTenant($club, fn () => $run->items()->firstOrFail());
+
+        foreach ([route('club.employees.index'), route('club.job-titles.index'), route('club.payroll.index'), route('club.payroll.index', ['run' => $run->id]), route('club.payroll.payouts'), route('club.staff-attendance.index'), route('club.settings.payroll'), route('club.payroll.print', $run), route('club.payroll.print', ['run' => $run->id, 'item' => $item->id]), route('club.payroll.export', ['run' => $run->id, 'format' => 'csv'])] as $url) {
+            $this->actingAs($owner)->get($url)->assertOk();
+        }
+        $this->actingAs($owner)->post(route('club.payroll.approve', $run));
+        $this->actingAs($owner)->get(route('club.payroll.payouts', ['run' => $run->id]))->assertOk()->assertInertia(fn ($page) => $page->where('run.unpaid', '450.000')->where('waiting', '450.000'));
+    }
+
     public function test_one_clubs_payroll_is_invisible_to_another(): void
     {
         $a = $this->club('A');

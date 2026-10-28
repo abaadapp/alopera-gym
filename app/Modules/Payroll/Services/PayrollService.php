@@ -147,8 +147,9 @@ final class PayrollService
             $lines[] = ['account' => $this->chart->account('salary_deductions'), 'credit' => $run->deductions];
             $lines[] = ['account' => $this->chart->account('salaries_payable'), 'credit' => $run->net];
 
+            // The month's salaries belong to that month: dated at its end, or today if it is not over yet.
             $this->ledger->post([
-                'date' => $run->period->endOfMonth(),
+                'date' => $run->period->endOfMonth()->min(today()),
                 'description' => "رواتب {$run->label()} — {$run->number}",
                 'source_type' => 'payroll_run', 'source_id' => $run->id, 'event' => 'approve',
             ], $lines);

@@ -224,6 +224,23 @@ class AccountingTest extends TestCase
         $this->asTenant($club, fn () => $this->assertSame(2, JournalEntry::count()));
     }
 
+    public function test_every_finance_screen_opens_with_real_books(): void
+    {
+        $club = $this->club();
+        $invoice = $this->invoice($club, '75');
+        $this->asTenant($club, fn () => app(PaymentService::class)->record($invoice, 75, 'cash'));
+        $cash = $this->asTenant($club, fn () => app(ChartOfAccounts::class)->account('cash'));
+        $owner = $this->owner($club);
+
+        foreach (['club.finance.summary', 'club.finance.movement', 'club.finance.banks', 'club.finance.accounts', 'club.finance.journal', 'club.finance.statements', 'club.settings.finance'] as $name) {
+            $this->actingAs($owner)->get(route($name))->assertOk();
+        }
+        $this->actingAs($owner)->get(route('club.finance.movement', ['account_id' => $cash->id, 'direction' => 'in']))->assertOk()
+            ->assertInertia(fn ($page) => $page->where('stats.in', '75.000')->where('closing', '75.000'));
+        $this->actingAs($owner)->get(route('club.finance.statements', ['view' => 'trial']))->assertOk();
+        $this->actingAs($owner)->get(route('club.finance.statements.export', ['format' => 'csv']))->assertOk();
+    }
+
     public function test_one_clubs_books_are_invisible_and_unusable_to_another(): void
     {
         $a = $this->club('A');

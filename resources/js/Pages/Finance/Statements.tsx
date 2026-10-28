@@ -91,18 +91,20 @@ function Section({ title, rows, total, m }: { title: string; rows: Row[]; total:
     return (
         <Card padded={false}>
             <div className="p-5 pb-2"><CardHeader title={title} className="mb-0" /></div>
+            <div className="overflow-x-auto">
             <table className="table-base">
                 <tbody>
                     {rows.map((r) => (
                         <tr key={r.code}>
                             <td className="num text-muted">{r.code}</td>
-                            <td>{r.name}{r.contra && <span className="ms-1 text-[11px] text-muted">(تُخصم)</span>}</td>
+                            <td className="max-w-56">{r.name}{r.contra && <span className="ms-1 text-[11px] text-muted">(تُخصم)</span>}</td>
                             <td className="text-end num">{m(r.amount)}</td>
                         </tr>
                     ))}
                     <tr className="font-semibold"><td /><td>الإجمالي</td><td className="text-end num">{m(total)}</td></tr>
                 </tbody>
             </table>
+            </div>
         </Card>
     );
 }

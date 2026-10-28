@@ -17,6 +17,8 @@ app/
     ├── Gym/              المشتركات، العضويات، الباقات، البرامج، المدربات، الجدول، الحصص، الحجوزات، PT، الدخول والأجهزة
     ├── Finance/          الفواتير، الدفعات، المصروفات (يتعامل مع «Billable» لا مع «Member»)
     ├── Inventory/        المنتجات، المخزون، الموردون، المشتريات، نقطة البيع (معطّلة: GYM_INVENTORY_MODULE)
+    ├── Accounting/       الدفاتر المزدوجة: شجرة الحسابات، القيود، الترحيل من المستندات، القوائم المالية
+    ├── Payroll/          الموظفون والمسميات ومسيرات الرواتب وصرفها (مرتبطة بالمحاسبة)
     ├── Messaging/        واتساب: البوابة، القوالب، الإشعارات، الوارد، الحملات
     ├── Payments/         Paymob: نية الدفع، التوقيع، Webhook
     ├── Website/          الموقع، البوابة، روابط الدفع، CMS
@@ -24,7 +26,7 @@ app/
     └── Platform/         خدمات المنصة: إنشاء الأندية، حدود الباقة، اشتراكات SaaS
 resources/js/
 ├── Components/ui/        مكونات الواجهة المشتركة (AdminScope يعطيها مظهر لوحات التحكم داخل اللوحات فقط)
-├── Components/           PanelShell (إطار لوحتي النادي والمنصة) · SectionTabs (تبويبات الأقسام)
+├── Components/           PanelShell (إطار لوحة النادي) · SectionTabs (تبويبات الأقسام) · PeriodFilter
 ├── lib/nav.ts            أقسام لوحة النادي وتبويباتها وصلاحياتها
 ├── Layouts/              ClubLayout · PlatformLayout · SiteLayout · PortalLayout · AuthLayout
 └── Pages/                82 صفحة Inertia مطابقة لمسارات المتحكمات

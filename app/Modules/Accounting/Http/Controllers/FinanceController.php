@@ -14,6 +14,7 @@ use App\Modules\Payroll\Models\PayrollItem;
 use App\Modules\Payroll\Models\PayrollRun;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -58,7 +59,7 @@ class FinanceController extends Controller
             ->join('gym_journal_entries as je', 'je.id', '=', 'gym_journal_lines.journal_entry_id')
             ->orderByDesc('je.entry_date')->orderByDesc('gym_journal_lines.id')->select('gym_journal_lines.*');
 
-        $totals = (clone $query)->reorder()->selectRaw('coalesce(sum(gym_journal_lines.debit), 0) as d, coalesce(sum(gym_journal_lines.credit), 0) as c')->first();
+        $totals = (clone $query)->toBase()->reorder()->select(DB::raw('coalesce(sum(gym_journal_lines.debit), 0) as d'), DB::raw('coalesce(sum(gym_journal_lines.credit), 0) as c'))->first();
         $opening = $account ? $this->reports->signed($account, $this->reports->totals(null, CarbonImmutable::parse($from)->subDay()->toDateString())) : null;
 
         return Inertia::render('Finance/Movement', [

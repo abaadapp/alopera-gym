@@ -16,7 +16,7 @@ export type NavSection = { label: string; icon: LucideIcon; tabs: NavTab[]; matc
 export type NavGroup = { sections: NavSection[]; footer?: boolean };
 
 /** Settings screens live behind the settings hub; none of them appears in the main menu. */
-const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'integrations.manage', 'audit.view', 'backups.manage', 'billing.view', 'website.manage'];
+const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'integrations.manage', 'audit.view', 'backups.manage', 'billing.view', 'accounting.manage'];
 
 export const NAV: NavGroup[] = [
     {

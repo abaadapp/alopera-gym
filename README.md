@@ -88,6 +88,8 @@ composer dev                  # أمر واحد للتطوير: الخادم + V
 ```bash
 php artisan test              # 177 اختبارًا على PostgreSQL (alopera_gym_testing)
 php artisan platform:preflight  # فحص جاهزية الإنتاج (يفشل محليًا عمدًا: بيئة تجريبية)
+php artisan clubs list          # إدارة الأندية من الخادم (list | create | suspend | activate) بدل لوحة المنصة
+php artisan accounting:sync     # بناء الدفاتر المحاسبية للسجلات القديمة (آمن للتكرار)
 npx tsc --noEmit              # فحص أنواع TypeScript
 vendor/bin/pint --test        # تنسيق PHP
 ```
