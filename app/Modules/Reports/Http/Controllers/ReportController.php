@@ -21,10 +21,14 @@ class ReportController extends Controller
     public function index(Request $request, ReportService $reports): Response
     {
         [$from, $to] = $this->range($request);
+        [$compareFrom, $compareTo, $compare] = $this->comparison($request, $from, $to);
 
         return Inertia::render('Reports/Index', [
-            'report' => $reports->period($from, $to, $request->user()->can('reports.financial')),
-            'filters' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'preset' => $request->string('preset')->toString()],
+            'report' => $reports->period($from, $to, $request->user()->can('reports.financial'), $compareFrom, $compareTo),
+            'filters' => [
+                'from' => $from->toDateString(), 'to' => $to->toDateString(), 'preset' => $request->string('preset')->toString(),
+                'compare' => $compare, 'compare_from' => $compareFrom->toDateString(), 'compare_to' => $compareTo->toDateString(),
+            ],
             'canFinancial' => $request->user()->can('reports.financial'),
             'canExport' => $request->user()->can('reports.export'),
         ]);
@@ -99,5 +103,29 @@ class ReportController extends Controller
 
         // keep reports to at most two years per query
         return [$from->max($to->subYears(2)), $to];
+    }
+
+    /**
+     * The period every figure is compared with. Default: the same number of days just before.
+     *
+     * @return array{0: CarbonImmutable, 1: CarbonImmutable, 2: string}
+     */
+    private function comparison(Request $request, CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        $days = (int) $from->diffInDays($to) + 1;
+        $previous = [$from->subDays($days), $from->subDay(), 'previous'];
+
+        return match ($request->string('compare')->toString()) {
+            'month' => [$from->subMonthNoOverflow(), $to->subMonthNoOverflow(), 'month'],
+            'year' => [$from->subYearNoOverflow(), $to->subYearNoOverflow(), 'year'],
+            'custom' => rescue(function () use ($request) {
+                $a = CarbonImmutable::parse($request->string('compare_from')->toString())->startOfDay();
+                $b = CarbonImmutable::parse($request->string('compare_to')->toString())->startOfDay();
+                [$a, $b] = $a->gt($b) ? [$b, $a] : [$a, $b];
+
+                return [$a->max($b->subYears(2)), $b, 'custom'];
+            }, $previous, false),
+            default => $previous,
+        };
     }
 }

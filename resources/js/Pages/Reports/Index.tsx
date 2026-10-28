@@ -25,7 +25,7 @@ interface Report {
 
 interface Props {
     report: Report;
-    filters: { from: string; to: string; preset: string };
+    filters: { from: string; to: string; preset: string; compare: string; compare_from: string; compare_to: string };
     canFinancial: boolean;
     canExport: boolean;
 }
@@ -39,18 +39,34 @@ const presets = [
     { key: 'year', label: 'هذه السنة' },
 ];
 
+const compareModes = [
+    { key: 'previous', label: 'الفترة السابقة (بنفس المدة)' },
+    { key: 'month', label: 'نفس الفترة من الشهر السابق' },
+    { key: 'year', label: 'نفس الفترة من العام السابق' },
+    { key: 'custom', label: 'فترة مخصصة' },
+];
+
 /** Metrics where a lower number is the good direction. */
-const lowerIsBetter = new Set(['cancellations', 'freezes', 'expirations', 'expenses', 'refunds']);
+const lowerIsBetter = new Set(['cancellations', 'freezes', 'expirations', 'expenses', 'refunds', 'credit_notes']);
 
 export default function ReportsIndex({ report, filters, canFinancial, canExport }: Props) {
     const currency = useCurrency();
     const can = useCan();
     const [from, setFrom] = useState(filters.from);
     const [to, setTo] = useState(filters.to);
+    const [compareFrom, setCompareFrom] = useState(filters.compare_from);
+    const [compareTo, setCompareTo] = useState(filters.compare_to);
+    const [customCompare, setCustomCompare] = useState(filters.compare === 'custom');
     const c = report.comparison;
     const m = (key: string) => c[key] ?? { current: 0, previous: 0, change: null };
 
-    const go = (params: Record<string, string>) => router.get(route('club.reports.index'), params, { preserveState: true, preserveScroll: true });
+    // Changing the period keeps the comparison choice, and changing the comparison keeps the period.
+    const compareParams = (): Record<string, string> =>
+        filters.compare === 'custom' ? { compare: 'custom', compare_from: filters.compare_from, compare_to: filters.compare_to }
+            : filters.compare !== 'previous' ? { compare: filters.compare } : {};
+    const periodParams = (): Record<string, string> => (filters.preset ? { preset: filters.preset } : { from: filters.from, to: filters.to });
+    const go = (params: Record<string, string>, keep: 'compare' | 'period' | 'none' = 'compare') =>
+        router.get(route('club.reports.index'), { ...(keep === 'compare' ? compareParams() : keep === 'period' ? periodParams() : {}), ...params }, { preserveState: true, preserveScroll: true });
     const activePreset = filters.preset || (isThisMonth(filters.from, filters.to) ? '' : 'custom');
 
     const exportLink = (report: string, format: 'csv' | 'xlsx') => route('club.reports.export', { report, from: filters.from, to: filters.to, format });
@@ -94,6 +110,33 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
                         <Button type="submit" variant="secondary">عرض</Button>
                     </form>
                 </div>
+                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
+                    <span className="text-sm text-muted">قارن مع:</span>
+                    {compareModes.map((mode) => (
+                        <button
+                            key={mode.key}
+                            type="button"
+                            onClick={() => (mode.key === 'custom' ? setCustomCompare(true) : (setCustomCompare(false), go(mode.key === 'previous' ? {} : { compare: mode.key }, 'period')))}
+                            className={cn('rounded-full border px-3 py-1 text-xs transition', (customCompare ? mode.key === 'custom' : filters.compare === mode.key) ? 'border-brand bg-brand-50 text-brand-700' : 'border-line hover:border-brand-200')}
+                        >
+                            {mode.label}
+                        </button>
+                    ))}
+                    {customCompare && (
+                        <form
+                            className="flex flex-wrap items-center gap-2"
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                go({ compare: 'custom', compare_from: compareFrom, compare_to: compareTo }, 'period');
+                            }}
+                        >
+                            <Input type="date" className="w-40" value={compareFrom} onChange={(e) => setCompareFrom(e.target.value)} aria-label="مقارنة من" />
+                            <span className="text-muted">—</span>
+                            <Input type="date" className="w-40" value={compareTo} onChange={(e) => setCompareTo(e.target.value)} aria-label="مقارنة إلى" />
+                            <Button type="submit" variant="secondary" size="sm">قارن</Button>
+                        </form>
+                    )}
+                </div>
             </Card>
 
             {canFinancial && (
@@ -104,6 +147,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
                         <Kpi label="صافي الربح التشغيلي" metric={m('net')} format={fmtMoney} metricKey="net" />
                         <Kpi label="نسبة التحصيل" metric={m('collection_rate')} format={fmtPct} metricKey="collection_rate" hint={`من فواتير بقيمة ${fmtMoney(m('invoiced').current)}`} />
                         <Kpi label="المردودات" metric={m('refunds')} format={fmtMoney} metricKey="refunds" />
+                        <Kpi label="الإشعارات الدائنة" metric={m('credit_notes')} format={fmtMoney} metricKey="credit_notes" />
                         <Kpi label="مبيعات المنتجات" metric={m('product_sales')} format={fmtMoney} metricKey="product_sales" />
                     </div>
                     <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -292,7 +336,7 @@ function Kpi({ label, metric, format, metricKey, hint }: { label: string; metric
             <p className="text-sm text-muted">{label}</p>
             <p className="mt-1 text-2xl font-semibold num">{format(metric.current)}</p>
             <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted">
-                <span>السابقة: <span className="num">{format(metric.previous)}</span></span>
+                <span>المقارنة: <span className="num">{format(metric.previous)}</span></span>
                 {inverted ? <InvertedDelta change={metric.change} /> : <Delta change={metric.change} />}
             </div>
             {hint && <p className="mt-1 text-[11px] text-muted">{hint}</p>}

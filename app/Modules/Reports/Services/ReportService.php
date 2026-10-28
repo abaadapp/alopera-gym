@@ -3,6 +3,7 @@
 namespace App\Modules\Reports\Services;
 
 use App\Core\Tenancy\TenantContext;
+use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
@@ -76,7 +77,7 @@ final class ReportService
                 'cancellations_month' => Membership::where('status', Membership::CANCELLED)->where('cancelled_at', '>=', $monthStart)->where(fn ($q) => $q->whereNull('cancel_reason')->orWhereNotIn('cancel_reason', ['upgraded', 'invoice_voided']))->count(),
                 'revenue_month' => $this->netCollected($monthStart, $today->endOfDay()),
                 'revenue_today' => $this->netCollected($today, $today->endOfDay()),
-                'outstanding' => (string) Invoice::open()->sum(DB::raw('total - paid_total')),
+                'outstanding' => (string) Invoice::open()->sum(DB::raw('total - credited_total - paid_total')),
                 'overdue_invoices' => Invoice::overdue()->count(),
                 'pending_transfers' => Payment::where('status', Payment::PENDING)->count(),
                 'checkins_today' => CheckIn::where('result', 'allowed')->where('checked_in_at', '>=', $today)->count(),
@@ -113,16 +114,18 @@ final class ReportService
     }
 
     /**
-     * Full report for a period, each headline figure compared with the
-     * previous period of the same length.
+     * Full report for a period, each headline figure compared with another period:
+     * by default the same number of days just before it.
      *
      * @return array<string, mixed>
      */
-    public function period(CarbonImmutable $from, CarbonImmutable $to, bool $financial = true): array
+    public function period(CarbonImmutable $from, CarbonImmutable $to, bool $financial = true, ?CarbonImmutable $prevFrom = null, ?CarbonImmutable $prevTo = null): array
     {
-        $days = (int) $from->diffInDays($to) + 1;
-        $prevTo = $from->subDay();
-        $prevFrom = $prevTo->subDays($days - 1);
+        if ($prevFrom === null || $prevTo === null) {
+            $days = (int) $from->diffInDays($to) + 1;
+            $prevTo = $from->subDay();
+            $prevFrom = $prevTo->subDays($days - 1);
+        }
 
         $current = $this->headline($from, $to, $financial);
         $previous = $this->headline($prevFrom, $prevTo, $financial);
@@ -188,7 +191,8 @@ final class ReportService
         if ($financial) {
             $revenue = (float) $this->netCollected($from, $end);
             $expenses = (float) Expense::whereBetween('expense_date', [$from, $to])->sum('amount');
-            $issued = (float) Invoice::whereBetween('issue_date', [$from, $to])->where('status', '!=', Invoice::VOID)->sum('total');
+            // net of credit notes: what the invoices are worth after partial refunds and reductions
+            $issued = (float) Invoice::whereBetween('issue_date', [$from, $to])->where('status', '!=', Invoice::VOID)->sum(DB::raw('total - credited_total'));
             $collectedOnIssued = (float) Invoice::whereBetween('issue_date', [$from, $to])->where('status', '!=', Invoice::VOID)->sum('paid_total');
 
             $row += [
@@ -198,6 +202,7 @@ final class ReportService
                 'invoiced' => round($issued, 3),
                 'collection_rate' => $issued > 0 ? round($collectedOnIssued / $issued * 100, 1) : 0,
                 'refunds' => round((float) Payment::completed()->where('kind', Payment::KIND_REFUND)->whereBetween('paid_at', [$from, $end])->sum('amount'), 3),
+                'credit_notes' => round((float) CreditNote::whereBetween('created_at', [$from, $end])->sum('amount'), 3),
                 'product_sales' => round((float) SaleItem::whereHas('sale', fn ($q) => $q->where('status', 'completed')->whereBetween('created_at', [$from, $end]))->sum('line_total'), 3),
             ];
         }
