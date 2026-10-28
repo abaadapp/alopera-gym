@@ -63,7 +63,7 @@ export default function PlansIndex({ plans, programs, types }: { plans: Plan[]; 
                                     <ConfirmAction url={route('club.plans.destroy', p.id)} method="delete" title="حذف الباقة" message="تُزال الباقة من البيع، وتبقى العضويات السابقة كما هي." confirmLabel="حذف" variant="ghost" icon={<Trash2 className="size-4" />}>{''}</ConfirmAction>
                                 </div>
                             </div>
-                            <p className="mt-3 text-2xl font-semibold text-brand-700 num">{money(p.price, currency)}</p>
+                            <p className="mt-3 text-2xl font-semibold text-brand-700"><span className="num">{money(p.price, currency)}</span></p>
                             <p className="text-sm text-muted">{p.duration_label}{Number(p.signup_fee) > 0 && <> · رسوم تسجيل <span className="num">{money(p.signup_fee, currency)}</span></>}</p>
                             <div className="mt-3 flex flex-wrap gap-1.5">
                                 <Badge tone="brand">{p.type_label}</Badge>

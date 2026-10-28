@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 import { Building2, FileText, LayoutDashboard, Layers, LogOut, ScrollText, Webhook } from 'lucide-react';
 import { Flash } from '@/Components/ui';
@@ -17,10 +17,13 @@ const items = [
 /** Super Admin (platform owner) — deliberately visually distinct from a club panel. */
 export default function PlatformLayout({ title, children }: { title: string; children: ReactNode }) {
     const { auth, appName } = useShared();
+    const nav = useRef<HTMLElement>(null);
 
     // Set on <html> (not a wrapper) so portalled modals get the platform colour too.
     useEffect(() => {
         document.documentElement.style.setProperty('--brand', '#3b2a5a');
+        // On phones the tabs scroll sideways; keep the current one in view.
+        nav.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
     }, []);
 
     return (
@@ -40,9 +43,9 @@ export default function PlatformLayout({ title, children }: { title: string; chi
                             <LogOut className="size-4" /> خروج
                         </button>
                     </div>
-                    <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 lg:px-8">
+                    <nav ref={nav} className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 lg:px-8">
                         {items.map(({ label, route: r, match, icon: Icon }) => (
-                            <Link key={r} href={route(r)} className={cn('flex items-center gap-2 whitespace-nowrap rounded-t-xl px-4 py-2.5 text-sm', route().current(match ?? r) ? 'bg-[#f6f5f8] text-ink' : 'text-white/75 hover:text-white')}>
+                            <Link key={r} href={route(r)} aria-current={route().current(match ?? r) ? 'page' : undefined} className={cn('flex items-center gap-2 whitespace-nowrap rounded-t-xl px-4 py-2.5 text-sm', route().current(match ?? r) ? 'bg-[#f6f5f8] text-ink' : 'text-white/75 hover:text-white')}>
                                 <Icon className="size-4" /> {label}
                             </Link>
                         ))}

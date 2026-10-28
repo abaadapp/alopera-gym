@@ -51,7 +51,7 @@ export default function Invoice({ site, seo, invoice, club }: Props) {
                             <div>
                                 <p className="font-display text-lg font-semibold">{club.legal_name || club.name}</p>
                                 {club.address && <p className="text-xs text-muted">{club.address}</p>}
-                                {club.phone && <p className="text-xs text-muted num">{club.phone}</p>}
+                                {club.phone && <p className="text-xs text-muted"><span className="num">{club.phone}</span></p>}
                                 {club.vat_number && <p className="text-xs text-muted">الرقم الضريبي: <span className="num">{club.vat_number}</span></p>}
                             </div>
                         </div>
@@ -89,19 +89,21 @@ export default function Invoice({ site, seo, invoice, club }: Props) {
                     {invoice.payments.length > 0 && (
                         <section className="mt-8">
                             <h2 className="mb-2 text-sm font-semibold">الإيصالات</h2>
-                            <table className="table-base">
-                                <thead><tr><th>رقم الإيصال</th><th>التاريخ</th><th>الطريقة</th><th className="text-end">المبلغ</th></tr></thead>
-                                <tbody>
-                                    {invoice.payments.map((p, i) => (
-                                        <tr key={i}>
-                                            <td className="num">{p.receipt_number ?? '—'}</td>
-                                            <td className="num">{p.paid_at}</td>
-                                            <td>{p.kind === 'refund' ? 'استرداد — ' : ''}{paymentMethod[p.method] ?? p.method}</td>
-                                            <td className="num text-end">{p.kind === 'refund' ? '− ' : ''}{money(p.amount, currency)}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                            <div className="overflow-x-auto">
+                                <table className="table-base">
+                                    <thead><tr><th>رقم الإيصال</th><th>التاريخ</th><th>الطريقة</th><th className="text-end">المبلغ</th></tr></thead>
+                                    <tbody>
+                                        {invoice.payments.map((p, i) => (
+                                            <tr key={i}>
+                                                <td className="num">{p.receipt_number ?? '—'}</td>
+                                                <td className="num">{p.paid_at}</td>
+                                                <td>{p.kind === 'refund' ? 'استرداد — ' : ''}{paymentMethod[p.method] ?? p.method}</td>
+                                                <td className="num text-end">{p.kind === 'refund' ? '− ' : ''}{money(p.amount, currency)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </section>
                     )}
 

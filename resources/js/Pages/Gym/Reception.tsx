@@ -124,9 +124,9 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
             />
 
             <div className="mb-6 grid grid-cols-3 gap-3">
-                <div className="card p-4"><p className="text-xs text-muted">دخول اليوم</p><p className="mt-1 text-xl font-semibold text-emerald-700 num">{number(stats.checkins)}</p></div>
-                <div className="card p-4"><p className="text-xs text-muted">مرفوض اليوم</p><p className="mt-1 text-xl font-semibold text-red-600 num">{number(stats.denied)}</p></div>
-                <div className="card p-4"><p className="text-xs text-muted">حصّلتُ اليوم</p><p className="mt-1 text-xl font-semibold num">{money(stats.collected, currency)}</p></div>
+                <div className="card p-4"><p className="text-xs text-muted">دخول اليوم</p><p className="mt-1 text-xl font-semibold text-emerald-700"><span className="num">{number(stats.checkins)}</span></p></div>
+                <div className="card p-4"><p className="text-xs text-muted">مرفوض اليوم</p><p className="mt-1 text-xl font-semibold text-red-600"><span className="num">{number(stats.denied)}</span></p></div>
+                <div className="card p-4"><p className="text-xs text-muted">حصّلتُ اليوم</p><p className="mt-1 text-xl font-semibold"><span className="num">{money(stats.collected, currency)}</span></p></div>
             </div>
 
             <div className="grid gap-6 lg:grid-cols-5">

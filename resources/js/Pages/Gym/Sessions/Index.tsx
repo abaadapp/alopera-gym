@@ -38,7 +38,7 @@ function addDays(day: string, n: number): string {
 
 function dayLabel(day: string): { weekday: string; date: string } {
     const d = new Date(`${day}T00:00:00Z`);
-    return { weekday: WEEKDAYS[d.getUTCDay()], date: new Intl.DateTimeFormat('ar-OM', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(d) };
+    return { weekday: WEEKDAYS[d.getUTCDay()], date: new Intl.DateTimeFormat('ar-OM-u-nu-latn', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(d) };
 }
 
 const today = new Date().toLocaleDateString('en-CA');

@@ -43,7 +43,7 @@ function SessionCard({ s }: { s: SessionItem }) {
             </div>
             <div className="text-end">
                 {s.status === 'cancelled' ? <Badge tone="red">ملغاة</Badge> : s.is_full ? <Badge tone="red">مكتملة</Badge> : null}
-                <p className="mt-1 text-sm num"><Users className="me-1 inline size-3.5 text-muted" />{s.booked}/{s.capacity}</p>
+                <p className="mt-1 text-sm"><Users className="me-1 inline size-3.5 text-muted" /><span className="num">{s.booked}/{s.capacity}</span></p>
             </div>
             <ChevronLeft className="size-4 text-muted" />
         </Link>

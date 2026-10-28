@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from '@inertiajs/react';
 import { cn } from '@/lib/cn';
 
 export function Card({ children, className, padded = true }: { children: ReactNode; className?: string; padded?: boolean }) {
@@ -46,16 +47,17 @@ export function Badge({ children, tone = 'gray', className }: { children: ReactN
 
 export function StatCard({ label, value, hint, icon, tone = 'brand', href }: { label: ReactNode; value: ReactNode; hint?: ReactNode; icon?: ReactNode; tone?: keyof typeof tones; href?: string }) {
     const body = (
-        <div className="card flex items-start gap-4 p-5 transition hover:border-brand-200">
-            {icon && <div className={cn('grid size-11 shrink-0 place-items-center rounded-xl', tones[tone])}>{icon}</div>}
+        // Two to a row on phones: icon above the figures; side by side from sm up.
+        <div className="card flex h-full flex-col items-start gap-3 p-4 transition hover:border-brand-200 sm:flex-row sm:gap-4 sm:p-5">
+            {icon && <div className={cn('grid size-9 shrink-0 place-items-center rounded-xl sm:size-11', tones[tone])}>{icon}</div>}
             <div className="min-w-0">
                 <p className="text-sm text-muted">{label}</p>
-                <p className="mt-1 text-2xl font-semibold text-ink num">{value}</p>
+                <p className="mt-1 text-xl font-semibold text-ink sm:text-2xl"><span className="num">{value}</span></p>
                 {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
             </div>
         </div>
     );
-    return href ? <a href={href}>{body}</a> : body;
+    return href ? <Link href={href} className="block h-full">{body}</Link> : body;
 }
 
 export function EmptyState({ icon, title, description, action }: { icon?: ReactNode; title: ReactNode; description?: ReactNode; action?: ReactNode }) {

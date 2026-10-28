@@ -20,7 +20,7 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
         <ClubLayout title="لوحة التحكم">
             <PageHeader title="لوحة التحكم" subtitle="نظرة سريعة على حالة النادي اليوم" />
 
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
                 <StatCard label="عضويات نشطة" value={number(kpis.active_members)} icon={<Users className="size-5" />} href={route('club.memberships.index', { filter: 'active' })} />
                 <StatCard label="تنتهي خلال 7 أيام" value={number(kpis.expiring_7_days)} tone="amber" icon={<CalendarClock className="size-5" />} href={route('club.memberships.index', { filter: 'expiring' })} />
                 <StatCard label="منتهية" value={number(kpis.expired_members)} tone="gray" icon={<AlertTriangle className="size-5" />} href={route('club.members.index', { membership: 'expired' })} />

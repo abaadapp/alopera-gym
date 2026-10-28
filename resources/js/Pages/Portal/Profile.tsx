@@ -43,7 +43,7 @@ export default function Profile({ site, seo, profile }: Props) {
                     <h2 className="font-display text-lg font-semibold">بياناتي</h2>
                     <dl className="mt-4 grid grid-cols-2 gap-4 rounded-xl bg-canvas p-4 text-sm">
                         <div><dt className="text-xs text-muted">الاسم</dt><dd className="mt-0.5 font-medium">{profile.full_name}</dd></div>
-                        <div><dt className="text-xs text-muted">الهاتف</dt><dd className="mt-0.5 num">{phone(profile.phone)}</dd></div>
+                        <div><dt className="text-xs text-muted">الهاتف</dt><dd className="mt-0.5"><span className="num">{phone(profile.phone)}</span></dd></div>
                         <div><dt className="text-xs text-muted">تاريخ الميلاد</dt><dd className="mt-0.5">{date(profile.date_of_birth)}</dd></div>
                     </dl>
                     <p className="mt-2 text-xs text-muted">لتغيير الاسم أو رقم الهاتف تواصلي مع الاستقبال.</p>

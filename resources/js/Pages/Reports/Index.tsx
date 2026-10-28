@@ -141,7 +141,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
 
             {canFinancial && (
                 <Section title="المالية" exports={canExport ? [['revenue', 'الإيرادات'], ['expenses', 'المصروفات'], ['sales', 'المبيعات']] : []} exportLink={exportLink}>
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
                         <Kpi label="صافي التحصيل" metric={m('revenue')} format={fmtMoney} metricKey="revenue" />
                         <Kpi label="المصروفات" metric={m('expenses')} format={fmtMoney} metricKey="expenses" />
                         <Kpi label="صافي الربح التشغيلي" metric={m('net')} format={fmtMoney} metricKey="net" />
@@ -186,19 +186,21 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
                         <Card padded={false}>
                             <div className="p-5 pb-2"><CardHeader title="المنتجات الأكثر مبيعًا" className="mb-0" /></div>
                             {report.products.length ? (
-                                <table className="table-base">
-                                    <thead><tr><th>المنتج</th><th>الكمية</th><th>الإيراد</th><th>الربح</th></tr></thead>
-                                    <tbody>
-                                        {report.products.map((p) => (
-                                            <tr key={p.product}>
-                                                <td className="font-medium">{p.product}</td>
-                                                <td className="num">{number(p.quantity, 3)}</td>
-                                                <td className="num">{fmtMoney(p.revenue)}</td>
-                                                <td className={cn('num', p.profit < 0 && 'text-red-600')}>{fmtMoney(p.profit)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                <div className="overflow-x-auto">
+                                    <table className="table-base">
+                                        <thead><tr><th>المنتج</th><th>الكمية</th><th>الإيراد</th><th>الربح</th></tr></thead>
+                                        <tbody>
+                                            {report.products.map((p) => (
+                                                <tr key={p.product}>
+                                                    <td className="font-medium">{p.product}</td>
+                                                    <td className="num">{number(p.quantity, 3)}</td>
+                                                    <td className="num">{fmtMoney(p.revenue)}</td>
+                                                    <td className={cn('num', p.profit < 0 && 'text-red-600')}>{fmtMoney(p.profit)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             ) : (
                                 <EmptyState title="لا مبيعات" />
                             )}
@@ -208,7 +210,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
             )}
 
             <Section title="العضويات والمشتركات" exports={canExport ? [['memberships', 'العضويات'], ...(can('members.export') ? [['members', 'المشتركات'] as [string, string]] : [])] : []} exportLink={exportLink}>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
                     <Kpi label="اشتراكات جديدة" metric={m('new_memberships')} format={fmtNum} metricKey="new_memberships" />
                     <Kpi label="تجديدات" metric={m('renewals')} format={fmtNum} metricKey="renewals" />
                     <Kpi label="تغيير/ترقية باقة" metric={m('upgrades')} format={fmtNum} metricKey="upgrades" />
@@ -243,7 +245,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
             </Section>
 
             <Section title="الحصص والحضور" exports={canExport ? [['classes', 'الحصص']] : []} exportLink={exportLink}>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
                     <Kpi label="الحصص" metric={m('sessions')} format={fmtNum} metricKey="sessions" />
                     <Kpi label="الحجوزات" metric={m('bookings')} format={fmtNum} metricKey="bookings" />
                     <Kpi label="نسبة الحضور" metric={m('attendance_rate')} format={fmtPct} metricKey="attendance_rate" hint="الحاضرات من الحضور + الغياب" />
@@ -334,8 +336,8 @@ function Kpi({ label, metric, format, metricKey, hint }: { label: string; metric
     return (
         <div className="card p-4">
             <p className="text-sm text-muted">{label}</p>
-            <p className="mt-1 text-2xl font-semibold num">{format(metric.current)}</p>
-            <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted">
+            <p className="mt-1 text-xl font-semibold sm:text-2xl"><span className="num">{format(metric.current)}</span></p>
+            <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs text-muted">
                 <span>المقارنة: <span className="num">{format(metric.previous)}</span></span>
                 {inverted ? <InvertedDelta change={metric.change} /> : <Delta change={metric.change} />}
             </div>

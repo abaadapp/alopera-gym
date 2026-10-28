@@ -14,8 +14,8 @@ export function number(value: number | string | null | undefined, digits = 0): s
     return new Intl.NumberFormat('en-US', { maximumFractionDigits: digits }).format(Number(value ?? 0));
 }
 
-const dateFmt = new Intl.DateTimeFormat('ar-OM', { day: 'numeric', month: 'short', year: 'numeric' });
-const dayFmt = new Intl.DateTimeFormat('ar-OM', { weekday: 'long', day: 'numeric', month: 'long' });
+const dateFmt = new Intl.DateTimeFormat('ar-OM-u-nu-latn', { day: 'numeric', month: 'short', year: 'numeric' });
+const dayFmt = new Intl.DateTimeFormat('ar-OM-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
 
 export function date(value: string | null | undefined): string {
     if (!value) return '—';

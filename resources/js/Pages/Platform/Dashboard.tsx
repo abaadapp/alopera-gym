@@ -15,7 +15,7 @@ export default function PlatformDashboard({ stats, recent }: Props) {
         <PlatformLayout title="الرئيسية">
             <PageHeader title="إدارة المنصة" subtitle="الأندية المشتركة وإيرادات اشتراكات المنصة" actions={<Button href={route('platform.tenants.create')} icon={<Plus className="size-4" />}>نادٍ جديد</Button>} />
 
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
                 <StatCard label="الأندية" value={number(stats.tenants)} icon={<Building2 className="size-5" />} hint={`نشطة ${number(stats.active)} · تجريبية ${number(stats.trial)}`} href={route('platform.tenants.index')} />
                 <StatCard label="الإيراد الشهري المتكرر (MRR)" value={money(stats.mrr, 'OMR')} tone="green" icon={<CircleDollarSign className="size-5" />} hint="الاشتراكات السنوية موزعة على 12 شهرًا" />
                 <StatCard label="فواتير غير مدفوعة" value={number(stats.unpaid_invoices)} tone="amber" icon={<FileWarning className="size-5" />} hint={money(stats.unpaid_amount, 'OMR')} href={route('platform.invoices.index', { status: 'unpaid' })} />

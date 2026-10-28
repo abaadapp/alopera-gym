@@ -86,8 +86,28 @@ h1, h2, h3, .font-display {
     .table-base td {
         @apply border-b border-line/70 px-4 py-3 align-middle;
     }
+    /* A number cell (or a number line under a name) is laid out left-to-right but sits in a right-to-left
+       column: align it with its header. text-end / text-center on the element still win. */
+    .table-base td.num:dir(rtl),
+    .table-base td .num:dir(rtl) {
+        @apply text-right;
+    }
     .table-base tbody tr:hover {
         @apply bg-brand-50/60;
+    }
+    /* Phones: rows stay one line high (numbers, phones and names never break) and the table scrolls
+       sideways inside its card. Cells sized with max-w-* hold free text and keep wrapping. */
+    @media (width < 48rem) {
+        .table-base th,
+        .table-base td {
+            @apply px-3;
+        }
+        .table-base td {
+            @apply whitespace-nowrap;
+        }
+        .table-base td[class*='max-w-'] {
+            @apply min-w-56 whitespace-normal;
+        }
     }
 }
 
