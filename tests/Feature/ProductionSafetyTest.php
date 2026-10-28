@@ -115,6 +115,12 @@ class ProductionSafetyTest extends TestCase
         $real->forceFill(['is_platform_admin' => true])->save();
         config(['app.debug' => false, 'app.url' => 'https://app.platform.om', 'session.secure' => true, 'session.encrypt' => true, 'queue.default' => 'database']);
 
+        // The gate also wants public/storage linked; a fresh checkout (CI) does not have the link yet.
+        if (! file_exists(public_path('storage'))) {
+            $this->artisan('storage:link')->assertSuccessful();
+            $this->beforeApplicationDestroyed(fn () => unlink(public_path('storage')));
+        }
+
         // Locally the demo rows are expected and never touched.
         $this->artisan('platform:preflight', ['--deactivate-demo' => true])->assertFailed();
         $this->assertTrue($demo->fresh()->is_active);
