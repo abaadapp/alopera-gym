@@ -3,6 +3,8 @@
     $tenant = $page['props']['tenant'] ?? null;
     $brand = $tenant['primary_color'] ?? '#9d174d';
     $brand2 = $tenant['secondary_color'] ?? '#f9a8d4';
+    // Tab icon: the club's logo, or its initial on its brand colour.
+    $icon = $tenant['logo_url'] ?? 'data:image/svg+xml,'.rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="'.e($brand).'"/><text x="32" y="44" font-family="Arial,sans-serif" font-size="34" font-weight="700" text-anchor="middle" fill="#fff">'.e(mb_substr($tenant['name'] ?? config('app.name'), 0, 1)).'</text></svg>');
 @endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
@@ -10,6 +12,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="{{ $brand }}">
+    <link rel="icon" href="{{ $icon }}">
+    @if (! empty($tenant['logo_url']))<link rel="apple-touch-icon" href="{{ $tenant['logo_url'] }}">@endif
     {{-- Rendered on the server so search engines and link previews see them without running JavaScript --}}
     @if ($seo)
         <title inertia>{{ $seo['title'] ?? config('app.name') }}</title>

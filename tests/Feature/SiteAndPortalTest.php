@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\TenantIntegration;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Website\Models\ContactMessage;
+use App\Modules\Website\Models\SiteSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
@@ -101,5 +103,39 @@ class SiteAndPortalTest extends TestCase
         $this->get('http://alopera.om/plans')->assertOk()
             ->assertInertia(fn ($page) => $page->component('Site/Plans')->where('plans.0.name', 'Domain Plan'));
         $this->get('http://alopera.om/')->assertOk()->assertInertia(fn ($page) => $page->component('Site/Home'));
+    }
+
+    public function test_home_page_promises_online_payment_only_when_the_club_can_take_it(): void
+    {
+        $club = $this->club();
+        $titles = fn () => collect($this->get(route('site.home', ['club' => $club->slug]))->viewData('page')['props']['features'])->pluck('title');
+
+        $this->assertNotContains('دفع إلكتروني آمن', $titles());
+        $this->assertContains('اشتراك سهل', $titles());
+
+        $this->asTenant($club, fn () => TenantIntegration::create([
+            'provider' => 'paymob', 'is_enabled' => true, 'mode' => 'test',
+            'credentials' => ['secret_key' => 'sk_test', 'public_key' => 'pk_test', 'hmac_secret' => 'h', 'integration_ids' => '111'],
+        ]));
+        $this->assertContains('دفع إلكتروني آمن', $titles());
+    }
+
+    public function test_club_edits_the_badge_and_why_us_cards(): void
+    {
+        $club = $this->club();
+
+        $this->actingAs($this->owner($club))->post(route('club.website.update'), [
+            'hero_badge' => 'نادٍ عائلي',
+            'features' => [['title' => 'مسبح داخلي', 'text' => 'مسبح مدفأ طوال العام.']],
+        ])->assertSessionHasNoErrors();
+
+        $this->get(route('site.home', ['club' => $club->slug]))->assertInertia(fn ($page) => $page
+            ->where('hero.badge', 'نادٍ عائلي')
+            ->has('features', 1)->where('features.0.title', 'مسبح داخلي'));
+
+        // Clearing both hides them on the site.
+        $this->actingAs($this->owner($club))->post(route('club.website.update'), ['hero_badge' => '', 'features' => []])->assertSessionHasNoErrors();
+        $this->assertSame([], $this->asTenant($club, fn () => SiteSetting::first()->features));
+        $this->get(route('site.home', ['club' => $club->slug]))->assertInertia(fn ($page) => $page->where('hero.badge', null)->has('features', 0));
     }
 }

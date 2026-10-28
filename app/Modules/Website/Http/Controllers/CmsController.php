@@ -5,6 +5,7 @@ namespace App\Modules\Website\Http\Controllers;
 use App\Core\Support\ImageStore;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
+use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Models\ContactMessage;
 use App\Modules\Website\Models\SiteMedia;
 use App\Modules\Website\Models\SiteSetting;
@@ -18,13 +19,14 @@ class CmsController extends Controller
 {
     private const IMAGES = ['hero_image', 'about_image', 'og_image'];
 
-    public function edit(TenantContext $tenants): Response
+    public function edit(TenantContext $tenants, OnlinePaymentService $online): Response
     {
         $site = SiteSetting::firstOrCreate([]);
 
         return Inertia::render('Website/Edit', [
-            'settings' => $site->only('is_published', 'hero_title', 'hero_subtitle', 'hero_cta_label', 'about_title', 'about_body', 'announcement',
+            'settings' => $site->only('is_published', 'hero_title', 'hero_subtitle', 'hero_cta_label', 'hero_badge', 'about_title', 'about_body', 'announcement',
                 'contact_phone', 'whatsapp_number', 'contact_email', 'address', 'map_url', 'working_hours', 'social_links', 'stats', 'seo_title', 'seo_description') + [
+                    'features' => $site->features ?? SiteController::defaultFeatures($online->available()),
                     'hero_image_url' => SiteSetting::url($site->hero_image_path),
                     'about_image_url' => SiteSetting::url($site->about_image_path),
                     'og_image_url' => SiteSetting::url($site->og_image_path),
@@ -42,6 +44,7 @@ class CmsController extends Controller
             'hero_title' => ['nullable', 'string', 'max:160'],
             'hero_subtitle' => ['nullable', 'string', 'max:500'],
             'hero_cta_label' => ['nullable', 'string', 'max:40'],
+            'hero_badge' => ['nullable', 'string', 'max:60'],
             'about_title' => ['nullable', 'string', 'max:160'],
             'about_body' => ['nullable', 'string', 'max:5000'],
             'announcement' => ['nullable', 'string', 'max:200'],
@@ -58,6 +61,9 @@ class CmsController extends Controller
             'stats' => ['nullable', 'array', 'max:4'],
             'stats.*.label' => ['required', 'string', 'max:40'],
             'stats.*.value' => ['required', 'string', 'max:20'],
+            'features' => ['nullable', 'array', 'max:3'],
+            'features.*.title' => ['required', 'string', 'max:40'],
+            'features.*.text' => ['required', 'string', 'max:140'],
             'seo_title' => ['nullable', 'string', 'max:70'],
             'seo_description' => ['nullable', 'string', 'max:300'],
             'hero_image' => ['nullable', 'image', 'max:'.config('gym.max_image_kb')],
@@ -66,7 +72,7 @@ class CmsController extends Controller
         ]);
 
         // Multipart requests (with an image) drop empty arrays: missing means "cleared".
-        foreach (['working_hours', 'stats', 'social_links'] as $list) {
+        foreach (['working_hours', 'stats', 'social_links', 'features'] as $list) {
             $data[$list] ??= [];
         }
 

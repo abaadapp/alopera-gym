@@ -22,6 +22,7 @@ class SiteSetting extends Model
             'working_hours' => 'array',
             'social_links' => 'array',
             'stats' => 'array',
+            'features' => 'array',
         ];
     }
 

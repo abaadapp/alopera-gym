@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { ArrowLeft, CalendarCheck, CreditCard, Heart, ImageIcon, Megaphone, Newspaper, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowLeft, CalendarCheck, CreditCard, Heart, Megaphone, Newspaper, ShieldCheck, Sparkles } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
 import { useCurrency, useShared } from '@/hooks/useShared';
 import { date } from '@/lib/format';
@@ -21,7 +21,8 @@ export interface PostData {
 interface Props {
     site: SiteInfo;
     seo: { title: string };
-    hero: { title: string; subtitle: string | null; image_url: string | null; cta: string };
+    hero: { title: string; subtitle: string | null; image_url: string | null; cta: string; badge: string | null };
+    features: { title: string; text: string }[];
     about: { title: string | null; body: string | null; image_url: string | null };
     stats: { label: string; value: string }[];
     plans: PlanData[];
@@ -55,7 +56,9 @@ export function PostCard({ post }: { post: PostData }) {
     );
 }
 
-export default function Home({ site, seo, hero, about, stats, plans, programs, trainers, offers, news, gallery }: Props) {
+const FEATURE_ICONS = [CalendarCheck, CreditCard, ShieldCheck];
+
+export default function Home({ site, seo, hero, features, about, stats, plans, programs, trainers, offers, news, gallery }: Props) {
     const currency = useCurrency();
     const { tenant } = useShared();
 
@@ -67,10 +70,12 @@ export default function Home({ site, seo, hero, about, stats, plans, programs, t
                 <div className="pointer-events-none absolute -top-32 end-[-8rem] size-[28rem] rounded-full bg-brand-soft/30 blur-3xl" />
                 <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 sm:py-20 lg:grid-cols-2">
                     <div>
-                        <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-brand-700 shadow-sm">
-                            <Heart className="size-3.5" /> نادٍ مخصص للنساء
-                        </span>
-                        <h1 className="mt-5 font-display text-4xl leading-[1.25] font-semibold text-ink sm:text-5xl lg:text-6xl">{hero.title}</h1>
+                        {hero.badge && (
+                            <span className="mb-5 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-brand-700 shadow-sm">
+                                <Heart className="size-3.5" /> {hero.badge}
+                            </span>
+                        )}
+                        <h1 className="font-display text-4xl leading-[1.25] font-semibold text-ink sm:text-5xl lg:text-6xl">{hero.title}</h1>
                         {hero.subtitle && <p className="mt-5 max-w-xl text-lg leading-8 text-muted">{hero.subtitle}</p>}
                         <div className="mt-8 flex flex-wrap gap-3">
                             {site.signup_enabled && (
@@ -87,7 +92,7 @@ export default function Home({ site, seo, hero, about, stats, plans, programs, t
                                 {stats.map((s, i) => (
                                     <div key={i}>
                                         <dt className="order-2 text-xs text-muted">{s.label}</dt>
-                                        <dd className="font-display text-2xl font-semibold text-brand num">{s.value}</dd>
+                                        <dd className="font-display text-2xl font-semibold text-brand"><span className="num">{s.value}</span></dd>
                                     </div>
                                 ))}
                             </dl>
@@ -110,37 +115,36 @@ export default function Home({ site, seo, hero, about, stats, plans, programs, t
             </section>
 
             {/* Why us */}
-            <section className="mx-auto max-w-6xl px-4 py-14">
-                <div className="grid gap-4 sm:grid-cols-3">
-                    {[
-                        { icon: CalendarCheck, title: 'احجزي حصتك أونلاين', text: 'شاهدي المقاعد المتاحة واحجزي من جوالك في ثوانٍ.' },
-                        { icon: CreditCard, title: 'دفع إلكتروني آمن', text: 'اشتركي وجددي وادفعي فواتيرك أونلاين بكل سهولة.' },
-                        { icon: ShieldCheck, title: 'خصوصية تامة', text: 'بيئة نسائية خاصة ومدربات محترفات.' },
-                    ].map(({ icon: Icon, title, text }) => (
-                        <div key={title} className="rounded-3xl border border-line bg-white p-6 shadow-sm">
-                            <span className="grid size-12 place-items-center rounded-2xl bg-brand-50 text-brand"><Icon className="size-6" /></span>
-                            <h3 className="mt-4 font-display text-lg font-semibold">{title}</h3>
-                            <p className="mt-1.5 text-sm leading-7 text-muted">{text}</p>
-                        </div>
-                    ))}
-                </div>
-            </section>
+            {features.length > 0 && (
+                <section className="mx-auto max-w-6xl px-4 py-14">
+                    <div className="grid gap-4 sm:grid-cols-3">
+                        {features.map(({ title, text }, i) => {
+                            const Icon = FEATURE_ICONS[i % FEATURE_ICONS.length];
+                            return (
+                                <div key={i} className="rounded-3xl border border-line bg-white p-6 shadow-sm">
+                                    <span className="grid size-12 place-items-center rounded-2xl bg-brand-50 text-brand"><Icon className="size-6" /></span>
+                                    <h3 className="mt-4 font-display text-lg font-semibold">{title}</h3>
+                                    <p className="mt-1.5 text-sm leading-7 text-muted">{text}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </section>
+            )}
 
             {/* About */}
             {(about.title || about.body) && (
-                <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 lg:grid-cols-2">
-                    <div className="order-2 lg:order-1">
+                <section className={`mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 ${about.image_url ? 'lg:grid-cols-2' : ''}`}>
+                    <div className={about.image_url ? 'order-2 lg:order-1' : 'rounded-[2rem] border border-line bg-white p-8 shadow-sm sm:p-12'}>
                         <p className="mb-2 text-sm font-medium text-brand">من نحن</p>
                         <h2 className="font-display text-3xl font-semibold sm:text-4xl">{about.title ?? 'عن النادي'}</h2>
-                        {about.body && <p className="mt-5 leading-8 whitespace-pre-line text-muted">{about.body}</p>}
+                        {about.body && <p className="mt-5 max-w-3xl leading-8 whitespace-pre-line text-muted">{about.body}</p>}
                     </div>
-                    <div className="order-1 aspect-[4/3] overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand-50 to-brand-100 lg:order-2">
-                        {about.image_url ? (
+                    {about.image_url && (
+                        <div className="order-1 aspect-[4/3] overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand-50 to-brand-100 lg:order-2">
                             <img src={about.image_url} alt={about.title ?? ''} loading="lazy" width={720} height={540} className="size-full object-cover" />
-                        ) : (
-                            <div className="grid size-full place-items-center text-brand-300"><ImageIcon className="size-14" /></div>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </section>
             )}
 

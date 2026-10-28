@@ -10,6 +10,7 @@ use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Models\Program;
 use App\Modules\Gym\Models\PtPackage;
 use App\Modules\Gym\Models\Trainer;
+use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Http\RendersSite;
 use App\Modules\Website\Models\ContactMessage;
 use App\Modules\Website\Models\SiteMedia;
@@ -26,7 +27,7 @@ class SiteController extends Controller
 {
     use RendersSite;
 
-    public function home(TenantContext $tenants): Response
+    public function home(TenantContext $tenants, OnlinePaymentService $online): Response
     {
         $tenant = $tenants->require();
         $site = $this->site();
@@ -37,7 +38,9 @@ class SiteController extends Controller
                 'subtitle' => $site->hero_subtitle,
                 'image_url' => SiteSetting::url($site->hero_image_path),
                 'cta' => $site->hero_cta_label ?: 'اشتركي الآن',
+                'badge' => $site->hero_badge,
             ],
+            'features' => $site->features ?? self::defaultFeatures($online->available()),
             'about' => ['title' => $site->about_title, 'body' => $site->about_body, 'image_url' => SiteSetting::url($site->about_image_path)],
             'stats' => $site->stats ?? [],
             'plans' => MembershipPlan::public()->orderByDesc('is_featured')->orderBy('sort')->limit(3)->get()->map(fn ($p) => GymPresenter::plan($p)),
@@ -55,6 +58,23 @@ class SiteController extends Controller
             'image' => $tenant->logoUrl(),
             'address' => ['@type' => 'PostalAddress', 'streetAddress' => $site->address ?: $tenant->address, 'addressLocality' => $tenant->city, 'addressCountry' => $tenant->country],
         ]);
+    }
+
+    /**
+     * The "why us" cards until the club writes its own. Online payment is only promised when the club
+     * has a working payment gateway.
+     *
+     * @return list<array{title: string, text: string}>
+     */
+    public static function defaultFeatures(bool $onlinePayments): array
+    {
+        return [
+            ['title' => 'احجزي حصتك أونلاين', 'text' => 'شاهدي المقاعد المتاحة واحجزي من جوالك في ثوانٍ.'],
+            $onlinePayments
+                ? ['title' => 'دفع إلكتروني آمن', 'text' => 'اشتركي وجددي وادفعي فواتيرك أونلاين بكل سهولة.']
+                : ['title' => 'اشتراك سهل', 'text' => 'اختاري باقتك وسجّلي بياناتك أونلاين، وأكملي الدفع في الاستقبال.'],
+            ['title' => 'خصوصية تامة', 'text' => 'بيئة نسائية خاصة ومدربات محترفات.'],
+        ];
     }
 
     public function plans(): Response

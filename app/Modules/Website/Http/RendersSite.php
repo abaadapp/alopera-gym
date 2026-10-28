@@ -42,7 +42,7 @@ trait RendersSite
                 'title' => $title ? $title.' | '.$tenant->name : ($site->seo_title ?: $tenant->name),
                 'description' => $description ?: ($site->seo_description ?: $site->hero_subtitle),
                 'canonical' => $this->canonical(),
-                'image' => $image ?: SiteSetting::url($site->og_image_path ?: $site->hero_image_path),
+                'image' => $image ?: (SiteSetting::url($site->og_image_path ?: $site->hero_image_path) ?? $tenant->logoUrl()),
                 'jsonld' => $jsonld,
             ],
         ]);

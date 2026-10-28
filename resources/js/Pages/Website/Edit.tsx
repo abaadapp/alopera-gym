@@ -9,6 +9,7 @@ interface Settings {
     hero_title: string | null;
     hero_subtitle: string | null;
     hero_cta_label: string | null;
+    hero_badge: string | null;
     about_title: string | null;
     about_body: string | null;
     announcement: string | null;
@@ -20,6 +21,7 @@ interface Settings {
     working_hours: { days: string; hours: string }[] | null;
     social_links: Record<string, string | null> | null;
     stats: { label: string; value: string }[] | null;
+    features: { title: string; text: string }[];
     seo_title: string | null;
     seo_description: string | null;
     hero_image_url: string | null;
@@ -55,6 +57,7 @@ type SiteForm = {
     hero_title: string;
     hero_subtitle: string;
     hero_cta_label: string;
+    hero_badge: string;
     about_title: string;
     about_body: string;
     announcement: string;
@@ -66,6 +69,7 @@ type SiteForm = {
     working_hours: { days: string; hours: string }[];
     social_links: Record<string, string>;
     stats: { label: string; value: string }[];
+    features: { title: string; text: string }[];
     seo_title: string;
     seo_description: string;
     hero_image: File | null;
@@ -79,6 +83,7 @@ export default function WebsiteEdit({ settings, media, siteUrl, unread }: Props)
         hero_title: settings.hero_title ?? '',
         hero_subtitle: settings.hero_subtitle ?? '',
         hero_cta_label: settings.hero_cta_label ?? '',
+        hero_badge: settings.hero_badge ?? '',
         about_title: settings.about_title ?? '',
         about_body: settings.about_body ?? '',
         announcement: settings.announcement ?? '',
@@ -90,6 +95,7 @@ export default function WebsiteEdit({ settings, media, siteUrl, unread }: Props)
         working_hours: settings.working_hours ?? [],
         social_links: Object.fromEntries(SOCIAL.map((s) => [s.key, settings.social_links?.[s.key] ?? ''])),
         stats: settings.stats ?? [],
+        features: settings.features,
         seo_title: settings.seo_title ?? '',
         seo_description: settings.seo_description ?? '',
         hero_image: null,
@@ -108,7 +114,7 @@ export default function WebsiteEdit({ settings, media, siteUrl, unread }: Props)
         });
     };
 
-    const updateRow = <T extends Record<string, string>>(key: 'working_hours' | 'stats', index: number, patch: Partial<T>) => {
+    const updateRow = <T extends Record<string, string>>(key: 'working_hours' | 'stats' | 'features', index: number, patch: Partial<T>) => {
         const rows = [...(form.data[key] as unknown as T[])];
         rows[index] = { ...rows[index], ...patch };
         set(key, rows as never);
@@ -134,6 +140,9 @@ export default function WebsiteEdit({ settings, media, siteUrl, unread }: Props)
                     <Card>
                         <CardHeader title="الواجهة الرئيسية" subtitle="أول ما تراه الزائرة" />
                         <div className="grid gap-4">
+                            <Field label="شارة أعلى العنوان" error={errors.hero_badge} hint="اتركيها فارغة لإخفائها">
+                                <Input value={form.data.hero_badge} onChange={(e) => set('hero_badge', e.target.value)} maxLength={60} placeholder="نادٍ مخصص للنساء" />
+                            </Field>
                             <Field label="العنوان الرئيسي" error={errors.hero_title}>
                                 <Input value={form.data.hero_title} onChange={(e) => set('hero_title', e.target.value)} maxLength={160} />
                             </Field>
@@ -163,6 +172,25 @@ export default function WebsiteEdit({ settings, media, siteUrl, unread }: Props)
                             </Field>
                             <ImageField label="صورة القسم" current={settings.about_image_url} file={form.data.about_image} onChange={(f) => set('about_image', f)} error={errors.about_image} />
                         </div>
+                    </Card>
+
+                    <Card>
+                        <CardHeader
+                            title="لماذا نحن"
+                            subtitle="ثلاث بطاقات أسفل الواجهة؛ احذفيها كلها لإخفاء القسم"
+                            actions={form.data.features.length < 3 ? <Button type="button" size="sm" variant="secondary" icon={<Plus className="size-3.5" />} onClick={() => set('features', [...form.data.features, { title: '', text: '' }])}>إضافة</Button> : undefined}
+                        />
+                        <div className="space-y-3">
+                            {form.data.features.map((f, i) => (
+                                <RowEditor key={i} onRemove={() => set('features', form.data.features.filter((_, j) => j !== i))}>
+                                    <div className="grid flex-1 gap-2 sm:grid-cols-[12rem_1fr]">
+                                        <Input value={f.title} onChange={(e) => updateRow('features', i, { title: e.target.value })} placeholder="العنوان" maxLength={40} aria-label={`عنوان البطاقة ${i + 1}`} />
+                                        <Input value={f.text} onChange={(e) => updateRow('features', i, { text: e.target.value })} placeholder="الوصف" maxLength={140} aria-label={`وصف البطاقة ${i + 1}`} />
+                                    </div>
+                                </RowEditor>
+                            ))}
+                        </div>
+                        {(errors['features.0.title'] || errors['features.1.title'] || errors['features.2.title'] || errors['features.0.text'] || errors['features.1.text'] || errors['features.2.text']) && <p className="mt-2 text-sm text-red-600">أكملي عنوان ووصف كل بطاقة.</p>}
                     </Card>
 
                     <Card>
