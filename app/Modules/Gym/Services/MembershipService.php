@@ -181,7 +181,7 @@ final class MembershipService
 
             $kindLabel = ['new' => 'اشتراك', 'renewal' => 'تجديد', 'upgrade' => 'ترقية'][$kind];
             $lines = [[
-                'description' => $kindLabel.' — '.$plan->name.' ('.$start->format('Y-m-d').' → '.$end->format('Y-m-d').')',
+                'description' => $kindLabel.' — '.$plan->name.' (من '.$start->format('Y-m-d').' إلى '.$end->format('Y-m-d').')',
                 'unit_price' => $price,
                 'discount' => Money::add($discount, $credit),
                 'itemable' => $membership,

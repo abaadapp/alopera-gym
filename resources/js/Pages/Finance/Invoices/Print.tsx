@@ -25,7 +25,7 @@ interface Props {
         due_date: string | null;
         notes: string | null;
         items: { description: string; quantity: string; unit_price: string; discount: string; line_total: string }[];
-        payments: { receipt_number: string | null; kind: string; method: string; amount: string; paid_at: string | null }[];
+        payments: { receipt_number: string | null; kind: string; method: string; reference: string | null; amount: string; paid_at: string | null }[];
         credit_notes: { number: string; amount: string; reason: string; issued_at: string }[];
     };
     club: { name: string; legal_name: string | null; phone: string | null; email: string | null; address: string | null; logo_url: string | null; vat_number: string | null; footer: string | null };
@@ -78,7 +78,7 @@ export default function InvoicePrint({ invoice, club }: Props) {
                         <div>
                             <p className="text-xs text-muted">فاتورة إلى</p>
                             <p className="mt-1 font-semibold">{invoice.customer_name}</p>
-                            {invoice.customer_phone && <p className="num">{invoice.customer_phone}</p>}
+                            {invoice.customer_phone && <p><span className="num">{invoice.customer_phone}</span></p>}
                         </div>
                         <div className="text-end">
                             <p><span className="text-muted">تاريخ الإصدار: </span>{date(invoice.issue_date)}</p>
@@ -154,10 +154,10 @@ export default function InvoicePrint({ invoice, club }: Props) {
                                 <tbody>
                                     {invoice.payments.map((p, i) => (
                                         <tr key={i} className="border-b border-line">
-                                            <td className="py-1.5 num">{p.receipt_number}</td>
-                                            <td className="py-1.5">{p.kind === 'refund' ? 'رد مبلغ' : paymentMethod[p.method] ?? p.method}</td>
-                                            <td className="py-1.5">{p.paid_at}</td>
-                                            <td className="py-1.5 text-end num">{p.kind === 'refund' ? '- ' : ''}{money(p.amount, currency)}</td>
+                                            <td className="px-2 py-1.5 num">{p.receipt_number}</td>
+                                            <td className="px-2 py-1.5">{p.kind === 'refund' ? 'رد مبلغ' : paymentMethod[p.method] ?? p.method}{p.reference && <> · <span className="num">{p.reference}</span></>}</td>
+                                            <td className="px-2 py-1.5 num">{p.paid_at}</td>
+                                            <td className="px-2 py-1.5 text-end num">{p.kind === 'refund' ? '- ' : ''}{money(p.amount, currency)}</td>
                                         </tr>
                                     ))}
                                 </tbody>

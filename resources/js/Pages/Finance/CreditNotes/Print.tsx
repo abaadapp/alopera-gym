@@ -47,7 +47,7 @@ export default function CreditNotePrint({ note, club }: Props) {
                             <div>
                                 <h1 className="text-xl font-semibold">{club.legal_name || club.name}</h1>
                                 {club.address && <p className="text-muted">{club.address}</p>}
-                                {club.phone && <p className="text-muted num">{club.phone}</p>}
+                                {club.phone && <p className="text-muted"><span className="num">{club.phone}</span></p>}
                                 {club.vat_number && <p className="text-muted">الرقم الضريبي: <span className="num">{club.vat_number}</span></p>}
                             </div>
                         </div>
@@ -62,7 +62,7 @@ export default function CreditNotePrint({ note, club }: Props) {
                         <div>
                             <p className="text-xs text-muted">إلى</p>
                             <p className="mt-1 font-semibold">{note.invoice.customer_name}</p>
-                            {note.invoice.customer_phone && <p className="num">{note.invoice.customer_phone}</p>}
+                            {note.invoice.customer_phone && <p><span className="num">{note.invoice.customer_phone}</span></p>}
                         </div>
                         <div className="text-end">
                             <p><span className="text-muted">الفاتورة الأصلية: </span><span className="num">{note.invoice.number}</span></p>
@@ -92,10 +92,10 @@ export default function CreditNotePrint({ note, club }: Props) {
                                 <tbody>
                                     {note.refunds.map((r, i) => (
                                         <tr key={i} className="border-b border-line">
-                                            <td className="py-1.5 num">{r.receipt_number}</td>
-                                            <td className="py-1.5">{paymentMethod[r.method] ?? r.method}{r.reference && <> · <span className="num">{r.reference}</span></>}</td>
-                                            <td className="py-1.5">{r.paid_at}</td>
-                                            <td className="py-1.5 text-end num">{money(r.amount, currency)}</td>
+                                            <td className="px-2 py-1.5 num">{r.receipt_number}</td>
+                                            <td className="px-2 py-1.5">{paymentMethod[r.method] ?? r.method}{r.reference && <> · <span className="num">{r.reference}</span></>}</td>
+                                            <td className="px-2 py-1.5 num">{r.paid_at}</td>
+                                            <td className="px-2 py-1.5 text-end num">{money(r.amount, currency)}</td>
                                         </tr>
                                     ))}
                                 </tbody>

@@ -106,7 +106,7 @@ class InvoiceController extends Controller
             'invoice' => self::row($invoice) + [
                 'notes' => $invoice->notes,
                 'items' => $invoice->items->map(fn ($i) => $i->only('description', 'quantity', 'unit_price', 'discount', 'line_total')),
-                'payments' => $invoice->payments->map(fn ($p) => $p->only('receipt_number', 'kind', 'method', 'amount') + ['paid_at' => $p->paid_at?->format('Y-m-d H:i')]),
+                'payments' => $invoice->payments->map(fn ($p) => $p->only('receipt_number', 'kind', 'method', 'reference', 'amount') + ['paid_at' => $p->paid_at?->format('Y-m-d H:i')]),
                 'credit_notes' => $invoice->creditNotes->map(fn ($n) => $n->only('number', 'amount', 'reason') + ['issued_at' => $n->created_at->toDateString()]),
             ],
             'club' => $tenant->only('name', 'legal_name', 'phone', 'email', 'address') + ['logo_url' => $tenant->logoUrl(), 'vat_number' => $tenant->setting('vat_number'), 'footer' => $tenant->setting('invoice_footer')],

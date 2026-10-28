@@ -20,7 +20,7 @@ class PlatformInvoiceController extends Controller
                 ->latest()->paginate(25)->withQueryString()
                 ->through(fn (PlatformInvoice $i) => $i->only('id', 'number', 'status', 'amount', 'currency', 'payment_method', 'payment_reference') + [
                     'tenant' => $i->tenant?->name, 'tenant_id' => $i->tenant_id,
-                    'period' => $i->period_start->toDateString().' → '.$i->period_end->toDateString(),
+                    'period' => $i->period_start->toDateString().' ← '.$i->period_end->toDateString(),
                     'due_on' => $i->due_on->toDateString(), 'paid_at' => $i->paid_at?->toDateString(),
                 ]),
             'filters' => $request->only('status'),

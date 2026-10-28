@@ -24,7 +24,7 @@ class BillingController extends Controller
             ] : null,
             'usage' => $limits->usage(),
             'invoices' => PlatformInvoice::where('tenant_id', $tenant->id)->latest()->get()->map(fn ($i) => $i->only('id', 'number', 'status', 'amount', 'currency') + [
-                'period' => $i->period_start->toDateString().' → '.$i->period_end->toDateString(), 'due_on' => $i->due_on->toDateString(),
+                'period' => $i->period_start->toDateString().' ← '.$i->period_end->toDateString(), 'due_on' => $i->due_on->toDateString(),
             ]),
             'status' => $tenant->status,
         ]);
