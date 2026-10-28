@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { ArrowRight, CreditCard, ExternalLink, PlayCircle, Users } from 'lucide-react';
 import PlatformLayout from '@/Layouts/PlatformLayout';
-import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Stat } from '@/Components/ui';
+import { Badge, Button, Card, CardHeader, Checkbox, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Stat } from '@/Components/ui';
 import { date, money, number } from '@/lib/format';
 import { label, tenantStatus } from '@/lib/labels';
 
@@ -22,6 +22,7 @@ interface Tenant {
     logo_url: string | null;
     created_at: string;
     trial_ends_at: string | null;
+    listed_on_landing: boolean;
 }
 
 interface PlatformInvoiceRow {
@@ -68,6 +69,7 @@ export default function TenantShow({ tenant, owner, usage, subscriptions, invoic
         email: tenant.email ?? '',
         phone: tenant.phone ?? '',
         city: tenant.city ?? '',
+        listed_on_landing: tenant.listed_on_landing,
     });
     const subscribe = useForm({ platform_plan_id: plans[0] ? String(plans[0].id) : '', billing_cycle: 'monthly' });
 
@@ -124,6 +126,9 @@ export default function TenantShow({ tenant, owner, usage, subscriptions, invoic
                         <Field label="المدينة" error={profile.errors.city}>
                             <Input value={profile.data.city} onChange={(e) => profile.setData('city', e.target.value)} />
                         </Field>
+                        <div className="sm:col-span-2">
+                            <Checkbox label="إظهار النادي في صفحة المنصة العامة (بموافقة النادي)" checked={profile.data.listed_on_landing} onChange={(e) => profile.setData('listed_on_landing', e.target.checked)} />
+                        </div>
                         <div className="flex items-end">
                             <Button type="submit" loading={profile.processing}>حفظ</Button>
                         </div>

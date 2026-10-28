@@ -125,9 +125,11 @@ export default function Landing({ plans, clubs, seo, appName, contactEmail }: Pr
                                                 <li className="flex gap-2"><Check className="size-4 shrink-0 text-brand" />{plan.max_branches ? <><span className="num">{plan.max_branches}</span> {plan.max_branches === 1 ? 'فرع' : 'فروع'}</> : 'فروع غير محدودة'}</li>
                                                 {(plan.features ?? []).map((f) => <li key={f} className="flex gap-2"><Check className="size-4 shrink-0 text-brand" />{f}</li>)}
                                             </ul>
-                                            <a href={`mailto:${contactEmail ?? ''}?subject=${encodeURIComponent('طلب اشتراك في المنصة')}`} className={cn('mt-7 block rounded-full py-3 text-center text-sm font-medium', featured ? 'bg-brand text-white hover:bg-brand-600' : 'border border-brand-200 text-brand-700 hover:bg-brand-50')}>
-                                                تواصلي معنا للاشتراك
-                                            </a>
+                                            {contactEmail && (
+                                                <a href={`mailto:${contactEmail}?subject=${encodeURIComponent(`طلب اشتراك في باقة ${plan.name}`)}`} className={cn('mt-7 block rounded-full py-3 text-center text-sm font-medium', featured ? 'bg-brand text-white hover:bg-brand-600' : 'border border-brand-200 text-brand-700 hover:bg-brand-50')}>
+                                                    تواصلي معنا للاشتراك
+                                                </a>
+                                            )}
                                         </div>
                                     );
                                 })}
@@ -158,6 +160,11 @@ export default function Landing({ plans, clubs, seo, appName, contactEmail }: Pr
                 )}
 
                 <footer className="border-t border-line bg-white py-8 text-center text-sm text-muted">
+                    {contactEmail && (
+                        <p className="mb-2">
+                            للاشتراك والاستفسار: <a href={`mailto:${contactEmail}`} className="font-medium text-brand hover:underline" dir="ltr">{contactEmail}</a>
+                        </p>
+                    )}
                     © {new Date().getFullYear()} {appName}
                 </footer>
             </div>

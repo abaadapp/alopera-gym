@@ -83,6 +83,7 @@ class TenantController extends Controller
             'tenant' => $tenant->only('id', 'name', 'slug', 'legal_name', 'status', 'domain', 'email', 'phone', 'city', 'primary_color', 'secondary_color', 'suspension_reason') + [
                 'logo_url' => $tenant->logoUrl(), 'created_at' => $tenant->created_at->toDateString(),
                 'trial_ends_at' => $tenant->trial_ends_at?->toDateString(),
+                'listed_on_landing' => (bool) $tenant->setting('listed_on_landing'),
             ],
             'owner' => $owner,
             'usage' => $usage,
@@ -91,7 +92,7 @@ class TenantController extends Controller
                 'price' => $s->price, 'starts_on' => $s->starts_on->toDateString(), 'ends_on' => $s->ends_on->toDateString(),
             ]),
             'invoices' => $tenant->platformInvoices->map(fn ($i) => $i->only('id', 'number', 'status', 'amount', 'currency', 'payment_method') + [
-                'period' => $i->period_start->toDateString().' → '.$i->period_end->toDateString(), 'due_on' => $i->due_on->toDateString(),
+                'period' => $i->period_start->toDateString().' ← '.$i->period_end->toDateString(), 'due_on' => $i->due_on->toDateString(),
                 'paid_at' => $i->paid_at?->toDateString(),
             ]),
             'plans' => PlatformPlan::where('is_active', true)->orderBy('sort')->get(['id', 'name', 'price_monthly', 'price_yearly']),
@@ -107,8 +108,12 @@ class TenantController extends Controller
             'email' => ['nullable', 'email'],
             'phone' => ['nullable', 'string', 'max:32'],
             'city' => ['nullable', 'string', 'max:80'],
+            'listed_on_landing' => ['boolean'],
         ]);
         $data['domain'] = isset($data['domain']) ? strtolower($data['domain']) : null;
+        // Showing a club on the platform's public page is an explicit choice, never a default.
+        $data['settings'] = array_replace($tenant->settings ?? [], ['listed_on_landing' => (bool) ($data['listed_on_landing'] ?? false)]);
+        unset($data['listed_on_landing']);
         $oldDomain = $tenant->domain;
         $tenant->update($data);
         foreach (array_filter([$oldDomain, $data['domain']]) as $domain) {

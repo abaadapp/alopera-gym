@@ -47,6 +47,7 @@ class Tenant extends Model
         'invoice_due_days' => 0,
         'allow_pay_at_reception' => true,
         'member_signup_enabled' => true,
+        'listed_on_landing' => false,
     ];
 
     protected $guarded = ['id'];

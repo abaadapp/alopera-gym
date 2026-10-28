@@ -96,4 +96,19 @@ class PlatformTest extends TestCase
         $this->assertSame(0, PlatformInvoice::count());
         $this->assertSame(1, $this->asTenant($club, fn () => Invoice::count()));
     }
+
+    public function test_clubs_appear_on_the_platform_landing_page_only_after_opting_in(): void
+    {
+        $admin = User::factory()->platformAdmin()->create();
+        $club = $this->club('Lotus Ladies Gym');
+        $listed = fn () => collect($this->get(route('landing'))->viewData('page')['props']['clubs'])->pluck('slug');
+
+        $this->assertNotContains($club->slug, $listed());
+
+        $this->actingAs($admin)->put(route('platform.tenants.update', $club), ['name' => $club->name, 'listed_on_landing' => true])->assertSessionHasNoErrors();
+        $this->assertContains($club->slug, $listed());
+
+        $club->refresh()->update(['status' => Tenant::STATUS_SUSPENDED]);
+        $this->assertNotContains($club->slug, $listed());
+    }
 }
