@@ -54,6 +54,7 @@ export default function TrainerPanel({ trainer, sessions, recent, pt }: { traine
     if (!trainer) {
         return (
             <ClubLayout title="شاشة المدربة">
+                <PageHeader title="شاشة المدربة" subtitle="حصص المدربة وجلساتها هذا الأسبوع" />
                 <Card>
                     <EmptyState icon={<Sparkles className="size-6" />} title="حسابك غير مرتبط بملف مدربة" description="اطلبي من الإدارة ربط حسابك بملفك في صفحة المدربات لتظهر حصصك هنا." />
                 </Card>

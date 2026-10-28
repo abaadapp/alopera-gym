@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from '@inertiajs/react';
+import SectionTabs from '@/Components/SectionTabs';
 import { cn } from '@/lib/cn';
 
 export function Card({ children, className, padded = true }: { children: ReactNode; className?: string; padded?: boolean }) {
@@ -18,15 +19,19 @@ export function CardHeader({ title, subtitle, actions, className }: { title: Rea
     );
 }
 
+/** A page's title, description and actions; on a page that is one tab of a section, the section's tabs follow. */
 export function PageHeader({ title, subtitle, actions, back }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; back?: ReactNode }) {
     return (
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-            <div className="min-w-0">
-                {back}
-                <h1 className="truncate text-2xl font-semibold text-ink">{title}</h1>
-                {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
+        <div className="mb-6">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+                <div className="min-w-0">
+                    {back}
+                    <h1 className="truncate text-2xl font-semibold text-ink">{title}</h1>
+                    {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
+                </div>
+                {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
             </div>
-            {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+            <SectionTabs className="mt-5" />
         </div>
     );
 }

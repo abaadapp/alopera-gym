@@ -7,6 +7,7 @@ import { useCan, useCurrency, useShared } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, money, number } from '@/lib/format';
 import { invoiceType, paymentMethod } from '@/lib/labels';
+import { useSectionTabs } from '@/lib/nav';
 
 type Metric = { current: number | string; previous: number | string; change: number | null };
 
@@ -60,14 +61,22 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
     const [customCompare, setCustomCompare] = useState(filters.compare === 'custom');
     const c = report.comparison;
     const m = (key: string) => c[key] ?? { current: 0, previous: 0, change: null };
+    // The report shown is the section tab in the address (?section=); without one, the first this user may see.
+    const { active, query } = useSectionTabs();
+    const view = active?.params?.section ?? 'members';
 
     // Changing the period keeps the comparison choice, and changing the comparison keeps the period.
     const compareParams = (): Record<string, string> =>
         filters.compare === 'custom' ? { compare: 'custom', compare_from: filters.compare_from, compare_to: filters.compare_to }
             : filters.compare !== 'previous' ? { compare: filters.compare } : {};
     const periodParams = (): Record<string, string> => (filters.preset ? { preset: filters.preset } : { from: filters.from, to: filters.to });
+    // ...and the open tab stays open.
     const go = (params: Record<string, string>, keep: 'compare' | 'period' | 'none' = 'compare') =>
-        router.get(route('club.reports.index'), { ...(keep === 'compare' ? compareParams() : keep === 'period' ? periodParams() : {}), ...params }, { preserveState: true, preserveScroll: true });
+        router.get(
+            route('club.reports.index'),
+            { ...(query.get('section') ? { section: query.get('section') as string } : {}), ...(keep === 'compare' ? compareParams() : keep === 'period' ? periodParams() : {}), ...params },
+            { preserveState: true, preserveScroll: true },
+        );
     const activePreset = filters.preset || (isThisMonth(filters.from, filters.to) ? '' : 'custom');
 
     const exportLink = (report: string, format: 'csv' | 'xlsx') => route('club.reports.export', { report, from: filters.from, to: filters.to, format });
@@ -140,7 +149,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
                 </div>
             </Card>
 
-            {canFinancial && (
+            {view === 'finance' && canFinancial && (
                 <Section title="المالية" exports={canExport ? [['revenue', 'الإيرادات'], ['expenses', 'المصروفات'], ...(inventory ? [['sales', 'المبيعات'] as [string, string]] : [])] : []} exportLink={exportLink}>
                     <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
                         <Kpi label="صافي التحصيل" metric={m('revenue')} format={fmtMoney} metricKey="revenue" />
@@ -210,95 +219,99 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
                 </Section>
             )}
 
-            <Section title="العضويات والمشتركات" exports={canExport ? [['memberships', 'العضويات'], ...(can('members.export') ? [['members', 'المشتركات'] as [string, string]] : [])] : []} exportLink={exportLink}>
-                <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-                    <Kpi label="اشتراكات جديدة" metric={m('new_memberships')} format={fmtNum} metricKey="new_memberships" />
-                    <Kpi label="تجديدات" metric={m('renewals')} format={fmtNum} metricKey="renewals" />
-                    <Kpi label="تغيير/ترقية باقة" metric={m('upgrades')} format={fmtNum} metricKey="upgrades" />
-                    <Kpi label="مشتركات جديدات" metric={m('new_members')} format={fmtNum} metricKey="new_members" />
-                    <Kpi label="إلغاءات" metric={m('cancellations')} format={fmtNum} metricKey="cancellations" />
-                    <Kpi label="تجميدات" metric={m('freezes')} format={fmtNum} metricKey="freezes" />
-                    <Kpi label="عضويات انتهت" metric={m('expirations')} format={fmtNum} metricKey="expirations" />
-                    <Kpi label="مرات الدخول" metric={m('checkins')} format={fmtNum} metricKey="checkins" />
-                </div>
-                <Card className="mt-4" padded={false}>
-                    <div className="p-5 pb-2"><CardHeader title="الباقات المباعة" subtitle="العضويات المفعّلة خلال الفترة" className="mb-0" /></div>
-                    {report.plans.length ? (
-                        <div className="overflow-x-auto">
-                            <table className="table-base">
-                                <thead><tr><th>الباقة</th><th>المباع</th><th>منها تجديد</th>{canFinancial && <th>القيمة</th>}</tr></thead>
-                                <tbody>
-                                    {report.plans.map((p) => (
-                                        <tr key={p.plan}>
-                                            <td className="font-medium">{p.plan}</td>
-                                            <td className="num">{number(p.sold)}</td>
-                                            <td className="num">{number(p.renewals)}</td>
-                                            {canFinancial && <td className="num">{p.revenue !== null ? fmtMoney(p.revenue) : '—'}</td>}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
-                        <EmptyState title="لم تُفعّل عضويات في هذه الفترة" />
-                    )}
-                </Card>
-            </Section>
-
-            <Section title="الحصص والحضور" exports={canExport ? [['classes', 'الحصص']] : []} exportLink={exportLink}>
-                <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-                    <Kpi label="الحصص" metric={m('sessions')} format={fmtNum} metricKey="sessions" />
-                    <Kpi label="الحجوزات" metric={m('bookings')} format={fmtNum} metricKey="bookings" />
-                    <Kpi label="نسبة الحضور" metric={m('attendance_rate')} format={fmtPct} metricKey="attendance_rate" hint="الحاضرات من الحضور + الغياب" />
-                    <Kpi label="نسبة الإشغال" metric={m('occupancy_rate')} format={fmtPct} metricKey="occupancy_rate" hint="الحجوزات من السعة المتاحة" />
-                </div>
-                <div className="mt-4 grid gap-4 lg:grid-cols-3">
-                    <Card padded={false} className="lg:col-span-2">
-                        <div className="p-5 pb-2"><CardHeader title="البرامج الأكثر طلبًا" className="mb-0" /></div>
-                        {report.programs.length ? (
+            {view === 'members' && (
+                <Section title="العضويات والمشتركات" exports={canExport ? [['memberships', 'العضويات'], ...(can('members.export') ? [['members', 'المشتركات'] as [string, string]] : [])] : []} exportLink={exportLink}>
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+                        <Kpi label="اشتراكات جديدة" metric={m('new_memberships')} format={fmtNum} metricKey="new_memberships" />
+                        <Kpi label="تجديدات" metric={m('renewals')} format={fmtNum} metricKey="renewals" />
+                        <Kpi label="تغيير/ترقية باقة" metric={m('upgrades')} format={fmtNum} metricKey="upgrades" />
+                        <Kpi label="مشتركات جديدات" metric={m('new_members')} format={fmtNum} metricKey="new_members" />
+                        <Kpi label="إلغاءات" metric={m('cancellations')} format={fmtNum} metricKey="cancellations" />
+                        <Kpi label="تجميدات" metric={m('freezes')} format={fmtNum} metricKey="freezes" />
+                        <Kpi label="عضويات انتهت" metric={m('expirations')} format={fmtNum} metricKey="expirations" />
+                        <Kpi label="مرات الدخول" metric={m('checkins')} format={fmtNum} metricKey="checkins" />
+                    </div>
+                    <Card className="mt-4" padded={false}>
+                        <div className="p-5 pb-2"><CardHeader title="الباقات المباعة" subtitle="العضويات المفعّلة خلال الفترة" className="mb-0" /></div>
+                        {report.plans.length ? (
                             <div className="overflow-x-auto">
                                 <table className="table-base">
-                                    <thead><tr><th>البرنامج</th><th>الحصص</th><th>الحجوزات</th><th>متوسط/حصة</th><th>حضرت</th><th>غابت</th><th>نسبة الحضور</th></tr></thead>
+                                    <thead><tr><th>الباقة</th><th>المباع</th><th>منها تجديد</th>{canFinancial && <th>القيمة</th>}</tr></thead>
                                     <tbody>
-                                        {report.programs.map((p, i) => (
-                                            <tr key={p.program}>
-                                                <td>
-                                                    <span className="flex items-center gap-2 font-medium">
-                                                        <span className="text-xs text-muted num">{i + 1}</span>
-                                                        <span className="size-2.5 rounded-full" style={{ background: p.color ?? 'var(--brand)' }} />
-                                                        {p.program}
-                                                    </span>
-                                                </td>
-                                                <td className="num">{p.sessions}</td>
-                                                <td className="font-medium num">{p.bookings}</td>
-                                                <td className="num">{number(p.avg_per_session, 1)}</td>
-                                                <td className="text-emerald-700 num">{p.attended}</td>
-                                                <td className="text-red-600 num">{p.no_show}</td>
-                                                <td>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-brand-50"><div className="h-full rounded-full bg-brand" style={{ width: `${p.attendance_rate}%` }} /></div>
-                                                        <span className="text-xs num">{number(p.attendance_rate, 1)}%</span>
-                                                    </div>
-                                                </td>
+                                        {report.plans.map((p) => (
+                                            <tr key={p.plan}>
+                                                <td className="font-medium">{p.plan}</td>
+                                                <td className="num">{number(p.sold)}</td>
+                                                <td className="num">{number(p.renewals)}</td>
+                                                {canFinancial && <td className="num">{p.revenue !== null ? fmtMoney(p.revenue) : '—'}</td>}
                                             </tr>
                                         ))}
                                     </tbody>
                                 </table>
                             </div>
                         ) : (
-                            <EmptyState title="لا حصص في هذه الفترة" />
+                            <EmptyState title="لم تُفعّل عضويات في هذه الفترة" />
                         )}
                     </Card>
-                    <Card>
-                        <CardHeader title="المدربات" subtitle="حسب الحجوزات" />
-                        {report.trainers.length ? (
-                            <HBars data={report.trainers.map((t) => ({ label: `${t.trainer} (${t.sessions} حصة)`, value: t.bookings }))} />
-                        ) : (
-                            <EmptyState title="لا بيانات" />
-                        )}
-                    </Card>
-                </div>
-            </Section>
+                </Section>
+            )}
+
+            {view === 'classes' && (
+                <Section title="الحصص والحضور" exports={canExport ? [['classes', 'الحصص']] : []} exportLink={exportLink}>
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+                        <Kpi label="الحصص" metric={m('sessions')} format={fmtNum} metricKey="sessions" />
+                        <Kpi label="الحجوزات" metric={m('bookings')} format={fmtNum} metricKey="bookings" />
+                        <Kpi label="نسبة الحضور" metric={m('attendance_rate')} format={fmtPct} metricKey="attendance_rate" hint="الحاضرات من الحضور + الغياب" />
+                        <Kpi label="نسبة الإشغال" metric={m('occupancy_rate')} format={fmtPct} metricKey="occupancy_rate" hint="الحجوزات من السعة المتاحة" />
+                    </div>
+                    <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                        <Card padded={false} className="lg:col-span-2">
+                            <div className="p-5 pb-2"><CardHeader title="البرامج الأكثر طلبًا" className="mb-0" /></div>
+                            {report.programs.length ? (
+                                <div className="overflow-x-auto">
+                                    <table className="table-base">
+                                        <thead><tr><th>البرنامج</th><th>الحصص</th><th>الحجوزات</th><th>متوسط/حصة</th><th>حضرت</th><th>غابت</th><th>نسبة الحضور</th></tr></thead>
+                                        <tbody>
+                                            {report.programs.map((p, i) => (
+                                                <tr key={p.program}>
+                                                    <td>
+                                                        <span className="flex items-center gap-2 font-medium">
+                                                            <span className="text-xs text-muted num">{i + 1}</span>
+                                                            <span className="size-2.5 rounded-full" style={{ background: p.color ?? 'var(--brand)' }} />
+                                                            {p.program}
+                                                        </span>
+                                                    </td>
+                                                    <td className="num">{p.sessions}</td>
+                                                    <td className="font-medium num">{p.bookings}</td>
+                                                    <td className="num">{number(p.avg_per_session, 1)}</td>
+                                                    <td className="text-emerald-700 num">{p.attended}</td>
+                                                    <td className="text-red-600 num">{p.no_show}</td>
+                                                    <td>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-brand-50"><div className="h-full rounded-full bg-brand" style={{ width: `${p.attendance_rate}%` }} /></div>
+                                                            <span className="text-xs num">{number(p.attendance_rate, 1)}%</span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <EmptyState title="لا حصص في هذه الفترة" />
+                            )}
+                        </Card>
+                        <Card>
+                            <CardHeader title="المدربات" subtitle="حسب الحجوزات" />
+                            {report.trainers.length ? (
+                                <HBars data={report.trainers.map((t) => ({ label: `${t.trainer} (${t.sessions} حصة)`, value: t.bookings }))} />
+                            ) : (
+                                <EmptyState title="لا بيانات" />
+                            )}
+                        </Card>
+                    </div>
+                </Section>
+            )}
         </ClubLayout>
     );
 }
