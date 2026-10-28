@@ -44,6 +44,7 @@ class SettingsController extends Controller
             'rules.booking_window_days' => ['integer', 'between:1,90'],
             'rules.booking_cancel_cutoff_hours' => ['integer', 'between:0,72'],
             'rules.checkin_class_window_minutes' => ['integer', 'between:0,240'],
+            'rules.duplicate_scan_minutes' => ['integer', 'between:0,120'],
             'rules.block_access_with_dues' => ['boolean'],
             'rules.auto_mark_no_show' => ['boolean'],
             'rules.expiry_reminder_days' => ['array', 'max:5'],

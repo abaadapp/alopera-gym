@@ -97,6 +97,43 @@ class DevicesTest extends TestCase
         });
     }
 
+    public function test_a_repeat_scan_inside_the_window_lets_her_in_but_is_logged_and_not_counted(): void
+    {
+        $club = $this->club();
+        $member = $this->member($club);
+        $this->activeMembership($club, $member);
+        [, $token] = $this->device($club);
+        $scan = fn () => $this->withToken($token)->postJson(route('devices.access'), ['credential_type' => 'qr', 'credential' => $member->qr_token]);
+
+        $scan()->assertJson(['allowed' => true, 'reason' => 'ok']);
+        $scan()->assertJson(['allowed' => true, 'reason' => 'duplicate_scan']);
+        $this->travel(2)->minutes();
+        $scan()->assertJson(['allowed' => true, 'reason' => 'duplicate_scan']);
+
+        $this->asTenant($club, function () use ($member) {
+            $this->assertSame(1, CheckIn::where('member_id', $member->id)->where('result', 'allowed')->count(), 'counted once');
+            $this->assertSame(2, CheckIn::where('member_id', $member->id)->where('result', 'duplicate')->count(), 'every attempt is kept');
+        });
+
+        $this->travel(6)->minutes(); // past the default 5-minute window
+        $scan()->assertJson(['allowed' => true, 'reason' => 'ok']);
+        $this->assertSame(2, $this->asTenant($club, fn () => CheckIn::where('member_id', $member->id)->where('result', 'allowed')->count()));
+    }
+
+    public function test_duplicate_window_is_configurable_and_can_be_switched_off(): void
+    {
+        $club = $this->club();
+        $club->forceFill(['settings' => array_replace($club->settings ?? [], ['duplicate_scan_minutes' => 0])])->save();
+        $member = $this->member($club);
+        $this->activeMembership($club, $member);
+        $reception = $this->staff($club, 'reception');
+
+        $this->actingAs($reception)->postJson(route('club.checkins.store'), ['qr' => $member->qr_token])->assertJson(['reason' => 'ok']);
+        $this->actingAs($reception)->postJson(route('club.checkins.store'), ['qr' => $member->qr_token])->assertJson(['reason' => 'ok']);
+        $this->assertSame(2, $this->asTenant($club, fn () => CheckIn::where('member_id', $member->id)->where('result', 'allowed')->count()));
+
+    }
+
     public function test_reception_qr_check_in_endpoint(): void
     {
         $club = $this->club();

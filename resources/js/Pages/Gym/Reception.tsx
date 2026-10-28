@@ -156,7 +156,7 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                             {decision?.member?.photo_url && <img src={decision.member.photo_url} alt="" className="size-14 rounded-xl object-cover" />}
                             <div className="min-w-0 flex-1">
                                 <p className={`text-lg font-semibold ${decision?.allowed ? 'text-emerald-800' : 'text-red-800'}`}>
-                                    {decision ? (decision.allowed ? 'دخول مسموح' : `مرفوض: ${decision.message}`) : scanError}
+                                    {decision ? (decision.allowed ? (decision.reason === 'duplicate_scan' ? 'دخول مسموح (مسجّلة قبل قليل — لم يُحتسب مرة أخرى)' : 'دخول مسموح') : `مرفوض: ${decision.message}`) : scanError}
                                 </p>
                                 {decision?.member && (
                                     <p className="text-sm text-ink/80">
@@ -246,11 +246,12 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                                 {recentCheckins.map((c) => (
                                     <li key={c.id} className="flex items-center justify-between gap-2 py-2 text-sm">
                                         <span className="flex min-w-0 items-center gap-2">
-                                            {c.result === 'allowed' ? <CheckCircle2 className="size-4 shrink-0 text-emerald-600" /> : <XCircle className="size-4 shrink-0 text-red-600" />}
+                                            {c.result === 'allowed' ? <CheckCircle2 className="size-4 shrink-0 text-emerald-600" /> : c.result === 'duplicate' ? <CheckCircle2 className="size-4 shrink-0 text-amber-500" /> : <XCircle className="size-4 shrink-0 text-red-600" />}
                                             {c.member_id ? <Link href={route('club.members.show', c.member_id)} className="truncate hover:text-brand">{c.member}</Link> : <span className="text-muted">غير معروفة</span>}
                                         </span>
                                         <span className="shrink-0 text-xs text-muted">
                                             {c.result === 'denied' && <span className="me-2 text-red-600">{checkinReason[c.reason ?? ''] ?? c.reason}</span>}
+                                            {c.result === 'duplicate' && <span className="me-2 text-amber-600">مكرر</span>}
                                             <span className="num">{c.at}</span>
                                         </span>
                                     </li>

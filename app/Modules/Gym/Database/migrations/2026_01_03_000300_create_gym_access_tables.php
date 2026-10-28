@@ -53,7 +53,7 @@ return new class extends Migration
             $table->foreignId('access_device_id')->nullable()->constrained('gym_access_devices')->nullOnDelete();
             $table->string('method', 20); // manual|qr|card|fingerprint|barcode|pin
             $table->string('direction', 5)->default('in');
-            $table->string('result', 10); // allowed|denied
+            $table->string('result', 10); // allowed|denied|duplicate
             $table->string('reason', 40)->nullable();
             $table->string('credential_hint', 20)->nullable(); // masked, for unknown-credential investigations
             $table->foreignId('performed_by')->nullable()->constrained('users')->nullOnDelete();

@@ -82,6 +82,10 @@ final class AccessControlService
     /**
      * Evaluate and record. On an allowed entry, today's class bookings close
      * to now are marked attended.
+     *
+     * Every attempt is logged. A second allowed scan of the same member within the club's
+     * duplicate window (setting duplicate_scan_minutes, 0 = off) still lets her in, but is
+     * logged as `duplicate` and counts as no new attendance.
      */
     public function checkIn(?Member $member, string $method, ?AccessDevice $device = null, ?string $credentialHint = null): AccessDecision
     {
@@ -89,28 +93,47 @@ final class AccessControlService
             ? AccessDecision::deny('device_not_for_members', $member)
             : $this->evaluate($member);
 
-        DB::transaction(function () use ($decision, $member, $method, $device, $credentialHint) {
+        return DB::transaction(function () use ($decision, $member, $method, $device, $credentialHint) {
+            $entering = $device?->direction !== 'out';
+            if ($decision->allowed && $member && $entering && $this->isRepeatEntry($member)) {
+                $decision = $decision->asDuplicate();
+            }
+
             CheckIn::create([
                 'branch_id' => $device?->branch_id ?? $member?->branch_id,
                 'member_id' => $member?->id,
                 'membership_id' => $decision->membership?->id,
                 'access_device_id' => $device?->id,
                 'method' => $method,
-                'direction' => $device?->direction === 'out' ? 'out' : 'in',
-                'result' => $decision->allowed ? 'allowed' : 'denied',
+                'direction' => $entering ? 'in' : 'out',
+                'result' => $decision->isDuplicate() ? 'duplicate' : ($decision->allowed ? 'allowed' : 'denied'),
                 'reason' => $decision->reason,
                 'credential_hint' => $credentialHint,
                 'performed_by' => Auth::guard('web')->id(),
                 'checked_in_at' => now(),
             ]);
 
-            if ($decision->allowed && $member) {
+            if ($decision->allowed && ! $decision->isDuplicate() && $member) {
                 $member->forceFill(['last_check_in_at' => now()])->saveQuietly();
                 $this->markTodaysBookingsAttended($member);
             }
-        });
 
-        return $decision;
+            return $decision;
+        });
+    }
+
+    /** An allowed entry of this member inside the duplicate window. Locks the member so two simultaneous reads count once. */
+    private function isRepeatEntry(Member $member): bool
+    {
+        $minutes = (int) $this->tenants->require()->setting('duplicate_scan_minutes', 5);
+        if ($minutes <= 0) {
+            return false;
+        }
+
+        Member::whereKey($member->id)->lockForUpdate()->first();
+
+        return CheckIn::where('member_id', $member->id)->where('result', 'allowed')->where('direction', 'in')
+            ->where('checked_in_at', '>=', now()->subMinutes($minutes))->exists();
     }
 
     private function markTodaysBookingsAttended(Member $member): void

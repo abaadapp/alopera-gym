@@ -23,6 +23,7 @@ type Rules = {
     booking_window_days: number;
     booking_cancel_cutoff_hours: number;
     checkin_class_window_minutes: number;
+    duplicate_scan_minutes: number;
     block_access_with_dues: boolean;
     auto_mark_no_show: boolean;
     expiry_reminder_days: number[];
@@ -69,6 +70,7 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
             booking_window_days: Number(rules.booking_window_days),
             booking_cancel_cutoff_hours: Number(rules.booking_cancel_cutoff_hours),
             checkin_class_window_minutes: Number(rules.checkin_class_window_minutes),
+            duplicate_scan_minutes: Number(rules.duplicate_scan_minutes ?? 5),
             block_access_with_dues: Boolean(rules.block_access_with_dues),
             auto_mark_no_show: Boolean(rules.auto_mark_no_show),
             expiry_reminder_days: (rules.expiry_reminder_days ?? []).map(Number),
@@ -171,6 +173,7 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
                             <NumberField label="نافذة الحجز (أيام)" hint="أقصى مدة مسبقة للحجز من البوابة" value={form.data.rules.booking_window_days} onChange={(v) => setRule('booking_window_days', v)} error={errors['rules.booking_window_days']} min={1} max={90} />
                             <NumberField label="مهلة إلغاء الحجز (ساعات)" hint="قبل موعد الحصة؛ بعدها لا تُسترد الحصة" value={form.data.rules.booking_cancel_cutoff_hours} onChange={(v) => setRule('booking_cancel_cutoff_hours', v)} error={errors['rules.booking_cancel_cutoff_hours']} min={0} max={72} />
                             <NumberField label="نافذة الحضور عند الدخول (دقائق)" hint="دخول النادي يسجّل حضور حصة تبدأ خلالها" value={form.data.rules.checkin_class_window_minutes} onChange={(v) => setRule('checkin_class_window_minutes', v)} error={errors['rules.checkin_class_window_minutes']} min={0} max={240} />
+                            <NumberField label="تجاهل المسح المكرر (دقائق)" hint="مسح نفس المشتركة خلالها يُسجَّل كمحاولة ولا يُحتسب دخولًا جديدًا (0 = إيقاف)" value={form.data.rules.duplicate_scan_minutes} onChange={(v) => setRule('duplicate_scan_minutes', v)} error={errors['rules.duplicate_scan_minutes']} min={0} max={120} />
                             <NumberField label="توليد الحصص مسبقًا (أسابيع)" value={form.data.rules.class_session_weeks_ahead} onChange={(v) => setRule('class_session_weeks_ahead', v)} error={errors['rules.class_session_weeks_ahead']} min={1} max={12} />
                         </div>
                         <div className="mt-4 divide-y divide-line">

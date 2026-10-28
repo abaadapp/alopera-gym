@@ -31,7 +31,7 @@ export default function CheckInsIndex({ checkins, filters }: { checkins: Paginat
             <Card padded={false}>
                 <div className="flex flex-wrap items-center justify-between gap-3 p-4">
                     <Tabs
-                        tabs={[{ key: '', label: 'الكل' }, { key: 'allowed', label: 'مسموح' }, { key: 'denied', label: 'مرفوض' }]}
+                        tabs={[{ key: '', label: 'الكل' }, { key: 'allowed', label: 'مسموح' }, { key: 'duplicate', label: 'مكرر' }, { key: 'denied', label: 'مرفوض' }]}
                         value={filters.result ?? ''}
                         onChange={(key) => go({ result: key || undefined })}
                         className="border-0"
@@ -66,6 +66,8 @@ export default function CheckInsIndex({ checkins, filters }: { checkins: Paginat
                                         <td>
                                             {c.result === 'allowed' ? (
                                                 <Badge tone="green"><CheckCircle2 className="size-3" /> مسموح</Badge>
+                                            ) : c.result === 'duplicate' ? (
+                                                <Badge tone="amber"><Clock className="size-3" /> مكرر — لم يُحتسب</Badge>
                                             ) : (
                                                 <Badge tone="red"><XCircle className="size-3" /> {c.reason_label ?? 'مرفوض'}</Badge>
                                             )}

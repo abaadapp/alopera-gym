@@ -9,6 +9,7 @@ final class AccessDecision
 {
     public const REASONS = [
         'ok' => 'مسموح',
+        'duplicate_scan' => 'مسموح — دخول مسجّل قبل قليل، لم يُحتسب مرة أخرى',
         'unknown_credential' => 'رمز/بطاقة/بصمة غير معروفة',
         'member_blocked' => 'حساب المشتركة موقوف',
         'member_inactive' => 'حساب المشتركة غير نشط',
@@ -31,6 +32,17 @@ final class AccessDecision
     public static function allow(Member $member, Membership $membership): self
     {
         return new self(true, 'ok', $member, $membership);
+    }
+
+    /** Still allowed (the gate opens), but a repeat of a recent entry: logged, not counted again. */
+    public function asDuplicate(): self
+    {
+        return new self(true, 'duplicate_scan', $this->member, $this->membership);
+    }
+
+    public function isDuplicate(): bool
+    {
+        return $this->reason === 'duplicate_scan';
     }
 
     public static function deny(string $reason, ?Member $member = null, ?Membership $membership = null): self

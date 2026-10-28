@@ -34,6 +34,7 @@ class Tenant extends Model
         'booking_window_days' => 14,
         'booking_cancel_cutoff_hours' => 3,
         'checkin_class_window_minutes' => 60,
+        'duplicate_scan_minutes' => 5,
         'block_access_with_dues' => false,
         'auto_mark_no_show' => true,
         'expiry_reminder_days' => [7, 3, 1],
