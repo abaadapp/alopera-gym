@@ -23,6 +23,7 @@
 
 الوثائق التفصيلية:
 
+- [docs/STATUS.md](docs/STATUS.md) — **التقرير النهائي**: الوظائف المكتملة والتحقق والتكاملات التي تحتاج حسابات حقيقية
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — المعمارية، الوحدات، عزل الأندية، دورة العضوية والمدفوعات
 - [docs/FEATURES.md](docs/FEATURES.md) — مطابقة كل بند في مواصفات المزايا مع التنفيذ وحالته
 - [docs/PERMISSIONS.md](docs/PERMISSIONS.md) — مصفوفة الأدوار والصلاحيات
