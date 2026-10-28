@@ -59,7 +59,12 @@ sudo -u deploy php /var/www/alopera-gym/current/artisan platform:create-admin yo
 - `APP_DEBUG=false`، `SESSION_SECURE_COOKIE=true`، HTTPS فقط (HSTS في Nginx والتطبيق).
 - احتفظي بنسخة آمنة من `APP_KEY`: أسرار التكاملات والملاحظات الصحية مشفّرة به، والنسخ الاحتياطية تحتاجه للاستعادة.
 - قاعدة البيانات بـ `DB_SSLMODE=require` ومحصورة على IP الخادم (Trusted sources).
-- البذرة التجريبية ترفض العمل في `production`.
+- **الحسابات التجريبية لا تعمل في الإنتاج** (`App\Core\Auth\DemoAccounts`، مختبر في `ProductionSafetyTest`):
+  - البذرة التجريبية ترفض العمل في `production`، فلا تُنشأ حسابات `*.test` أصلًا.
+  - أي بريد بنطاق محجوز (`.test`، `.example`، `.invalid`، `.localhost`، `example.com/net/org`) يُرفض دخوله للوحة والمنصة
+    والبوابة حتى لو كانت كلمة المرور صحيحة، ويُرفض عند إنشاء حساب جديد، ويُسجّل `auth.demo_blocked` في سجل العمليات.
+  - `platform:create-admin` يرفض النطاقات المحجوزة وكلمات المرور الضعيفة (10 أحرف، كبيرة وصغيرة وأرقام، وغير مسرّبة).
+  - الأوامر المدمّرة (`migrate:fresh`، `migrate:refresh`، `migrate:reset`، `db:wipe`) ممنوعة في `production`.
 
 ## النسخ الاحتياطي والاستعادة
 - يوميًا 03:00: أرشيف لكل نادٍ (`backup:tenants`) في `storage/app/private/backups/tenants/<id>` — آخر 14.

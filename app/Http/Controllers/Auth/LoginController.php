@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Auth\DemoAccounts;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -26,6 +27,11 @@ class LoginController extends Controller
             'password' => ['required', 'string', 'max:255'],
         ]);
         $credentials['email'] = strtolower($credentials['email']);
+
+        if (DemoAccounts::blocked($credentials['email'])) {
+            $audit->log('auth.demo_blocked', null, ['email' => $credentials['email']]);
+            throw ValidationException::withMessages(['email' => 'بيانات الدخول غير صحيحة.']);
+        }
 
         if (! Auth::guard('web')->attempt($credentials + ['is_active' => true], $request->boolean('remember'))) {
             $audit->log('auth.failed', null, ['email' => $credentials['email']]);

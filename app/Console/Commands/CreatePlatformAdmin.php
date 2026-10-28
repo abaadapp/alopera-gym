@@ -2,9 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\Core\Auth\DemoAccounts;
 use App\Models\User;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
 
 class CreatePlatformAdmin extends Command
 {
@@ -19,6 +22,22 @@ class CreatePlatformAdmin extends Command
             $this->error('Provide a valid email (argument or PLATFORM_ADMIN_EMAIL).');
 
             return self::FAILURE;
+        }
+
+        if (DemoAccounts::blocked($email)) {
+            $this->error('Demo/reserved email domains (.test, example.com…) are not allowed in production.');
+
+            return self::FAILURE;
+        }
+
+        // A password given on the command line gets the same policy as the UI (strict in production).
+        if ($this->option('password')) {
+            $check = Validator::make(['password' => $this->option('password')], ['password' => [Password::defaults()]]);
+            if ($check->fails()) {
+                $this->error($check->errors()->first('password'));
+
+                return self::FAILURE;
+            }
         }
 
         $password = $this->option('password') ?: Str::password(16);

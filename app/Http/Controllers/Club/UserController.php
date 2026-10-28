@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Club;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Auth\DemoAccounts;
 use App\Core\Auth\SystemRoles;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
@@ -110,7 +111,7 @@ class UserController extends Controller
     {
         return $request->validate([
             'name' => ['required', 'string', 'max:120'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user?->id)],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user?->id), DemoAccounts::rule()],
             'phone' => ['nullable', 'string', 'max:32'],
             'role_id' => ['required', TenantRule::exists('roles')],
             'branch_id' => ['nullable', TenantRule::exists('branches')],

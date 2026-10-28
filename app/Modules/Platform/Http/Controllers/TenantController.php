@@ -2,6 +2,7 @@
 
 namespace App\Modules\Platform\Http\Controllers;
 
+use App\Core\Auth\DemoAccounts;
 use App\Core\Auth\SystemRoles;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -50,7 +51,7 @@ class TenantController extends Controller
             'phone' => ['nullable', 'string', 'max:32'],
             'city' => ['nullable', 'string', 'max:80'],
             'owner_name' => ['required', 'string', 'max:120'],
-            'owner_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
+            'owner_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email'), DemoAccounts::rule()],
             'owner_password' => ['required', Password::defaults()],
             'platform_plan_id' => ['required', 'exists:platform_plans,id'],
             'billing_cycle' => ['required', 'in:monthly,yearly'],

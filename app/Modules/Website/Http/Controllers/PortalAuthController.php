@@ -2,6 +2,7 @@
 
 namespace App\Modules\Website\Http\Controllers;
 
+use App\Core\Auth\DemoAccounts;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Phone;
 use App\Core\Tenancy\TenantContext;
@@ -119,7 +120,7 @@ class PortalAuthController extends Controller
         // Member::where is tenant-scoped: a member can only sign in to her own club's portal.
         $member = Member::where($field, $value)->first();
 
-        if (! $member || ! $member->password || $member->status === Member::BLOCKED
+        if (! $member || ! $member->password || $member->status === Member::BLOCKED || DemoAccounts::blocked($member->email)
             || ! Auth::guard('member')->attempt(['id' => $member->id, 'password' => $data['password']], $request->boolean('remember'))) {
             throw ValidationException::withMessages(['login' => 'بيانات الدخول غير صحيحة. إن لم تُفعّلي حسابك بعد، تواصلي مع الاستقبال.']);
         }

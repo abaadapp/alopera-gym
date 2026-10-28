@@ -329,8 +329,8 @@ class AloperaDemoSeeder extends Seeder
     /** @return list<Product> */
     private function inventory(): array
     {
-        $supplier = Supplier::create(['name' => 'مؤسسة الصحة للتجهيزات الرياضية', 'contact_name' => 'أحمد', 'phone' => '96899112233']);
-        Supplier::create(['name' => 'مياه النقاء', 'phone' => '96824556677']);
+        $supplier = Supplier::create(['name' => 'مؤسسة الصحة للتجهيزات الرياضية', 'contact_name' => 'أحمد', 'phone' => '96890000002']);
+        Supplier::create(['name' => 'مياه النقاء', 'phone' => '96890000003']);
 
         $rows = [['مياه 500 مل', 0.2, 0.08, 'مشروبات'], ['مشروب طاقة رياضي', 0.8, 0.45, 'مشروبات'], ['بروتين بار', 1.2, 0.7, 'مكملات'],
             ['منشفة Alopera', 3.5, 1.8, 'إكسسوارات'], ['شيكر بروتين', 2.5, 1.2, 'إكسسوارات'], ['قفازات تمرين', 4.0, 2.2, 'إكسسوارات'], ['حصيرة يوغا', 9.0, 5.0, 'إكسسوارات']];
@@ -553,7 +553,7 @@ class AloperaDemoSeeder extends Seeder
     {
         $program = Program::create(['name' => 'Functional Training', 'slug' => 'functional', 'color' => '#0f766e']);
         $plan = MembershipPlan::create(['name' => 'Monthly', 'type' => 'combo', 'duration_value' => 1, 'duration_unit' => 'month', 'price' => 20]);
-        $member = app(MemberService::class)->create(['full_name' => 'عضوة نادٍ آخر', 'phone' => '96891112222']);
+        $member = app(MemberService::class)->create(['full_name' => 'عضوة نادٍ آخر', 'phone' => '96890000004']);
         $m = app(MembershipService::class)->sell($member, $plan);
         app(PaymentService::class)->record($m->invoice()->first(), $m->total, 'cash');
         unset($program);
