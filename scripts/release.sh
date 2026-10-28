@@ -30,6 +30,9 @@ fail() {
 
 cd "$(git rev-parse --show-toplevel)"
 
+# A trace of each hook run (inside .git, never committed): shows the hook is live.
+[ "$MODE" = "--hook" ] && date '+%F %T' >> "$(git rev-parse --git-dir)/release-hook.log"
+
 if [ "$(git rev-parse --abbrev-ref HEAD)" != "$BRANCH" ]; then
     [ "$MODE" = "--hook" ] && exit 0
     fail "not on $BRANCH"
