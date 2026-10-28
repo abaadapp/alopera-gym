@@ -41,12 +41,48 @@ final class MemberNotifier
         ], $invoice, 'invoice:'.$invoice->id);
     }
 
-    public function paymentReceived(Member $member, string $amount, string $receipt, int $paymentId): void
+    public function paymentReceived(Member $member, string $amount, string $receipt, int $paymentId, ?Invoice $invoice = null): void
     {
         $this->whatsapp->queueTemplate($member, 'payment_received', $this->base($member) + [
             'amount' => $this->money($amount),
             'receipt_number' => $receipt,
+            'invoice_link' => $invoice ? $this->invoiceLink($invoice) : '',
         ], null, 'payment:'.$paymentId);
+    }
+
+    public function transferReceived(Member $member, string $amount, int $paymentId): void
+    {
+        $this->whatsapp->queueTemplate($member, 'transfer_received', $this->base($member) + [
+            'amount' => $this->money($amount),
+        ], null, 'transfer:'.$paymentId);
+    }
+
+    public function paymentFailed(Member $member, Invoice $invoice, int $intentId): void
+    {
+        if (! $invoice->isOpen()) {
+            return;
+        }
+
+        $this->whatsapp->queueTemplate($member, 'payment_failed', $this->base($member) + [
+            'amount' => $this->money($invoice->balance()),
+            'payment_link' => $this->paymentLink($invoice),
+        ], $invoice, 'payment_failed:'.$intentId);
+    }
+
+    public function classChanged(Booking $booking, string $change, int $version): void
+    {
+        $booking->loadMissing(['member', 'session.program']);
+        $this->whatsapp->queueTemplate($booking->member, 'class_changed', $this->base($booking->member) + $this->bookingValues($booking) + [
+            'change' => $change,
+        ], $booking, 'class_changed:'.$booking->id.':'.$version);
+    }
+
+    public function membershipFollowup(Membership $membership, int $days): void
+    {
+        $membership->loadMissing('member');
+        $this->whatsapp->queueTemplate($membership->member, 'membership_followup', $this->base($membership->member) + [
+            'renew_link' => $this->portalLink('portal.renew'),
+        ], $membership, 'followup:'.$membership->id.':'.$days);
     }
 
     public function membershipActivated(Membership $membership): void
@@ -141,6 +177,11 @@ final class MemberNotifier
     public function paymentLink(Invoice $invoice): string
     {
         return route('site.pay.show', ['club' => $this->tenants->require()->slug, 'token' => $invoice->public_token]);
+    }
+
+    public function invoiceLink(Invoice $invoice): string
+    {
+        return route('site.invoice', ['club' => $this->tenants->require()->slug, 'token' => $invoice->public_token]);
     }
 
     private function portalLink(string $route): string

@@ -3,6 +3,11 @@
 namespace App\Modules\Messaging\Listeners;
 
 use App\Modules\Finance\Events\PaymentRecorded;
+use App\Modules\Finance\Events\TransferSubmitted;
+use App\Modules\Finance\Models\Invoice;
+use App\Modules\Gym\Events\ClassSessionChanged;
+use App\Modules\Gym\Models\Booking;
+use App\Modules\Payments\Events\OnlinePaymentFailed;
 use App\Modules\Gym\Events\BookingCancelled;
 use App\Modules\Gym\Events\BookingConfirmed;
 use App\Modules\Gym\Events\MemberRegistered;
@@ -39,6 +44,9 @@ final class SendDomainNotifications
             PaymentRecorded::class => 'onPaymentRecorded',
             BookingConfirmed::class => 'onBookingConfirmed',
             BookingCancelled::class => 'onBookingCancelled',
+            TransferSubmitted::class => 'onTransferSubmitted',
+            OnlinePaymentFailed::class => 'onOnlinePaymentFailed',
+            ClassSessionChanged::class => 'onClassSessionChanged',
         ];
     }
 
@@ -86,8 +94,36 @@ final class SendDomainNotifications
             }
             $member = Member::find($payment->payer_id);
             if ($member) {
-                $this->notifier->paymentReceived($member, (string) $payment->amount, $payment->receipt_number, $payment->id);
+                $this->notifier->paymentReceived($member, (string) $payment->amount, $payment->receipt_number, $payment->id, Invoice::find($payment->invoice_id));
             }
+        });
+    }
+
+    public function onTransferSubmitted(TransferSubmitted $e): void
+    {
+        $this->safely(function () use ($e) {
+            if ($e->payment->payer_type === 'member' && ($member = Member::find($e->payment->payer_id))) {
+                $this->notifier->transferReceived($member, (string) $e->payment->amount, $e->payment->id);
+            }
+        });
+    }
+
+    public function onOnlinePaymentFailed(OnlinePaymentFailed $e): void
+    {
+        $this->safely(function () use ($e) {
+            $invoice = Invoice::find($e->intent->invoice_id);
+            if ($invoice && $invoice->billable_type === 'member' && ($member = Member::find($invoice->billable_id))) {
+                $this->notifier->paymentFailed($member, $invoice, $e->intent->id);
+            }
+        });
+    }
+
+    public function onClassSessionChanged(ClassSessionChanged $e): void
+    {
+        $this->safely(function () use ($e) {
+            $version = (int) $e->session->updated_at?->timestamp;
+            Booking::where('class_session_id', $e->session->id)->where('status', Booking::BOOKED)->get()
+                ->each(fn (Booking $b) => $this->notifier->classChanged($b, $e->change, $version));
         });
     }
 

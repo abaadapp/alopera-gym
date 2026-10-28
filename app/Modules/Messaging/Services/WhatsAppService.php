@@ -47,14 +47,15 @@ final class WhatsAppService
      *
      * @param  array<string, string>  $values  available variable values by name
      */
-    public function queueTemplate(Member $member, string $key, array $values, ?Model $related = null, ?string $dedupeKey = null, ?\DateTimeInterface $at = null, ?int $campaignId = null): ?Message
+    public function queueTemplate(Member $member, string $key, array $values, ?Model $related = null, ?string $dedupeKey = null, ?\DateTimeInterface $at = null, ?int $campaignId = null, bool $marketing = false): ?Message
     {
         if (! $this->enabled()) {
             return null;
         }
 
-        $marketing = $campaignId !== null;
         $template = MessageTemplate::where('key', $key)->first();
+        // Campaigns and marketing-category templates need marketing consent; service messages do not.
+        $marketing = $marketing || $campaignId !== null || $template?->category === 'marketing';
         $skip = match (true) {
             ! $template => 'template_missing',
             ! $template->isUsable() => 'template_not_approved',

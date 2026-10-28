@@ -8,6 +8,7 @@ use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Modules\Finance\Events\InvoicePaid;
 use App\Modules\Finance\Events\PaymentRecorded;
+use App\Modules\Finance\Events\TransferSubmitted;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -63,7 +64,9 @@ final class PaymentService
                 'received_by' => Auth::guard('web')->id(),
             ]);
 
-            if (! $pending) {
+            if ($pending) {
+                TransferSubmitted::dispatch($payment);
+            } else {
                 $this->apply($invoice, $payment);
             }
 

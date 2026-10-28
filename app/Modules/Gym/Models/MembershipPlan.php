@@ -16,11 +16,13 @@ class MembershipPlan extends Model
 
     public const UNITS = ['day', 'week', 'month', 'year'];
 
+    public const TYPES = ['gym' => 'دخول النادي', 'classes' => 'حصص جماعية', 'combo' => 'شاملة'];
+
     protected $table = 'gym_membership_plans';
 
     protected $guarded = ['id', 'tenant_id'];
 
-    protected $attributes = ['is_active' => true, 'is_public' => true, 'is_featured' => false, 'freeze_allowed' => true, 'signup_fee' => 0, 'max_freeze_days' => 0, 'max_freezes' => 0, 'sort' => 0];
+    protected $attributes = ['type' => 'gym', 'is_active' => true, 'is_public' => true, 'is_featured' => false, 'freeze_allowed' => true, 'signup_fee' => 0, 'max_freeze_days' => 0, 'max_freezes' => 0, 'sort' => 0];
 
     protected function casts(): array
     {
@@ -76,6 +78,7 @@ class MembershipPlan extends Model
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'type' => $this->type,
             'duration_value' => $this->duration_value,
             'duration_unit' => $this->duration_unit,
             'price' => $this->price,

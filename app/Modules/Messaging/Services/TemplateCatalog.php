@@ -26,10 +26,22 @@ final class TemplateCatalog
             'body' => 'مرحبًا {{1}}، تم إصدار الفاتورة رقم {{2}} بمبلغ {{3}}. للدفع الإلكتروني الآمن: {{4}}',
         ],
         'payment_received' => [
-            'label' => 'تأكيد استلام الدفعة',
+            'label' => 'تأكيد استلام الدفعة والإيصال',
             'category' => 'utility',
-            'variables' => ['member_name', 'amount', 'receipt_number'],
-            'body' => 'شكرًا {{1}}، استلمنا دفعتك بمبلغ {{2}}. رقم الإيصال: {{3}}.',
+            'variables' => ['member_name', 'amount', 'receipt_number', 'invoice_link'],
+            'body' => 'شكرًا {{1}}، استلمنا دفعتك بمبلغ {{2}}. رقم الإيصال: {{3}}. الفاتورة والإيصال: {{4}}',
+        ],
+        'transfer_received' => [
+            'label' => 'استلام إشعار تحويل بنكي (بانتظار التأكيد)',
+            'category' => 'utility',
+            'variables' => ['member_name', 'amount'],
+            'body' => 'مرحبًا {{1}}، استلمنا إشعار تحويلك بمبلغ {{2}}، وسيتم تأكيده وتفعيل اشتراكك فور مطابقته.',
+        ],
+        'payment_failed' => [
+            'label' => 'تعذّر الدفع الإلكتروني',
+            'category' => 'utility',
+            'variables' => ['member_name', 'amount', 'payment_link'],
+            'body' => 'مرحبًا {{1}}، لم تكتمل عملية الدفع بمبلغ {{2}}. يمكنك المحاولة مجددًا من هنا: {{3}}',
         ],
         'membership_activated' => [
             'label' => 'تأكيد الاشتراك',
@@ -55,6 +67,12 @@ final class TemplateCatalog
             'variables' => ['member_name', 'renew_link'],
             'body' => 'انتهى اشتراكك يا {{1}}. اشتقنا لكِ! جددي اشتراكك من هنا: {{2}}',
         ],
+        'membership_followup' => [
+            'label' => 'متابعة بعد انتهاء العضوية',
+            'category' => 'marketing',
+            'variables' => ['member_name', 'club_name', 'renew_link'],
+            'body' => 'اشتقنا لكِ يا {{1}} في {{2}} 💕 عودي لتمارينك وجددي اشتراكك من هنا: {{3}}',
+        ],
         'membership_frozen' => [
             'label' => 'تأكيد التجميد',
             'category' => 'utility',
@@ -78,6 +96,12 @@ final class TemplateCatalog
             'category' => 'utility',
             'variables' => ['member_name', 'class_name', 'date', 'time', 'reason'],
             'body' => 'تم إلغاء حجزك في حصة {{2}} يوم {{3}} الساعة {{4}}. السبب: {{5}}',
+        ],
+        'class_changed' => [
+            'label' => 'تعديل موعد/مدربة الحصة',
+            'category' => 'utility',
+            'variables' => ['member_name', 'class_name', 'date', 'time', 'change'],
+            'body' => 'تنبيه يا {{1}}: تم تعديل حصة {{2}} يوم {{3}} الساعة {{4}}. التعديل: {{5}}',
         ],
     ];
 

@@ -1,0 +1,45 @@
+<?php
+
+namespace App\Core\Backup;
+
+/**
+ * Every table a club owns, in insert order (parents before children). Restore
+ * deletes in reverse order. A guard test fails when a table with a tenant_id
+ * column is added without being listed here or in EXCLUDED.
+ */
+final class TenantTables
+{
+    public const ORDER = [
+        'roles', 'branches', 'users', 'number_sequences', 'tenant_integrations',
+        'site_settings', 'site_posts', 'site_media', 'contact_messages',
+        'expense_categories', 'product_categories', 'suppliers', 'products',
+        'gym_programs', 'gym_membership_plans', 'gym_plan_program', 'gym_coupons',
+        'gym_trainers', 'gym_trainer_availabilities',
+        'gym_members',
+        'invoices', 'invoice_items', 'payments',
+        'gym_memberships', 'gym_coupon_redemptions', 'gym_membership_freezes', 'gym_membership_events',
+        'gym_member_documents', 'gym_member_notes',
+        'gym_class_schedules', 'gym_class_sessions', 'gym_bookings',
+        'gym_pt_packages', 'gym_pt_subscriptions', 'gym_pt_sessions',
+        'gym_access_devices', 'gym_access_credentials', 'gym_check_ins', 'gym_staff_attendances',
+        'expenses', 'purchase_orders', 'purchase_order_items', 'sales', 'sale_items', 'stock_movements',
+        'message_templates', 'conversations', 'campaigns', 'messages', 'auto_replies',
+        'payment_intents',
+    ];
+
+    /** Tenant-related tables deliberately left out, with the reason. */
+    public const EXCLUDED = [
+        'audit_logs' => 'append-only trail; a restore must never rewrite history',
+        'tenant_subscriptions' => 'owned by the platform, not by the club',
+        'platform_invoices' => 'owned by the platform, not by the club',
+        'payment_webhook_events' => 'platform-level gateway log',
+    ];
+
+    /** Child tables without their own tenant_id: [table => [fk column, parent table]]. */
+    public const PIVOTS = [
+        'gym_plan_program' => ['membership_plan_id', 'gym_membership_plans'],
+    ];
+
+    /** Tables whose rows reference earlier rows of the same table; inserted in id order. */
+    public const SELF_REFERENCING = ['payments', 'gym_memberships'];
+}

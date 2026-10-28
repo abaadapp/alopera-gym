@@ -37,6 +37,8 @@ class Tenant extends Model
         'block_access_with_dues' => false,
         'auto_mark_no_show' => true,
         'expiry_reminder_days' => [7, 3, 1],
+        'expired_followup_days' => [7],
+        'notify_class_changes' => true,
         'class_session_weeks_ahead' => 4,
         'vat_rate' => 0,
         'vat_number' => null,

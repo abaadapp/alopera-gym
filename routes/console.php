@@ -1,8 +1,16 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+/*
+| Production cron: * * * * * php /var/www/alopera-gym/current/artisan schedule:run
+| Times are in APP_TIMEZONE (Asia/Muscat).
+*/
+
+Schedule::command('gym:daily-memberships')->dailyAt('00:10')->withoutOverlapping()->onOneServer();
+Schedule::command('gym:sessions')->hourly()->withoutOverlapping()->onOneServer();
+Schedule::command('gym:send-reminders')->dailyAt('10:00')->withoutOverlapping()->onOneServer();
+Schedule::command('messaging:dispatch-scheduled')->everyMinute()->withoutOverlapping()->onOneServer();
+Schedule::command('platform:billing')->dailyAt('01:00')->withoutOverlapping()->onOneServer();
+Schedule::command('backup:tenants')->dailyAt('03:00')->withoutOverlapping()->onOneServer();
+Schedule::command('queue:prune-failed --hours=720')->daily();

@@ -78,6 +78,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
             $table->string('name');
+            $table->string('type', 20)->default('gym'); // gym|classes|combo — the membership type shown to members
             $table->text('description')->nullable();
             $table->unsignedSmallInteger('duration_value');
             $table->string('duration_unit', 10); // day|week|month|year

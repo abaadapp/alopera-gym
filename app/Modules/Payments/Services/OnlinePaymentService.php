@@ -10,6 +10,7 @@ use App\Models\Tenant;
 use App\Models\TenantIntegration;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Services\PaymentService;
+use App\Modules\Payments\Events\OnlinePaymentFailed;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobClient;
@@ -135,6 +136,7 @@ final class OnlinePaymentService
                         'provider_transaction_id' => $transactionId,
                         'failure_reason' => Str::limit((string) Arr::get($obj, 'data.message', 'declined'), 250),
                     ])->save();
+                    OnlinePaymentFailed::dispatch($intent);
                 }
 
                 return $this->log($intent->tenant_id, $transactionId, $reference, true, 'failed_payment', $payload, $ip);
