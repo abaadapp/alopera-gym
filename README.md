@@ -85,7 +85,8 @@ php artisan schedule:work     # المهام المجدولة (العضويات�
 ## الاختبارات
 
 ```bash
-php artisan test              # 132 اختبارًا على PostgreSQL (alopera_gym_testing)
+php artisan test              # 161 اختبارًا على PostgreSQL (alopera_gym_testing)
+php artisan platform:preflight  # فحص جاهزية الإنتاج (يفشل محليًا عمدًا: بيئة تجريبية)
 npx tsc --noEmit              # فحص أنواع TypeScript
 vendor/bin/pint --test        # تنسيق PHP
 ```

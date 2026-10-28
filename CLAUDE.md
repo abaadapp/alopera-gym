@@ -20,3 +20,4 @@ Read `docs/ARCHITECTURE.md` first.
 - Types/build: `npx tsc --noEmit -p tsconfig.json` · `npm run build`
 - Style: `vendor/bin/pint`
 - Demo data: `php artisan migrate:fresh --seed` (refuses to run in production)
+- Release gate: `php artisan platform:preflight` (run by `scripts/deploy.sh`; fails locally by design)

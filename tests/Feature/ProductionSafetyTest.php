@@ -105,4 +105,27 @@ class ProductionSafetyTest extends TestCase
             ->post(route('club.users.store'), ['name' => 'X', 'email' => 'x@alopera.test', 'role_id' => $this->owner($club)->role_id, 'password' => 'Str0ng-Passw0rd!'])
             ->assertSessionHasErrors('email');
     }
+
+    public function test_preflight_blocks_a_release_with_usable_demo_accounts_and_can_deactivate_them(): void
+    {
+        $club = $this->club();
+        $demo = $this->owner($club);
+        $demo->forceFill(['email' => 'owner@alopera.test'])->save();
+        $real = new User(['name' => 'Admin', 'email' => 'admin@platform.om', 'password' => 'Str0ng-Passw0rd!']);
+        $real->forceFill(['is_platform_admin' => true])->save();
+        config(['app.debug' => false, 'app.url' => 'https://app.platform.om', 'session.secure' => true, 'session.encrypt' => true, 'queue.default' => 'database']);
+
+        // Locally the demo rows are expected and never touched.
+        $this->artisan('platform:preflight', ['--deactivate-demo' => true])->assertFailed();
+        $this->assertTrue($demo->fresh()->is_active);
+
+        $this->app['env'] = 'production';
+        $this->artisan('platform:preflight')->expectsOutputToContain('No active demo staff/admin accounts')->assertFailed();
+
+        $this->artisan('platform:preflight', ['--deactivate-demo' => true])->expectsOutputToContain('Deactivated 1 demo account(s).')->assertSuccessful();
+        $this->assertFalse($demo->fresh()->is_active);
+        $this->assertTrue($real->fresh()->is_active);
+        $this->assertDatabaseHas('audit_logs', ['event' => 'platform.demo_deactivated']);
+        $this->artisan('platform:preflight')->assertSuccessful();
+    }
 }

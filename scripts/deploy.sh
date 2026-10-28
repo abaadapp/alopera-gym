@@ -29,6 +29,9 @@ php artisan route:cache
 php artisan view:cache
 php artisan event:cache
 
+# Release gate: production settings and no usable demo accounts. A FAIL stops here, before the switch.
+php artisan platform:preflight
+
 ln -sfn "$REL" "$APP/current"
 sudo systemctl reload php8.4-fpm
 php artisan queue:restart
