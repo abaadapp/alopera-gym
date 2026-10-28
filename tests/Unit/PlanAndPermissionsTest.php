@@ -36,7 +36,9 @@ class PlanAndPermissionsTest extends TestCase
 
                 continue;
             }
-            $this->assertSame([], array_diff($role['permissions'], PermissionRegistry::all()), "Role {$key} has unknown permissions");
+            // Permissions of a switched-off module are defined but dormant (kept for when it is switched on).
+            $known = [...PermissionRegistry::all(), ...PermissionRegistry::dormant($role['permissions'])];
+            $this->assertSame([], array_values(array_diff($role['permissions'], $known)), "Role {$key} has unknown permissions");
         }
     }
 

@@ -38,7 +38,7 @@ final class SystemRoles
             ],
             self::RECEPTION => [
                 'name' => 'الاستقبال',
-                'description' => 'تسجيل الدخول والحجوزات وبيع العضويات وتحصيل الدفعات ونقطة البيع.',
+                'description' => 'تسجيل الدخول والحجوزات وبيع العضويات وتحصيل الدفعات.',
                 'permissions' => [
                     'members.view', 'members.manage', 'members.documents',
                     'memberships.view', 'memberships.sell', 'memberships.freeze',
@@ -51,7 +51,7 @@ final class SystemRoles
             ],
             self::FINANCE => [
                 'name' => 'المالية',
-                'description' => 'الفواتير والتحصيل والمصروفات والمشتريات والتقارير المالية.',
+                'description' => 'الفواتير والتحصيل والمصروفات والتقارير المالية.',
                 'permissions' => [
                     'dashboard.view', 'members.view', 'memberships.view',
                     'invoices.view', 'invoices.manage', 'invoices.void', 'invoices.credit',

@@ -19,7 +19,7 @@ class RoleController extends Controller
             'roles' => Role::withCount('users')->orderBy('id')->get()->map(fn (Role $r) => $r->only('id', 'key', 'name', 'description', 'is_system', 'is_locked', 'users_count') + [
                 'permissions' => $r->expandedPermissions(),
             ]),
-            'groups' => collect(PermissionRegistry::GROUPS)->map(fn ($g, $key) => ['key' => $key, 'label' => $g['label'], 'permissions' => collect($g['permissions'])->map(fn ($label, $perm) => ['key' => $perm, 'label' => $label])->values()])->values(),
+            'groups' => collect(PermissionRegistry::groups())->map(fn ($g, $key) => ['key' => $key, 'label' => $g['label'], 'permissions' => collect($g['permissions'])->map(fn ($label, $perm) => ['key' => $perm, 'label' => $label])->values()])->values(),
         ]);
     }
 
@@ -46,7 +46,7 @@ class RoleController extends Controller
         $role->update([
             'name' => $data['name'],
             'description' => $data['description'] ?? null,
-            'permissions' => PermissionRegistry::sanitize($data['permissions'] ?? []),
+            'permissions' => [...PermissionRegistry::sanitize($data['permissions'] ?? []), ...PermissionRegistry::dormant($role->permissions ?? [])],
         ]);
 
         return back()->with('success', 'تم حفظ صلاحيات الدور.');

@@ -17,6 +17,13 @@ class PosInventoryTest extends TestCase
 {
     use BuildsClubs, RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // The module is switched off by default (config gym.modules.inventory); its code is kept working.
+        config(['gym.modules.inventory' => true]);
+    }
+
     public function test_receiving_a_purchase_adds_stock_at_weighted_average_cost(): void
     {
         $club = $this->club();

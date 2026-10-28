@@ -13,6 +13,12 @@ return [
 
     'backup_disk' => env('BACKUP_DISK', 'local'),
 
+    // Optional modules. Sales & inventory (POS, products, suppliers, purchases) is switched off: its tables
+    // and data stay untouched, but its screens and routes are unavailable and its permissions are not granted.
+    'modules' => [
+        'inventory' => (bool) env('GYM_INVENTORY_MODULE', false),
+    ],
+
     // Upload limits (kilobytes)
     'max_document_kb' => 10240,
     'max_image_kb' => 4096,

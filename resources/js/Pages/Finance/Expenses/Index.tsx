@@ -200,11 +200,11 @@ function ExpenseModal({ expense, categories, suppliers, onClose }: { expense: Ex
                 <Field label="المستفيد" error={form.errors.payee}>
                     <Input value={form.data.payee} onChange={(e) => form.setData('payee', e.target.value)} />
                 </Field>
-                <Field label="المورد" error={form.errors.supplier_id}>
+                {suppliers.length > 0 && <Field label="المورد" error={form.errors.supplier_id}>
                     <Select value={form.data.supplier_id} onChange={(e) => form.setData('supplier_id', e.target.value)} placeholder="—">
                         {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </Select>
-                </Field>
+                </Field>}
                 <Field label="المرجع" error={form.errors.reference}>
                     <Input value={form.data.reference} onChange={(e) => form.setData('reference', e.target.value)} />
                 </Field>

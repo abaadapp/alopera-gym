@@ -111,7 +111,7 @@ class AloperaDemoSeeder extends Seeder
             'starter' => ['name' => 'Starter', 'description' => 'لنادٍ صغير بفرع واحد', 'price_monthly' => 25, 'price_yearly' => 250, 'max_members' => 300, 'max_staff' => 5, 'max_branches' => 1, 'sort' => 1,
                 'features' => ['إدارة العضويات والحجوزات', 'الموقع وبوابة المشتركات', 'التقارير الأساسية']],
             'pro' => ['name' => 'Pro', 'description' => 'الأكثر طلبًا للأندية النشطة', 'price_monthly' => 45, 'price_yearly' => 450, 'max_members' => 1500, 'max_staff' => 20, 'max_branches' => 3, 'sort' => 2,
-                'features' => ['كل مزايا Starter', 'أتمتة واتساب والحملات', 'الدفع الإلكتروني', 'نقطة البيع والمخزون', 'أجهزة الدخول']],
+                'features' => ['كل مزايا Starter', 'أتمتة واتساب والحملات', 'الدفع الإلكتروني', 'أجهزة الدخول']],
             'enterprise' => ['name' => 'Enterprise', 'description' => 'سلاسل أندية وفروع متعددة', 'price_monthly' => 95, 'price_yearly' => 950, 'max_members' => null, 'max_staff' => null, 'max_branches' => null, 'sort' => 3,
                 'features' => ['كل مزايا Pro', 'فروع غير محدودة', 'خادم وقاعدة بيانات مستقلة', 'دعم أولوية']],
         ];

@@ -89,16 +89,57 @@ final class PermissionRegistry
         ]],
     ];
 
+    /** Permission groups that belong to an optional module (config gym.modules.<module>). */
+    private const MODULE_GROUPS = ['inventory' => 'inventory'];
+
+    public static function moduleEnabled(string $module): bool
+    {
+        return (bool) config("gym.modules.{$module}", false);
+    }
+
+    /**
+     * The groups of the modules that are switched on. A switched-off module's permissions are not
+     * granted to anyone (the owner's "*" included) and do not appear in the role editor.
+     *
+     * @return array<string, array{label: string, permissions: array<string, string>}>
+     */
+    public static function groups(): array
+    {
+        return array_filter(
+            self::GROUPS,
+            fn (string $key) => ! isset(self::MODULE_GROUPS[$key]) || self::moduleEnabled(self::MODULE_GROUPS[$key]),
+            ARRAY_FILTER_USE_KEY,
+        );
+    }
+
     /** @return list<string> */
     public static function all(): array
     {
         $keys = [];
 
-        foreach (self::GROUPS as $group) {
+        foreach (self::groups() as $group) {
             array_push($keys, ...array_keys($group['permissions']));
         }
 
         return $keys;
+    }
+
+    /**
+     * Permissions of switched-off modules found in a stored list: kept when a role is edited, so they come
+     * back if the module is switched on again.
+     *
+     * @param  array<int, mixed>  $stored
+     * @return list<string>
+     */
+    public static function dormant(array $stored): array
+    {
+        $dormant = [];
+
+        foreach (array_diff_key(self::GROUPS, self::groups()) as $group) {
+            array_push($dormant, ...array_keys($group['permissions']));
+        }
+
+        return array_values(array_intersect($dormant, $stored));
     }
 
     public static function exists(string $permission): bool

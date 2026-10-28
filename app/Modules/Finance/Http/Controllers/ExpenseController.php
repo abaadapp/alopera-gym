@@ -2,6 +2,7 @@
 
 namespace App\Modules\Finance\Http\Controllers;
 
+use App\Core\Auth\PermissionRegistry;
 use App\Core\Export\TableExporter;
 use App\Core\Support\NumberSequence;
 use App\Core\Tenancy\TenantContext;
@@ -31,7 +32,8 @@ class ExpenseController extends Controller
                 ]),
             'total' => round((float) (clone $query)->sum('amount'), 3),
             'categories' => ExpenseCategory::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'suppliers' => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            // Suppliers belong to the sales & inventory module; without it the expense form has no supplier field.
+            'suppliers' => PermissionRegistry::moduleEnabled('inventory') ? Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name']) : [],
             'filters' => $request->only('category_id', 'from', 'to', 'q'),
         ]);
     }

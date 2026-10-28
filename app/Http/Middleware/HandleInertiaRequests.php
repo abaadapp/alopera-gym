@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Core\Auth\PermissionRegistry;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Models\User;
@@ -33,6 +34,7 @@ class HandleInertiaRequests extends Middleware
             'dir' => app()->getLocale() === 'ar' ? 'rtl' : 'ltr',
             'auth' => fn () => $this->staff($request),
             'tenant' => fn () => $this->tenant(),
+            'modules' => ['inventory' => PermissionRegistry::moduleEnabled('inventory')],
             'member' => fn () => $this->member(),
             'flash' => fn () => [
                 'success' => $request->session()->get('success'),

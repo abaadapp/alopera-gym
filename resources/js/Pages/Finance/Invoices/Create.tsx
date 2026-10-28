@@ -54,7 +54,7 @@ export default function InvoiceCreate() {
         <ClubLayout title="فاتورة يدوية">
             <PageHeader
                 title="فاتورة يدوية"
-                subtitle="لخدمات أو بنود خارج العضويات ونقطة البيع"
+                subtitle="لخدمات أو بنود خارج العضويات"
                 back={<a href={route('club.invoices.index')} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-brand"><ArrowRight className="size-4" /> الفواتير</a>}
             />
 

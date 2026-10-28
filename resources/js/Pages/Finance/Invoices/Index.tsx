@@ -2,7 +2,7 @@ import { Link, router } from '@inertiajs/react';
 import { FilePlus2, FileText } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, EmptyState, Input, PageHeader, Pagination, SearchInput, Select, Tabs } from '@/Components/ui';
-import { useCan, useCurrency } from '@/hooks/useShared';
+import { useCan, useCurrency, useShared } from '@/hooks/useShared';
 import { date, money } from '@/lib/format';
 import { invoiceStatus, invoiceType, label } from '@/lib/labels';
 import type { Paginated } from '@/types';
@@ -47,6 +47,7 @@ const statusTabs = [
 export default function InvoicesIndex({ invoices, filters }: { invoices: Paginated<InvoiceRow>; filters: Filters }) {
     const can = useCan();
     const currency = useCurrency();
+    const inventory = useShared().modules.inventory;
 
     const apply = (patch: Partial<Filters>) => {
         const next = { ...filters, ...patch };
@@ -76,7 +77,7 @@ export default function InvoicesIndex({ invoices, filters }: { invoices: Paginat
                     <div className="flex flex-wrap items-end gap-3">
                         <div className="w-40">
                             <Select value={filters.type ?? ''} onChange={(e) => apply({ type: e.target.value })} placeholder="كل الأنواع">
-                                {Object.entries(invoiceType).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                {Object.entries(invoiceType).filter(([k]) => k !== 'pos' || inventory).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                             </Select>
                         </div>
                         <label className="flex items-center gap-2 text-sm text-muted">

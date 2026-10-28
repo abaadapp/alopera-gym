@@ -4,6 +4,7 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Tenancy\CrossTenantWriteException;
 use App\Core\Tenancy\MissingTenantException;
 use App\Http\Middleware\AuthenticateDevice;
+use App\Http\Middleware\EnsureModuleEnabled;
 use App\Http\Middleware\EnsurePlatformAdmin;
 use App\Http\Middleware\EnsureTenantIsOperational;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -40,6 +41,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'platform' => EnsurePlatformAdmin::class,
             'site.tenant' => ResolveSiteTenant::class,
             'device' => AuthenticateDevice::class,
+            'module' => EnsureModuleEnabled::class,
         ]);
 
         // The tenant must be known before route-model binding runs: the tenant

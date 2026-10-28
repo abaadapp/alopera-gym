@@ -3,7 +3,7 @@ import { router } from '@inertiajs/react';
 import { CalendarRange, Download } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { BarTrend, Button, Card, CardHeader, Delta, EmptyState, HBars, Input, PageHeader } from '@/Components/ui';
-import { useCan, useCurrency } from '@/hooks/useShared';
+import { useCan, useCurrency, useShared } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, money, number } from '@/lib/format';
 import { invoiceType, paymentMethod } from '@/lib/labels';
@@ -52,6 +52,7 @@ const lowerIsBetter = new Set(['cancellations', 'freezes', 'expirations', 'expen
 export default function ReportsIndex({ report, filters, canFinancial, canExport }: Props) {
     const currency = useCurrency();
     const can = useCan();
+    const inventory = useShared().modules.inventory;
     const [from, setFrom] = useState(filters.from);
     const [to, setTo] = useState(filters.to);
     const [compareFrom, setCompareFrom] = useState(filters.compare_from);
@@ -140,7 +141,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
             </Card>
 
             {canFinancial && (
-                <Section title="المالية" exports={canExport ? [['revenue', 'الإيرادات'], ['expenses', 'المصروفات'], ['sales', 'المبيعات']] : []} exportLink={exportLink}>
+                <Section title="المالية" exports={canExport ? [['revenue', 'الإيرادات'], ['expenses', 'المصروفات'], ...(inventory ? [['sales', 'المبيعات'] as [string, string]] : [])] : []} exportLink={exportLink}>
                     <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
                         <Kpi label="صافي التحصيل" metric={m('revenue')} format={fmtMoney} metricKey="revenue" />
                         <Kpi label="المصروفات" metric={m('expenses')} format={fmtMoney} metricKey="expenses" />
@@ -148,7 +149,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
                         <Kpi label="نسبة التحصيل" metric={m('collection_rate')} format={fmtPct} metricKey="collection_rate" hint={`من فواتير بقيمة ${fmtMoney(m('invoiced').current)}`} />
                         <Kpi label="المردودات" metric={m('refunds')} format={fmtMoney} metricKey="refunds" />
                         <Kpi label="الإشعارات الدائنة" metric={m('credit_notes')} format={fmtMoney} metricKey="credit_notes" />
-                        <Kpi label="مبيعات المنتجات" metric={m('product_sales')} format={fmtMoney} metricKey="product_sales" />
+                        {inventory && <Kpi label="مبيعات المنتجات" metric={m('product_sales')} format={fmtMoney} metricKey="product_sales" />}
                     </div>
                     <div className="mt-4 grid gap-4 lg:grid-cols-3">
                         <Card className="lg:col-span-2">
@@ -175,7 +176,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
                                 <EmptyState title="لا دفعات" />
                             )}
                         </Card>
-                        <Card>
+                        <Card className={cn(!inventory && 'lg:col-span-2')}>
                             <CardHeader title="المصروفات حسب التصنيف" />
                             {report.expenses_by_category.length ? (
                                 <HBars data={report.expenses_by_category.map((r) => ({ label: r.key, value: r.amount, color: '#dc2626' }))} format={fmtMoney} />
@@ -183,7 +184,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
                                 <EmptyState title="لا مصروفات" />
                             )}
                         </Card>
-                        <Card padded={false}>
+                        {inventory && <Card padded={false}>
                             <div className="p-5 pb-2"><CardHeader title="المنتجات الأكثر مبيعًا" className="mb-0" /></div>
                             {report.products.length ? (
                                 <div className="overflow-x-auto">
@@ -204,7 +205,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
                             ) : (
                                 <EmptyState title="لا مبيعات" />
                             )}
-                        </Card>
+                        </Card>}
                     </div>
                 </Section>
             )}

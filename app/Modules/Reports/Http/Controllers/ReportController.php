@@ -2,6 +2,7 @@
 
 namespace App\Modules\Reports\Http\Controllers;
 
+use App\Core\Auth\PermissionRegistry;
 use App\Core\Export\TableExporter;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Expense;
@@ -43,6 +44,7 @@ class ReportController extends Controller
         if (in_array($report, ['revenue', 'expenses', 'sales'], true)) {
             abort_unless($request->user()->can('reports.financial'), 403);
         }
+        abort_if($report === 'sales' && ! PermissionRegistry::moduleEnabled('inventory'), 404);
 
         return match ($report) {
             'memberships' => TableExporter::download('memberships', ['الرقم', 'المشتركة', 'الباقة', 'النوع', 'الحالة', 'من', 'إلى', 'الإجمالي', 'تاريخ التفعيل'],
