@@ -82,6 +82,8 @@ class DevicesTest extends TestCase
 
     public function test_fingerprint_punches_staff_in_then_out(): void
     {
+        // A morning shift: an 8-hour shift started late in the day would cross midnight into a new day.
+        $this->travelTo(now()->setTime(8, 0));
         $club = $this->club();
         [, $token] = $this->device($club, 'staff');
         $reception = $this->staff($club, 'reception');
