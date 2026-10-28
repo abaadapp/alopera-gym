@@ -1,124 +1,140 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 import {
-    BarChart3, Bell, CalendarDays, ClipboardList, Clock, CreditCard, Dumbbell, FileText, Globe, Fingerprint, LayoutDashboard,
-    LogOut, Menu, MessageCircle, Megaphone, Package, Receipt, Settings, ShoppingBag, Sparkles, Tags, Truck, UserCog, Users,
-    Wallet, X, ScanLine, Layers, ShieldCheck, Database, Building2, KeyRound, ScrollText, Newspaper, Mail, UserRoundCheck, HandCoins, Ticket, BadgePercent,
+    BarChart3, ChevronDown, Clock, DoorOpen, Dumbbell, Globe, LayoutDashboard, LogOut, Menu, MessageCircle, ScanLine, Settings, Ticket, Users, Wallet, X,
 } from 'lucide-react';
 import { Flash } from '@/Components/ui';
 import { useCan, useShared } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 
-type Item = { label: string; route: string; icon: ReactNode; permission?: string; match?: string; roleKey?: string };
-type Group = { label?: string; items: Item[] };
+/** A page link. `permission` may list several (any of them is enough); `match` lists route patterns that count as this page. */
+type Leaf = { label: string; route: string; permission?: string | string[]; match?: string | string[]; roleKey?: string };
+/** A main-menu entry: a page of its own, or a section that opens to one level of pages. */
+type Section = { label: string; icon: ReactNode } & ({ route: string; permission?: string | string[]; match?: string | string[] } | { children: Leaf[] });
 
-const ic = 'size-[18px]';
+const ic = 'size-[18px] shrink-0';
 
-export const NAV: Group[] = [
+/** Settings screens live behind the settings hub; none of them appears in the main menu. */
+const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'integrations.manage', 'audit.view', 'backups.manage', 'billing.view', 'website.manage'];
+
+export const NAV: Section[] = [
+    { label: 'لوحة التحكم', route: 'club.dashboard', icon: <LayoutDashboard className={ic} />, permission: 'dashboard.view' },
+    { label: 'الاستقبال', route: 'club.reception', icon: <ScanLine className={ic} />, permission: 'checkin.perform' },
+    { label: 'المشتركات', route: 'club.members.index', icon: <Users className={ic} />, permission: 'members.view', match: 'club.members.*' },
     {
-        items: [
-            { label: 'لوحة التحكم', route: 'club.dashboard', icon: <LayoutDashboard className={ic} />, permission: 'dashboard.view' },
-            { label: 'الاستقبال', route: 'club.reception', icon: <ScanLine className={ic} />, permission: 'checkin.perform' },
-            { label: 'شاشة المدربة', route: 'club.trainer', icon: <UserRoundCheck className={ic} />, permission: 'classes.view', roleKey: 'trainer' },
+        label: 'العضويات والباقات',
+        icon: <Ticket className={ic} />,
+        children: [
+            { label: 'العضويات', route: 'club.memberships.index', permission: 'memberships.view', match: 'club.memberships.*' },
+            { label: 'الباقات والأسعار', route: 'club.plans.index', permission: 'plans.manage', match: 'club.plans.*' },
+            { label: 'الخصومات والعروض', route: 'club.coupons.index', permission: 'plans.manage', match: 'club.coupons.*' },
         ],
     },
     {
-        label: 'المشتركات',
-        items: [
-            { label: 'المشتركات', route: 'club.members.index', icon: <Users className={ic} />, permission: 'members.view', match: 'club.members.*' },
-            { label: 'العضويات', route: 'club.memberships.index', icon: <Ticket className={ic} />, permission: 'memberships.view' },
-            { label: 'الباقات والأسعار', route: 'club.plans.index', icon: <Layers className={ic} />, permission: 'plans.manage' },
-            { label: 'الخصومات والعروض', route: 'club.coupons.index', icon: <BadgePercent className={ic} />, permission: 'plans.manage' },
-        ],
-    },
-    {
-        label: 'التدريب',
-        items: [
-            { label: 'الجدول الأسبوعي', route: 'club.schedule.index', icon: <CalendarDays className={ic} />, permission: 'classes.view' },
-            { label: 'الحصص والحجوزات', route: 'club.sessions.index', icon: <ClipboardList className={ic} />, permission: 'classes.view', match: 'club.sessions.*' },
-            { label: 'البرامج', route: 'club.programs.index', icon: <Dumbbell className={ic} />, permission: 'classes.manage' },
-            { label: 'المدربات', route: 'club.trainers.index', icon: <Sparkles className={ic} />, permission: 'trainers.manage' },
-            { label: 'التدريب الشخصي', route: 'club.pt.index', icon: <UserCog className={ic} />, permission: 'pt.manage' },
-            { label: 'باقات التدريب الشخصي', route: 'club.pt-packages.index', icon: <Tags className={ic} />, permission: 'pt.manage' },
+        label: 'الحصص والتدريب',
+        icon: <Dumbbell className={ic} />,
+        children: [
+            { label: 'شاشة المدربة', route: 'club.trainer', permission: 'classes.view', roleKey: 'trainer' },
+            { label: 'الجدول الأسبوعي', route: 'club.schedule.index', permission: 'classes.view', match: 'club.schedule.*' },
+            { label: 'الحصص والحجوزات', route: 'club.sessions.index', permission: 'classes.view', match: ['club.sessions.*', 'club.bookings.*'] },
+            { label: 'البرامج', route: 'club.programs.index', permission: 'classes.manage', match: 'club.programs.*' },
+            { label: 'المدربات', route: 'club.trainers.index', permission: 'trainers.manage', match: 'club.trainers.*' },
+            { label: 'التدريب الشخصي', route: 'club.pt.index', permission: 'pt.manage', match: 'club.pt.*' },
+            { label: 'باقات التدريب الشخصي', route: 'club.pt-packages.index', permission: 'pt.manage', match: 'club.pt-packages.*' },
         ],
     },
     {
         label: 'الدخول والحضور',
-        items: [
-            { label: 'سجل الدخول', route: 'club.checkins.index', icon: <Clock className={ic} />, permission: 'checkin.view' },
-            { label: 'أجهزة الدخول', route: 'club.devices.index', icon: <Fingerprint className={ic} />, permission: 'devices.manage' },
-            { label: 'حضور الموظفات', route: 'club.staff-attendance.index', icon: <UserRoundCheck className={ic} />, permission: 'staff_attendance.view' },
+        icon: <DoorOpen className={ic} />,
+        children: [
+            { label: 'سجل الدخول', route: 'club.checkins.index', permission: 'checkin.view', match: 'club.checkins.*' },
+            { label: 'أجهزة الدخول', route: 'club.devices.index', permission: 'devices.manage', match: 'club.devices.*' },
+            { label: 'حضور الموظفات', route: 'club.staff-attendance.index', permission: 'staff_attendance.view', match: 'club.staff-attendance.*' },
         ],
     },
     {
         label: 'المالية',
-        items: [
-            { label: 'الفواتير', route: 'club.invoices.index', icon: <FileText className={ic} />, permission: 'invoices.view', match: 'club.invoices.*' },
-            { label: 'الدفعات والإيصالات', route: 'club.payments.index', icon: <Receipt className={ic} />, permission: 'invoices.view' },
-            { label: 'المستحقات', route: 'club.dues', icon: <HandCoins className={ic} />, permission: 'dues.view' },
-            { label: 'المصروفات', route: 'club.expenses.index', icon: <Wallet className={ic} />, permission: 'expenses.manage' },
+        icon: <Wallet className={ic} />,
+        children: [
+            { label: 'الفواتير', route: 'club.invoices.index', permission: 'invoices.view', match: ['club.invoices.*', 'club.credit-notes.*'] },
+            { label: 'المدفوعات والإيصالات', route: 'club.payments.index', permission: 'invoices.view', match: 'club.payments.*' },
+            { label: 'المستحقات', route: 'club.dues', permission: 'dues.view' },
+            { label: 'المصروفات', route: 'club.expenses.index', permission: 'expenses.manage', match: 'club.expenses.*' },
         ],
-    },
-    {
-        label: 'المبيعات والمخزون',
-        items: [
-            { label: 'نقطة البيع', route: 'club.pos.index', icon: <ShoppingBag className={ic} />, permission: 'pos.sell' },
-            { label: 'عمليات البيع', route: 'club.pos.sales', icon: <CreditCard className={ic} />, permission: 'pos.sell' },
-            { label: 'المنتجات والمخزون', route: 'club.products.index', icon: <Package className={ic} />, permission: 'products.manage' },
-            { label: 'الموردون', route: 'club.suppliers.index', icon: <Building2 className={ic} />, permission: 'suppliers.manage' },
-            { label: 'المشتريات', route: 'club.purchases.index', icon: <Truck className={ic} />, permission: 'purchases.manage', match: 'club.purchases.*' },
-        ],
-    },
-    {
-        label: 'التقارير',
-        items: [{ label: 'التقارير', route: 'club.reports.index', icon: <BarChart3 className={ic} />, permission: 'reports.view' }],
     },
     {
         label: 'واتساب',
-        items: [
-            { label: 'المحادثات', route: 'club.inbox.index', icon: <MessageCircle className={ic} />, permission: 'whatsapp.inbox', match: 'club.inbox.*' },
-            { label: 'الحملات', route: 'club.campaigns.index', icon: <Megaphone className={ic} />, permission: 'campaigns.manage', match: 'club.campaigns.*' },
-            { label: 'القوالب والأتمتة', route: 'club.templates.index', icon: <Bell className={ic} />, permission: 'templates.manage' },
-            { label: 'سجل الرسائل', route: 'club.messages.index', icon: <ScrollText className={ic} />, permission: 'whatsapp.inbox' },
+        icon: <MessageCircle className={ic} />,
+        children: [
+            { label: 'المحادثات', route: 'club.inbox.index', permission: 'whatsapp.inbox', match: 'club.inbox.*' },
+            { label: 'الحملات', route: 'club.campaigns.index', permission: 'campaigns.manage', match: 'club.campaigns.*' },
+            { label: 'القوالب', route: 'club.templates.index', permission: 'templates.manage', match: 'club.templates.*' },
+            { label: 'الأتمتة', route: 'club.automation.index', permission: 'templates.manage' },
+            { label: 'سجل الرسائل', route: 'club.messages.index', permission: 'whatsapp.inbox' },
         ],
     },
+    { label: 'التقارير', route: 'club.reports.index', icon: <BarChart3 className={ic} />, permission: 'reports.view', match: 'club.reports.*' },
     {
         label: 'الموقع الإلكتروني',
-        items: [
-            { label: 'محتوى الموقع', route: 'club.website.edit', icon: <Globe className={ic} />, permission: 'website.manage' },
-            { label: 'الأخبار والعروض', route: 'club.website.posts.index', icon: <Newspaper className={ic} />, permission: 'website.manage' },
-            { label: 'رسائل التواصل', route: 'club.website.messages', icon: <Mail className={ic} />, permission: 'website.manage' },
+        icon: <Globe className={ic} />,
+        children: [
+            { label: 'المحتوى', route: 'club.website.edit', permission: 'website.manage' },
+            { label: 'الأخبار والعروض', route: 'club.website.posts.index', permission: 'website.manage', match: 'club.website.posts.*' },
+            { label: 'رسائل التواصل', route: 'club.website.messages', permission: 'website.manage' },
         ],
     },
     {
         label: 'الإعدادات',
-        items: [
-            { label: 'إعدادات النادي', route: 'club.settings.edit', icon: <Settings className={ic} />, permission: 'settings.manage' },
-            { label: 'الفروع', route: 'club.branches.index', icon: <Building2 className={ic} />, permission: 'branches.manage' },
-            { label: 'المستخدمون', route: 'club.users.index', icon: <Users className={ic} />, permission: 'users.manage' },
-            { label: 'الأدوار والصلاحيات', route: 'club.roles.index', icon: <ShieldCheck className={ic} />, permission: 'roles.manage' },
-            { label: 'الربط (الدفع وواتساب)', route: 'club.integrations.index', icon: <KeyRound className={ic} />, permission: 'integrations.manage' },
-            { label: 'سجل العمليات', route: 'club.audit.index', icon: <ScrollText className={ic} />, permission: 'audit.view' },
-            { label: 'النسخ الاحتياطي', route: 'club.backups.index', icon: <Database className={ic} />, permission: 'backups.manage' },
-            { label: 'اشتراك المنصة', route: 'club.billing', icon: <Receipt className={ic} />, permission: 'billing.view' },
-        ],
+        route: 'club.settings.index',
+        icon: <Settings className={ic} />,
+        permission: SETTINGS_PERMISSIONS,
+        match: ['club.settings.*', 'club.branches.*', 'club.users.*', 'club.roles.*', 'club.integrations.*', 'club.audit.*', 'club.backups.*', 'club.billing'],
     },
 ];
+
+const patterns = (item: { route: string; match?: string | string[] }) => (item.match === undefined ? [item.route] : Array.isArray(item.match) ? item.match : [item.match]);
+const isActive = (item: { route: string; match?: string | string[] }) => patterns(item).some((p) => route().current(p));
 
 export default function ClubLayout({ title, children }: { title: string; children: ReactNode }) {
     const { auth, tenant } = useShared();
     const can = useCan();
     const [open, setOpen] = useState(false);
 
-    const groups = NAV.map((g) => ({
-        ...g,
-        items: g.items.filter((i) => (!i.permission || can(i.permission)) && (!i.roleKey || auth?.user.role_key === i.roleKey || can('classes.manage'))),
-    })).filter((g) => g.items.length > 0);
+    const allowed = (permission?: string | string[]) => !permission || (Array.isArray(permission) ? permission.some(can) : can(permission));
+    const visible = (leaf: Leaf) => allowed(leaf.permission) && (!leaf.roleKey || auth?.user.role_key === leaf.roleKey || can('classes.manage'));
 
-    const isActive = (item: Item) => route().current(item.match ?? item.route);
+    const sections = NAV.flatMap((section): Section[] => {
+        if (!('children' in section)) return allowed(section.permission) ? [section] : [];
+        const items = section.children.filter(visible);
+        return items.length ? [{ ...section, children: items }] : [];
+    });
 
-    const sidebar = (
-        <nav className="flex h-full flex-col">
+    // The section holding the current page starts open; the others open on demand.
+    const [expanded, setExpanded] = useState<Set<string>>(() => new Set(sections.filter((s) => 'children' in s && s.children.some(isActive)).map((s) => s.label)));
+    const toggle = (label: string) => setExpanded((prev) => {
+        const next = new Set(prev);
+        if (next.has(label)) next.delete(label);
+        else next.add(label);
+        return next;
+    });
+
+    // Phones: Esc closes the drawer, and the page behind it does not scroll.
+    useEffect(() => {
+        if (!open) return;
+        const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+        document.addEventListener('keydown', onKey);
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.removeEventListener('keydown', onKey);
+            document.body.style.overflow = '';
+        };
+    }, [open]);
+
+    const linkClass = (active: boolean) =>
+        cn('flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition', active ? 'bg-brand font-medium text-white shadow-sm shadow-brand/20' : 'text-ink/80 hover:bg-brand-50 hover:text-ink');
+
+    const sidebar = (id: string) => (
+        <nav className="flex h-full flex-col" aria-label="القائمة الرئيسية">
             <div className="flex items-center gap-3 px-5 py-5">
                 {tenant?.logo_url ? (
                     <img src={tenant.logo_url} alt="" className="size-10 rounded-xl object-cover" />
@@ -130,30 +146,70 @@ export default function ClubLayout({ title, children }: { title: string; childre
                     <p className="truncate text-xs text-muted">{auth?.user.role}</p>
                 </div>
             </div>
-            <div className="flex-1 space-y-5 overflow-y-auto px-3 pb-6">
-                {groups.map((group, gi) => (
-                    <div key={gi}>
-                        {group.label && <p className="mb-1.5 px-3 text-[11px] font-semibold tracking-wide text-muted/80">{group.label}</p>}
-                        <ul className="space-y-0.5">
-                            {group.items.map((item) => (
-                                <li key={item.route}>
-                                    <Link
-                                        href={route(item.route)}
-                                        onClick={() => setOpen(false)}
-                                        className={cn(
-                                            'flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition',
-                                            isActive(item) ? 'bg-brand text-white shadow-sm shadow-brand/20' : 'text-ink/80 hover:bg-brand-50 hover:text-ink',
-                                        )}
-                                    >
-                                        {item.icon}
-                                        <span className="truncate">{item.label}</span>
+            <ScrollIntoActive className="flex-1 overflow-y-auto overscroll-contain px-3 pb-6">
+                <ul className="space-y-1">
+                    {sections.map((section, i) => {
+                        if (!('children' in section)) {
+                            const active = isActive(section);
+                            return (
+                                <li key={section.label}>
+                                    <Link href={route(section.route)} onClick={() => setOpen(false)} aria-current={active ? 'page' : undefined} className={linkClass(active)}>
+                                        {section.icon}
+                                        <span className="truncate">{section.label}</span>
                                     </Link>
                                 </li>
-                            ))}
-                        </ul>
-                    </div>
-                ))}
-            </div>
+                            );
+                        }
+                        const isOpen = expanded.has(section.label);
+                        const holdsActive = section.children.some(isActive);
+                        const panel = `${id}-section-${i}`;
+                        return (
+                            <li key={section.label}>
+                                <button
+                                    type="button"
+                                    onClick={() => toggle(section.label)}
+                                    aria-expanded={isOpen}
+                                    aria-controls={panel}
+                                    className={cn(
+                                        'flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm transition',
+                                        holdsActive ? 'font-semibold text-brand-700' : 'text-ink/80 hover:bg-brand-50 hover:text-ink',
+                                        holdsActive && !isOpen && 'bg-brand-50',
+                                    )}
+                                >
+                                    {section.icon}
+                                    <span className="flex-1 truncate text-start">{section.label}</span>
+                                    <ChevronDown className={cn('size-4 shrink-0 text-muted transition-transform duration-200', isOpen && 'rotate-180')} />
+                                </button>
+                                {/* Closed sections stay in the page (inert) so they can animate open. */}
+                                <div id={panel} inert={!isOpen} className={cn('grid transition-[grid-template-rows] duration-200', isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+                                    <div className="min-h-0 overflow-hidden">
+                                        <ul className="ms-[1.15rem] mt-0.5 mb-1 space-y-0.5 border-s border-line ps-3">
+                                            {section.children.map((leaf) => {
+                                                const active = isActive(leaf);
+                                                return (
+                                                    <li key={leaf.route}>
+                                                        <Link
+                                                            href={route(leaf.route)}
+                                                            onClick={() => setOpen(false)}
+                                                            aria-current={active ? 'page' : undefined}
+                                                            className={cn(
+                                                                'block truncate rounded-lg px-3 py-1.5 text-[13px] transition',
+                                                                active ? 'bg-brand font-medium text-white shadow-sm shadow-brand/20' : 'text-ink/70 hover:bg-brand-50 hover:text-ink',
+                                                            )}
+                                                        >
+                                                            {leaf.label}
+                                                        </Link>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </li>
+                        );
+                    })}
+                </ul>
+            </ScrollIntoActive>
         </nav>
     );
 
@@ -161,16 +217,16 @@ export default function ClubLayout({ title, children }: { title: string; childre
         <>
             <Head title={`${title} · ${tenant?.name ?? ''}`} />
             <div className="min-h-screen lg:ps-64">
-                <aside className="fixed inset-y-0 start-0 z-30 hidden w-64 border-e border-line bg-white lg:block">{sidebar}</aside>
+                <aside className="fixed inset-y-0 start-0 z-30 hidden w-64 border-e border-line bg-white lg:block">{sidebar('side')}</aside>
 
                 {open && (
                     <div className="fixed inset-0 z-40 lg:hidden">
                         <div className="absolute inset-0 bg-ink/40" onClick={() => setOpen(false)} />
-                        <aside className="absolute inset-y-0 start-0 w-72 bg-white shadow-xl">
+                        <aside className="absolute inset-y-0 start-0 w-72 max-w-[85vw] bg-white shadow-xl" role="dialog" aria-modal="true" aria-label="القائمة">
                             <button className="absolute top-4 end-3 grid size-8 place-items-center rounded-lg hover:bg-brand-50" onClick={() => setOpen(false)} aria-label="إغلاق">
                                 <X className="size-4" />
                             </button>
-                            {sidebar}
+                            {sidebar('drawer')}
                         </aside>
                     </div>
                 )}
@@ -203,4 +259,13 @@ export default function ClubLayout({ title, children }: { title: string; childre
             <Flash />
         </>
     );
+}
+
+/** The menu scrolls on its own; when a page opens, its link is brought into view. */
+function ScrollIntoActive({ className, children }: { className: string; children: ReactNode }) {
+    const ref = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        ref.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest' });
+    }, []);
+    return <div ref={ref} className={className}>{children}</div>;
 }
