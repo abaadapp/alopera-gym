@@ -35,4 +35,19 @@ return [
         ],
     ],
 
+    // WhatsApp Business Platform (Meta Cloud API). Club credentials are stored
+    // per tenant; these values are platform-wide.
+    'whatsapp' => [
+        'driver' => env('WHATSAPP_DRIVER', 'log'), // log|meta
+        'graph_url' => 'https://graph.facebook.com',
+        'graph_version' => env('WHATSAPP_GRAPH_VERSION', 'v21.0'),
+        'app_secret' => env('WHATSAPP_APP_SECRET'),
+        'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
+    ],
+
+    'paymob' => [
+        'base_url' => env('PAYMOB_BASE_URL', 'https://oman.paymob.com'),
+        'intent_ttl_seconds' => 3600,
+    ],
+
 ];

@@ -1,0 +1,131 @@
+<?php
+
+namespace App\Modules\Inventory\Services;
+
+use App\Core\Support\BusinessRuleException;
+use App\Core\Support\Money;
+use App\Core\Support\NumberSequence;
+use App\Modules\Finance\Models\Payment;
+use App\Modules\Finance\Services\InvoiceService;
+use App\Modules\Finance\Services\PaymentService;
+use App\Modules\Gym\Models\Member;
+use App\Modules\Inventory\Models\Product;
+use App\Modules\Inventory\Models\Sale;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Front-desk shop: one call sells the items, takes the stock off the shelf,
+ * issues a paid invoice and records the payment — or does none of it.
+ */
+final class PosService
+{
+    public function __construct(
+        private readonly StockService $stock,
+        private readonly InvoiceService $invoices,
+        private readonly PaymentService $payments,
+    ) {
+    }
+
+    /**
+     * @param  list<array{product_id: int, quantity: float|int}>  $items
+     */
+    public function checkout(array $items, string $method, ?Member $member = null, string|float $discount = 0, ?int $branchId = null): Sale
+    {
+        if (! in_array($method, ['cash', 'card'], true)) {
+            throw new BusinessRuleException('pos.method', 'طريقة الدفع في نقطة البيع: نقدًا أو بطاقة.', 'payment_method');
+        }
+        if ($items === []) {
+            throw new BusinessRuleException('pos.empty', 'السلة فارغة.', 'items');
+        }
+
+        return DB::transaction(function () use ($items, $method, $member, $discount, $branchId) {
+            $products = Product::whereIn('id', array_column($items, 'product_id'))->where('is_active', true)->get()->keyBy('id');
+            $lines = [];
+            $subtotal = '0';
+
+            foreach ($items as $item) {
+                $product = $products->get($item['product_id']);
+                $qty = (float) $item['quantity'];
+                if (! $product || $qty <= 0) {
+                    throw new BusinessRuleException('pos.item', 'منتج غير متاح في السلة.', 'items');
+                }
+                $lineTotal = Money::mul($product->price, $qty);
+                $subtotal = Money::add($subtotal, $lineTotal);
+                $lines[] = compact('product', 'qty', 'lineTotal');
+            }
+
+            if (Money::toMinor($discount) < 0 || Money::cmp($discount, $subtotal) > 0) {
+                throw new BusinessRuleException('pos.discount', 'الخصم أكبر من قيمة السلة.', 'discount');
+            }
+
+            $sale = Sale::create([
+                'branch_id' => $branchId,
+                'customer_type' => $member?->getMorphClass(),
+                'customer_id' => $member?->id,
+                'number' => NumberSequence::next('sale'),
+                'status' => 'completed',
+                'subtotal' => $subtotal,
+                'discount' => Money::normalize($discount),
+                'tax' => '0',
+                'total' => Money::sub($subtotal, $discount),
+                'payment_method' => $method,
+                'cashier_id' => Auth::guard('web')->id(),
+            ]);
+
+            $invoiceLines = [];
+            foreach ($lines as $i => $line) {
+                $sale->items()->create([
+                    'product_id' => $line['product']->id,
+                    'name' => $line['product']->name,
+                    'quantity' => $line['qty'],
+                    'unit_price' => $line['product']->price,
+                    'unit_cost' => $line['product']->cost,
+                    'line_total' => $line['lineTotal'],
+                ]);
+                $this->stock->move($line['product'], -$line['qty'], 'sale', $sale);
+                $invoiceLines[] = [
+                    'description' => $line['product']->name,
+                    'quantity' => $line['qty'],
+                    'unit_price' => $line['product']->price,
+                    // the basket discount sits on the first line so totals match the sale
+                    'discount' => $i === 0 ? $discount : 0,
+                    'itemable' => $line['product'],
+                ];
+            }
+
+            $invoice = $this->invoices->issue($member, $invoiceLines, ['type' => 'pos', 'branch_id' => $branchId], 'عميل نقدي');
+            if ($invoice->isOpen()) {
+                $this->payments->record($invoice, $invoice->balance(), $method === 'card' ? 'card' : 'cash', ['reference' => $sale->number, 'branch_id' => $branchId]);
+            }
+
+            $sale->forceFill(['invoice_id' => $invoice->id, 'tax' => $invoice->tax_total, 'total' => $invoice->total])->save();
+
+            return $sale->load('items');
+        });
+    }
+
+    /** Void a sale: stock goes back, the payment is refunded. */
+    public function void(Sale $sale, string $reason): Sale
+    {
+        return DB::transaction(function () use ($sale, $reason) {
+            $sale = Sale::with('items.product')->whereKey($sale->id)->lockForUpdate()->firstOrFail();
+            if ($sale->status !== 'completed') {
+                throw new BusinessRuleException('pos.voided', 'العملية ملغاة بالفعل.');
+            }
+
+            foreach ($sale->items as $item) {
+                $this->stock->move($item->product, (float) $item->quantity, 'void', $sale, $reason);
+            }
+
+            $payment = Payment::where('invoice_id', $sale->invoice_id)->where('kind', Payment::KIND_PAYMENT)->where('status', Payment::COMPLETED)->first();
+            if ($payment) {
+                $this->payments->refund($payment, $payment->amount, $payment->method === 'card' ? 'card' : 'cash', 'إلغاء عملية بيع '.$sale->number.': '.$reason);
+            }
+
+            $sale->forceFill(['status' => 'voided', 'voided_at' => now()])->save();
+
+            return $sale;
+        });
+    }
+}
