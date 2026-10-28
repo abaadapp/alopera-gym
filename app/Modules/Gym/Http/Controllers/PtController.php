@@ -33,7 +33,7 @@ class PtController extends Controller
                 ]),
             'upcoming' => PtSession::with(['member:id,full_name', 'trainer:id,name'])->where('status', PtSession::SCHEDULED)
                 ->where('starts_at', '>=', now()->startOfDay())->orderBy('starts_at')->limit(50)->get()
-                ->map(fn (PtSession $s) => ['id' => $s->id, 'member' => $s->member?->full_name, 'trainer' => $s->trainer?->name, 'starts_at' => $s->starts_at->format('Y-m-d H:i'), 'ends_at' => $s->ends_at->format('H:i'), 'status' => $s->status]),
+                ->map(fn (PtSession $s) => ['id' => $s->id, 'member' => $s->member?->full_name, 'trainer' => $s->trainer?->name, 'starts_at' => $s->starts_at->format('Y-m-d H:i'), 'ends_at' => $s->ends_at->format('H:i'), 'status' => $s->status, 'started' => $s->starts_at->lte(now())]),
             'trainers' => Trainer::where('is_active', true)->get(['id', 'name']),
             'filters' => $request->only('status'),
         ]);
@@ -67,6 +67,7 @@ class PtController extends Controller
         $data = $request->validate([
             'status' => ['required', 'in:completed,no_show,cancelled'],
             'notes' => ['nullable', 'string', 'max:500'],
+            'reason' => ['nullable', 'string', 'max:255'], // why it is closed before its start time
         ]);
 
         $user = $request->user();
@@ -74,7 +75,7 @@ class PtController extends Controller
             abort_unless($user->trainer && $ptSession->trainer_id === $user->trainer->id, 403);
         }
 
-        $this->pt->close($ptSession, $data['status'], $data['notes'] ?? null);
+        $this->pt->close($ptSession, $data['status'], $data['notes'] ?? null, $data['reason'] ?? null);
 
         return back()->with('success', 'تم تحديث الجلسة.');
     }

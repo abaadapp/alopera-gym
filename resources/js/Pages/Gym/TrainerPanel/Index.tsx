@@ -1,6 +1,7 @@
-import { Link, router } from '@inertiajs/react';
-import { CalendarDays, Check, ChevronLeft, Phone, Sparkles, UserX, Users } from 'lucide-react';
+import { Link } from '@inertiajs/react';
+import { CalendarDays, ChevronLeft, Phone, Sparkles, Users } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import PtCloseActions from '@/Components/PtCloseActions';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, StatCard } from '@/Components/ui';
 import { dayName, phone as fmtPhone, time } from '@/lib/format';
 import { cn } from '@/lib/cn';
@@ -20,7 +21,7 @@ type SessionItem = {
     status: string;
 };
 
-type PtItem = { id: number; member: string | null; phone: string | null; starts_at: string; ends_at: string; status: string; notes: string | null };
+type PtItem = { id: number; member: string | null; phone: string | null; starts_at: string; ends_at: string; status: string; notes: string | null; started: boolean };
 
 const PT_STATUS: Record<string, [string, 'blue' | 'green' | 'red' | 'gray']> = {
     scheduled: ['مجدولة', 'blue'],
@@ -63,7 +64,6 @@ export default function TrainerPanel({ trainer, sessions, recent, pt }: { traine
     const today = sessions.filter((s) => s.date === todayStr);
     const later = sessions.filter((s) => s.date !== todayStr);
     const ptUpcoming = pt.filter((p) => p.status === 'scheduled');
-    const close = (id: number, status: 'completed' | 'no_show') => router.post(route('club.pt.close', id), { status }, { preserveScroll: true });
 
     return (
         <ClubLayout title="شاشة المدربة">
@@ -113,8 +113,7 @@ export default function TrainerPanel({ trainer, sessions, recent, pt }: { traine
                                         </div>
                                         {p.status === 'scheduled' && (
                                             <div className="mt-2 flex gap-1.5">
-                                                <Button size="sm" variant="success" icon={<Check className="size-3.5" />} onClick={() => close(p.id, 'completed')}>تمت</Button>
-                                                <Button size="sm" variant="outline" icon={<UserX className="size-3.5" />} onClick={() => close(p.id, 'no_show')}>غابت</Button>
+                                                <PtCloseActions id={p.id} started={p.started} />
                                             </div>
                                         )}
                                     </li>

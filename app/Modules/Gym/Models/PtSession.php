@@ -22,11 +22,15 @@ class PtSession extends Model
 
     protected $guarded = ['id', 'tenant_id'];
 
+    protected $attributes = ['closed_early' => false];
+
     protected function casts(): array
     {
         return [
             'starts_at' => 'immutable_datetime',
             'ends_at' => 'immutable_datetime',
+            'closed_at' => 'immutable_datetime',
+            'closed_early' => 'boolean',
         ];
     }
 

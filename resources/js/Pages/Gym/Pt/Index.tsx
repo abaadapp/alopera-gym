@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link, router, useForm } from '@inertiajs/react';
-import { CalendarPlus, Check, Package, UserCog, UserX, X } from 'lucide-react';
+import { CalendarPlus, Package, UserCog, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import PtCloseActions from '@/Components/PtCloseActions';
 import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Pagination, Select, Tabs, Textarea } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, dayName, money, time } from '@/lib/format';
@@ -22,7 +23,7 @@ type Subscription = {
     remaining: number;
 };
 
-type Upcoming = { id: number; member: string | null; trainer: string | null; starts_at: string; ends_at: string; status: string };
+type Upcoming = { id: number; member: string | null; trainer: string | null; starts_at: string; ends_at: string; status: string; started: boolean };
 
 const STATUS: Record<string, [string, 'amber' | 'green' | 'gray' | 'red']> = {
     pending: ['بانتظار الدفع', 'amber'],
@@ -59,8 +60,6 @@ export default function PtIndex({ subscriptions, upcoming, trainers, filters }: 
         form.transform((d) => ({ ...d, trainer_id: d.trainer_id || null, starts_at: d.starts_at.replace('T', ' ') }));
         form.post(route('club.pt.schedule', target.id), { preserveScroll: true, onSuccess: () => setTarget(null) });
     };
-
-    const close = (id: number, status: 'completed' | 'no_show') => router.post(route('club.pt.close', id), { status }, { preserveScroll: true });
 
     const grouped = upcoming.reduce<Record<string, Upcoming[]>>((acc, s) => {
         (acc[s.starts_at.slice(0, 10)] ??= []).push(s);
@@ -147,8 +146,7 @@ export default function PtIndex({ subscriptions, upcoming, trainers, filters }: 
                                                     </div>
                                                 </div>
                                                 <div className="mt-2 flex flex-wrap gap-1.5">
-                                                    <Button size="sm" variant="success" icon={<Check className="size-3.5" />} onClick={() => close(s.id, 'completed')}>تمت</Button>
-                                                    <Button size="sm" variant="outline" icon={<UserX className="size-3.5" />} onClick={() => close(s.id, 'no_show')}>غابت</Button>
+                                                    <PtCloseActions id={s.id} started={s.started} />
                                                     <ConfirmAction url={route('club.pt.close', s.id)} data={{ status: 'cancelled' }} title="إلغاء الجلسة" message="الجلسة الملغاة لا تُستهلك من الباقة." confirmLabel="إلغاء الجلسة" variant="ghost" icon={<X className="size-3.5" />}>
                                                         إلغاء
                                                     </ConfirmAction>

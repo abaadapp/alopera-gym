@@ -29,7 +29,7 @@ class TrainerPanelController extends Controller
                 ->between($from->subDays(7), $from)->orderByDesc('starts_at')->limit(10)->get()->map(fn ($s) => GymPresenter::session($s)) : [],
             'pt' => $trainer ? PtSession::with('member:id,full_name,phone')->where('trainer_id', $trainer->id)
                 ->where('starts_at', '>=', $from->subDay())->orderBy('starts_at')->limit(30)->get()
-                ->map(fn ($s) => ['id' => $s->id, 'member' => $s->member?->full_name, 'phone' => $s->member?->phone, 'starts_at' => $s->starts_at->format('Y-m-d H:i'), 'ends_at' => $s->ends_at->format('H:i'), 'status' => $s->status, 'notes' => $s->notes]) : [],
+                ->map(fn ($s) => ['id' => $s->id, 'member' => $s->member?->full_name, 'phone' => $s->member?->phone, 'starts_at' => $s->starts_at->format('Y-m-d H:i'), 'ends_at' => $s->ends_at->format('H:i'), 'status' => $s->status, 'notes' => $s->notes, 'started' => $s->starts_at->lte(now())]) : [],
         ]);
     }
 

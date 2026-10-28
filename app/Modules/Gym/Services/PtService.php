@@ -156,17 +156,30 @@ final class PtService
     }
 
     /** Completed and no-show both consume a session. */
-    public function close(PtSession $session, string $status, ?string $notes = null): PtSession
+    /**
+     * Completed / no-show consume a session; cancelled does not. Closing before the start time is
+     * an early close: only with pt.close_early, always with a reason, and written to the audit log.
+     * An early-closed session keeps its status (completed or no-show) — it is not a cancellation.
+     */
+    public function close(PtSession $session, string $status, ?string $notes = null, ?string $earlyReason = null): PtSession
     {
         if (! in_array($status, [PtSession::COMPLETED, PtSession::NO_SHOW, PtSession::CANCELLED], true)) {
             $this->fail('pt.status', 'حالة غير صالحة.');
         }
 
-        return DB::transaction(function () use ($session, $status, $notes) {
+        return DB::transaction(function () use ($session, $status, $notes, $earlyReason) {
             $session = PtSession::whereKey($session->id)->lockForUpdate()->firstOrFail();
 
             if ($session->status !== PtSession::SCHEDULED) {
                 $this->fail('pt.closed', 'تم إغلاق هذه الجلسة بالفعل.');
+            }
+
+            $early = $status !== PtSession::CANCELLED && now()->lt($session->starts_at);
+            if ($early && ! Auth::guard('web')->user()?->can('pt.close_early')) {
+                $this->fail('pt.too_early', 'لم يبدأ موعد الجلسة بعد. الإغلاق المبكر متاح للإدارة مع ذكر السبب.');
+            }
+            if ($early && blank($earlyReason)) {
+                $this->fail('pt.early_reason', 'اذكري سبب إغلاق الجلسة قبل موعدها.');
             }
 
             $session->forceFill([
@@ -174,7 +187,17 @@ final class PtService
                 'notes' => $notes ?? $session->notes,
                 'cancel_reason' => $status === PtSession::CANCELLED ? $notes : null,
                 'completed_by' => Auth::guard('web')->id(),
+                'closed_at' => now(),
+                'closed_early' => $early,
+                'early_reason' => $early ? $earlyReason : null,
             ])->save();
+
+            if ($early) {
+                $this->audit->log('pt.closed_early', $session, [
+                    'status' => $status, 'reason' => $earlyReason,
+                    'scheduled_at' => $session->starts_at->toIso8601String(), 'closed_at' => now()->toIso8601String(),
+                ]);
+            }
 
             if ($status !== PtSession::CANCELLED) {
                 $subscription = PtSubscription::whereKey($session->pt_subscription_id)->lockForUpdate()->firstOrFail();
