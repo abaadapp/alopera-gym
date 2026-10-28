@@ -21,3 +21,4 @@ Read `docs/ARCHITECTURE.md` first.
 - Style: `vendor/bin/pint`
 - Demo data: `php artisan migrate:fresh --seed` (refuses to run in production)
 - Release gate: `php artisan platform:preflight` (run by `scripts/deploy.sh`; fails locally by design)
+- Push + version tag: `scripts/release.sh` (`--dry-run` to preview); bumps from conventional-commit subjects, refuses env files and keys

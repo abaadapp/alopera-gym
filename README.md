@@ -86,7 +86,7 @@ composer dev                  # أمر واحد للتطوير: الخادم + V
 ## الاختبارات
 
 ```bash
-php artisan test              # 161 اختبارًا على PostgreSQL (alopera_gym_testing)
+php artisan test              # 177 اختبارًا على PostgreSQL (alopera_gym_testing)
 php artisan platform:preflight  # فحص جاهزية الإنتاج (يفشل محليًا عمدًا: بيئة تجريبية)
 npx tsc --noEmit              # فحص أنواع TypeScript
 vendor/bin/pint --test        # تنسيق PHP
@@ -96,6 +96,17 @@ vendor/bin/pint --test        # تنسيق PHP
 الحجوزات والسعة، أمان Webhook الخاص بـ Paymob ومنع التكرار، واتساب (التوقيع، الموافقات، الحملات، الحالات)، API الأجهزة،
 نقطة البيع والمخزون، النسخ والاستعادة، اشتراكات المنصة، الموقع والبوابة و SEO والدومين المخصص، التصدير وسجل التدقيق
 وتحديد المعدل. يعمل CI على GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+
+### الإصدارات
+
+```bash
+scripts/release.sh --dry-run  # يعرض رقم الإصدار التالي والـ commits دون رفع
+scripts/release.sh            # يرفع main إلى GitHub مع وسم الإصدار التالي (v0.1.0، v0.2.0، …)
+```
+
+رقم الإصدار يُحسب من عناوين الـ commits منذ آخر وسم: `feat` يرفع الرقم الأوسط، وأي نوع آخر يرفع الأخير.
+يرفض السكربت الرفع إذا وجد ملف `.env` أو مفاتيح أو رموز وصول في الـ commits الجديدة. الرفع لا ينشر على الخادم؛
+النشر يتم يدويًا على الخادم بـ `scripts/deploy.sh v0.1.0` لإصدار محدد.
 
 ---
 
