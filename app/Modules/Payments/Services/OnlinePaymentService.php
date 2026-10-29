@@ -118,9 +118,12 @@ final class OnlinePaymentService
 
             if (! $valid) {
                 $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, ['reason' => 'signature']));
+                $integration?->markFailed('وصل إشعار من Paymob بتوقيع غير صحيح، فرُفض. تحقق من HMAC secret.');
 
                 return $this->log($intent->tenant_id, $transactionId, $reference, false, 'rejected_signature', $payload, $ip);
             }
+
+            $integration->markWebhook();
 
             $succeeded = Arr::get($obj, 'success') === true
                 && Arr::get($obj, 'pending') !== true

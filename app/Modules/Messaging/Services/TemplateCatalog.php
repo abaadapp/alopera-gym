@@ -91,6 +91,12 @@ final class TemplateCatalog
             'variables' => ['member_name', 'class_name', 'date', 'time'],
             'body' => 'تم تأكيد حجزك يا {{1}} في حصة {{2}} يوم {{3}} الساعة {{4}}.',
         ],
+        'class_reminder' => [
+            'label' => 'تذكير بموعد الحصة المحجوزة',
+            'category' => 'utility',
+            'variables' => ['member_name', 'class_name', 'date', 'time'],
+            'body' => 'تذكير يا {{1}}: موعد حصة {{2}} يوم {{3}} الساعة {{4}}. نراك قريبًا.',
+        ],
         'booking_cancelled' => [
             'label' => 'إلغاء/تعديل الحجز',
             'category' => 'utility',

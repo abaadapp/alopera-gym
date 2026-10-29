@@ -1,6 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
-import { BarChart3, Briefcase, DoorOpen, Dumbbell, FolderOpen, Globe, LayoutGrid, MessageCircle, ScanLine, Settings, ShoppingBag, Ticket, Users, Wallet } from 'lucide-react';
+import { BarChart3, Blocks, Briefcase, DoorOpen, Dumbbell, FolderOpen, Globe, LayoutGrid, MessageCircle, ScanLine, Settings, ShoppingBag, Ticket, Users, Wallet } from 'lucide-react';
 import { useCan, useShared } from '@/hooks/useShared';
 
 /**
@@ -16,7 +16,7 @@ export type NavSection = { label: string; icon: LucideIcon; tabs: NavTab[]; matc
 export type NavGroup = { sections: NavSection[]; footer?: boolean };
 
 /** Settings screens live behind the settings hub; none of them appears in the main menu. */
-const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'integrations.manage', 'audit.view', 'backups.manage', 'billing.view', 'accounting.manage', 'documents.manage'];
+const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'billing.view', 'accounting.manage', 'documents.manage'];
 
 export const NAV: NavGroup[] = [
     {
@@ -55,7 +55,6 @@ export const NAV: NavGroup[] = [
                 icon: DoorOpen,
                 tabs: [
                     { label: 'سجل الدخول', route: 'club.checkins.index', permission: 'checkin.view', match: 'club.checkins.*' },
-                    { label: 'أجهزة الدخول', route: 'club.devices.index', permission: 'devices.manage', match: 'club.devices.*' },
                 ],
             },
         ],
@@ -158,10 +157,17 @@ export const NAV: NavGroup[] = [
         footer: true,
         sections: [
             {
+                // One page of three cards (Paymob, access devices, WhatsApp Business); each card opens its own settings.
+                label: 'التطبيقات التكاملية',
+                icon: Blocks,
+                tabs: [{ label: 'التطبيقات التكاملية', route: 'club.integrations.index', permission: ['integrations.manage', 'devices.manage'] }],
+                match: ['club.integrations.*', 'club.devices.*'],
+            },
+            {
                 label: 'الإعدادات',
                 icon: Settings,
                 tabs: [{ label: 'الإعدادات', route: 'club.settings.index', permission: SETTINGS_PERMISSIONS }],
-                match: ['club.settings.*', 'club.branches.*', 'club.users.*', 'club.roles.*', 'club.integrations.*', 'club.audit.*', 'club.backups.*', 'club.billing'],
+                match: ['club.settings.*', 'club.branches.*', 'club.users.*', 'club.roles.*', 'club.audit.*', 'club.backups.*', 'club.billing'],
             },
         ],
     },

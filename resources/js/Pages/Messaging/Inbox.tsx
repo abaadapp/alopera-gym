@@ -79,7 +79,7 @@ export default function Inbox({ conversations, active, enabled, filters }: Props
                 <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                     ربط واتساب غير مفعّل لهذا النادي، لذلك لن تصل رسائل جديدة ولن تُرسل الردود.
                     {can('integrations.manage') && (
-                        <Link href={route('club.integrations.index')} className="ms-2 font-medium underline">فعّله من إعدادات الربط</Link>
+                        <Link href={route('club.integrations.index')} className="ms-2 font-medium underline">فعّله من التطبيقات التكاملية</Link>
                     )}
                 </div>
             )}

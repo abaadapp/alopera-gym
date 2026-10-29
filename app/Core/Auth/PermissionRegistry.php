@@ -43,7 +43,7 @@ final class PermissionRegistry
         'access' => ['label' => 'الدخول والحضور', 'permissions' => [
             'checkin.perform' => 'تسجيل دخول الأعضاء',
             'checkin.view' => 'عرض سجل الدخول',
-            'devices.manage' => 'إدارة أجهزة الدخول',
+            'devices.manage' => 'أجهزة البصمة والبوابات',
         ]],
         'finance' => ['label' => 'المالية', 'permissions' => [
             'invoices.view' => 'عرض الفواتير',
@@ -108,7 +108,7 @@ final class PermissionRegistry
             'branches.manage' => 'الفروع',
             'users.manage' => 'المستخدمون',
             'roles.manage' => 'الأدوار والصلاحيات',
-            'integrations.manage' => 'إعدادات الدفع وواتساب',
+            'integrations.manage' => 'التطبيقات التكاملية: مفاتيح Paymob وواتساب',
             'audit.view' => 'سجل التدقيق',
             'backups.manage' => 'النسخ الاحتياطي والاستعادة',
             'billing.view' => 'اشتراك النادي في المنصة',

@@ -14,6 +14,22 @@ class AccessCredential extends Model
 
     public const TYPES = ['card', 'fingerprint', 'pin', 'barcode'];
 
+    /**
+     * A fingerprint is enrolled and matched on the device; the system keeps only the user number the device gives
+     * it, never the print, its image or its template. A short id is all that fits here.
+     */
+    public const FINGERPRINT_ID = '/^[A-Za-z0-9_-]{1,32}$/';
+
+    /** @return array<string, list<string>> */
+    public static function identifierRules(string $type): array
+    {
+        return ['identifier' => array_merge(['required', 'string', 'max:128'], $type === 'fingerprint' ? ['regex:'.self::FINGERPRINT_ID] : [])];
+    }
+
+    public const IDENTIFIER_MESSAGES = [
+        'identifier.regex' => 'للبصمة أدخل رقم المستخدم المسجّل في جهاز البصمة فقط (حروف وأرقام حتى 32 خانة). البصمة نفسها لا تُحفظ في النظام.',
+    ];
+
     protected $table = 'gym_access_credentials';
 
     protected $guarded = ['id', 'tenant_id'];

@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { BellRing, Building2, ChevronLeft, Clock, Database, FileClock, Landmark, Plug, ScrollText, ShoppingBag, SlidersHorizontal, UserCog, type LucideIcon } from 'lucide-react';
+import { BellRing, Building2, ChevronLeft, Clock, Database, FileClock, Landmark, ScrollText, ShoppingBag, SlidersHorizontal, UserCog, type LucideIcon } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { PageHeader } from '@/Components/ui';
 import { useCan, useShared } from '@/hooks/useShared';
@@ -17,9 +17,9 @@ const SECTIONS: { title: string; items: Entry[] }[] = [
         ],
     },
     {
-        title: 'الربط والإشعارات',
+        // Paymob, WhatsApp and the access devices are set up in their own section, «التطبيقات التكاملية».
+        title: 'الإشعارات',
         items: [
-            { title: 'الربط مع واتساب وPaymob', description: 'واتساب للأعمال وبوابة الدفع الإلكتروني للأعضاء', route: 'club.integrations.index', permission: 'integrations.manage', icon: Plug },
             { title: 'الإشعارات', description: 'تذكيرات انتهاء العضوية والمتابعة وإشعارات الحصص', route: 'club.settings.notifications', permission: 'settings.manage', icon: BellRing },
         ],
     },

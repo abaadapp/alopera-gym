@@ -19,6 +19,9 @@ class AccessDevice extends Model
 
     public const TYPES = ['fingerprint', 'qr_reader', 'barcode_reader', 'rfid_reader', 'turnstile', 'kiosk'];
 
+    /** Online: it called the API (a heartbeat or a reading) within this many minutes. */
+    public const ONLINE_MINUTES = 10;
+
     protected $table = 'gym_access_devices';
 
     protected $guarded = ['id', 'tenant_id', 'token_hash', 'token_last4'];
@@ -54,6 +57,11 @@ class AccessDevice extends Model
         ]);
 
         return $token;
+    }
+
+    public function isOnline(): bool
+    {
+        return $this->last_seen_at !== null && $this->last_seen_at->greaterThan(now()->subMinutes(self::ONLINE_MINUTES));
     }
 
     public function acceptsMembers(): bool

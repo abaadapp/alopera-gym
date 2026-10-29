@@ -41,6 +41,7 @@ Route::prefix('app')->name('club.')->middleware(['auth', 'tenant.user', 'tenant.
     require app_path('Modules/Accounting/Http/routes.php');
     require app_path('Modules/Payroll/Http/routes.php');
     require app_path('Modules/Documents/Http/routes.php');
+    require app_path('Modules/Integrations/Http/routes.php');
     // Sales (products, point of sale, website orders) and, separately, suppliers and purchases — each behind its
     // own switch (GYM_SALES_MODULE, GYM_INVENTORY_MODULE); a switched-off module answers 404, its data is kept.
     Route::middleware('module:sales')->group(app_path('Modules/Inventory/Http/routes.php'));

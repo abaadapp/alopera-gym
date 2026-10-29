@@ -160,7 +160,7 @@ final class DocumentService
         $raised = 0;
 
         BusinessDocument::where('status', 'active')->whereNotNull('expiry_date')->where('expiry_date', '<=', $horizon)
-            ->with('responsible')->orderBy('id')
+            ->with('responsible.role')->orderBy('id')
             ->each(function (BusinessDocument $document) use ($settings, $today, &$raised) {
                 $left = $document->daysLeft($today);
                 $threshold = $left < 0 ? 0 : collect($settings['alert_days'])->filter(fn ($d) => $left <= $d)->min();
@@ -188,12 +188,17 @@ final class DocumentService
         $alert->forceFill(['acknowledged_at' => now(), 'acknowledged_by' => Auth::guard('web')->id()])->save();
     }
 
-    /** queued | skipped:<reason> — never a promise: only an enabled integration and an approved template send. */
+    /** queued | skipped:<reason> — never a promise: only an enabled integration, an approved template and an authorised recipient send. */
     private function sendWhatsApp(BusinessDocument $document, DocumentAlert $alert): string
     {
         $user = $document->responsible;
         if (! $user instanceof User) {
             return 'skipped:no_responsible';
+        }
+        // Only to someone still allowed to see this document: an active account with access to documents (and, for a
+        // confidential one, the confidential permission or being its responsible — which they are).
+        if (! $user->is_active || ! $user->can('documents.view') || ! $document->isVisibleTo($user)) {
+            return 'skipped:not_authorized';
         }
         $message = $this->whatsapp->queueStaffTemplate($user, 'document_expiry', [
             'user_name' => $user->name,

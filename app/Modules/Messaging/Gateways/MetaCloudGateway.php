@@ -87,6 +87,42 @@ final class MetaCloudGateway implements WhatsAppGateway
         return GatewayResult::failed($code, Str::limit($message, 250), $retryable);
     }
 
+    /**
+     * Read the club's number from the Graph API with its own token — a read-only call that proves the phone number
+     * id and the access token belong together. Sends nothing.
+     *
+     * @return array{ok: bool, message: string, number?: array<string, string|null>}
+     */
+    public function describeNumber(TenantIntegration $integration): array
+    {
+        $phoneId = $integration->credential('phone_number_id');
+        $token = $integration->credential('access_token');
+        if (! $phoneId || ! $token) {
+            return ['ok' => false, 'message' => 'أدخل Phone number ID وAccess token أولًا.'];
+        }
+
+        $url = rtrim(config('services.whatsapp.graph_url'), '/').'/'.config('services.whatsapp.graph_version').'/'.$phoneId;
+        try {
+            $response = Http::withToken($token)->acceptJson()->timeout(15)
+                ->get($url, ['fields' => 'display_phone_number,verified_name,quality_rating,code_verification_status']);
+        } catch (ConnectionException) {
+            return ['ok' => false, 'message' => 'تعذّر الاتصال بخوادم Meta. تحقق من الاتصال بالإنترنت وحاول مرة أخرى.'];
+        }
+
+        if (! $response->successful() || ! is_string($response->json('display_phone_number'))) {
+            $code = (string) ($response->json('error.code') ?? $response->status());
+            $detail = (string) ($response->json('error.message') ?? 'WhatsApp API error');
+
+            return ['ok' => false, 'message' => 'رفضت Meta الطلب (رمز '.$code.'): '.Str::limit($detail, 160)];
+        }
+
+        return ['ok' => true, 'message' => 'تم التحقق من الرقم والرمز لدى Meta.', 'number' => [
+            'display_phone' => $response->json('display_phone_number'),
+            'verified_name' => $response->json('verified_name'),
+            'quality_rating' => $response->json('quality_rating'),
+        ]];
+    }
+
     /** Verify `X-Hub-Signature-256` on webhook calls (HMAC-SHA256 of the raw body with the app secret). */
     public static function verifySignature(?string $header, string $rawBody, ?string $appSecret): bool
     {

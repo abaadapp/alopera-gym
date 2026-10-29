@@ -5,7 +5,6 @@ use App\Http\Controllers\Club\BackupController;
 use App\Http\Controllers\Club\BillingController;
 use App\Http\Controllers\Club\BranchController;
 use App\Http\Controllers\Club\DashboardController;
-use App\Http\Controllers\Club\IntegrationController;
 use App\Http\Controllers\Club\RoleController;
 use App\Http\Controllers\Club\SettingsController;
 use App\Http\Controllers\Club\UserController;
@@ -30,10 +29,8 @@ Route::prefix('settings')->group(function () {
     Route::resource('users', UserController::class)->except(['show', 'create', 'edit'])->middleware('can:users.manage');
     Route::resource('roles', RoleController::class)->except(['show', 'create', 'edit'])->middleware('can:roles.manage');
 
-    Route::middleware('can:integrations.manage')->group(function () {
-        Route::get('/integrations', [IntegrationController::class, 'index'])->name('integrations.index');
-        Route::put('/integrations/{provider}', [IntegrationController::class, 'update'])->whereIn('provider', ['whatsapp', 'paymob'])->name('integrations.update');
-    });
+    // Integrations moved to their own section (/app/integrations); the old address still leads there.
+    Route::redirect('/integrations', '/app/integrations');
 
     Route::get('/audit', [AuditController::class, 'index'])->middleware('can:audit.view')->name('audit.index');
 
@@ -48,6 +45,6 @@ Route::prefix('settings')->group(function () {
 });
 
 // Settings screens used to live at the top level; keep old bookmarks working.
-foreach (['branches', 'users', 'roles', 'integrations', 'audit', 'backups', 'billing'] as $screen) {
+foreach (['branches', 'users', 'roles', 'audit', 'backups', 'billing'] as $screen) {
     Route::redirect("/{$screen}", "/app/settings/{$screen}");
 }

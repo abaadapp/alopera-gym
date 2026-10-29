@@ -3,13 +3,14 @@ import { useForm } from '@inertiajs/react';
 import { FileText, Plus, Workflow, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import SettingsBack from '@/Components/SettingsBack';
-import { Button, Card, CardHeader, Field, PageHeader, Toggle } from '@/Components/ui';
+import { Button, Card, CardHeader, Field, Input, PageHeader, Toggle } from '@/Components/ui';
 import { useCan } from '@/hooks/useShared';
 
 interface Rules {
     expiry_reminder_days: number[];
     expired_followup_days: number[];
     notify_class_changes: boolean;
+    class_reminder_hours: number;
 }
 
 export default function NotificationSettings({ rules }: { rules: Rules }) {
@@ -18,6 +19,7 @@ export default function NotificationSettings({ rules }: { rules: Rules }) {
         expiry_reminder_days: (rules.expiry_reminder_days ?? []).map(Number),
         expired_followup_days: (rules.expired_followup_days ?? []).map(Number),
         notify_class_changes: Boolean(rules.notify_class_changes),
+        class_reminder_hours: Number(rules.class_reminder_hours ?? 0),
     });
     const errors = form.errors as Record<string, string | undefined>;
 
@@ -39,6 +41,9 @@ export default function NotificationSettings({ rules }: { rules: Rules }) {
                         <div className="mt-2">
                             <Toggle checked={form.data.notify_class_changes} onChange={(v) => form.setData('notify_class_changes', v)} label="إبلاغ أصحاب الحجوزات عند تعديل الحصة" hint="تغيير الموعد أو المدرب أو القاعة" />
                         </div>
+                        <Field label="تذكير قبل الحصة المحجوزة بـ (ساعات)" hint="0 يوقف التذكير. يُرسل مرة واحدة لكل حجز تم قبل موعد التذكير." error={errors.class_reminder_hours} className="mt-4 max-w-xs">
+                            <Input type="number" min={0} max={48} value={form.data.class_reminder_hours} onChange={(e) => form.setData('class_reminder_hours', Number(e.target.value))} />
+                        </Field>
                         <div className="mt-6 flex justify-end">
                             <Button type="submit" loading={form.processing}>حفظ</Button>
                         </div>

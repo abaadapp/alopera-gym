@@ -51,7 +51,8 @@ final class InboundProcessor
                     continue;
                 }
 
-                $this->tenants->run($integration->tenant, function () use ($value, &$handled) {
+                $this->tenants->run($integration->tenant, function () use ($value, &$handled, $integration) {
+                    $integration->markWebhook(); // the signature was checked by the controller
                     $contacts = collect(Arr::get($value, 'contacts', []))->keyBy('wa_id');
 
                     foreach (Arr::get($value, 'messages', []) as $incoming) {

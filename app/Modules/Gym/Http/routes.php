@@ -91,9 +91,14 @@ Route::post('/pt-sessions/{ptSession}/close', [PtController::class, 'close'])->m
 // ─── Access ────────────────────────────────────────────────────────────
 Route::get('/checkins', [CheckInController::class, 'index'])->middleware('can:checkin.view')->name('checkins.index');
 Route::post('/checkins', [CheckInController::class, 'store'])->middleware(['can:checkin.perform', 'throttle:120,1'])->name('checkins.store');
-Route::post('/devices/staff-credentials', [DeviceController::class, 'storeStaffCredential'])->middleware('can:devices.manage')->name('devices.staff-credentials');
-Route::delete('/devices/staff-credentials/{credential}', [DeviceController::class, 'destroyStaffCredential'])->middleware('can:devices.manage')->name('devices.staff-credentials.destroy');
-Route::resource('devices', DeviceController::class)->except(['show', 'create', 'edit'])->middleware('can:devices.manage');
-Route::post('/devices/{device}/token', [DeviceController::class, 'token'])->middleware('can:devices.manage')->name('devices.token');
+// Access devices are one of the integrations: their screen lives under /integrations/devices (route names kept).
+Route::prefix('integrations')->middleware('can:devices.manage')->group(function () {
+    Route::post('/devices/staff-credentials', [DeviceController::class, 'storeStaffCredential'])->name('devices.staff-credentials');
+    Route::delete('/devices/staff-credentials/{credential}', [DeviceController::class, 'destroyStaffCredential'])->name('devices.staff-credentials.destroy');
+    Route::resource('devices', DeviceController::class)->except(['show', 'create', 'edit']);
+    Route::post('/devices/{device}/token', [DeviceController::class, 'token'])->name('devices.token');
+    Route::post('/devices/{device}/simulate', [DeviceController::class, 'simulate'])->middleware('throttle:60,1')->name('devices.simulate');
+});
+Route::redirect('/devices', '/app/integrations/devices');
 Route::get('/staff-attendance', [StaffAttendanceController::class, 'index'])->middleware('can:staff_attendance.view')->name('staff-attendance.index');
 Route::post('/staff-attendance/punch', [StaffAttendanceController::class, 'punch'])->name('staff-attendance.punch');

@@ -132,6 +132,13 @@ final class MemberNotifier
             $booking, 'booking:'.$booking->id);
     }
 
+    public function classReminder(Booking $booking): void
+    {
+        $booking->loadMissing(['member', 'session.program']);
+        $this->whatsapp->queueTemplate($booking->member, 'class_reminder', $this->base($booking->member) + $this->bookingValues($booking),
+            $booking, 'class_reminder:'.$booking->id);
+    }
+
     public function bookingCancelled(Booking $booking, ?string $reason): void
     {
         $booking->loadMissing(['member', 'session.program']);

@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { router, useForm } from '@inertiajs/react';
-import { Copy, Fingerprint, KeyRound, Pencil, Plus, RefreshCw, ShieldAlert, Trash2, Wifi, WifiOff } from 'lucide-react';
+import { Copy, FlaskConical, Fingerprint, KeyRound, Pencil, Plus, RefreshCw, ShieldAlert, ShieldCheck, Trash2, Wifi, WifiOff } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Toggle } from '@/Components/ui';
+import { IntegrationBack, IntegrationSummary, type IntegrationStatusData } from '@/Components/Integrations';
 import { useCan, useShared } from '@/hooks/useShared';
 import type { Option } from '@/types';
 
@@ -22,7 +23,26 @@ type Device = {
     branch_id: number | null;
     branch: string | null;
     last_seen_at: string | null;
+    online: boolean;
 };
+
+type DeviceEvent = { key: string; at: string; device: string | null; who: string | null; kind: 'member' | 'staff'; result: string; reason: string; method: string; hint: string | null };
+type Simulation = { allowed: boolean; message: string; holder: string | null; device: string; type: string; credential: string; at: string };
+type Driver = { key: string; label: string; transport: string; description: string };
+
+interface Props {
+    devices: Device[];
+    status: IntegrationStatusData;
+    events: DeviceEvent[];
+    simulation: Simulation | null;
+    drivers: Driver[];
+    staffCredentials: StaffCredential[];
+    staff: Option[];
+    branches: Option[];
+    types: string[];
+    apiBase: string;
+    onlineMinutes: number;
+}
 
 type StaffCredential = { id: number; type: string; identifier: string; label: string | null; holder_id: number; is_active: boolean };
 
@@ -49,20 +69,16 @@ const TYPE_LABELS: Record<string, string> = {
 const DIRECTIONS: Record<string, string> = { in: 'دخول', out: 'خروج', both: 'دخول وخروج' };
 const PURPOSES: Record<string, string> = { members: 'الأعضاء', staff: 'الموظفون', both: 'الأعضاء والموظفون' };
 const CREDENTIAL_TYPES: Record<string, string> = { fingerprint: 'بصمة (رقم المستخدم في الجهاز)', card: 'بطاقة', pin: 'رمز PIN', barcode: 'باركود' };
+const READING_TYPES: Record<string, string> = { qr: 'رمز QR للعضو', card: 'بطاقة', fingerprint: 'بصمة (رقم المستخدم في الجهاز)', pin: 'رمز PIN', barcode: 'باركود' };
+const RESULTS: Record<string, { label: string; tone: 'green' | 'red' | 'gray' }> = { allowed: { label: 'مسموح', tone: 'green' }, denied: { label: 'مرفوض', tone: 'red' }, duplicate: { label: 'مكرر', tone: 'gray' } };
 
 const blank: DeviceForm = { name: '', type: 'qr_reader', vendor: '', model: '', serial_number: '', direction: 'in', purpose: 'members', branch_id: null, is_active: true };
-
-/** Considered online when it called the API in the last 10 minutes. */
-function online(lastSeen: string | null): boolean {
-    if (!lastSeen) return false;
-    return Date.now() - new Date(lastSeen.replace(' ', 'T')).getTime() < 10 * 60 * 1000;
-}
 
 function copy(text: string) {
     void navigator.clipboard?.writeText(text);
 }
 
-export default function DevicesIndex({ devices, staffCredentials, staff, branches, types, apiBase }: { devices: Device[]; staffCredentials: StaffCredential[]; staff: Option[]; branches: Option[]; types: string[]; apiBase: string }) {
+export default function DevicesIntegration({ devices, status, events, simulation, drivers, staffCredentials, staff, branches, types, apiBase, onlineMinutes }: Props) {
     const { flash } = useShared();
     const can = useCan();
     const [editing, setEditing] = useState<Device | null>(null);
@@ -70,6 +86,7 @@ export default function DevicesIndex({ devices, staffCredentials, staff, branche
     const [copied, setCopied] = useState(false);
     const form = useForm<DeviceForm>(blank);
     const credForm = useForm({ holder_id: '' as number | string, type: 'fingerprint', identifier: '', label: '' });
+    const simForm = useForm({ device_id: (devices[0]?.id ?? '') as number | string, credential_type: 'qr', credential: '' });
     const staffName = (id: number) => staff.find((s) => s.id === id)?.name ?? `#${id}`;
 
     const openForm = (d: Device | null) => {
@@ -94,15 +111,24 @@ export default function DevicesIndex({ devices, staffCredentials, staff, branche
         credForm.post(route('club.devices.staff-credentials'), { preserveScroll: true, onSuccess: () => credForm.reset('identifier', 'label') });
     };
 
+    const simulate = (e: FormEvent) => {
+        e.preventDefault();
+        if (!simForm.data.device_id) return;
+        simForm.post(route('club.devices.simulate', simForm.data.device_id), { preserveScroll: true });
+    };
+
     const example = JSON.stringify({ credential_type: 'qr', credential: '<رمز QR المقروء>' }, null, 2);
 
     return (
-        <ClubLayout title="أجهزة الدخول">
+        <ClubLayout title="أجهزة البصمة والبوابات">
             <PageHeader
-                title="أجهزة الدخول والبصمة"
+                back={<IntegrationBack />}
+                title="أجهزة البصمة والبوابات"
                 subtitle="قارئات QR والباركود والبطاقات، أجهزة البصمة، والبوابات — كل جهاز يتصل برمز خاص"
                 actions={<Button icon={<Plus className="size-4" />} onClick={() => openForm(null)}>جهاز جديد</Button>}
             />
+
+            <IntegrationSummary service="devices" title="أجهزة البصمة والبوابات" status={status} />
 
             {flash.token && (
                 <Card className="mb-6 border-amber-300 bg-amber-50">
@@ -133,7 +159,7 @@ export default function DevicesIndex({ devices, staffCredentials, staff, branche
                             </thead>
                             <tbody>
                                 {devices.map((d) => {
-                                    const isOnline = online(d.last_seen_at);
+                                    const isOnline = d.online;
                                     return (
                                         <tr key={d.id} className={d.is_active ? '' : 'opacity-60'}>
                                             <td>
@@ -148,7 +174,7 @@ export default function DevicesIndex({ devices, staffCredentials, staff, branche
                                             <td>{d.branch ?? '—'}</td>
                                             <td>
                                                 {!d.is_active ? <Badge tone="gray">موقوف</Badge> : isOnline ? <Badge tone="green"><Wifi className="size-3.5" />متصل</Badge> : <Badge tone="amber"><WifiOff className="size-3.5" />غير متصل</Badge>}
-                                                <p className="mt-0.5 text-[11px] text-muted num">{d.last_seen_at ?? 'لم يتصل بعد'}{d.last_ip ? ` · ${d.last_ip}` : ''}</p>
+                                                <p className="mt-0.5 text-[11px] text-muted num">{d.last_seen_at ? `آخر اتصال ${d.last_seen_at}` : 'لم يتصل بعد — التوافق غير مؤكد'}{d.last_ip ? ` · ${d.last_ip}` : ''}</p>
                                             </td>
                                             <td><span className="font-mono text-xs text-muted" dir="ltr">…{d.token_last4}</span></td>
                                             <td>
@@ -181,7 +207,7 @@ export default function DevicesIndex({ devices, staffCredentials, staff, branche
                                 {Object.entries(CREDENTIAL_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                             </Select>
                         </Field>
-                        <Field label="المعرّف في الجهاز" error={credForm.errors.identifier}>
+                        <Field label="المعرّف في الجهاز" error={credForm.errors.identifier} hint={credForm.data.type === 'fingerprint' ? 'رقم المستخدم في جهاز البصمة فقط؛ البصمة نفسها لا تُحفظ في النظام' : undefined}>
                             <Input dir="ltr" value={credForm.data.identifier} onChange={(e) => credForm.setData('identifier', e.target.value)} required />
                         </Field>
                         <Field label="وصف (اختياري)" error={credForm.errors.label}>
@@ -212,7 +238,8 @@ export default function DevicesIndex({ devices, staffCredentials, staff, branche
                 </Card>
 
                 <Card>
-                    <CardHeader title="طريقة الربط" subtitle="بروتوكول JSON عام — يتطلب جهازًا أو برنامج وسيط يدعم إرسال طلبات HTTP" />
+                    <CardHeader title="طريقة الربط" subtitle={`${drivers[0]?.label ?? 'البروتوكول العام'} — ${drivers[0]?.transport ?? 'HTTPS · JSON'}`} />
+                    <p className="mb-3 text-[13px] leading-6 text-muted">{drivers[0]?.description}</p>
                     <ol className="list-decimal space-y-2 ps-5 text-sm text-ink/80">
                         <li>أضف الجهاز وانسخ رمزه.</li>
                         <li>
@@ -231,13 +258,82 @@ export default function DevicesIndex({ devices, staffCredentials, staff, branche
                             <span className="font-mono text-xs" dir="ltr"> qr · card · fingerprint · pin · barcode</span>.
                         </li>
                         <li>
-                            فحص الاتصال: <span className="font-mono text-xs" dir="ltr">POST {apiBase}/heartbeat</span>
+                            فحص الاتصال: <span className="font-mono text-xs" dir="ltr">POST {apiBase}/heartbeat</span> — يظهر الجهاز «متصل» إذا اتصل خلال آخر {onlineMinutes} دقائق.
                         </li>
                     </ol>
-                    <p className="mt-4 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">
-                        <KeyRound className="mt-0.5 size-3.5 shrink-0" />
-                        الربط المباشر بموديل معيّن (مثل أجهزة البصمة التي تعمل ببروتوكولات خاصة) يحتاج تحققًا من توافق الجهاز واختبارًا عليه قبل الاعتماد.
+                    <p className="mt-4 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs leading-6 text-amber-800">
+                        <KeyRound className="mt-1 size-3.5 shrink-0" />
+                        لا يُفترض توافق أي جهاز قبل معرفة الشركة والموديل والبروتوكول. الأجهزة ذات البروتوكولات الخاصة تحتاج جسرًا يتحدث البروتوكول العام، أو مشغّلًا يُبنى لها بعد اختباره على الجهاز نفسه.
                     </p>
+                    <ul className="mt-3 space-y-1.5 text-xs leading-6 text-muted">
+                        <li className="flex gap-2"><ShieldCheck className="mt-1 size-3.5 shrink-0" />النظام يرد بقرار السماح أو الرفض فقط، ولا يرسل أمر فتح لأي بوابة. فتح البوابة قرار الجهاز نفسه عند السماح.</li>
+                        <li className="flex gap-2"><ShieldCheck className="mt-1 size-3.5 shrink-0" />البصمة تُسجَّل وتُطابق داخل الجهاز. النظام يحفظ رقم المستخدم في الجهاز فقط، لا صورة البصمة ولا قالبها.</li>
+                    </ul>
+                </Card>
+            </div>
+
+            <div className="mt-6 grid gap-6 lg:grid-cols-5 [&>*]:min-w-0">
+                <Card className="lg:col-span-2">
+                    <CardHeader title="محاكاة قراءة" subtitle="جرّب ما سيرد به النظام على جهاز قبل توفره. لا يُسجَّل دخول ولا حضور، ولا يُفتح شيء." />
+                    {devices.length === 0 ? (
+                        <p className="text-sm text-muted">أضف جهازًا أولًا.</p>
+                    ) : (
+                        <form onSubmit={simulate} className="space-y-3">
+                            <Field label="الجهاز">
+                                <Select value={simForm.data.device_id} onChange={(e) => simForm.setData('device_id', e.target.value)}>
+                                    {devices.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                </Select>
+                            </Field>
+                            <Field label="نوع القراءة" error={simForm.errors.credential_type}>
+                                <Select value={simForm.data.credential_type} onChange={(e) => simForm.setData('credential_type', e.target.value)}>
+                                    {Object.entries(READING_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                </Select>
+                            </Field>
+                            <Field label="القيمة المقروءة" error={simForm.errors.credential} hint="رمز QR من بطاقة العضو، أو رقم البطاقة، أو رقم المستخدم في جهاز البصمة">
+                                <Input dir="ltr" value={simForm.data.credential} onChange={(e) => simForm.setData('credential', e.target.value)} required />
+                            </Field>
+                            <Button type="submit" variant="secondary" loading={simForm.processing} icon={<FlaskConical className="size-4" />}>محاكاة</Button>
+                        </form>
+                    )}
+                    {simulation && (
+                        <div className={`mt-4 rounded-xl border p-3 text-sm ${simulation.allowed ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
+                            <p className="font-semibold">{simulation.allowed ? 'سيُسمح بالدخول' : 'سيُرفض'} — {simulation.message}</p>
+                            <p className="mt-1 text-xs text-muted">
+                                {simulation.device} · {READING_TYPES[simulation.type] ?? simulation.type} <span dir="ltr" className="font-mono">{simulation.credential}</span>
+                                {simulation.holder ? ` · ${simulation.holder}` : ''} · <span className="num">{simulation.at}</span>
+                            </p>
+                            <p className="mt-1 text-[11px] text-muted">محاكاة فقط: لم يُسجَّل شيء.</p>
+                        </div>
+                    )}
+                </Card>
+
+                <Card padded={false} className="lg:col-span-3">
+                    <div className="p-5 pb-0"><CardHeader title="سجل قراءات الأجهزة" subtitle="آخر ما وصل من الأجهزة: دخول الأعضاء وحضور الموظفين" /></div>
+                    {events.length === 0 ? (
+                        <EmptyState title="لا توجد قراءات بعد" description="تظهر هنا كل قراءة يرسلها جهاز متصل برمزه." />
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="table-base">
+                                <thead><tr><th>الوقت</th><th>الجهاز</th><th>الشخص</th><th>النتيجة</th></tr></thead>
+                                <tbody>
+                                    {events.map((e) => (
+                                        <tr key={e.key}>
+                                            <td className="num text-xs">{e.at}</td>
+                                            <td>{e.device ?? '—'}</td>
+                                            <td>
+                                                <p>{e.who ?? '—'}</p>
+                                                <p className="text-[11px] text-muted">{e.kind === 'staff' ? 'موظف' : 'عضو'}{e.hint ? <> · <span dir="ltr" className="font-mono">{e.hint}</span></> : null}</p>
+                                            </td>
+                                            <td>
+                                                <Badge tone={RESULTS[e.result]?.tone ?? 'gray'}>{RESULTS[e.result]?.label ?? e.result}</Badge>
+                                                <p className="mt-0.5 text-[11px] text-muted">{e.reason}</p>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </Card>
             </div>
 

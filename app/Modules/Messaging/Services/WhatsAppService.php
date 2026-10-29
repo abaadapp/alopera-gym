@@ -27,6 +27,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class WhatsAppService
 {
+    /** Meta error codes that concern the account or its credentials, not one message. */
+    private const CONNECTION_ERRORS = ['190', '10', '100', '200', '368', '131031', '133010'];
+
     public function __construct(
         private readonly TenantContext $tenants,
         private readonly WhatsAppGateway $gateway,
@@ -197,6 +200,8 @@ final class WhatsAppService
             $result = $this->gateway->sendText($integration, (string) $message->to_phone, (string) $message->body);
         }
 
+        $this->recordHealth($integration, $result);
+
         DB::transaction(function () use ($message, $result) {
             $message->forceFill([
                 'attempts' => $message->attempts + 1,
@@ -213,5 +218,27 @@ final class WhatsAppService
         });
 
         return $result;
+    }
+
+    /**
+     * What a send says about the connection itself: a message Meta accepted proves it (the development log driver
+     * proves nothing); a refused token, a wrong number id or a blocked account is shown on the integrations screen.
+     * Errors about one message (a template, a recipient) say nothing about the connection and are left out.
+     */
+    private function recordHealth(?TenantIntegration $integration, GatewayResult $result): void
+    {
+        if (! $integration?->exists) {
+            return;
+        }
+        if ($result->ok) {
+            if (! str_starts_with((string) $result->messageId, 'log.')) {
+                $integration->markVerified();
+            }
+
+            return;
+        }
+        if (in_array($result->errorCode, self::CONNECTION_ERRORS, true)) {
+            $integration->markFailed('رفضت Meta الإرسال (رمز '.$result->errorCode.'): '.$result->errorMessage);
+        }
     }
 }

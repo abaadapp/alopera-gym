@@ -5,13 +5,15 @@ namespace App\Modules\Gym\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Gym\Access\AccessControlService;
+use App\Modules\Gym\Access\Drivers\DeviceDrivers;
 use App\Modules\Gym\Models\AccessDevice;
 use App\Modules\Gym\Models\Member;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Generic JSON protocol for access-control hardware (docs/DEVICES.md).
+ * Access-control hardware API (docs/DEVICES.md). The device's driver reads its request; the generic JSON protocol
+ * is the only one today.
  *
  * The device (or a small bridge next to it) sends what it read; we answer
  * allow/deny and log the decision. Opening the relay is the device's job.
@@ -28,12 +30,10 @@ class DeviceApiController extends Controller
 
     public function access(Request $request, AccessControlService $access): JsonResponse
     {
-        $data = $request->validate([
-            'credential_type' => ['required', 'in:qr,card,fingerprint,pin,barcode'],
-            'credential' => ['required', 'string', 'max:128'],
-        ]);
         /** @var AccessDevice $device */
         $device = $request->attributes->get('device');
+        $reading = DeviceDrivers::for($device)->reading($request, ['qr', 'card', 'fingerprint', 'pin', 'barcode']);
+        $data = ['credential_type' => $reading['type'], 'credential' => $reading['value']];
 
         $holder = $access->resolve($data['credential_type'], $data['credential']);
         $hint = AccessControlService::mask($data['credential']);
@@ -55,12 +55,10 @@ class DeviceApiController extends Controller
 
     public function staffPunch(Request $request, AccessControlService $access): JsonResponse
     {
-        $data = $request->validate([
-            'credential_type' => ['required', 'in:card,fingerprint,pin'],
-            'credential' => ['required', 'string', 'max:128'],
-        ]);
         /** @var AccessDevice $device */
         $device = $request->attributes->get('device');
+        $reading = DeviceDrivers::for($device)->reading($request, ['card', 'fingerprint', 'pin']);
+        $data = ['credential_type' => $reading['type'], 'credential' => $reading['value']];
 
         $holder = $access->resolve($data['credential_type'], $data['credential']);
         if (! $holder instanceof User || ! $device->acceptsStaff()) {

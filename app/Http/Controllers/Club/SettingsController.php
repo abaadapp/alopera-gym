@@ -16,11 +16,11 @@ class SettingsController extends Controller
 {
     /** Opening the hub needs at least one of the screens it links to. */
     public const HUB_PERMISSIONS = [
-        'settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'integrations.manage',
+        'settings.manage', 'branches.manage', 'users.manage', 'roles.manage',
         'audit.view', 'backups.manage', 'billing.view', 'accounting.manage', 'documents.manage',
     ];
 
-    private const NOTIFICATION_RULES = ['expiry_reminder_days', 'expired_followup_days', 'notify_class_changes'];
+    private const NOTIFICATION_RULES = ['expiry_reminder_days', 'expired_followup_days', 'notify_class_changes', 'class_reminder_hours'];
 
     public function index(Request $request): Response
     {
@@ -104,12 +104,14 @@ class SettingsController extends Controller
             'expired_followup_days' => ['array', 'max:5'],
             'expired_followup_days.*' => ['integer', 'between:1,180'],
             'notify_class_changes' => ['boolean'],
+            'class_reminder_hours' => ['nullable', 'integer', 'between:0,48'],
         ]);
 
         $tenant->settings = array_replace($tenant->settings ?? [], [
             'expiry_reminder_days' => array_values(array_unique(array_map('intval', $data['expiry_reminder_days'] ?? []))),
             'expired_followup_days' => array_values(array_unique(array_map('intval', $data['expired_followup_days'] ?? []))),
             'notify_class_changes' => (bool) ($data['notify_class_changes'] ?? false),
+            'class_reminder_hours' => (int) ($data['class_reminder_hours'] ?? 0),
         ]);
         $tenant->save();
 

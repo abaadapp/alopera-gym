@@ -28,7 +28,7 @@ class TenantIntegration extends Model
     protected $hidden = ['credentials'];
 
     /** @var list<string> */
-    protected array $auditExclude = ['credentials'];
+    protected array $auditExclude = ['credentials', 'verified_at', 'last_checked_at', 'last_error', 'last_error_at', 'last_webhook_at'];
 
     protected function casts(): array
     {
@@ -37,6 +37,9 @@ class TenantIntegration extends Model
             'settings' => 'array',
             'is_enabled' => 'boolean',
             'verified_at' => 'datetime',
+            'last_checked_at' => 'datetime',
+            'last_error_at' => 'datetime',
+            'last_webhook_at' => 'datetime',
         ];
     }
 
@@ -60,5 +63,36 @@ class TenantIntegration extends Model
     public function credentialPresence(array $keys): array
     {
         return collect($keys)->mapWithKeys(fn ($key) => [$key => $this->credential($key) !== null])->all();
+    }
+
+    /** A real call to the provider succeeded (a connection test, a payment page opened, a message sent). */
+    public function markVerified(array $settings = []): void
+    {
+        $this->forceFill([
+            'verified_at' => now(),
+            'last_checked_at' => now(),
+            'last_error' => null,
+            'last_error_at' => null,
+            'settings' => array_merge($this->settings ?? [], $settings),
+        ])->saveQuietly();
+    }
+
+    /** The provider refused or could not be reached. The message is shown to the club owner; it never holds a secret. */
+    public function markFailed(string $message): void
+    {
+        $this->forceFill(['last_error' => mb_substr($message, 0, 250), 'last_error_at' => now(), 'last_checked_at' => now()])->saveQuietly();
+    }
+
+    /** The provider called back with a valid signature. */
+    public function markWebhook(): void
+    {
+        $this->forceFill(['last_webhook_at' => now()])->saveQuietly();
+    }
+
+    /** The last thing that happened was an error (a later success clears it). */
+    public function failing(): bool
+    {
+        return $this->last_error !== null && $this->last_error_at !== null
+            && ($this->verified_at === null || $this->last_error_at->greaterThanOrEqualTo($this->verified_at));
     }
 }

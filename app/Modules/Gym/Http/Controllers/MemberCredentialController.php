@@ -16,9 +16,8 @@ class MemberCredentialController extends Controller
     {
         $data = $request->validate([
             'type' => ['required', 'in:'.implode(',', AccessCredential::TYPES)],
-            'identifier' => ['required', 'string', 'max:128'],
             'label' => ['nullable', 'string', 'max:80'],
-        ]);
+        ]) + $request->validate(AccessCredential::identifierRules((string) $request->input('type')), AccessCredential::IDENTIFIER_MESSAGES);
         $request->validate(['identifier' => [TenantRule::unique('gym_access_credentials', 'identifier')->where('type', $data['type'])]],
             ['identifier.unique' => 'هذا المعرّف مسجّل لشخص آخر.']);
 
