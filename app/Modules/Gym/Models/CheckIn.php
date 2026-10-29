@@ -3,14 +3,16 @@
 namespace App\Modules\Gym\Models;
 
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\OwnedByBranch;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /** Every door decision, allowed or denied. */
-class CheckIn extends Model
+class CheckIn extends Model implements BranchOwned
 {
-    use BelongsToTenant;
+    use BelongsToTenant, OwnedByBranch;
 
     protected $table = 'gym_check_ins';
 

@@ -23,8 +23,16 @@ class DashboardController extends Controller
     /** The dashboard tiles, in their default order. A user may hide and reorder them (users.preferences). */
     public const TILES = ['active_members', 'expiring_7_days', 'expired_members', 'frozen_members', 'revenue_month', 'outstanding', 'checkins_today', 'new_members_month'];
 
-    public function index(Request $request, ReportService $reports, BranchContext $branches): Response
+    public function index(Request $request, ReportService $reports, BranchContext $branches): Response|RedirectResponse
     {
+        // /app is where staff land: whoever has no dashboard (reception, trainers) goes to their own first screen.
+        if (! $request->user()->can('dashboard.view')) {
+            $home = $request->user()->homeRoute();
+            abort_if($home === 'club.dashboard', 403);
+
+            return redirect()->route($home);
+        }
+
         $branch = $branches->id();
         $data = $reports->dashboard($branch);
         $data['trends'] = $this->trends($reports, $branch, $request->user()->can('reports.financial'));
@@ -86,7 +94,7 @@ class DashboardController extends Controller
         $monthStart = $today->startOfMonth();
         $prevStart = $monthStart->subMonthNoOverflow();
         $prevEnd = $prevStart->addDays((int) $monthStart->diffInDays($today))->endOfDay();
-        $b = fn ($query) => $branch ? $query->where(fn ($w) => $w->where('branch_id', $branch)->orWhereNull('branch_id')) : $query;
+        $b = fn ($query) => app(BranchContext::class)->narrow($query, $branch);
         $out = [];
         $put = function (string $key, float $current, float $previous, string $label) use (&$out) {
             if ($previous > 0) {

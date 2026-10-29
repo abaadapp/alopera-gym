@@ -4,6 +4,8 @@ namespace App\Modules\Documents\Models;
 
 use App\Core\Audit\Auditable;
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\OwnedByBranch;
 use App\Models\Branch;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -17,9 +19,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * A document of the business itself (not a member's). Its file lives on the private disk and is only served
  * through the download route, after the permission and confidentiality checks.
  */
-class BusinessDocument extends Model
+class BusinessDocument extends Model implements BranchOwned
 {
-    use Auditable, BelongsToTenant, SoftDeletes;
+    use Auditable, BelongsToTenant, OwnedByBranch, SoftDeletes;
 
     public const STATUSES = ['active' => 'ساري', 'cancelled' => 'ملغى'];
 

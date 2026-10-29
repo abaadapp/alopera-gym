@@ -5,6 +5,7 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, Checkbox, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Pagination, SearchInput, Select, StatCard, Textarea } from '@/Components/ui';
 import { date, dayCount, number } from '@/lib/format';
 import type { Paginated } from '@/types';
+import { useBranchDefault } from '@/hooks/useShared';
 
 export interface DocumentRow {
     id: number;
@@ -159,6 +160,7 @@ function FileInput({ onChange, current, error, maxKb }: { onChange: (f: File | n
 
 function DocumentModal({ document, props, onClose }: { document: DocumentRow | null; props: Props; onClose: () => void }) {
     const { types, branches, users, can, maxKb } = props;
+    const branchDefault = useBranchDefault();
     const form = useForm({
         name: document?.name ?? '',
         document_type_id: document?.document_type_id ? String(document.document_type_id) : '',
@@ -167,7 +169,7 @@ function DocumentModal({ document, props, onClose }: { document: DocumentRow | n
         issue_date: document?.issue_date ?? '',
         expiry_date: document?.expiry_date ?? '',
         renewal_months: document?.renewal_months ? String(document.renewal_months) : '',
-        branch_id: document?.branch_id ? String(document.branch_id) : '',
+        branch_id: document ? (document.branch_id ? String(document.branch_id) : '') : branchDefault,
         responsible_user_id: document?.responsible_user_id ? String(document.responsible_user_id) : '',
         status: document?.status ?? 'active',
         is_confidential: document?.is_confidential ?? false,

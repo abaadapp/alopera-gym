@@ -4,10 +4,9 @@ namespace App\Modules\Gym\Http\Controllers;
 
 use App\Core\Support\ImageStore;
 use App\Core\Support\Phone;
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
-use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
-use App\Models\Branch;
 use App\Models\User;
 use App\Modules\Gym\Models\Trainer;
 use Illuminate\Http\RedirectResponse;
@@ -31,7 +30,7 @@ class TrainerController extends Controller
             ]),
             // Staff accounts that can be linked so the trainer can sign in to her own screen.
             'users' => User::ofTenant($tenants->require()->id)->where('is_active', true)->orderBy('name')->get(['id', 'name', 'email']),
-            'branches' => Branch::where('is_active', true)->get(['id', 'name']),
+            'branches' => app(BranchContext::class)->choices(),
         ]);
     }
 
@@ -105,7 +104,7 @@ class TrainerController extends Controller
             'is_public' => ['boolean'],
             'is_active' => ['boolean'],
             'sort' => ['nullable', 'integer'],
-            'branch_id' => ['nullable', TenantRule::exists('branches')],
+            'branch_id' => ['nullable', ...app(BranchContext::class)->rule($trainer?->branch_id)],
             'user_id' => ['nullable', Rule::exists('users', 'id')->where('tenant_id', $tenantId), Rule::unique('gym_trainers', 'user_id')->ignore($trainer?->id)],
             'photo' => ['nullable', 'image', 'max:'.config('gym.max_image_kb')],
         ]);

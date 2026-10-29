@@ -44,6 +44,7 @@ class ExpenseController extends Controller
         $data = $this->validated($request);
         $expense = new Expense(collect($data)->except('attachment')->all());
         $expense->number = NumberSequence::next('expense');
+        $expense->branch_id = app(BranchContext::class)->assign();
         $expense->created_by = $request->user()->id;
         if ($request->hasFile('attachment')) {
             $expense->attachment_path = $request->file('attachment')->store('tenants/'.$tenants->require()->id.'/expenses', 'local');

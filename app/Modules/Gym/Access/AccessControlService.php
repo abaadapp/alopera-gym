@@ -2,6 +2,7 @@
 
 namespace App\Modules\Gym\Access;
 
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Models\User;
 use App\Modules\Finance\Models\Invoice;
@@ -100,7 +101,8 @@ final class AccessControlService
             }
 
             CheckIn::create([
-                'branch_id' => $device?->branch_id ?? $member?->branch_id,
+                // Where it happened: the device's branch, else the branch of the staff at reception, else the member's.
+                'branch_id' => $device?->branch_id ?? app(BranchContext::class)->id() ?? $member?->branch_id,
                 'member_id' => $member?->id,
                 'membership_id' => $decision->membership?->id,
                 'access_device_id' => $device?->id,
@@ -203,7 +205,7 @@ final class AccessControlService
 
             return StaffAttendance::create([
                 'user_id' => $user->id,
-                'branch_id' => $device?->branch_id ?? $user->branch_id,
+                'branch_id' => $device?->branch_id ?? app(BranchContext::class)->id($user),
                 'access_device_id' => $device?->id,
                 'clock_in_at' => now(),
                 'method' => $method,

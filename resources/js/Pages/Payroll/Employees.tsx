@@ -3,7 +3,7 @@ import { router, useForm } from '@inertiajs/react';
 import { Lock, Pencil, Plus, UserCheck, UserPlus, Users, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, SearchInput, Select, StatCard, Textarea } from '@/Components/ui';
-import { useCan, useCurrency } from '@/hooks/useShared';
+import { useBranchDefault, useCan, useCurrency } from '@/hooks/useShared';
 import { date, money, phone } from '@/lib/format';
 
 type Allowance = { name: string; amount: string };
@@ -110,9 +110,10 @@ export default function Employees({ employees, stats, jobTitles, branches, users
 }
 
 function EmployeeForm({ employee, jobTitles, branches, users, trainers, statuses, confidential, onClose }: Pick<Props, 'jobTitles' | 'branches' | 'users' | 'trainers' | 'statuses' | 'confidential'> & { employee: Employee | null; onClose: () => void }) {
+    const branchDefault = useBranchDefault();
     const form = useForm({
         name: employee?.name ?? '', phone: employee?.phone ?? '', email: employee?.email ?? '', hired_at: employee?.hired_at ?? '', status: employee?.status ?? 'active',
-        job_title_id: employee?.job_title_id ? String(employee.job_title_id) : '', branch_id: employee?.branch_id ? String(employee.branch_id) : '',
+        job_title_id: employee?.job_title_id ? String(employee.job_title_id) : '', branch_id: employee ? (employee.branch_id ? String(employee.branch_id) : '') : branchDefault,
         user_id: employee?.user_id ? String(employee.user_id) : '', trainer_id: employee?.trainer_id ? String(employee.trainer_id) : '', notes: employee?.notes ?? '',
         basic_salary: employee?.basic_salary ?? '', allowances: (employee?.allowances ?? []) as Allowance[], payment_method: employee?.payment_method ?? 'bank',
         bank_name: employee?.bank_name ?? '', iban: employee?.iban ?? '', account_number: employee?.account_number ?? '',

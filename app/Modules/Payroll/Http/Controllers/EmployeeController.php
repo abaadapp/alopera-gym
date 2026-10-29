@@ -9,7 +9,6 @@ use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
-use App\Models\Branch;
 use App\Models\User;
 use App\Modules\Gym\Models\Trainer;
 use App\Modules\Payroll\Models\Employee;
@@ -53,7 +52,7 @@ class EmployeeController extends Controller
                 'monthly' => $confidential ? Money::add('0', ...$active->map(fn (Employee $e) => Money::add($e->basic_salary, $e->allowancesTotal()))->all()) : null,
             ],
             'jobTitles' => JobTitle::orderBy('name')->get(['id', 'name']),
-            'branches' => Branch::orderByDesc('is_main')->orderBy('name')->get(['id', 'name']),
+            'branches' => app(BranchContext::class)->choices(true),
             'users' => User::ofTenant($tenants->require()->id)->with('role:id,name')->orderBy('name')->get(['id', 'name', 'email', 'role_id'])
                 ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email, 'role' => $u->role?->name, 'linked' => $linkedUsers->contains($u->id)]),
             'trainers' => Trainer::orderBy('name')->get(['id', 'name'])->map(fn (Trainer $t) => ['id' => $t->id, 'name' => $t->name, 'linked' => $linkedTrainers->contains($t->id)]),
@@ -67,6 +66,7 @@ class EmployeeController extends Controller
     public function store(Request $request, AuditLogger $audit): RedirectResponse
     {
         $data = $this->validated($request);
+        $data['branch_id'] = app(BranchContext::class)->assign($data['branch_id'] ?? null);
         $this->guardSelf($request, null, $data);
         $employee = Employee::create($data);
         $audit->log('employee.created', $employee, ['name' => $employee->name]);
@@ -120,7 +120,7 @@ class EmployeeController extends Controller
             'hired_at' => ['nullable', 'date'],
             'status' => ['required', Rule::in(array_keys(Employee::STATUSES))],
             'job_title_id' => ['nullable', TenantRule::exists('gym_job_titles')],
-            'branch_id' => ['nullable', TenantRule::exists('branches')],
+            'branch_id' => ['nullable', ...app(BranchContext::class)->rule($employee?->branch_id)],
             'user_id' => ['nullable', TenantRule::exists('users'), TenantRule::unique('gym_employees', 'user_id')->ignore($employee?->id)],
             'trainer_id' => ['nullable', TenantRule::exists('gym_trainers'), TenantRule::unique('gym_employees', 'trainer_id')->ignore($employee?->id)],
             'notes' => ['nullable', 'string', 'max:2000'],

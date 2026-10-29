@@ -4,7 +4,7 @@ import { Copy, FlaskConical, Fingerprint, KeyRound, Pencil, Plus, RefreshCw, Shi
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Toggle } from '@/Components/ui';
 import { IntegrationBack, IntegrationSummary, type IntegrationStatusData } from '@/Components/Integrations';
-import { useCan, useShared } from '@/hooks/useShared';
+import { useBranchDefault, useCan, useShared } from '@/hooks/useShared';
 import type { Option } from '@/types';
 
 type Device = {
@@ -81,6 +81,7 @@ function copy(text: string) {
 export default function DevicesIntegration({ devices, status, events, simulation, drivers, staffCredentials, staff, branches, types, apiBase, onlineMinutes }: Props) {
     const { flash } = useShared();
     const can = useCan();
+    const branchDefault = useBranchDefault();
     const [editing, setEditing] = useState<Device | null>(null);
     const [open, setOpen] = useState(false);
     const [copied, setCopied] = useState(false);
@@ -95,7 +96,7 @@ export default function DevicesIntegration({ devices, status, events, simulation
         form.setData(d ? {
             name: d.name, type: d.type, vendor: d.vendor ?? '', model: d.model ?? '', serial_number: d.serial_number ?? '',
             direction: d.direction, purpose: d.purpose, branch_id: d.branch_id, is_active: d.is_active,
-        } : blank);
+        } : { ...blank, branch_id: branchDefault ? Number(branchDefault) : null });
         setOpen(true);
     };
 

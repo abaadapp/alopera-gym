@@ -3,6 +3,7 @@
 namespace App\Modules\Reports\Services;
 
 use App\Core\Auth\PermissionRegistry;
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Expense;
@@ -27,11 +28,11 @@ final class ReportService
 {
     /** @return array<string, mixed> */
     /**
-     * The dashboard's figures, for one branch when $branch is given (its records and those tied to no branch).
+     * The dashboard's figures, for one branch when $branch is given (see BranchContext::narrow()).
      */
     public function dashboard(?int $branch = null): array
     {
-        $b = fn ($query, string $column = 'branch_id') => $branch ? $query->where(fn ($w) => $w->where($column, $branch)->orWhereNull($column)) : $query;
+        $b = fn ($query, string $column = 'branch_id') => app(BranchContext::class)->narrow($query, $branch, $column);
         $today = CarbonImmutable::today();
         $monthStart = $today->startOfMonth();
 
@@ -102,8 +103,7 @@ final class ReportService
 
     private function netCollected(CarbonImmutable $from, CarbonImmutable $to, ?int $branch = null): string
     {
-        $row = Payment::completed()->whereBetween('paid_at', [$from, $to])
-            ->when($branch, fn ($q) => $q->where(fn ($w) => $w->where('branch_id', $branch)->orWhereNull('branch_id')))
+        $row = app(BranchContext::class)->narrow(Payment::completed()->whereBetween('paid_at', [$from, $to]), $branch)
             ->selectRaw("coalesce(sum(case when kind = 'refund' then -amount else amount end), 0) as net")
             ->first();
 
@@ -113,8 +113,7 @@ final class ReportService
     /** @return list<array{date: string, amount: float}> */
     public function dailyRevenue(CarbonImmutable $from, CarbonImmutable $to, ?int $branch = null): array
     {
-        $rows = Payment::completed()->whereBetween('paid_at', [$from->startOfDay(), $to->endOfDay()])
-            ->when($branch, fn ($q) => $q->where(fn ($w) => $w->where('branch_id', $branch)->orWhereNull('branch_id')))
+        $rows = app(BranchContext::class)->narrow(Payment::completed()->whereBetween('paid_at', [$from->startOfDay(), $to->endOfDay()]), $branch)
             ->selectRaw("date(paid_at) as d, sum(case when kind = 'refund' then -amount else amount end) as net")
             ->groupBy('d')->pluck('net', 'd');
 

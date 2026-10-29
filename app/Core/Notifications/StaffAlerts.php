@@ -3,6 +3,7 @@
 namespace App\Core\Notifications;
 
 use App\Core\Support\Money;
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Models\StaffNotification;
 use App\Models\TenantIntegration;
@@ -18,7 +19,8 @@ use App\Modules\Website\Models\ContactMessage;
 use Carbon\CarbonImmutable;
 
 /**
- * What goes into the bell, and to whom — the events of the club's own screens, worded once:
+ * What goes into the bell, and to whom — the events of the club's own screens, worded once. A user tied to a
+ * branch hears only of their branch's documents, orders, payments and memberships (BranchContext::allows()).
  *
  * | event                                   | who                                   | handled when                     |
  * |-----------------------------------------|---------------------------------------|----------------------------------|
@@ -33,7 +35,7 @@ use Carbon\CarbonImmutable;
  */
 final class StaffAlerts
 {
-    public function __construct(private readonly StaffNotifier $notifier, private readonly TenantContext $tenants) {}
+    public function __construct(private readonly StaffNotifier $notifier, private readonly TenantContext $tenants, private readonly BranchContext $branches) {}
 
     public function documentAlert(DocumentAlert $alert): void
     {
@@ -45,7 +47,7 @@ final class StaffAlerts
         $this->notifier->notify('documents.view', 'document-alert:'.$alert->id, 'document',
             $days === null || $days < 0 ? 'انتهى المستند «'.$document->name.'»' : 'المستند «'.$document->name.'» ينتهي '.($days === 0 ? 'اليوم' : 'خلال '.$days.' يوم'),
             route('club.business-documents.index', ['view' => $days !== null && $days < 0 ? 'expired' : 'expiring']),
-            fn (User $u) => $document->isVisibleTo($u));
+            fn (User $u) => $document->isVisibleTo($u) && $this->branches->allows($u, $document->owningBranchId()));
     }
 
     public function order(Sale $sale): void
@@ -53,7 +55,7 @@ final class StaffAlerts
         $this->notifier->notify('orders.manage', 'order:'.$sale->id, 'order',
             'طلب جديد من الموقع '.$sale->number.($sale->customer_name ? ' — '.$sale->customer_name : ''),
             route('club.sales.orders.index'),
-            fn (User $u) => ! $u->branch_id || ! $sale->branch_id || (int) $u->branch_id === (int) $sale->branch_id);
+            fn (User $u) => $this->branches->allows($u, $sale->owningBranchId()));
     }
 
     public function pendingPayment(Payment $payment): void
@@ -61,18 +63,20 @@ final class StaffAlerts
         $payment->loadMissing('invoice:id,number,customer_name');
         $this->notifier->notify('payments.confirm', 'payment-pending:'.$payment->id, 'payment',
             'دفعة بانتظار التأكيد: '.Money::normalize($payment->amount).' '.$payment->currency.($payment->invoice?->customer_name ? ' — '.$payment->invoice->customer_name : ''),
-            route('club.payments.index', ['status' => Payment::PENDING]));
+            route('club.payments.index', ['status' => Payment::PENDING]),
+            fn (User $u) => $this->branches->allows($u, $payment->owningBranchId()));
     }
 
     public function paymentFailed(PaymentIntent $intent): void
     {
-        $intent->loadMissing('invoice:id,number');
+        $intent->loadMissing('invoice:id,number,branch_id');
         if (! $intent->invoice) {
             return;
         }
         $this->notifier->notify('invoices.view', 'payment-failed:'.$intent->id, 'payment',
             'لم يكتمل دفع إلكتروني للفاتورة '.$intent->invoice->number,
-            route('club.invoices.show', $intent->invoice_id));
+            route('club.invoices.show', $intent->invoice_id),
+            fn (User $u) => $this->branches->allows($u, $intent->invoice->owningBranchId()));
     }
 
     /** Once a day: how many memberships end within a week — for each recipient, in their own branch when tied to one. */
@@ -81,8 +85,7 @@ final class StaffAlerts
         $today ??= CarbonImmutable::today();
         $counts = [];
         $count = function (?int $branch) use (&$counts, $today): int {
-            return $counts[$branch ?? 0] ??= Membership::expiringWithin(7, $today)
-                ->when($branch, fn ($q) => $q->where(fn ($w) => $w->where('branch_id', $branch)->orWhereNull('branch_id')))->count();
+            return $counts[$branch ?? 0] ??= $this->branches->narrow(Membership::expiringWithin(7, $today), $branch)->count();
         };
 
         foreach ([null, ...User::ofTenant($this->tenants->require()->id)->whereNotNull('branch_id')->distinct()->pluck('branch_id')->all()] as $branch) {

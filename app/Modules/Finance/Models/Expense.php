@@ -4,15 +4,17 @@ namespace App\Modules\Finance\Models;
 
 use App\Core\Audit\Auditable;
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\OwnedByBranch;
 use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Expense extends Model
+class Expense extends Model implements BranchOwned
 {
-    use Auditable, BelongsToTenant, SoftDeletes;
+    use Auditable, BelongsToTenant, OwnedByBranch, SoftDeletes;
 
     protected $guarded = ['id', 'tenant_id'];
 

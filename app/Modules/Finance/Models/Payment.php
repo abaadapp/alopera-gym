@@ -4,6 +4,8 @@ namespace App\Modules\Finance\Models;
 
 use App\Core\Audit\Auditable;
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\OwnedByBranch;
 use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -11,9 +13,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
-class Payment extends Model
+class Payment extends Model implements BranchOwned
 {
-    use Auditable, BelongsToTenant;
+    use Auditable, BelongsToTenant, OwnedByBranch;
 
     public const PENDING = 'pending';
 

@@ -68,12 +68,13 @@ class MemberController extends Controller
 
     public function create(): Response
     {
-        return Inertia::render('Gym/Members/Form', ['member' => null, 'branches' => Branch::where('is_active', true)->get(['id', 'name'])]);
+        return Inertia::render('Gym/Members/Form', ['member' => null, 'branches' => app(BranchContext::class)->choices()]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
+        $data['branch_id'] = app(BranchContext::class)->assign($data['branch_id'] ?? null);
         $photo = $request->file('photo');
         unset($data['photo']);
 
@@ -91,13 +92,16 @@ class MemberController extends Controller
         $member->load(['branch:id,name', 'currentMembership']);
 
         $memberships = Membership::where('member_id', $member->id)->latest('id')->get();
+        // The member's account is one across branches; a user tied to a branch sees another branch's invoices and
+        // payments in it, without opening or collecting them (their pages answer 404 for that user).
+        $branches = app(BranchContext::class);
         $invoices = $user->can('invoices.view')
             ? Invoice::where('billable_type', 'member')->where('billable_id', $member->id)->latest('id')->limit(50)->get()
-                ->map(fn (Invoice $i) => $i->only('id', 'number', 'type', 'status', 'total', 'paid_total', 'issue_date') + ['balance' => $i->balance(), 'issue_date' => $i->issue_date->toDateString()])
+                ->map(fn (Invoice $i) => $i->only('id', 'number', 'type', 'status', 'total', 'paid_total', 'issue_date') + ['balance' => $i->balance(), 'issue_date' => $i->issue_date->toDateString(), 'reachable' => $branches->allows($user, $i->owningBranchId())])
             : [];
         $payments = $user->can('invoices.view')
             ? Payment::where('payer_type', 'member')->where('payer_id', $member->id)->latest('id')->limit(50)->get()
-                ->map(fn (Payment $p) => $p->only('id', 'receipt_number', 'kind', 'method', 'status', 'amount', 'reference') + ['paid_at' => $p->paid_at?->format('Y-m-d H:i'), 'invoice_id' => $p->invoice_id])
+                ->map(fn (Payment $p) => $p->only('id', 'receipt_number', 'kind', 'method', 'status', 'amount', 'reference') + ['paid_at' => $p->paid_at?->format('Y-m-d H:i'), 'invoice_id' => $p->invoice_id, 'reachable' => $branches->allows($user, $p->owningBranchId())])
             : [];
 
         return Inertia::render('Gym/Members/Show', [
@@ -112,7 +116,7 @@ class MemberController extends Controller
                 'qr_token' => $user->can('members.manage') ? $member->qr_token : null,
                 'balance' => Money::normalize(Invoice::where('billable_type', 'member')->where('billable_id', $member->id)->open()->get()->sum(fn ($i) => (float) $i->balance())),
             ],
-            'memberships' => $memberships->map(fn ($m) => GymPresenter::membership($m)),
+            'memberships' => $memberships->map(fn ($m) => GymPresenter::membership($m) + ['invoice_reachable' => $branches->allows($user, $m->branch_id ? (int) $m->branch_id : null)]),
             'events' => MembershipEvent::whereIn('membership_id', $memberships->pluck('id'))->with('user:id,name')->latest('id')->limit(30)->get()
                 ->map(fn ($e) => ['type' => $e->type, 'data' => $e->data, 'user' => $e->user?->name, 'at' => $e->created_at->format('Y-m-d H:i'), 'membership_id' => $e->membership_id]),
             'invoices' => $invoices,
@@ -147,7 +151,7 @@ class MemberController extends Controller
                     'health_notes' => $member->health_notes,
                     'photo_url' => $member->photoUrl(),
                 ],
-            'branches' => Branch::where('is_active', true)->get(['id', 'name']),
+            'branches' => app(BranchContext::class)->choices(),
         ]);
     }
 
@@ -227,7 +231,7 @@ class MemberController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
             'whatsapp_opt_in' => ['boolean'],
             'marketing_opt_in' => ['boolean'],
-            'branch_id' => ['nullable', TenantRule::exists('branches')],
+            'branch_id' => ['nullable', ...app(BranchContext::class)->rule($member?->branch_id)],
             'photo' => ['nullable', 'image', 'max:'.config('gym.max_image_kb')],
         ]);
     }

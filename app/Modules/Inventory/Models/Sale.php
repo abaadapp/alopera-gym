@@ -3,6 +3,8 @@
 namespace App\Modules\Inventory\Models;
 
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\OwnedByBranch;
 use App\Models\User;
 use App\Modules\Finance\Models\Invoice;
 use Illuminate\Database\Eloquent\Model;
@@ -15,9 +17,9 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * club's website (pending until handed over, or cancelled). The money side lives on the linked invoice and its
  * payments; the books are posted from those, never from the sale, so revenue is counted once.
  */
-class Sale extends Model
+class Sale extends Model implements BranchOwned
 {
-    use BelongsToTenant;
+    use BelongsToTenant, OwnedByBranch;
 
     public const POS = 'pos';
 

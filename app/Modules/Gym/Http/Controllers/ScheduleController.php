@@ -2,9 +2,9 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
-use App\Models\Branch;
 use App\Modules\Gym\Models\ClassSchedule;
 use App\Modules\Gym\Models\Program;
 use App\Modules\Gym\Models\Trainer;
@@ -30,7 +30,7 @@ class ScheduleController extends Controller
                 ]),
             'programs' => Program::where('is_active', true)->orderBy('name')->get(['id', 'name', 'color', 'duration_minutes', 'default_capacity']),
             'trainers' => Trainer::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'branches' => Branch::where('is_active', true)->get(['id', 'name']),
+            'branches' => app(BranchContext::class)->choices(),
         ]);
     }
 
@@ -68,7 +68,7 @@ class ScheduleController extends Controller
         $data = $request->validate([
             'program_id' => ['required', TenantRule::exists('gym_programs')],
             'trainer_id' => ['nullable', TenantRule::exists('gym_trainers')],
-            'branch_id' => ['nullable', TenantRule::exists('branches')],
+            'branch_id' => ['nullable', ...app(BranchContext::class)->rule()],
             'weekday' => ['required', 'integer', 'between:0,6'],
             'starts_at' => ['required', 'date_format:H:i'],
             'duration_minutes' => ['required', 'integer', 'min:10', 'max:300'],

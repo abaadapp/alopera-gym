@@ -122,6 +122,10 @@ class MembershipController extends Controller
 
         $plan = MembershipPlan::findOrFail($data['membership_plan_id']);
         $options = collect($data)->only('coupon_code', 'discount', 'notes', 'starts_on')->filter(fn ($v) => $v !== null && $v !== '')->all();
+        // Sold where the staff member works (or the branch the panel shows); otherwise the member's own branch.
+        if ($branch = app(BranchContext::class)->id()) {
+            $options['branch_id'] = $branch;
+        }
 
         $membership = $data['mode'] === 'renewal'
             ? $this->service->renew($member, $plan, $options)

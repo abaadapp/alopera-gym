@@ -64,7 +64,7 @@ class DocumentController extends Controller
             'soon' => $soon,
             'filters' => $request->only('q', 'type'),
             'types' => DocumentType::where('is_active', true)->orderBy('name')->get(['id', 'name', 'renewal_months']),
-            'branches' => Branch::orderByDesc('is_main')->orderBy('name')->get(['id', 'name']),
+            'branches' => app(BranchContext::class)->choices(true),
             'users' => User::where('tenant_id', $tenant->id)->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'can' => [
                 'create' => $user->can('documents.create'),
@@ -102,6 +102,7 @@ class DocumentController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
+        $data['branch_id'] = app(BranchContext::class)->assign($data['branch_id'] ?? null);
         $this->documents->create($data, $request->file('file'));
 
         return back()->with('success', 'أُضيف المستند.');
@@ -201,7 +202,7 @@ class DocumentController extends Controller
             'issue_date' => ['nullable', 'date'],
             'expiry_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
             'renewal_months' => ['nullable', 'integer', 'min:1', 'max:120'],
-            'branch_id' => ['nullable', 'integer', TenantRule::exists('branches')],
+            'branch_id' => ['nullable', 'integer', ...app(BranchContext::class)->rule($document?->branch_id)],
             'responsible_user_id' => ['nullable', 'integer', TenantRule::exists('users')],
             'status' => ['nullable', 'in:active,cancelled'],
             'is_confidential' => ['boolean'],

@@ -60,7 +60,7 @@ final class PermissionRegistry
             'accounting.view' => 'الملخص المالي والحسابات والقيود والتقارير المالية',
             'accounting.manage' => 'الحسابات البنكية والقيود اليدوية والإعدادات المالية',
         ]],
-        'payroll' => ['label' => 'الرواتب والموظفين', 'permissions' => [
+        'payroll' => ['label' => 'الرواتب والموظفون', 'permissions' => [
             'employees.view' => 'عرض ملفات الموظفين',
             'employees.manage' => 'إضافة الموظفين وتعديل ملفاتهم والمسميات الوظيفية',
             'payroll.salaries' => 'عرض الرواتب والبيانات البنكية (سري)',

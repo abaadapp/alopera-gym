@@ -4,6 +4,8 @@ namespace App\Modules\Payroll\Models;
 
 use App\Core\Support\Money;
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\OwnedByBranch;
 use App\Models\Branch;
 use App\Models\User;
 use App\Modules\Gym\Models\Trainer;
@@ -15,9 +17,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * A member of staff's file. Salary and bank details are confidential (payroll.salaries); the bank numbers are
  * stored encrypted.
  */
-class Employee extends Model
+class Employee extends Model implements BranchOwned
 {
-    use BelongsToTenant;
+    use BelongsToTenant, OwnedByBranch;
 
     protected $table = 'gym_employees';
 

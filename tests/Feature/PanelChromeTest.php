@@ -14,6 +14,7 @@ use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Inventory\Services\OrderService;
 use App\Modules\Inventory\Services\StockService;
+use App\Modules\Payroll\Models\Employee;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Artisan;
@@ -80,10 +81,17 @@ class PanelChromeTest extends TestCase
         $this->actingAs($owner)->post(route('club.branch.switch'), ['branch_id' => $khoud->id])->assertSessionHas('success');
         $props = $this->props($owner, 'club.members.index');
         $this->assertSame('فرع الخوض', $props['auth']['branch']['current']['name']);
-        $this->assertEqualsCanonicalizing(['عضو الخوض', 'عضو بلا فرع'], array_column($props['members']['data'], 'full_name'));
+        $this->assertSame(['عضو الخوض'], array_column($props['members']['data'], 'full_name'));
 
-        // The dashboard follows too; «all branches» brings everything back.
-        $this->assertSame(2, $this->props($owner, 'club.dashboard')['kpis']['new_members_month']);
+        // The dashboard follows too.
+        $this->assertSame(1, $this->props($owner, 'club.dashboard')['kpis']['new_members_month']);
+
+        // A record without a branch counts as the main branch's: it shows there and nowhere else.
+        $main = $this->asTenant($club, fn () => Branch::where('is_main', true)->first());
+        $this->actingAs($owner)->post(route('club.branch.switch'), ['branch_id' => $main->id]);
+        $this->assertSame(['عضو بلا فرع'], array_column($this->props($owner, 'club.members.index')['members']['data'], 'full_name'));
+
+        // «All branches» brings everything back.
         $this->actingAs($owner)->post(route('club.branch.switch'), ['branch_id' => null]);
         $this->assertCount(3, $this->props($owner, 'club.members.index')['members']['data']);
     }
@@ -276,6 +284,64 @@ class PanelChromeTest extends TestCase
         $groups = collect($this->actingAs($this->staff($club, 'reception'))->getJson(route('club.search', ['q' => $invoice->number]))->json('groups'))->keyBy('key');
         $this->assertStringContainsString($invoice->number, $groups['invoices']['items'][0]['label']);
         $this->assertArrayNotHasKey('sales', $groups->all(), 'reception does not see sales figures, and this number is an invoice');
+    }
+
+    public function test_search_finds_products_payments_and_employees_without_their_pay(): void
+    {
+        $club = $this->club();
+        $this->asTenant($club, function () {
+            Product::create(['name' => 'مشروب الطاقة', 'price' => 1.2, 'sku' => 'NRG-1']);
+            Employee::create(['name' => 'سالمة الهنائي', 'phone' => '96899887766', 'basic_salary' => 735.5, 'iban' => 'OM810180000001299123456']);
+        });
+        $invoice = $this->asTenant($club, fn () => app(InvoiceService::class)->issue(null, [['description' => 'تأجير', 'quantity' => 1, 'unit_price' => 30]], ['type' => 'other'], 'شركة النور'));
+        $payment = $this->asTenant($club, fn () => app(PaymentService::class)->record($invoice, 30, 'cash'));
+
+        $search = fn (User $u, string $q) => collect($this->actingAs($u)->getJson(route('club.search', ['q' => $q]))->assertOk()->json('groups'))->keyBy('key');
+        $manager = $this->staff($club, 'manager');
+
+        $this->assertSame(['مشروب الطاقة'], array_column($search($manager, 'مشروب')['products']['items'], 'label'));
+        $this->assertSame(['مشروب الطاقة'], array_column($search($manager, 'nrg')['products']['items'], 'label'), 'by SKU');
+
+        $employees = $search($manager, 'سالمه');
+        $this->assertSame(['سالمة الهنائي'], array_column($employees['employees']['items'], 'label'), 'taa marbuta folds');
+        $raw = $this->actingAs($manager)->getJson(route('club.search', ['q' => 'سالمة']))->getContent();
+        $this->assertStringNotContainsString('735', $raw, 'no salary in search');
+        $this->assertStringNotContainsString('OM81', $raw, 'no bank account in search');
+
+        $finance = $this->staff($club, 'finance');
+        $this->assertStringContainsString('شركة النور', $search($finance, (string) $payment->receipt_number)['payments']['items'][0]['label']);
+        $this->assertSame(route('club.invoices.show', $invoice), $search($finance, 'النور')['payments']['items'][0]['url']);
+
+        // Reception collects payments but manages neither products nor staff files.
+        $reception = $search($this->staff($club, 'reception'), 'سالمة');
+        $this->assertArrayNotHasKey('employees', $reception->all());
+        $this->assertArrayNotHasKey('products', $search($this->staff($club, 'reception'), 'مشروب')->all());
+    }
+
+    public function test_the_bell_refreshes_lightly_and_only_with_the_users_own_rows(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $reception = $this->staff($club, 'reception');
+        $trainer = $this->staff($club, 'trainer');
+        $this->websiteOrder($club);
+
+        $feed = $this->actingAs($reception)->getJson(route('club.notifications.feed'))->assertOk()->json();
+        $this->assertSame(1, $feed['unread']);
+        $this->assertCount(1, $feed['items']);
+
+        // Nothing changed since what the bell shows: no items travel.
+        $again = $this->actingAs($reception)->getJson(route('club.notifications.feed', ['since' => $feed['latest'], 'unread' => 1]))->json();
+        $this->assertNull($again['items']);
+
+        // Read elsewhere: the count changes, and the items come again with their new state.
+        $this->actingAs($owner)->post(route('club.notifications.read-all'));
+        $this->actingAs($reception)->post(route('club.notifications.read-all'));
+        $after = $this->actingAs($reception)->getJson(route('club.notifications.feed', ['since' => $feed['latest'], 'unread' => 1]))->json();
+        $this->assertSame(0, $after['unread']);
+        $this->assertTrue($after['items'][0]['read']);
+
+        $this->assertSame(['unread' => 0, 'latest' => 0, 'items' => []], $this->actingAs($trainer)->getJson(route('club.notifications.feed'))->json());
     }
 
     // ─── Dashboard tiles ──────────────────────────────────────────────────

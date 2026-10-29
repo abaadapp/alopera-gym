@@ -4,6 +4,8 @@ namespace App\Modules\Gym\Models;
 
 use App\Core\Audit\Auditable;
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\OwnedByBranch;
 use App\Models\Branch;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,9 +15,9 @@ use Illuminate\Support\Str;
  * A door reader, fingerprint terminal, turnstile or kiosk. Devices authenticate
  * with a bearer token; only its SHA-256 hash is stored.
  */
-class AccessDevice extends Model
+class AccessDevice extends Model implements BranchOwned
 {
-    use Auditable, BelongsToTenant;
+    use Auditable, BelongsToTenant, OwnedByBranch;
 
     public const TYPES = ['fingerprint', 'qr_reader', 'barcode_reader', 'rfid_reader', 'turnstile', 'kiosk'];
 

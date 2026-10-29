@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Core\Support\BusinessRuleException;
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Gym\Models\Member;
@@ -17,7 +18,7 @@ use Inertia\Response;
 /** The point of sale: whoever holds pos.sell sells; discounts need sales.discount, voiding needs sales.refund. */
 class PosController extends Controller
 {
-    public function __construct(private readonly PosService $pos) {}
+    public function __construct(private readonly PosService $pos, private readonly BranchContext $branches) {}
 
     public function index(): Response
     {
@@ -46,7 +47,7 @@ class PosController extends Controller
             throw new BusinessRuleException('pos.discount_permission', 'الخصم يحتاج صلاحية «تطبيق الخصومات عند البيع».', 'discount');
         }
 
-        $sale = $this->pos->checkout($data['items'], $data['payment_method'], isset($data['member_id']) ? Member::find($data['member_id']) : null, $data['discount'] ?? 0, $request->user()->branch_id, $data['card_reference'] ?? null, $data['customer_name'] ?? null);
+        $sale = $this->pos->checkout($data['items'], $data['payment_method'], isset($data['member_id']) ? Member::find($data['member_id']) : null, $data['discount'] ?? 0, $this->branches->assign(), $data['card_reference'] ?? null, $data['customer_name'] ?? null);
 
         return back()->with('success', 'تمت عملية البيع '.$sale->number.' بمبلغ '.$sale->total)->with('sale_id', $sale->id);
     }

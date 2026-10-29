@@ -90,7 +90,7 @@ export const NAV: NavGroup[] = [
                 ],
             },
             {
-                label: 'الرواتب والموظفين',
+                label: 'الرواتب والموظفون',
                 icon: Briefcase,
                 tabs: [
                     { label: 'الموظفون', route: 'club.employees.index', permission: 'employees.view', match: 'club.employees.*' },

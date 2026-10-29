@@ -35,6 +35,8 @@ interface MembershipItem {
     freeze_allowed: boolean;
     max_freeze_days: number;
     invoice_id: number | null;
+    /** False when the invoice is another branch's and this user is tied to a branch. */
+    invoice_reachable: boolean;
     cancel_reason: string | null;
     activated_at: string | null;
     created_at: string | null;
@@ -89,8 +91,9 @@ interface Props {
     member: MemberDetail;
     memberships: MembershipItem[];
     events: { type: string; data: Record<string, unknown> | null; user: string | null; at: string; membership_id: number }[];
-    invoices: { id: number; number: string; type: string; status: string; total: string; paid_total: string; issue_date: string; balance: string }[];
-    payments: { id: number; receipt_number: string | null; kind: string; method: string; status: string; amount: string; reference: string | null; paid_at: string | null; invoice_id: number | null }[];
+    /** `reachable` is false for another branch's invoice or payment, seen by a user tied to a branch: shown, not opened. */
+    invoices: { id: number; number: string; type: string; status: string; total: string; paid_total: string; issue_date: string; balance: string; reachable: boolean }[];
+    payments: { id: number; receipt_number: string | null; kind: string; method: string; status: string; amount: string; reference: string | null; paid_at: string | null; invoice_id: number | null; reachable: boolean }[];
     bookings: { id: number; status: string; source: string; program: string | null; starts_at: string | null; session_id: number }[];
     checkins: { id: number; method: string; result: string; reason: string | null; at: string }[];
     documents: { id: number; type: string; title: string; original_name: string | null; size: number; uploaded_by: string | null; created_at: string; expires_on: string | null }[];
@@ -399,7 +402,7 @@ function MembershipsTab({ memberships, events, plans, member, onSell }: Props & 
                             </div>
 
                             <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
-                                {m.invoice_id && can('invoices.view') && (
+                                {m.invoice_id && m.invoice_reachable && can('invoices.view') && (
                                     <Button size="sm" variant={m.status === 'pending' ? 'primary' : 'outline'} href={route('club.invoices.show', m.invoice_id)} icon={m.status === 'pending' ? <Wallet className="size-4" /> : <FileText className="size-4" />}>
                                         {m.status === 'pending' ? 'تحصيل الدفعة' : 'الفاتورة'}
                                     </Button>
@@ -727,14 +730,18 @@ function FinanceTab({ invoices, payments }: Props) {
                                     const open = ['issued', 'partially_paid'].includes(i.status);
                                     return (
                                         <tr key={i.id}>
-                                            <td><Link href={route('club.invoices.show', i.id)} className="font-medium hover:text-brand num">{i.number}</Link></td>
+                                            <td>
+                                                {i.reachable
+                                                    ? <Link href={route('club.invoices.show', i.id)} className="font-medium hover:text-brand num">{i.number}</Link>
+                                                    : <span className="num">{i.number}<span className="block text-xs text-muted">فرع آخر</span></span>}
+                                            </td>
                                             <td>{invoiceType[i.type] ?? i.type}</td>
                                             <td>{date(i.issue_date)}</td>
                                             <td className="num">{money(i.total, currency)}</td>
                                             <td className={`num ${Number(i.balance) > 0 ? 'text-red-600' : ''}`}>{money(i.balance, currency)}</td>
                                             <td><Badge tone={tone}>{l}</Badge></td>
                                             <td className="text-end">
-                                                {open && can('payments.record') && <Button size="sm" variant="secondary" icon={<CreditCard className="size-3.5" />} onClick={() => setPayFor(i)}>تحصيل</Button>}
+                                                {open && i.reachable && can('payments.record') && <Button size="sm" variant="secondary" icon={<CreditCard className="size-3.5" />} onClick={() => setPayFor(i)}>تحصيل</Button>}
                                             </td>
                                         </tr>
                                     );
@@ -762,7 +769,7 @@ function FinanceTab({ invoices, payments }: Props) {
                                             <td className={`num ${p.kind === 'refund' ? 'text-red-600' : ''}`}>{p.kind === 'refund' ? '− ' : ''}{money(p.amount, currency)}</td>
                                             <td><Badge tone={tone}>{p.kind === 'refund' ? 'رد مبلغ' : l}</Badge></td>
                                             <td className="text-end">
-                                                {p.status === 'completed' && <Link href={route('club.payments.receipt', p.id)} className="text-sm text-brand">الإيصال</Link>}
+                                                {p.status === 'completed' && p.reachable && <Link href={route('club.payments.receipt', p.id)} className="text-sm text-brand">الإيصال</Link>}
                                             </td>
                                         </tr>
                                     );

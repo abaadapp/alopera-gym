@@ -4,6 +4,7 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Tenancy\CrossTenantWriteException;
 use App\Core\Tenancy\MissingTenantException;
 use App\Http\Middleware\AuthenticateDevice;
+use App\Http\Middleware\EnforceBranchAccess;
 use App\Http\Middleware\EnsureModuleEnabled;
 use App\Http\Middleware\EnsurePlatformAdmin;
 use App\Http\Middleware\EnsureTenantIsOperational;
@@ -42,6 +43,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'site.tenant' => ResolveSiteTenant::class,
             'device' => AuthenticateDevice::class,
             'module' => EnsureModuleEnabled::class,
+            'branch.guard' => EnforceBranchAccess::class,
         ]);
 
         // The tenant must be known before route-model binding runs: the tenant
@@ -49,6 +51,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->prependToPriorityList(before: AuthenticatesRequests::class, prepend: ResolveSiteTenant::class);
         $middleware->prependToPriorityList(before: SubstituteBindings::class, prepend: ResolveTenantFromUser::class);
         $middleware->prependToPriorityList(before: SubstituteBindings::class, prepend: AuthenticateDevice::class);
+        // The branch guard reads the bound records, so it runs after binding.
+        $middleware->appendToPriorityList(after: SubstituteBindings::class, append: EnforceBranchAccess::class);
 
         $middleware->redirectGuestsTo(function (Request $request) {
             return $request->routeIs('portal.*') ? route('portal.login', ['club' => $request->route('club') ?? $request->segment(2)]) : route('login');

@@ -155,9 +155,10 @@ class SalesController extends Controller
         return app(BranchContext::class)->apply(Sale::query(), 'branch_id', $user);
     }
 
+    /** The route guard (EnforceBranchAccess) already does this for a sale named in the address; kept for callers. */
     public static function ensureBranch(User $user, Sale $sale): void
     {
-        abort_if($user->branch_id && $sale->branch_id && $sale->branch_id !== $user->branch_id, 404);
+        abort_unless(app(BranchContext::class)->allows($user, $sale->owningBranchId()), 404);
     }
 
     private function scoped(Request $request): Builder

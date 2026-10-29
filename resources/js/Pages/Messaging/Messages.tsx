@@ -1,7 +1,7 @@
 import { Link, router } from '@inertiajs/react';
-import { ScrollText } from 'lucide-react';
+import { CheckCheck, Eye, MailCheck, ScrollText, Send, TriangleAlert, type LucideIcon } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Card, EmptyState, PageHeader, Pagination, Select } from '@/Components/ui';
+import { Badge, Card, EmptyState, PageHeader, Pagination, Select, StatCard, StatGrid } from '@/Components/ui';
 import { number } from '@/lib/format';
 import { label, messageStatus } from '@/lib/labels';
 import type { Paginated } from '@/types';
@@ -43,6 +43,16 @@ const skipReasons: Record<string, string> = {
     campaign_cancelled: 'أُلغيت الحملة',
 };
 
+const STATUS_TILES: { status: string; icon: LucideIcon; tone: 'brand' | 'green' | 'blue' | 'red' }[] = [
+    { status: 'sent', icon: Send, tone: 'brand' },
+    { status: 'delivered', icon: MailCheck, tone: 'green' },
+    { status: 'read', icon: Eye, tone: 'blue' },
+    { status: 'failed', icon: TriangleAlert, tone: 'red' },
+];
+
+/** The filters without the empty ones, for a link. */
+const clean = (filters: Record<string, string | undefined>) => Object.fromEntries(Object.entries(filters).filter(([, v]) => v)) as Record<string, string>;
+
 export default function Messages({ messages, stats, filters }: Props) {
     const apply = (patch: Record<string, string>) =>
         router.get(route('club.messages.index'), { ...filters, ...patch }, { preserveState: true, replace: true });
@@ -54,25 +64,22 @@ export default function Messages({ messages, stats, filters }: Props) {
         <ClubLayout title="سجل الرسائل">
             <PageHeader title="سجل رسائل واتساب" subtitle="متابعة الإرسال والتسليم والقراءة لكل رسالة" />
 
-            <div className="mb-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-                <div className="card p-4">
-                    <p className="text-xs text-muted">المرسلة (30 يومًا)</p>
-                    <p className="mt-1 text-xl font-semibold num">{number(total)}</p>
-                </div>
-                <div className="card p-4">
-                    <p className="text-xs text-muted">نسبة التسليم</p>
-                    <p className="mt-1 text-xl font-semibold num">{total > 0 ? Math.round((delivered / total) * 100) : 0}%</p>
-                </div>
-                {['sent', 'delivered', 'read', 'failed'].map((s) => {
-                    const [l, tone] = label(messageStatus, s);
-                    return (
-                        <button key={s} onClick={() => apply({ status: filters.status === s ? '' : s })} className={`card p-4 text-start transition hover:border-brand-200 ${filters.status === s ? 'border-brand' : ''}`}>
-                            <Badge tone={tone}>{l}</Badge>
-                            <p className="mt-2 text-xl font-semibold num">{number(stats[s] ?? 0)}</p>
-                        </button>
-                    );
-                })}
-            </div>
+            <StatGrid cols={3} className="mb-6">
+                <StatCard label="المرسلة (30 يومًا)" value={number(total)} icon={<Send />} tone="gray" />
+                <StatCard label="نسبة التسليم" value={total > 0 ? `${Math.round((delivered / total) * 100)}%` : '—'} icon={<CheckCheck />} tone="blue" />
+                {/* Each status tile filters the list below; pressing the active one clears it. */}
+                {STATUS_TILES.map(({ status, icon: Icon, tone }) => (
+                    <StatCard
+                        key={status}
+                        label={label(messageStatus, status)[0]}
+                        value={number(stats[status] ?? 0)}
+                        icon={<Icon />}
+                        tone={tone}
+                        active={filters.status === status}
+                        href={route('club.messages.index', clean({ ...filters, status: filters.status === status ? '' : status }))}
+                    />
+                ))}
+            </StatGrid>
 
             <Card padded={false}>
                 <div className="flex flex-wrap gap-3 p-4">

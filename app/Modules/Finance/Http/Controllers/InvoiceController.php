@@ -68,7 +68,7 @@ class InvoiceController extends Controller
         ]);
 
         $member = isset($data['member_id']) ? Member::find($data['member_id']) : null;
-        $invoice = $service->issue($member, $data['lines'], ['type' => 'other', 'due_date' => $data['due_date'] ?? null, 'notes' => $data['notes'] ?? null], $data['customer_name'] ?? null);
+        $invoice = $service->issue($member, $data['lines'], ['type' => 'other', 'branch_id' => app(BranchContext::class)->assign(), 'due_date' => $data['due_date'] ?? null, 'notes' => $data['notes'] ?? null], $data['customer_name'] ?? null);
 
         return redirect()->route('club.invoices.show', $invoice)->with('success', 'تم إصدار الفاتورة '.$invoice->number);
     }

@@ -3,13 +3,20 @@
 namespace App\Modules\Documents\Models;
 
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /** An expiry alert: one per document, expiry date and threshold (0 = expired), never repeated. */
-class DocumentAlert extends Model
+class DocumentAlert extends Model implements BranchOwned
 {
     use BelongsToTenant;
+
+    /** The branch of its document. */
+    public function owningBranchId(): ?int
+    {
+        return $this->document?->owningBranchId();
+    }
 
     protected $table = 'gym_document_alerts';
 

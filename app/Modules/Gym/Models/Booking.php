@@ -3,13 +3,20 @@
 namespace App\Modules\Gym\Models;
 
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Booking extends Model
+class Booking extends Model implements BranchOwned
 {
     use BelongsToTenant;
+
+    /** The branch of its session. */
+    public function owningBranchId(): ?int
+    {
+        return $this->session?->owningBranchId();
+    }
 
     public const BOOKED = 'booked';
 

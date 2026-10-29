@@ -1,10 +1,10 @@
 import { Link, router, useForm } from '@inertiajs/react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
-    CalendarPlus, CheckCircle2, CreditCard, FileText, LogIn, MessageCircle, QrCode, ScanLine, ShoppingBag, UserPlus, UserRound, Wallet, XCircle, CalendarCheck,
+    Ban, CalendarPlus, CheckCircle2, CreditCard, DoorOpen, FileText, LogIn, MessageCircle, QrCode, ScanLine, ShoppingBag, UserPlus, UserRound, Wallet, XCircle, CalendarCheck,
 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, MemberPicker, Modal, PageHeader, Select, type MemberHit } from '@/Components/ui';
+import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, MemberPicker, Modal, PageHeader, Select, StatCard, StatGrid, type MemberHit } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, money, number, time, whatsappUrl, dayCount } from '@/lib/format';
 import { checkinReason, label, membershipStatus } from '@/lib/labels';
@@ -123,11 +123,11 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                 }
             />
 
-            <div className="mb-6 grid grid-cols-3 gap-3">
-                <div className="card p-4"><p className="text-xs text-muted">دخول اليوم</p><p className="mt-1 text-xl font-semibold text-emerald-700"><span className="num">{number(stats.checkins)}</span></p></div>
-                <div className="card p-4"><p className="text-xs text-muted">مرفوض اليوم</p><p className="mt-1 text-xl font-semibold text-red-600"><span className="num">{number(stats.denied)}</span></p></div>
-                <div className="card p-4"><p className="text-xs text-muted">حصّلتُ اليوم</p><p className="mt-1 text-xl font-semibold"><span className="num">{money(stats.collected, currency)}</span></p></div>
-            </div>
+            <StatGrid cols={3} className="mb-6">
+                <StatCard label="دخول اليوم" value={number(stats.checkins)} icon={<DoorOpen />} tone="green" />
+                <StatCard label="مرفوض اليوم" value={number(stats.denied)} icon={<Ban />} tone="red" />
+                <StatCard label="حصّلتُ اليوم" value={money(stats.collected, currency)} icon={<Wallet />} tone="brand" />
+            </StatGrid>
 
             <div className="grid gap-6 lg:grid-cols-5">
                 {/* Search, scan and the selected member */}

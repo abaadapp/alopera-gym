@@ -86,6 +86,7 @@ class SessionController extends Controller
         $start = CarbonImmutable::parse($data['starts_at']);
 
         ClassSession::create([
+            'branch_id' => app(BranchContext::class)->assign(),
             'program_id' => $data['program_id'],
             'trainer_id' => $data['trainer_id'] ?? null,
             'starts_at' => $start,

@@ -4,13 +4,15 @@ namespace App\Modules\Inventory\Models;
 
 use App\Core\Audit\Auditable;
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\OwnedByBranch;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class PurchaseOrder extends Model
+class PurchaseOrder extends Model implements BranchOwned
 {
-    use Auditable, BelongsToTenant;
+    use Auditable, BelongsToTenant, OwnedByBranch;
 
     public const DRAFT = 'draft';
 

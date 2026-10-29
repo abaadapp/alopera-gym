@@ -6,7 +6,6 @@ use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
-use App\Models\Branch;
 use App\Models\User;
 use App\Modules\Gym\Access\AccessControlService;
 use App\Modules\Gym\Access\AccessDecision;
@@ -44,7 +43,7 @@ class DeviceController extends Controller
             'drivers' => DeviceDrivers::catalog(),
             'staffCredentials' => AccessCredential::where('holder_type', 'user')->get()->map(fn ($c) => $c->only('id', 'type', 'identifier', 'label', 'holder_id', 'is_active')),
             'staff' => User::ofTenant($tid)->where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'branches' => Branch::where('is_active', true)->get(['id', 'name']),
+            'branches' => app(BranchContext::class)->choices(),
             'types' => AccessDevice::TYPES,
             'apiBase' => url('/api/devices/v1'),
             'onlineMinutes' => AccessDevice::ONLINE_MINUTES,
@@ -108,6 +107,7 @@ class DeviceController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $device = new AccessDevice($this->validated($request));
+        $device->branch_id = app(BranchContext::class)->assign($device->branch_id);
         $token = $device->issueToken();
         $device->save();
 
@@ -116,7 +116,7 @@ class DeviceController extends Controller
 
     public function update(Request $request, AccessDevice $device): RedirectResponse
     {
-        $device->update($this->validated($request));
+        $device->update($this->validated($request, $device));
 
         return back()->with('success', 'تم حفظ الجهاز.');
     }
@@ -160,7 +160,7 @@ class DeviceController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function validated(Request $request): array
+    private function validated(Request $request, ?AccessDevice $device = null): array
     {
         return $request->validate([
             'name' => ['required', 'string', 'max:120'],
@@ -171,7 +171,7 @@ class DeviceController extends Controller
             'serial_number' => ['nullable', 'string', 'max:80'],
             'direction' => ['required', 'in:in,out,both'],
             'purpose' => ['required', 'in:members,staff,both'],
-            'branch_id' => ['nullable', TenantRule::exists('branches')],
+            'branch_id' => ['nullable', ...app(BranchContext::class)->rule($device?->branch_id)],
             'is_active' => ['boolean'],
         ]);
     }

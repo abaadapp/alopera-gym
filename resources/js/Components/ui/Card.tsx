@@ -106,9 +106,10 @@ export function StatGrid({ cols = 4, className, children }: { cols?: 3 | 4; clas
     return <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2', cols === 4 ? 'xl:grid-cols-4' : 'xl:grid-cols-3', className)}>{children}</div>;
 }
 
-export function StatCard({ label, value, hint, icon, tone = 'brand', href, trend }: { label: ReactNode; value: ReactNode; hint?: ReactNode; icon?: ReactNode; tone?: keyof typeof tones; href?: string; trend?: StatTrend | null }) {
+/** A stat tile. With `href` it is a link (a filter tile when `active` marks the filter in use). */
+export function StatCard({ label, value, hint, icon, tone = 'brand', href, trend, active }: { label: ReactNode; value: ReactNode; hint?: ReactNode; icon?: ReactNode; tone?: keyof typeof tones; href?: string; trend?: StatTrend | null; active?: boolean }) {
     const body = (
-        <div className={cn('card @container h-full p-4', href && 'transition hover:border-[#dcdcdc] hover:shadow-[0_8px_30px_-12px_rgba(17,17,17,0.14)]')}>
+        <div className={cn('card @container h-full p-4', href && 'transition hover:border-[#dcdcdc] hover:shadow-[0_8px_30px_-12px_rgba(17,17,17,0.14)]', active && 'border-[#111] shadow-[0_0_0_1px_#111] hover:border-[#111]')}>
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="truncate text-[13px] text-[#6b7280]">{label}</p>
@@ -120,7 +121,7 @@ export function StatCard({ label, value, hint, icon, tone = 'brand', href, trend
             {hint && <p className={cn('text-[12px] text-[#6b7280]', trend ? 'mt-1' : 'mt-3')}>{hint}</p>}
         </div>
     );
-    return href ? <Link href={href} className="block h-full">{body}</Link> : body;
+    return href ? <Link href={href} preserveScroll className="block h-full" aria-current={active ? 'true' : undefined}>{body}</Link> : body;
 }
 
 export function EmptyState({ icon, title, description, action }: { icon?: ReactNode; title: ReactNode; description?: ReactNode; action?: ReactNode }) {

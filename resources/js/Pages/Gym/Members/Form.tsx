@@ -4,6 +4,7 @@ import { ArrowRight, Camera, UserRound } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Card, CardHeader, Field, Input, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import type { Option } from '@/types';
+import { useBranchDefault } from '@/hooks/useShared';
 
 interface MemberData {
     id: number;
@@ -43,6 +44,7 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
     const editing = member !== null;
     const [preview, setPreview] = useState<string | null>(member?.photo_url ?? null);
 
+    const branchDefault = useBranchDefault();
     const form = useForm({
         full_name: member?.full_name ?? '',
         phone: member?.phone ?? '',
@@ -62,7 +64,7 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
         notes: member?.notes ?? '',
         whatsapp_opt_in: member?.whatsapp_opt_in ?? true,
         marketing_opt_in: member?.marketing_opt_in ?? false,
-        branch_id: member?.branch_id ? String(member.branch_id) : '',
+        branch_id: member ? (member.branch_id ? String(member.branch_id) : '') : branchDefault,
         photo: null as File | null,
         _method: editing ? 'put' : 'post',
     });

@@ -17,7 +17,8 @@ use Illuminate\Support\Facades\Route;
 // Club-wide (shared) screens: dashboard, and the settings area — a hub of cards at /settings, each
 // opening one settings screen under /settings/*. Route names are kept from the flat layout.
 
-Route::get('/', [DashboardController::class, 'index'])->middleware('can:dashboard.view')->name('dashboard');
+// No can: here — the controller sends whoever has no dashboard to their own first screen.
+Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 Route::put('/dashboard/tiles', [DashboardController::class, 'saveTiles'])->middleware('can:dashboard.view')->name('dashboard.tiles');
 Route::post('/branch', BranchSwitchController::class)->middleware('throttle:30,1')->name('branch.switch');
 
@@ -31,6 +32,7 @@ Route::put('/account/password', [AccountController::class, 'password'])->middlew
 
 // The bell: every staff member's own notifications (no permission — each sees only their own rows).
 Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+Route::get('/notifications/feed', [NotificationController::class, 'feed'])->middleware('throttle:30,1')->name('notifications.feed');
 Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
 Route::get('/notifications/{notification}/open', [NotificationController::class, 'open'])->whereNumber('notification')->name('notifications.open');
 Route::post('/notifications/{notification}/read', [NotificationController::class, 'read'])->whereNumber('notification')->name('notifications.read');

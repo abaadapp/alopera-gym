@@ -38,6 +38,7 @@ export function Avatar({ name, size = 32 }: { name?: string | null; size?: numbe
 export default function Topbar({ onMenu }: { onMenu: () => void }) {
     const { tenant, modules } = useShared();
     const can = useCan();
+    const bell = useBellFeed();
 
     return (
         <header className="no-print sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-[#e8e8e8] bg-white/95 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-white/80 lg:px-6">
@@ -72,8 +73,8 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
                     <span className="sr-only">حضور/انصراف</span>
                 </button>
 
-                <NotificationBell />
-                <UserMenu />
+                {bell && <NotificationBell bell={bell} />}
+                <UserMenu unread={bell?.unread ?? 0} />
             </div>
         </header>
     );
@@ -166,10 +167,56 @@ export function NotificationRow({ n, onOpen, compact = false }: { n: StaffNotifi
 }
 
 /** The bell: a red badge with the unread count, the latest notifications, «mark all read» and the full list. */
-function NotificationBell() {
+type Bell = { unread: number; items: StaffNotification[] };
+
+const BELL_POLL_MS = 60_000;
+
+/**
+ * The bell's state: what the page brought, refreshed about once a minute while the tab is visible and at once when
+ * it becomes visible again (one light request; the items come only when they changed). A page visit's fresh props
+ * replace it. Signed out or forbidden stops the polling; a network error waits for the next turn.
+ */
+function useBellFeed(): Bell | null {
     const { notifications } = useShared();
-    if (!notifications) return null;
-    const { unread, items } = notifications;
+    const [bell, setBell] = useState<Bell | null>(notifications ?? null);
+    const shown = useRef({ since: 0, unread: 0 });
+    shown.current = { since: bell?.items[0]?.id ?? 0, unread: bell?.unread ?? 0 };
+
+    useEffect(() => setBell(notifications ?? null), [notifications]);
+
+    const enabled = notifications != null;
+    useEffect(() => {
+        if (!enabled) return;
+        let stopped = false;
+        const poll = async () => {
+            if (stopped || document.visibilityState !== 'visible') return;
+            try {
+                const res = await fetch(route('club.notifications.feed', shown.current), { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' });
+                if (!res.ok) {
+                    if ([401, 403, 419].includes(res.status)) stopped = true;
+                    return;
+                }
+                const data = (await res.json()) as { unread: number; items: StaffNotification[] | null };
+                if (!stopped) setBell((b) => b && { unread: data.unread, items: data.items ?? b.items });
+            } catch {
+                // Offline for a moment: the next turn tries again.
+            }
+        };
+        const timer = window.setInterval(poll, BELL_POLL_MS);
+        const onVisible = () => void poll();
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            stopped = true;
+            window.clearInterval(timer);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
+    }, [enabled]);
+
+    return bell;
+}
+
+function NotificationBell({ bell }: { bell: Bell }) {
+    const { unread, items } = bell;
 
     return (
         <Dropdown
@@ -222,12 +269,12 @@ function NotificationBell() {
 }
 
 /** The user: a 32px circle with initials, the name and the role beneath it; the menu opens on hover or click. */
-function UserMenu() {
-    const { auth, tenant, notifications } = useShared();
+function UserMenu({ unread }: { unread: number }) {
+    const { auth, tenant } = useShared();
     const can = useCan();
     const user = auth?.user;
+    const branchOptions: { id: number | null; name: string }[] = auth?.branch?.options ?? [];
     if (!user) return null;
-    const unread = notifications?.unread ?? 0;
 
     return (
         <Dropdown
@@ -255,6 +302,19 @@ function UserMenu() {
                             <p className="truncate text-[12px] text-[#9ca3af]">{[user.role, auth?.branch?.current?.name, tenant?.name].filter(Boolean).join(' · ')}</p>
                         </div>
                     </div>
+                    {/* On a phone the top bar has no room for the branch picker: the choice sits here. */}
+                    {branchOptions.length > 0 && (
+                        <div className="md:hidden">
+                            <DropdownSeparator />
+                            <DropdownLabel className="font-normal">الفرع</DropdownLabel>
+                            {[{ id: null, name: 'كل الفروع' }, ...branchOptions].map((b) => (
+                                <DropdownItem key={b.id ?? 'all'} onClick={() => { close(); router.post(route('club.branch.switch'), { branch_id: b.id }, { preserveScroll: true }); }}>
+                                    <Building2 /> <span className="flex-1 truncate">{b.name}</span>
+                                    {(auth?.branch?.current?.id ?? null) === b.id && <Check />}
+                                </DropdownItem>
+                            ))}
+                        </div>
+                    )}
                     <DropdownSeparator />
                     <DropdownItem href={route('club.account.show')} onClick={close}>
                         <UserRound /> حسابي
@@ -295,7 +355,8 @@ function fold(text: string): string {
 
 /**
  * Search in the top bar: the panel's pages this user may open (instantly, in the browser) and, from the server,
- * members, sales and website orders, invoices and documents — each group only for whoever may open it. Arrow keys
+ * members, products, sales and website orders, invoices, payments, employees and documents — each group only for
+ * whoever may open it. Arrow keys
  * move, Enter opens, Escape closes; on a computer «/» jumps into it.
  */
 function TopSearch({ className, autoFocus, onDone }: { className?: string; autoFocus?: boolean; onDone?: () => void }) {
@@ -395,7 +456,7 @@ function TopSearch({ className, autoFocus, onDone }: { className?: string; autoF
                     if (e.key === 'Enter') { e.preventDefault(); go(hits[index]); }
                     if (e.key === 'Escape') { setOpen(false); input.current?.blur(); onDone?.(); }
                 }}
-                placeholder="ابحث عن عضو، فاتورة، بيع، مستند أو صفحة…"
+                placeholder="ابحث عن عضو، فاتورة، دفعة، منتج، موظف أو صفحة…"
                 aria-label="بحث"
                 className="h-10 w-full rounded-[12px] border border-[#dcdcdc] bg-white pe-9 ps-9 text-sm text-[#111] outline-none transition placeholder:text-[#9ca3af] focus:border-[#111] focus:shadow-[0_0_0_4px_rgba(17,17,17,0.08)] [&::-webkit-search-cancel-button]:hidden"
             />
@@ -426,7 +487,7 @@ function TopSearch({ className, autoFocus, onDone }: { className?: string; autoF
                                             className={cn('flex w-full items-center justify-between gap-3 px-4 py-2.5 text-start', active ? 'bg-[#f5f5f4]' : 'hover:bg-[#fafafa]')}
                                         >
                                             <span className="truncate text-sm text-[#111]">{hit.label}</span>
-                                            {hit.hint && <span className="shrink-0 truncate text-[12px] text-[#9ca3af]" dir="ltr">{hit.hint}</span>}
+                                            {hit.hint && <span className="shrink-0 truncate text-[12px] text-[#9ca3af]" dir="auto">{hit.hint}</span>}
                                         </button>
                                     );
                                 })}

@@ -8,17 +8,21 @@ use App\Core\Tenancy\BranchContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Documents\Models\BusinessDocument;
 use App\Modules\Finance\Models\Invoice;
+use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Inventory\Http\Controllers\SalesController;
+use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\Sale;
+use App\Modules\Payroll\Models\Employee;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * The top bar's quick search: members, sales and website orders, invoices and business documents — each group only
- * for whoever may open it, narrowed to the current branch, at most five per group. Arabic text matches whatever
- * form of alef, yaa or taa marbuta was typed, and Arabic-Indic digits are read as digits. The panel's pages are
- * searched in the browser.
+ * The top bar's quick search: members, products, sales and website orders, invoices, payments, employees and
+ * business documents — each group only for whoever may open it, narrowed to the current branch, at most five per
+ * group. Arabic text matches whatever form of alef, yaa or taa marbuta was typed, and Arabic-Indic digits are read
+ * as digits. Employees show their job title, never their pay; confidential documents only to who may see them. The
+ * panel's pages are searched in the browser.
  */
 class SearchController extends Controller
 {
@@ -45,6 +49,17 @@ class SearchController extends Controller
                 ->map(fn (Member $m) => ['label' => $m->full_name, 'hint' => trim($m->member_no.' · '.$m->phone, ' ·'), 'url' => route('club.members.show', $m)])];
         }
 
+        if (PermissionRegistry::moduleEnabled('sales') && $user->can('products.manage')) {
+            $groups[] = ['key' => 'products', 'label' => 'المنتجات', 'items' => Product::query()
+                ->where(fn ($q) => $q->whereRaw(self::folded('name').' ilike ?', [$like])->orWhere('sku', 'ilike', $like)->orWhere('barcode', 'ilike', $like))
+                ->orderBy('name')->limit(self::LIMIT)->get(['id', 'name', 'sku', 'price', 'stock_quantity', 'track_stock'])
+                ->map(fn (Product $p) => [
+                    'label' => $p->name,
+                    'hint' => trim(Money::normalize($p->price).($p->track_stock ? ' · المخزون '.(float) $p->stock_quantity : '').($p->sku ? ' · '.$p->sku : ''), ' ·'),
+                    'url' => route('club.products.index', ['q' => $p->name]),
+                ])];
+        }
+
         $seesSales = PermissionRegistry::moduleEnabled('sales') && $user->can('sales.view');
         $seesOrders = PermissionRegistry::moduleEnabled('sales') && $user->can('orders.manage');
         if ($seesSales || $seesOrders) {
@@ -66,6 +81,27 @@ class SearchController extends Controller
                     ->when($phone, fn ($w) => $w->orWhere('customer_phone', 'like', $phone)))
                 ->latest('id')->limit(self::LIMIT)->get(['id', 'number', 'customer_name', 'total', 'currency'])
                 ->map(fn (Invoice $i) => ['label' => $i->number.' — '.$i->customer_name, 'hint' => Money::normalize($i->total).' '.$i->currency, 'url' => route('club.invoices.show', $i)])];
+        }
+
+        if ($user->can('invoices.view')) {
+            $groups[] = ['key' => 'payments', 'label' => 'المدفوعات', 'items' => BranchContext::scope(Payment::query())
+                ->where(fn ($q) => $q->where('receipt_number', 'ilike', $like)->orWhere('reference', 'ilike', $like)
+                    ->orWhereHas('invoice', fn ($i) => $i->where('number', 'ilike', $like)->orWhereRaw(self::folded('customer_name').' ilike ?', [$like])))
+                ->with('invoice:id,number,customer_name')->latest('id')->limit(self::LIMIT)->get(['id', 'invoice_id', 'receipt_number', 'kind', 'amount', 'currency', 'status'])
+                ->map(fn (Payment $p) => [
+                    'label' => trim(($p->receipt_number ?? ($p->kind === Payment::KIND_REFUND ? 'رد مبلغ' : 'دفعة')).' — '.($p->invoice?->customer_name ?? ''), ' —'),
+                    'hint' => ($p->kind === Payment::KIND_REFUND ? '− ' : '').Money::normalize($p->amount).' '.$p->currency.($p->invoice ? ' · '.$p->invoice->number : ''),
+                    'url' => $p->invoice_id ? route('club.invoices.show', $p->invoice_id) : route('club.payments.index'),
+                ])];
+        }
+
+        if ($user->can('employees.view')) {
+            $groups[] = ['key' => 'employees', 'label' => 'الموظفون', 'items' => BranchContext::scope(Employee::query())
+                ->where(fn ($q) => $q->whereRaw(self::folded('name').' ilike ?', [$like])->orWhere('email', 'ilike', $like)
+                    ->when($phone, fn ($w) => $w->orWhere('phone', 'like', $phone)))
+                ->with('jobTitle:id,name')->orderBy('name')->limit(self::LIMIT)->get(['id', 'name', 'phone', 'job_title_id'])
+                // Name, job title and phone only: pay and bank details stay on the employee's own screen.
+                ->map(fn (Employee $e) => ['label' => $e->name, 'hint' => trim(($e->jobTitle?->name ?? '').' · '.($e->phone ?? ''), ' ·'), 'url' => route('club.employees.index', ['q' => $e->name])])];
         }
 
         if ($user->can('documents.view')) {

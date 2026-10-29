@@ -5,6 +5,8 @@ namespace App\Modules\Finance\Models;
 use App\Core\Audit\Auditable;
 use App\Core\Support\Money;
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\OwnedByBranch;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,9 +18,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $amount
  * @property string $refunded_total
  */
-class CreditNote extends Model
+class CreditNote extends Model implements BranchOwned
 {
-    use Auditable, BelongsToTenant;
+    use Auditable, BelongsToTenant, OwnedByBranch;
 
     protected $guarded = ['id', 'tenant_id'];
 

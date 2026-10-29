@@ -5,6 +5,8 @@ namespace App\Modules\Finance\Models;
 use App\Core\Audit\Auditable;
 use App\Core\Support\Money;
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\OwnedByBranch;
 use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -18,9 +20,9 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @property string $credited_total
  * @property string $paid_total
  */
-class Invoice extends Model
+class Invoice extends Model implements BranchOwned
 {
-    use Auditable, BelongsToTenant;
+    use Auditable, BelongsToTenant, OwnedByBranch;
 
     public const DRAFT = 'draft';
 

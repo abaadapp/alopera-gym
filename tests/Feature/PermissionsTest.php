@@ -75,7 +75,7 @@ class PermissionsTest extends TestCase
             'trainer cannot list members' => ['trainer', 'club.members.index', 403],
             'trainer cannot see invoices' => ['trainer', 'club.invoices.index', 403],
             'trainer cannot open the settings hub' => ['trainer', 'club.settings.index', 403],
-            'trainer cannot see dashboard' => ['trainer', 'club.dashboard', 403],
+            'trainer is sent from the dashboard to her screen' => ['trainer', 'club.dashboard', 302],
         ];
     }
 

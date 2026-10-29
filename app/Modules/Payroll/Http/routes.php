@@ -7,7 +7,7 @@ use App\Modules\Payroll\Http\Controllers\PayrollSettingsController;
 use Illuminate\Support\Facades\Route;
 
 /*
-| الرواتب والموظفين — staff files, job titles, payroll runs and payouts (club panel, /app/...).
+| الرواتب والموظفون — staff files, job titles, payroll runs and payouts (club panel, /app/...).
 | Confidential salary fields are filtered in the controllers (payroll.salaries); every run action has its own permission.
 */
 

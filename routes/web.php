@@ -34,7 +34,7 @@ Route::post('/logout', [LoginController::class, 'destroy'])->middleware('auth')-
 Route::prefix('platform')->name('platform.')->middleware(['module:platform_panel', 'auth', 'platform'])
     ->group(app_path('Modules/Platform/Http/routes.php'));
 
-Route::prefix('app')->name('club.')->middleware(['auth', 'tenant.user', 'tenant.active'])->group(function () {
+Route::prefix('app')->name('club.')->middleware(['auth', 'tenant.user', 'tenant.active', 'branch.guard'])->group(function () {
     require app_path('Http/club-routes.php');
     require app_path('Modules/Gym/Http/routes.php');
     require app_path('Modules/Finance/Http/routes.php');

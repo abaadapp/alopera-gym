@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Club;
 
 use App\Http\Controllers\Controller;
 use App\Models\StaffNotification;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -34,6 +35,25 @@ class NotificationController extends Controller
             'unread' => $mine()->unread()->count(),
             'kinds' => collect(self::KIND_LABELS)->only($mine()->distinct()->pluck('kind'))->all(),
             'filters' => ['view' => $view, 'kind' => $kind],
+        ]);
+    }
+
+    /**
+     * The bell's refresh, polled by the top bar about once a minute while the tab is visible: the unread count and
+     * the newest id are two indexed lookups; the latest items travel only when they changed since what the bell
+     * shows (`since` = its newest id, `unread` = its count).
+     */
+    public function feed(Request $request): JsonResponse
+    {
+        $mine = fn () => StaffNotification::for($request->user());
+        $latest = (int) $mine()->max('id');
+        $unread = $mine()->unread()->count();
+        $changed = $latest !== (int) $request->query('since', 0) || $unread !== (int) $request->query('unread', -1);
+
+        return response()->json([
+            'unread' => $unread,
+            'latest' => $latest,
+            'items' => $changed ? $mine()->latest('id')->limit(8)->get()->map(fn (StaffNotification $n) => self::row($n))->all() : null,
         ]);
     }
 
