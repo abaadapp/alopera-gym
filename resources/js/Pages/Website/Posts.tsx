@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import { ImagePlus, Newspaper, Pencil, Plus, Tag, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Tabs, Textarea, Toggle } from '@/Components/ui';
+import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Tabs, Textarea, Toggle } from '@/Components/ui';
 import { date } from '@/lib/format';
 
 interface Post {
@@ -59,24 +59,24 @@ export default function Posts({ posts }: { posts: Post[] }) {
                     <EmptyState icon={<Newspaper className="size-6" />} title="لا يوجد محتوى بعد" action={<Button size="sm" onClick={() => setEditing('new')}>إضافة خبر أو عرض</Button>} />
                 </Card>
             ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {list.map((p) => (
-                        <Card key={p.id} padded={false} className="overflow-hidden">
+                        <Card key={p.id} padded={false} fill className="overflow-hidden">
                             <div className="aspect-[16/9] bg-brand-50">
                                 {p.image_url ? <img src={p.image_url} alt="" className="h-full w-full object-cover" loading="lazy" /> : <div className="grid h-full place-items-center text-brand-300"><Newspaper className="size-8" /></div>}
                             </div>
-                            <div className="p-4">
+                            <div className="flex flex-1 flex-col p-5">
                                 <div className="mb-2 flex flex-wrap items-center gap-1.5">
                                     <Badge tone={p.type === 'offer' ? 'brand' : 'blue'}>{p.type === 'offer' ? <><Tag className="size-3.5" /> عرض</> : 'خبر'}</Badge>
                                     {p.is_published ? <Badge tone="green">منشور</Badge> : <Badge>مسودة</Badge>}
                                     {p.ends_on && <span className="text-xs text-muted">حتى {date(p.ends_on)}</span>}
                                 </div>
-                                <h3 className="font-semibold">{p.title}</h3>
+                                <h3 className="text-[15px] font-semibold text-[#111]">{p.title}</h3>
                                 {p.excerpt && <p className="mt-1 line-clamp-2 text-sm text-muted">{p.excerpt}</p>}
-                                <div className="mt-3 flex gap-1">
+                                <CardFooter>
                                     <Button size="sm" variant="outline" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(p)}>تعديل</Button>
                                     <ConfirmAction url={route('club.website.posts.destroy', p.id)} method="delete" title="حذف" message={`حذف «${p.title}»؟`} variant="ghost" icon={<Trash2 className="size-3.5" />}>حذف</ConfirmAction>
-                                </div>
+                                </CardFooter>
                             </div>
                         </Card>
                     ))}

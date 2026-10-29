@@ -1,7 +1,7 @@
 import { Link } from '@inertiajs/react';
 import { AlertTriangle, CircleCheck, CircleDashed, ShieldCheck } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Card, CardHeader, EmptyState, PageHeader } from '@/Components/ui';
+import { Badge, Card, CardHeader, EmptyState, Notice, PageHeader } from '@/Components/ui';
 import { CheckList, CopyRow, IntegrationBack, IntegrationSummary, KeysForm, VerifyButton, type IntegrationStatusData, type ProviderForm } from '@/Components/Integrations';
 
 interface Props {
@@ -42,9 +42,7 @@ export default function PaymobIntegration({ integration, status, warning, checks
             </IntegrationSummary>
 
             {warning && (
-                <p className="mb-6 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                    <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {warning}
-                </p>
+                <Notice tone="amber" icon={<AlertTriangle />} className="mb-6">{warning}</Notice>
             )}
 
             <div className="grid gap-6 lg:grid-cols-5 [&>*]:min-w-0">

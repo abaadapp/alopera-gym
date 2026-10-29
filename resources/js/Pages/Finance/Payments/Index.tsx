@@ -1,7 +1,7 @@
 import { Link, router } from '@inertiajs/react';
 import { Check, FileDown, Receipt, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, ConfirmAction, EmptyState, Input, PageHeader, Pagination, Select, Tabs } from '@/Components/ui';
+import { Badge, Button, Card, ConfirmAction, EmptyState, Input, Notice, PageHeader, Pagination, Select, Tabs } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money } from '@/lib/format';
@@ -45,9 +45,9 @@ export default function PaymentsIndex({ payments, pendingCount, filters }: { pay
             <PageHeader title="الدفعات والإيصالات" subtitle="كل المبالغ المستلمة والمردودة" />
 
             {pendingCount > 0 && filters.status !== 'pending' && (
-                <button onClick={() => apply({ status: 'pending' })} className="mb-4 w-full rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-start text-sm text-amber-800">
+                <Notice tone="amber" onClick={() => apply({ status: 'pending' })} className="mb-4">
                     <span className="font-semibold num">{pendingCount}</span> تحويل بنكي بانتظار التأكيد — اضغط للمراجعة
-                </button>
+                </Notice>
             )}
 
             <Card padded={false}>

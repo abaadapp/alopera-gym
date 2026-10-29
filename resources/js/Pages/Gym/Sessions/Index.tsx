@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, router, useForm } from '@inertiajs/react';
 import { CalendarPlus, ChevronLeft, ChevronRight, Plus, RefreshCw, Users } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, Field, Input, Modal, PageHeader, Select } from '@/Components/ui';
+import { Badge, Button, Card, cardActive, Field, Input, Modal, PageHeader, Select } from '@/Components/ui';
 import { useCan } from '@/hooks/useShared';
 import { WEEKDAYS, time } from '@/lib/format';
 import { cn } from '@/lib/cn';
@@ -114,7 +114,7 @@ export default function SessionsIndex({ week, sessions, programs, trainers, filt
                     const items = sessions.filter((s) => s.date === day);
                     const label = dayLabel(day);
                     return (
-                        <div key={day} className={cn('rounded-2xl border bg-white', day === today ? 'border-brand-300 ring-2 ring-brand/10' : 'border-line')}>
+                        <div key={day} className={cn('card', day === today && cardActive)}>
                             <div className="flex items-baseline justify-between border-b border-line px-3 py-2.5">
                                 <p className="text-sm font-semibold">{label.weekday}</p>
                                 <p className="text-xs text-muted">{label.date}</p>
@@ -131,7 +131,7 @@ export default function SessionsIndex({ week, sessions, programs, trainers, filt
                                         <Tile
                                             key={s.id}
                                             href={linkable ? route('club.sessions.show', s.id) : undefined}
-                                            className={cn('block rounded-xl border border-transparent p-2.5 transition', linkable && 'hover:shadow-md', cancelled && 'opacity-50')}
+                                            className={cn('block rounded-[12px] border border-transparent p-2.5 transition', linkable && 'hover:shadow-[0_8px_30px_-12px_rgba(17,17,17,0.14)]', cancelled && 'opacity-50')}
                                             style={{ background: `${s.color ?? '#db2777'}14`, borderInlineStartColor: s.color ?? undefined, borderInlineStartWidth: 3 }}
                                         >
                                             <div className="flex items-center justify-between gap-1">

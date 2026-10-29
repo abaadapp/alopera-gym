@@ -10,8 +10,10 @@ use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Inventory\Models\SaleItem;
+use App\Modules\Reports\Services\ReportCatalog;
 use App\Modules\Reports\Services\ReportService;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -19,18 +21,40 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class ReportController extends Controller
 {
-    public function index(Request $request, ReportService $reports): Response
+    /** The reports page: every report this user may open, in categories, with a search (ReportCatalog). */
+    public function index(Request $request, ReportCatalog $catalog): Response|RedirectResponse
     {
-        [$from, $to] = $this->range($request);
-        [$compareFrom, $compareTo, $compare] = $this->comparison($request, $from, $to);
+        // The period reports were tabs of this page (?section=); an old link opens the report itself.
+        if (in_array($section = $request->query('section'), ['finance', 'members', 'classes'], true)) {
+            return redirect()->route('club.reports.show', ['report' => $section] + $request->except('section'));
+        }
 
         return Inertia::render('Reports/Index', [
-            'report' => $reports->period($from, $to, $request->user()->can('reports.financial'), $compareFrom, $compareTo),
+            'reports' => $catalog->for($request->user()),
+            'categories' => ReportCatalog::CATEGORIES,
+        ]);
+    }
+
+    /** One period report: its filters, comparison, charts, tables and exports. */
+    public function show(Request $request, string $report, ReportService $reports, ReportCatalog $catalog): Response
+    {
+        abort_unless($report !== 'branches' || $catalog->multiBranch(), 404);
+        abort_unless($catalog->allows($request->user(), $report), 403);
+        [$from, $to] = $this->range($request);
+        [$compareFrom, $compareTo, $compare] = $this->comparison($request, $from, $to);
+        $financial = $request->user()->can('reports.financial');
+
+        return Inertia::render('Reports/Show', [
+            'kind' => $report,
+            'title' => $catalog->title($report),
+            'report' => $reports->period($from, $to, $financial, $compareFrom, $compareTo),
+            'trainers' => $report === 'trainers' ? $reports->trainers($from, $to, $compareFrom, $compareTo) : null,
+            'branches' => $report === 'branches' ? $reports->branches($from, $to, $compareFrom, $compareTo, $financial) : null,
             'filters' => [
                 'from' => $from->toDateString(), 'to' => $to->toDateString(), 'preset' => $request->string('preset')->toString(),
                 'compare' => $compare, 'compare_from' => $compareFrom->toDateString(), 'compare_to' => $compareTo->toDateString(),
             ],
-            'canFinancial' => $request->user()->can('reports.financial'),
+            'canFinancial' => $financial,
             'canExport' => $request->user()->can('reports.export'),
         ]);
     }
@@ -45,6 +69,7 @@ class ReportController extends Controller
             abort_unless($request->user()->can('reports.financial'), 403);
         }
         abort_if($report === 'sales' && ! PermissionRegistry::moduleEnabled('sales'), 404);
+        [$compareFrom, $compareTo] = $this->comparison($request, $from, $to);
 
         return match ($report) {
             'memberships' => TableExporter::download('memberships', ['الرقم', 'العضو', 'الباقة', 'النوع', 'الحالة', 'من', 'إلى', 'الإجمالي', 'تاريخ التفعيل'],
@@ -75,6 +100,21 @@ class ReportController extends Controller
                 (function () use ($from, $to) {
                     foreach (Expense::with('category:id,name')->whereBetween('expense_date', [$from, $to])->orderBy('expense_date')->lazy(500) as $e) {
                         yield [$e->number, $e->expense_date->toDateString(), $e->category?->name, $e->description, $e->amount];
+                    }
+                })(), $format),
+            'trainers' => TableExporter::download('trainers', ['المدرب', 'الحصص', 'الحجوزات', 'حضر', 'غاب', 'نسبة الحضور', 'جلسات التدريب الشخصي المنجزة'],
+                (function () use ($from, $to, $compareFrom, $compareTo) {
+                    foreach (app(ReportService::class)->trainers($from, $to, $compareFrom, $compareTo)['rows'] as $r) {
+                        yield [$r['trainer'], $r['sessions'], $r['bookings'], $r['attended'], $r['no_show'], $r['attendance_rate'], $r['pt_completed']];
+                    }
+                })(), $format),
+            'branches' => TableExporter::download('branches', ['الفرع', 'العضويات النشطة الآن', 'أعضاء جدد', 'عضويات مفعّلة', 'مرات الدخول', 'الحصص', ...($request->user()->can('reports.financial') ? ['صافي التحصيل', 'المصروفات'] : [])],
+                (function () use ($request, $from, $to, $compareFrom, $compareTo) {
+                    $financial = $request->user()->can('reports.financial');
+                    foreach (app(ReportService::class)->branches($from, $to, $compareFrom, $compareTo, $financial) as $b) {
+                        $c = $b['comparison'];
+                        yield [$b['name'], $b['active_members'], $c['new_members']['current'], $c['memberships_sold']['current'], $c['checkins']['current'], $c['sessions']['current'],
+                            ...($financial ? [$c['revenue']['current'], $c['expenses']['current']] : [])];
                     }
                 })(), $format),
             default => redirect()->route('club.members.export', ['format' => $format]),

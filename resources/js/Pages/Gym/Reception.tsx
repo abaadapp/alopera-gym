@@ -4,7 +4,8 @@ import {
     Ban, CalendarPlus, CheckCircle2, CreditCard, DoorOpen, FileText, LogIn, MessageCircle, QrCode, ScanLine, ShoppingBag, UserPlus, UserRound, Wallet, XCircle, CalendarCheck,
 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, MemberPicker, Modal, PageHeader, Select, StatCard, StatGrid, type MemberHit } from '@/Components/ui';
+import { cn } from '@/lib/cn';
+import { Badge, Button, Card, CardHeader, ChoiceCard, choiceClass, EmptyState, Field, Input, ItemCard, MemberPicker, Modal, PageHeader, Select, StatCard, StatGrid, type MemberHit } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, money, number, time, whatsappUrl, dayCount } from '@/lib/format';
 import { checkinReason, label, membershipStatus } from '@/lib/labels';
@@ -222,14 +223,13 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                             <ul className="grid gap-2 sm:grid-cols-2">
                                 {todaySessions.map((s) => (
                                     <li key={s.id}>
-                                        <Link href={route('club.sessions.show', s.id)} className="flex items-center gap-3 rounded-xl border border-line p-3 hover:border-brand-200">
-                                            <span className="h-10 w-1 rounded-full" style={{ background: s.color ?? 'var(--brand)' }} />
-                                            <span className="min-w-0 flex-1">
-                                                <span className="block truncate text-sm font-medium">{s.program}</span>
-                                                <span className="text-xs text-muted">{time(s.time)} · {s.trainer ?? '—'}</span>
-                                            </span>
-                                            {s.status === 'cancelled' ? <Badge tone="red">ملغاة</Badge> : s.is_full ? <Badge tone="red">مكتملة</Badge> : <Badge tone="green">متاح <span className="num">{s.seats_left}</span></Badge>}
-                                        </Link>
+                                        <ItemCard
+                                            href={route('club.sessions.show', s.id)}
+                                            accent={s.color}
+                                            title={s.program}
+                                            meta={`${time(s.time)} · ${s.trainer ?? '—'}`}
+                                            trailing={s.status === 'cancelled' ? <Badge tone="red">ملغاة</Badge> : s.is_full ? <Badge tone="red">مكتملة</Badge> : <Badge tone="green">متاح <span className="num">{s.seats_left}</span></Badge>}
+                                        />
                                     </li>
                                 ))}
                             </ul>
@@ -326,16 +326,11 @@ function QuickSellModal({ open, onClose, member, plans }: { open: boolean; onClo
             <form onSubmit={submit} className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2">
                     {plans.map((p) => (
-                        <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => form.setData('membership_plan_id', String(p.id))}
-                            className={`rounded-xl border p-3 text-start ${form.data.membership_plan_id === String(p.id) ? 'border-brand bg-brand-50 ring-2 ring-brand/15' : 'border-line hover:border-brand-200'}`}
-                        >
+                        <ChoiceCard key={p.id} selected={form.data.membership_plan_id === String(p.id)} onClick={() => form.setData('membership_plan_id', String(p.id))}>
                             <span className="block text-sm font-medium">{p.name}</span>
                             <span className="block text-xs text-muted">{p.type_label} · {p.duration_label}</span>
-                            <span className="mt-1 block text-sm font-semibold text-brand-700 num">{money(p.price, currency)}</span>
-                        </button>
+                            <span className="mt-1 block text-sm font-semibold num">{money(p.price, currency)}</span>
+                        </ChoiceCard>
                     ))}
                 </div>
                 {form.errors.membership_plan_id && <p className="text-xs text-red-600">{form.errors.membership_plan_id}</p>}
@@ -373,7 +368,7 @@ function QuickBookModal({ open, onClose, memberId, sessions }: { open: boolean; 
             ) : (
                 <div className="space-y-2">
                     {upcoming.map((s) => (
-                        <label key={s.id} className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 ${s.is_full ? 'cursor-not-allowed opacity-50' : sessionId === String(s.id) ? 'border-brand bg-brand-50' : 'border-line'}`}>
+                        <label key={s.id} className={cn('flex cursor-pointer items-center gap-3', choiceClass(sessionId === String(s.id), s.is_full))}>
                             <input type="radio" name="session" disabled={s.is_full} checked={sessionId === String(s.id)} onChange={() => setSessionId(String(s.id))} className="accent-[var(--brand)]" />
                             <span className="flex-1 text-sm">
                                 <span className="font-medium">{s.program}</span> · {time(s.time)}

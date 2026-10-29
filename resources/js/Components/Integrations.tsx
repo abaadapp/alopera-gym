@@ -44,6 +44,29 @@ export function IntegrationMark({ service, size = 48 }: { service: string; size?
     );
 }
 
+/** A connected service on the integrations page: its mark, name and site, what it does, its state, and the way in. */
+export function IntegrationCard({ service, name, subtitle, site, line, status, action }: { service: string; name: string; subtitle: string; site: string; line: string; status: IntegrationStatusData; action: ReactNode }) {
+    return (
+        <div className="card flex h-full flex-col p-5">
+            <div className="flex items-start gap-3">
+                <IntegrationMark service={service} />
+                <div className="min-w-0">
+                    <h3 className="truncate font-bold text-[#111]">{name}</h3>
+                    <p className="mt-0.5 text-[12px] text-[#9ca3af]">
+                        {subtitle} · <span dir="ltr">{site}</span>
+                    </p>
+                </div>
+            </div>
+            <p className="mt-4 grow text-[13px] leading-relaxed text-[#6b7280]">{line}</p>
+            <p className={cn('mt-3 text-[12px] leading-5', status.state === 'error' ? 'text-[#b91c1c]' : 'text-[#9ca3af]')}>{status.detail}</p>
+            <div className="mt-5 flex items-center justify-between gap-3 border-t border-[#e8e8e8] pt-4">
+                {action}
+                <IntegrationStatus status={status} />
+            </div>
+        </div>
+    );
+}
+
 /** The way back to the integrations page, above each service's settings. */
 export function IntegrationBack() {
     return (

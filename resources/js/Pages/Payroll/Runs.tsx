@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
-import { CheckCircle2, Download, FileText, Pencil, Plus, Printer, Trash2, Wallet, X } from 'lucide-react';
+import { Banknote, CheckCircle2, Download, FileText, MinusCircle, Pencil, Plus, Printer, Trash2, Wallet, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, StatCard } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
@@ -71,10 +71,10 @@ export default function PayrollRuns({ runs, run, months, can }: Props) {
                                 </div>
                             </Card>
 
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                                <StatCard label="المستحقات" value={m(run.gross)} hint="أساسي + بدلات + إضافي" tone="blue" />
-                                <StatCard label="الخصومات" value={m(run.deductions)} tone="amber" />
-                                <StatCard label="الصافي" value={m(run.net)} hint={`${run.items.length} موظف`} tone="green" />
+                            <div className="grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                <StatCard label="المستحقات" value={m(run.gross)} hint="أساسي + بدلات + إضافي" icon={<Banknote />} tone="blue" />
+                                <StatCard label="الخصومات" value={m(run.deductions)} icon={<MinusCircle />} tone="amber" />
+                                <StatCard label="الصافي" value={m(run.net)} hint={`${run.items.length} موظف`} icon={<Wallet />} tone="green" />
                             </div>
 
                             <Card padded={false}>

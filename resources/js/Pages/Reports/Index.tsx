@@ -1,359 +1,120 @@
-import { useState, type ReactNode } from 'react';
-import { router } from '@inertiajs/react';
-import { CalendarRange, Download } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import {
+    ArrowLeftRight, Banknote, BarChart3, Briefcase, Building2, CalendarDays, Clock, DoorOpen, Dumbbell, FileClock, HandCoins, History, Hourglass, Landmark,
+    Search, ShoppingBag, Ticket, Wallet, X, type LucideIcon,
+} from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { BarTrend, Button, Card, CardHeader, Delta, EmptyState, HBars, Input, PageHeader, StatCard } from '@/Components/ui';
-import { useCan, useCurrency, useShared } from '@/hooks/useShared';
+import { PageHeader, ReportCard } from '@/Components/ui';
 import { cn } from '@/lib/cn';
-import { date, money, number } from '@/lib/format';
-import { invoiceType, paymentMethod } from '@/lib/labels';
-import { useSectionTabs } from '@/lib/nav';
-
-type Metric = { current: number | string; previous: number | string; change: number | null };
+import { fold } from '@/lib/format';
 
 interface Report {
-    range: { from: string; to: string; previous_from: string; previous_to: string };
-    comparison: Record<string, Metric>;
-    plans: { plan: string; sold: number; renewals: number; revenue: number | null }[];
-    programs: { program: string; color: string | null; sessions: number; bookings: number; attended: number; no_show: number; attendance_rate: number; avg_per_session: number }[];
-    trainers: { trainer: string; sessions: number; bookings: number; attended: number }[];
-    revenue_by_method: { key: string; amount: number }[];
-    revenue_by_type: { key: string; amount: number }[];
-    expenses_by_category: { key: string; amount: number }[];
-    products: { product: string; quantity: number; revenue: number; profit: number }[];
-    trend: { date: string; amount: number }[];
+    key: string;
+    category: string;
+    title: string;
+    desc: string;
+    icon: string;
+    href: string;
 }
 
-interface Props {
-    report: Report;
-    filters: { from: string; to: string; preset: string; compare: string; compare_from: string; compare_to: string };
-    canFinancial: boolean;
-    canExport: boolean;
-}
+/* The icon names the server gives (App\Modules\Reports\Services\ReportCatalog), mapped one by one. */
+const ICONS: Record<string, LucideIcon> = {
+    wallet: Wallet, landmark: Landmark, 'arrow-left-right': ArrowLeftRight, 'hand-coins': HandCoins, ticket: Ticket, hourglass: Hourglass,
+    'calendar-days': CalendarDays, dumbbell: Dumbbell, 'shopping-bag': ShoppingBag, briefcase: Briefcase, banknote: Banknote, 'door-open': DoorOpen,
+    clock: Clock, 'file-clock': FileClock, history: History, 'building-2': Building2,
+};
 
-const presets = [
-    { key: 'today', label: 'اليوم' },
-    { key: 'week', label: 'هذا الأسبوع' },
-    { key: '', label: 'هذا الشهر' },
-    { key: 'last_month', label: 'الشهر الماضي' },
-    { key: 'quarter', label: 'هذا الربع' },
-    { key: 'year', label: 'هذه السنة' },
-];
+/**
+ * The reports page: a large search, the categories with how many reports each holds, and the reports in groups of
+ * equal cards — three to a row on a wide screen. Only the reports this user may open arrive here, and the counts are
+ * of what arrived, so a category never promises more than it shows. The search reads the title and the description,
+ * whatever form of alef, yaa or taa marbuta was typed.
+ */
+export default function ReportsIndex({ reports, categories }: { reports: Report[]; categories: Record<string, string> }) {
+    const [query, setQuery] = useState('');
+    const [category, setCategory] = useState<string | null>(null);
 
-const compareModes = [
-    { key: 'previous', label: 'الفترة السابقة (بنفس المدة)' },
-    { key: 'month', label: 'نفس الفترة من الشهر السابق' },
-    { key: 'year', label: 'نفس الفترة من العام السابق' },
-    { key: 'custom', label: 'فترة مخصصة' },
-];
+    const matched = useMemo(() => {
+        const q = fold(query);
+        return q ? reports.filter((r) => fold(r.title).includes(q) || fold(r.desc).includes(q)) : reports;
+    }, [reports, query]);
+    const visible = category ? matched.filter((r) => r.category === category) : matched;
 
-/** Metrics where a lower number is the good direction. */
-const lowerIsBetter = new Set(['cancellations', 'freezes', 'expirations', 'expenses', 'refunds', 'credit_notes']);
-
-export default function ReportsIndex({ report, filters, canFinancial, canExport }: Props) {
-    const currency = useCurrency();
-    const can = useCan();
-    const inventory = useShared().modules.sales;
-    const [from, setFrom] = useState(filters.from);
-    const [to, setTo] = useState(filters.to);
-    const [compareFrom, setCompareFrom] = useState(filters.compare_from);
-    const [compareTo, setCompareTo] = useState(filters.compare_to);
-    const [customCompare, setCustomCompare] = useState(filters.compare === 'custom');
-    const c = report.comparison;
-    const m = (key: string) => c[key] ?? { current: 0, previous: 0, change: null };
-    // The report shown is the section tab in the address (?section=); without one, the first this user may see.
-    const { active, query } = useSectionTabs();
-    const view = active?.params?.section ?? 'members';
-
-    // Changing the period keeps the comparison choice, and changing the comparison keeps the period.
-    const compareParams = (): Record<string, string> =>
-        filters.compare === 'custom' ? { compare: 'custom', compare_from: filters.compare_from, compare_to: filters.compare_to }
-            : filters.compare !== 'previous' ? { compare: filters.compare } : {};
-    const periodParams = (): Record<string, string> => (filters.preset ? { preset: filters.preset } : { from: filters.from, to: filters.to });
-    // ...and the open tab stays open.
-    const go = (params: Record<string, string>, keep: 'compare' | 'period' | 'none' = 'compare') =>
-        router.get(
-            route('club.reports.index'),
-            { ...(query.get('section') ? { section: query.get('section') as string } : {}), ...(keep === 'compare' ? compareParams() : keep === 'period' ? periodParams() : {}), ...params },
-            { preserveState: true, preserveScroll: true },
-        );
-    const activePreset = filters.preset || (isThisMonth(filters.from, filters.to) ? '' : 'custom');
-
-    const exportLink = (report: string, format: 'csv' | 'xlsx') => route('club.reports.export', { report, from: filters.from, to: filters.to, format });
-
-    const fmtMoney = (v: number | string) => money(v, currency);
-    const fmtPct = (v: number | string) => `${number(v, 1)}%`;
-    const fmtNum = (v: number | string) => number(v);
+    const chips = Object.entries(categories)
+        .map(([key, label]) => ({ key, label, count: matched.filter((r) => r.category === key).length }))
+        .filter((c) => c.count > 0);
+    const groups = Object.entries(categories)
+        .map(([key, label]) => ({ key, label, items: visible.filter((r) => r.category === key) }))
+        .filter((g) => g.items.length > 0);
 
     return (
         <ClubLayout title="التقارير">
-            <PageHeader
-                title="التقارير"
-                subtitle={<>من {date(report.range.from)} إلى {date(report.range.to)} · مقارنة بـ {date(report.range.previous_from)} – {date(report.range.previous_to)}</>}
-            />
+            <PageHeader title="التقارير" subtitle="تصفّح تقارير النادي وافتح ما تحتاجه: المالية والأعضاء والحصص والمدربين والمبيعات والموظفين والحضور والمستندات." />
 
-            <Card className="mb-6">
-                <div className="flex flex-wrap items-end justify-between gap-4">
-                    <div className="flex flex-wrap gap-2">
-                        {presets.map((p) => (
-                            <button
-                                key={p.key || 'month'}
-                                type="button"
-                                onClick={() => go(p.key ? { preset: p.key } : {})}
-                                className={cn('rounded-full border px-3.5 py-1.5 text-sm transition', activePreset === p.key ? 'border-brand bg-brand text-white' : 'border-line hover:border-brand-200')}
-                            >
-                                {p.label}
-                            </button>
-                        ))}
-                    </div>
-                    <form
-                        className="flex flex-wrap items-center gap-2"
-                        onSubmit={(e) => {
-                            e.preventDefault();
-                            go({ from, to });
-                        }}
-                    >
-                        <CalendarRange className="size-4 text-muted" />
-                        <Input type="date" className="w-40" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="من" />
-                        <span className="text-muted">—</span>
-                        <Input type="date" className="w-40" value={to} onChange={(e) => setTo(e.target.value)} aria-label="إلى" />
-                        <Button type="submit" variant="secondary">عرض</Button>
-                    </form>
-                </div>
-                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
-                    <span className="text-sm text-muted">قارن مع:</span>
-                    {compareModes.map((mode) => (
+            <div className="relative mb-4">
+                <Search className="pointer-events-none absolute start-4 top-1/2 size-[18px] -translate-y-1/2 text-[#9ca3af]" />
+                <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="ابحث عن تقرير بالاسم أو الوصف"
+                    aria-label="ابحث عن تقرير بالاسم أو الوصف"
+                    className="h-[52px] w-full rounded-2xl border border-line bg-white pe-11 ps-12 text-[14px] text-[#111] outline-none transition-[border-color,box-shadow] placeholder:text-[#9ca3af] focus:border-[#d1d5db] focus:shadow-[0_0_0_3px_rgba(0,0,0,0.05)] [&::-webkit-search-cancel-button]:appearance-none"
+                />
+                {query && (
+                    <button type="button" onClick={() => setQuery('')} aria-label="مسح البحث" className="absolute end-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-[#9ca3af] transition-colors hover:bg-[#f2f2f0] hover:text-[#111]">
+                        <X className="size-4" />
+                    </button>
+                )}
+            </div>
+
+            <div className="mb-7 flex flex-wrap items-center gap-2" role="group" aria-label="تصنيفات التقارير">
+                {[{ key: null as string | null, label: 'الكل', count: matched.length }, ...chips].map((c) => {
+                    const active = category === c.key;
+                    return (
                         <button
-                            key={mode.key}
+                            key={c.key ?? 'all'}
                             type="button"
-                            onClick={() => (mode.key === 'custom' ? setCustomCompare(true) : (setCustomCompare(false), go(mode.key === 'previous' ? {} : { compare: mode.key }, 'period')))}
-                            className={cn('rounded-full border px-3 py-1 text-xs transition', (customCompare ? mode.key === 'custom' : filters.compare === mode.key) ? 'border-brand bg-brand-50 text-brand-700' : 'border-line hover:border-brand-200')}
+                            onClick={() => setCategory(c.key)}
+                            aria-pressed={active}
+                            className={cn(
+                                'flex h-9 items-center gap-2 rounded-full px-4 text-[13px] font-medium transition-colors',
+                                active ? 'bg-[#111] text-white' : 'border border-line bg-white text-[#6b7280] hover:border-[#d4d4d4] hover:text-[#111]',
+                            )}
                         >
-                            {mode.label}
+                            {c.label}
+                            <span className={cn('num text-[12px]', active ? 'text-white/60' : 'text-[#9ca3af]')}>{c.count}</span>
                         </button>
-                    ))}
-                    {customCompare && (
-                        <form
-                            className="flex flex-wrap items-center gap-2"
-                            onSubmit={(e) => {
-                                e.preventDefault();
-                                go({ compare: 'custom', compare_from: compareFrom, compare_to: compareTo }, 'period');
-                            }}
-                        >
-                            <Input type="date" className="w-40" value={compareFrom} onChange={(e) => setCompareFrom(e.target.value)} aria-label="مقارنة من" />
-                            <span className="text-muted">—</span>
-                            <Input type="date" className="w-40" value={compareTo} onChange={(e) => setCompareTo(e.target.value)} aria-label="مقارنة إلى" />
-                            <Button type="submit" variant="secondary" size="sm">قارن</Button>
-                        </form>
-                    )}
+                    );
+                })}
+            </div>
+
+            {groups.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-line bg-white py-16 text-center">
+                    <BarChart3 className="mx-auto mb-3 size-6 text-[#9ca3af]" />
+                    <p className="text-[14px] font-medium text-[#111]">{reports.length ? 'لا تقرير بهذا الاسم' : 'لا تقارير متاحة لحسابك'}</p>
+                    <p className="mt-1 text-[13px] text-[#9ca3af]">{reports.length ? 'جرّب كلمة أخرى، أو اعرض الكل.' : 'تظهر هنا التقارير التي تسمح بها صلاحياتك.'}</p>
                 </div>
-            </Card>
-
-            {view === 'finance' && canFinancial && (
-                <Section title="المالية" exports={canExport ? [['revenue', 'الإيرادات'], ['expenses', 'المصروفات'], ...(inventory ? [['sales', 'المبيعات'] as [string, string]] : [])] : []} exportLink={exportLink}>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                        <Kpi label="صافي التحصيل" metric={m('revenue')} format={fmtMoney} metricKey="revenue" />
-                        <Kpi label="المصروفات" metric={m('expenses')} format={fmtMoney} metricKey="expenses" />
-                        <Kpi label="صافي الربح التشغيلي" metric={m('net')} format={fmtMoney} metricKey="net" />
-                        <Kpi label="نسبة التحصيل" metric={m('collection_rate')} format={fmtPct} metricKey="collection_rate" hint={`من فواتير بقيمة ${fmtMoney(m('invoiced').current)}`} />
-                        <Kpi label="المردودات" metric={m('refunds')} format={fmtMoney} metricKey="refunds" />
-                        <Kpi label="الإشعارات الدائنة" metric={m('credit_notes')} format={fmtMoney} metricKey="credit_notes" />
-                        {inventory && <Kpi label="مبيعات المنتجات" metric={m('product_sales')} format={fmtMoney} metricKey="product_sales" />}
-                    </div>
-                    <div className="mt-4 grid gap-4 lg:grid-cols-3">
-                        <Card className="lg:col-span-2">
-                            <CardHeader title="التحصيل اليومي" />
-                            {report.trend.length > 0 ? (
-                                <BarTrend data={report.trend.map((d) => ({ label: d.date.slice(5), value: d.amount }))} valueLabel={fmtMoney} />
-                            ) : (
-                                <EmptyState title="لا بيانات" />
-                            )}
-                        </Card>
-                        <Card>
-                            <CardHeader title="حسب طريقة الدفع" />
-                            {report.revenue_by_method.length ? (
-                                <HBars data={report.revenue_by_method.map((r) => ({ label: paymentMethod[r.key] ?? r.key, value: r.amount }))} format={fmtMoney} />
-                            ) : (
-                                <EmptyState title="لا دفعات" />
-                            )}
-                        </Card>
-                        <Card>
-                            <CardHeader title="حسب نوع الإيراد" />
-                            {report.revenue_by_type.length ? (
-                                <HBars data={report.revenue_by_type.map((r) => ({ label: invoiceType[r.key] ?? r.key, value: r.amount }))} format={fmtMoney} />
-                            ) : (
-                                <EmptyState title="لا دفعات" />
-                            )}
-                        </Card>
-                        <Card className={cn(!inventory && 'lg:col-span-2')}>
-                            <CardHeader title="المصروفات حسب التصنيف" />
-                            {report.expenses_by_category.length ? (
-                                <HBars data={report.expenses_by_category.map((r) => ({ label: r.key, value: r.amount, color: '#dc2626' }))} format={fmtMoney} />
-                            ) : (
-                                <EmptyState title="لا مصروفات" />
-                            )}
-                        </Card>
-                        {inventory && <Card padded={false}>
-                            <div className="p-5 pb-2"><CardHeader title="المنتجات الأكثر مبيعًا" className="mb-0" /></div>
-                            {report.products.length ? (
-                                <div className="overflow-x-auto">
-                                    <table className="table-base">
-                                        <thead><tr><th>المنتج</th><th>الكمية</th><th>الإيراد</th><th>الربح</th></tr></thead>
-                                        <tbody>
-                                            {report.products.map((p) => (
-                                                <tr key={p.product}>
-                                                    <td className="font-medium">{p.product}</td>
-                                                    <td className="num">{number(p.quantity, 3)}</td>
-                                                    <td className="num">{fmtMoney(p.revenue)}</td>
-                                                    <td className={cn('num', p.profit < 0 && 'text-red-600')}>{fmtMoney(p.profit)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            ) : (
-                                <EmptyState title="لا مبيعات" />
-                            )}
-                        </Card>}
-                    </div>
-                </Section>
-            )}
-
-            {view === 'members' && (
-                <Section title="العضويات والأعضاء" exports={canExport ? [['memberships', 'العضويات'], ...(can('members.export') ? [['members', 'الأعضاء'] as [string, string]] : [])] : []} exportLink={exportLink}>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                        <Kpi label="اشتراكات جديدة" metric={m('new_memberships')} format={fmtNum} metricKey="new_memberships" />
-                        <Kpi label="تجديدات" metric={m('renewals')} format={fmtNum} metricKey="renewals" />
-                        <Kpi label="تغيير/ترقية باقة" metric={m('upgrades')} format={fmtNum} metricKey="upgrades" />
-                        <Kpi label="أعضاء جدد" metric={m('new_members')} format={fmtNum} metricKey="new_members" />
-                        <Kpi label="إلغاءات" metric={m('cancellations')} format={fmtNum} metricKey="cancellations" />
-                        <Kpi label="تجميدات" metric={m('freezes')} format={fmtNum} metricKey="freezes" />
-                        <Kpi label="عضويات انتهت" metric={m('expirations')} format={fmtNum} metricKey="expirations" />
-                        <Kpi label="مرات الدخول" metric={m('checkins')} format={fmtNum} metricKey="checkins" />
-                    </div>
-                    <Card className="mt-4" padded={false}>
-                        <div className="p-5 pb-2"><CardHeader title="الباقات المباعة" subtitle="العضويات المفعّلة خلال الفترة" className="mb-0" /></div>
-                        {report.plans.length ? (
-                            <div className="overflow-x-auto">
-                                <table className="table-base">
-                                    <thead><tr><th>الباقة</th><th>المباع</th><th>منها تجديد</th>{canFinancial && <th>القيمة</th>}</tr></thead>
-                                    <tbody>
-                                        {report.plans.map((p) => (
-                                            <tr key={p.plan}>
-                                                <td className="font-medium">{p.plan}</td>
-                                                <td className="num">{number(p.sold)}</td>
-                                                <td className="num">{number(p.renewals)}</td>
-                                                {canFinancial && <td className="num">{p.revenue !== null ? fmtMoney(p.revenue) : '—'}</td>}
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+            ) : (
+                <div className="space-y-9">
+                    {groups.map((g) => (
+                        <section key={g.key} aria-labelledby={`reports-${g.key}`}>
+                            <div className="mb-4 flex items-center justify-between gap-3">
+                                <h2 id={`reports-${g.key}`} className="flex items-center gap-2.5 text-[15px] font-bold text-[#111]">
+                                    <span className="size-2 rounded-[3px] bg-[#111]" aria-hidden />
+                                    {g.label}
+                                </h2>
+                                <span className="num flex size-7 items-center justify-center rounded-full border border-line bg-white text-[12px] text-[#9ca3af]">{g.items.length}</span>
                             </div>
-                        ) : (
-                            <EmptyState title="لم تُفعّل عضويات في هذه الفترة" />
-                        )}
-                    </Card>
-                </Section>
-            )}
-
-            {view === 'classes' && (
-                <Section title="الحصص والحضور" exports={canExport ? [['classes', 'الحصص']] : []} exportLink={exportLink}>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                        <Kpi label="الحصص" metric={m('sessions')} format={fmtNum} metricKey="sessions" />
-                        <Kpi label="الحجوزات" metric={m('bookings')} format={fmtNum} metricKey="bookings" />
-                        <Kpi label="نسبة الحضور" metric={m('attendance_rate')} format={fmtPct} metricKey="attendance_rate" hint="الحاضرون من الحضور + الغياب" />
-                        <Kpi label="نسبة الإشغال" metric={m('occupancy_rate')} format={fmtPct} metricKey="occupancy_rate" hint="الحجوزات من السعة المتاحة" />
-                    </div>
-                    <div className="mt-4 grid gap-4 lg:grid-cols-3">
-                        <Card padded={false} className="lg:col-span-2">
-                            <div className="p-5 pb-2"><CardHeader title="البرامج الأكثر طلبًا" className="mb-0" /></div>
-                            {report.programs.length ? (
-                                <div className="overflow-x-auto">
-                                    <table className="table-base">
-                                        <thead><tr><th>البرنامج</th><th>الحصص</th><th>الحجوزات</th><th>متوسط/حصة</th><th>حضر</th><th>غاب</th><th>نسبة الحضور</th></tr></thead>
-                                        <tbody>
-                                            {report.programs.map((p, i) => (
-                                                <tr key={p.program}>
-                                                    <td>
-                                                        <span className="flex items-center gap-2 font-medium">
-                                                            <span className="text-xs text-muted num">{i + 1}</span>
-                                                            <span className="size-2.5 rounded-full" style={{ background: p.color ?? 'var(--brand)' }} />
-                                                            {p.program}
-                                                        </span>
-                                                    </td>
-                                                    <td className="num">{p.sessions}</td>
-                                                    <td className="font-medium num">{p.bookings}</td>
-                                                    <td className="num">{number(p.avg_per_session, 1)}</td>
-                                                    <td className="text-emerald-700 num">{p.attended}</td>
-                                                    <td className="text-red-600 num">{p.no_show}</td>
-                                                    <td>
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-brand-50"><div className="h-full rounded-full bg-brand" style={{ width: `${p.attendance_rate}%` }} /></div>
-                                                            <span className="text-xs num">{number(p.attendance_rate, 1)}%</span>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            ) : (
-                                <EmptyState title="لا حصص في هذه الفترة" />
-                            )}
-                        </Card>
-                        <Card>
-                            <CardHeader title="فريق التدريب" subtitle="حسب الحجوزات" />
-                            {report.trainers.length ? (
-                                <HBars data={report.trainers.map((t) => ({ label: `${t.trainer} (${t.sessions} حصة)`, value: t.bookings }))} />
-                            ) : (
-                                <EmptyState title="لا بيانات" />
-                            )}
-                        </Card>
-                    </div>
-                </Section>
+                            <div className="grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {g.items.map((r) => (
+                                    <ReportCard key={r.key} href={r.href} icon={ICONS[r.icon] ?? BarChart3} title={r.title} description={r.desc} />
+                                ))}
+                            </div>
+                        </section>
+                    ))}
+                </div>
             )}
         </ClubLayout>
     );
 }
-
-function isThisMonth(from: string, to: string): boolean {
-    const now = new Date();
-    const first = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const today = `${first.slice(0, 8)}${String(now.getDate()).padStart(2, '0')}`;
-    return from === first && to === today;
-}
-
-function Section({ title, children, exports, exportLink }: { title: string; children: ReactNode; exports: [string, string][]; exportLink: (r: string, f: 'csv' | 'xlsx') => string }) {
-    return (
-        <section className="mb-8">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-lg font-semibold">{title}</h2>
-                {exports.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                        {exports.map(([key, text]) => (
-                            <span key={key} className="inline-flex items-center overflow-hidden rounded-lg border border-line bg-white text-xs">
-                                <span className="flex items-center gap-1 px-2 py-1.5 text-muted"><Download className="size-3.5" />{text}</span>
-                                <a href={exportLink(key, 'xlsx')} className="border-s border-line px-2 py-1.5 hover:bg-brand-50">Excel</a>
-                                <a href={exportLink(key, 'csv')} className="border-s border-line px-2 py-1.5 hover:bg-brand-50">CSV</a>
-                            </span>
-                        ))}
-                    </div>
-                )}
-            </div>
-            {children}
-        </section>
-    );
-}
-
-function Kpi({ label, metric, format, metricKey, hint }: { label: string; metric: Metric; format: (v: number | string) => string; metricKey: string; hint?: string }) {
-    const comparison = `المقارنة: ${format(metric.previous)}`;
-    return (
-        <StatCard
-            label={label}
-            value={format(metric.current)}
-            trend={metric.change === null || metric.change === undefined ? null : { change: metric.change, label: comparison, inverted: lowerIsBetter.has(metricKey) }}
-            hint={[metric.change === null || metric.change === undefined ? comparison : null, hint].filter(Boolean).join(' · ') || undefined}
-        />
-    );
-}
-

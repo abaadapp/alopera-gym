@@ -6,7 +6,7 @@ import {
     Send, Snowflake, Trash2, UserRound, Wallet, Repeat, Play, Ban, Fingerprint,
 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Modal, Select, Stat, Tabs, Textarea } from '@/Components/ui';
+import { Badge, Button, Card, CardHeader, ChoiceCard, ConfirmAction, EmptyState, Field, Input, Modal, Select, Stat, Tabs, Textarea } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, money, whatsappUrl, dayCount } from '@/lib/format';
 import { bookingStatus, checkinReason, invoiceStatus, invoiceType, label, memberStatus, membershipKind, membershipStatus, messageStatus, paymentMethod, paymentStatus } from '@/lib/labels';
@@ -267,7 +267,7 @@ export default function MemberShow(props: Props) {
             <Modal open={qrOpen} onClose={() => setQrOpen(false)} title="رمز الدخول QR" size="sm">
                 {member.qr_token && (
                     <div className="flex flex-col items-center gap-4 py-2">
-                        <div className="rounded-2xl border border-line bg-white p-4">
+                        <div className="card p-4">
                             <QRCode value={member.qr_token} size={200} />
                         </div>
                         <p className="text-center text-sm text-muted">تظهر هذه الشيفرة أيضًا في بوابة العضو، وتُقرأ عند البوابة أو في الاستقبال.</p>
@@ -593,30 +593,20 @@ function SellModal({ open, onClose, member, current, plans, hasMemberships }: { 
                     {hasMemberships && (
                         <div className="grid grid-cols-2 gap-2">
                             {(['renewal', 'new'] as const).map((m) => (
-                                <button
-                                    key={m}
-                                    type="button"
-                                    onClick={() => form.setData('mode', m)}
-                                    className={`rounded-xl border px-3 py-2.5 text-sm ${form.data.mode === m ? 'border-brand bg-brand-50 text-brand-700' : 'border-line hover:bg-brand-50/50'}`}
-                                >
+                                <ChoiceCard key={m} selected={form.data.mode === m} onClick={() => form.setData('mode', m)} className="py-2.5 text-center text-sm">
                                     {m === 'renewal' ? 'تجديد (يبدأ بعد الحالية)' : 'عضوية بتاريخ محدد'}
-                                </button>
+                                </ChoiceCard>
                             ))}
                         </div>
                     )}
                     <Field label="الباقة" error={form.errors.membership_plan_id} required>
                         <div className="grid gap-2 sm:grid-cols-2">
                             {plans.map((p) => (
-                                <button
-                                    key={p.id}
-                                    type="button"
-                                    onClick={() => form.setData('membership_plan_id', String(p.id))}
-                                    className={`rounded-xl border p-3 text-start transition ${form.data.membership_plan_id === String(p.id) ? 'border-brand bg-brand-50 ring-2 ring-brand/15' : 'border-line hover:border-brand-200'}`}
-                                >
+                                <ChoiceCard key={p.id} selected={form.data.membership_plan_id === String(p.id)} onClick={() => form.setData('membership_plan_id', String(p.id))}>
                                     <span className="block text-sm font-medium">{p.name}</span>
                                     <span className="block text-xs text-muted">{p.type_label} · {p.duration_label}{p.sessions_limit ? ` · ${p.sessions_limit} حصة` : ''}</span>
-                                    <span className="mt-1 block text-sm font-semibold text-brand-700 num">{money(p.price, currency)}</span>
-                                </button>
+                                    <span className="mt-1 block text-sm font-semibold num">{money(p.price, currency)}</span>
+                                </ChoiceCard>
                             ))}
                         </div>
                     </Field>
@@ -1040,7 +1030,7 @@ function CrmTab({ notes, member }: Props) {
                 {notes.length === 0 ? <EmptyState title="لا يوجد تواصل مسجل" /> : (
                     <ul className="space-y-3">
                         {notes.map((n) => (
-                            <li key={n.id} className="rounded-xl border border-line p-4">
+                            <li key={n.id} className="rounded-[12px] border border-line p-4">
                                 <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
                                     <Badge tone="brand">{CHANNELS[n.channel] ?? n.channel}</Badge>
                                     <Badge tone="gray">{DIRECTIONS[n.direction] ?? n.direction}</Badge>

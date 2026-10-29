@@ -2,7 +2,7 @@ import { useEffect, useRef, type FormEvent } from 'react';
 import { Link, router, useForm } from '@inertiajs/react';
 import { ArrowRight, CheckCheck, Lock, MessageCircle, Send, UserRound } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, EmptyState, PageHeader, SearchInput, Tabs } from '@/Components/ui';
+import { Badge, Button, Card, EmptyState, Notice, PageHeader, SearchInput, Tabs } from '@/Components/ui';
 import { useCan } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { phone } from '@/lib/format';
@@ -76,12 +76,12 @@ export default function Inbox({ conversations, active, enabled, filters }: Props
             <PageHeader title="محادثات واتساب" subtitle="الرسائل الواردة من الأعضاء والرد عليها خلال نافذة الـ24 ساعة" />
 
             {!enabled && (
-                <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                <Notice tone="amber" className="mb-4">
                     ربط واتساب غير مفعّل لهذا النادي، لذلك لن تصل رسائل جديدة ولن تُرسل الردود.
                     {can('integrations.manage') && (
                         <Link href={route('club.integrations.index')} className="ms-2 font-medium underline">فعّله من التطبيقات التكاملية</Link>
                     )}
-                </div>
+                </Notice>
             )}
 
             <Card padded={false} className="overflow-hidden">

@@ -2,7 +2,7 @@ import { useForm } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import { Check, Layers, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, Checkbox, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
+import { Badge, Button, Card, CardFooter, Checkbox, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { money, dayCount } from '@/lib/format';
 import { durationUnit } from '@/lib/labels';
@@ -49,21 +49,21 @@ export default function PlansIndex({ plans, programs, types }: { plans: Plan[]; 
             {plans.length === 0 ? (
                 <Card><EmptyState icon={<Layers className="size-6" />} title="لا توجد باقات" description="أضف أول باقة لبدء بيع العضويات." action={<Button onClick={() => setCreating(true)}>إضافة باقة</Button>} /></Card>
             ) : (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {plans.map((p) => (
-                        <Card key={p.id} className={p.is_active ? '' : 'opacity-60'}>
+                        <Card key={p.id} fill className={p.is_active ? '' : 'opacity-60'}>
                             <div className="flex items-start justify-between gap-3">
                                 <div className="flex items-center gap-2">
                                     <span className="size-3 rounded-full" style={{ background: p.color || 'var(--brand)' }} />
-                                    <h3 className="font-semibold">{p.name}</h3>
+                                    <h3 className="text-[15px] font-semibold text-[#111]">{p.name}</h3>
                                     {p.is_featured && <Star className="size-4 fill-amber-400 text-amber-400" />}
                                 </div>
                                 <div className="flex gap-1">
-                                    <button className="grid size-8 place-items-center rounded-lg text-muted hover:bg-brand-50 hover:text-brand" onClick={() => setEditing(p)} title="تعديل"><Pencil className="size-4" /></button>
+                                    <button className="grid size-8 place-items-center rounded-lg text-muted hover:bg-[#f2f2f0] hover:text-[#111]" onClick={() => setEditing(p)} title="تعديل"><Pencil className="size-4" /></button>
                                     <ConfirmAction url={route('club.plans.destroy', p.id)} method="delete" title="حذف الباقة" message="تُزال الباقة من البيع، وتبقى العضويات السابقة كما هي." confirmLabel="حذف" variant="ghost" icon={<Trash2 className="size-4" />}>{''}</ConfirmAction>
                                 </div>
                             </div>
-                            <p className="mt-3 text-2xl font-semibold text-brand-700"><span className="num">{money(p.price, currency)}</span></p>
+                            <p className="mt-3 text-[22px] font-bold leading-8 tracking-tight text-[#111]"><span className="num">{money(p.price, currency)}</span></p>
                             <p className="text-sm text-muted">{p.duration_label}{Number(p.signup_fee) > 0 && <> · رسوم تسجيل <span className="num">{money(p.signup_fee, currency)}</span></>}</p>
                             <div className="mt-3 flex flex-wrap gap-1.5">
                                 <Badge tone="brand">{p.type_label}</Badge>
@@ -77,9 +77,9 @@ export default function PlansIndex({ plans, programs, types }: { plans: Plan[]; 
                                     {p.features.slice(0, 4).map((f, i) => <li key={i} className="flex items-center gap-1.5"><Check className="size-3.5 text-emerald-600" />{f}</li>)}
                                 </ul>
                             )}
-                            <p className="mt-4 border-t border-line pt-3 text-xs text-muted">
-                                <span className="num">{p.active_count}</span> عضوية نشطة · {p.program_ids.length > 0 ? `${p.program_ids.length} برنامج مشمول` : 'كل البرامج'}
-                            </p>
+                            <CardFooter className="text-xs text-muted">
+                                <span><span className="num">{p.active_count}</span> عضوية نشطة · {p.program_ids.length > 0 ? `${p.program_ids.length} برنامج مشمول` : 'كل البرامج'}</span>
+                            </CardFooter>
                         </Card>
                     ))}
                 </div>

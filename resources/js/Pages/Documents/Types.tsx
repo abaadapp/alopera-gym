@@ -17,6 +17,7 @@ export default function DocumentTypes({ types }: { types: Type[] }) {
                 {types.length === 0 ? (
                     <EmptyState icon={<Tags />} title="لا أنواع بعد" />
                 ) : (
+                    <div className="overflow-x-auto">
                     <table className="table-base">
                         <thead><tr><th>النوع</th><th>مدة التجديد</th><th>المستندات</th><th>الحالة</th><th /></tr></thead>
                         <tbody>
@@ -36,6 +37,7 @@ export default function DocumentTypes({ types }: { types: Type[] }) {
                             ))}
                         </tbody>
                     </table>
+                    </div>
                 )}
             </Card>
             {editing && <TypeModal type={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}

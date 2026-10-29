@@ -3,7 +3,7 @@ import { Link, router } from '@inertiajs/react';
 import { toast } from 'sonner';
 import { Banknote, CreditCard, Minus, Package, Plus, Printer, ReceiptText, ScanBarcode, ShoppingBag, Trash2, UserRound, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, EmptyState, Field, Input, MemberPicker, PageHeader, type MemberHit } from '@/Components/ui';
+import { Button, Card, cardHover, ChoiceCard, EmptyState, Field, Input, MemberPicker, PageHeader, type MemberHit } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
@@ -169,7 +169,7 @@ export default function Pos({ products, can: allowed, lastSale }: { products: Pr
                             <EmptyState icon={<Package className="size-6" />} title="لا توجد منتجات" description={products.length === 0 ? 'أضف منتجات من صفحة المنتجات.' : 'جرّب بحثًا آخر.'} action={products.length === 0 && can('products.manage') ? <Button size="sm" href={route('club.products.index')}>المنتجات</Button> : undefined} />
                         </Card>
                     ) : (
-                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                        <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
                             {visible.map((p) => {
                                 const out = p.track_stock && Number(p.stock_quantity) - inCart(p.id) <= 0;
                                 return (
@@ -178,12 +178,12 @@ export default function Pos({ products, can: allowed, lastSale }: { products: Pr
                                         type="button"
                                         disabled={out}
                                         onClick={() => add(p)}
-                                        className="card flex min-h-28 flex-col items-start justify-between p-3 text-start transition hover:border-brand-300 hover:shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                                        className={cn('card flex h-full min-h-28 flex-col items-start justify-between p-3 text-start active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50', cardHover)}
                                     >
                                         {p.image_url && <img src={p.image_url} alt="" loading="lazy" className="mb-2 h-16 w-full rounded-lg object-cover" />}
                                         <span className="line-clamp-2 text-sm font-medium">{p.name}</span>
                                         <span className="mt-2 flex w-full items-end justify-between gap-2">
-                                            <span className="font-semibold text-brand num">{money(p.price, currency)}</span>
+                                            <span className="font-semibold text-[#111] num">{money(p.price, currency)}</span>
                                             {p.track_stock && <span className={cn('text-xs num', out ? 'text-red-600' : 'text-muted')}>{out ? 'نفد' : number(Number(p.stock_quantity) - inCart(p.id))}</span>}
                                         </span>
                                     </button>
@@ -229,8 +229,8 @@ export default function Pos({ products, can: allowed, lastSale }: { products: Pr
                         <div>
                             <p className="label">العميل (اختياري)</p>
                             {member ? (
-                                <div className="flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 text-sm">
-                                    <span className="flex items-center gap-2"><UserRound className="size-4 text-brand" />{member.full_name}</span>
+                                <div className="flex items-center justify-between rounded-[12px] border border-line bg-[#fafafa] px-3 py-2 text-sm">
+                                    <span className="flex items-center gap-2"><UserRound className="size-4 text-[#6b7280]" />{member.full_name}</span>
                                     <button type="button" onClick={() => setMember(null)} aria-label="إزالة"><X className="size-4 text-muted" /></button>
                                 </div>
                             ) : (
@@ -247,14 +247,9 @@ export default function Pos({ products, can: allowed, lastSale }: { products: Pr
                         )}
                         <div className="grid grid-cols-2 gap-2">
                             {([['cash', 'نقدًا', Banknote], ['card', 'بطاقة', CreditCard]] as const).map(([key, text, Icon]) => (
-                                <button
-                                    key={key}
-                                    type="button"
-                                    onClick={() => setMethod(key)}
-                                    className={cn('flex items-center justify-center gap-2 rounded-xl border py-2.5 text-sm', method === key ? 'border-brand bg-brand-50 text-brand-700' : 'border-line hover:border-brand-200')}
-                                >
+                                <ChoiceCard key={key} selected={method === key} onClick={() => setMethod(key)} className="flex items-center justify-center gap-2 py-2.5 text-sm">
                                     <Icon className="size-4" /> {text}
-                                </button>
+                                </ChoiceCard>
                             ))}
                         </div>
                         {method === 'card' && (

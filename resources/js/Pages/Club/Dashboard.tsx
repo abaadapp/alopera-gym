@@ -1,7 +1,7 @@
 import { Link } from '@inertiajs/react';
-import { CalendarClock, CalendarX, CreditCard, FileClock, LogIn, Snowflake, UserPlus, Users, Wallet } from 'lucide-react';
+import { CalendarClock, CalendarX, CreditCard, FileClock, Landmark, LogIn, PackageX, Snowflake, UserPlus, Users, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, BarTrend, Card, CardHeader, EmptyState, PageHeader, StatCard } from '@/Components/ui';
+import { Badge, BarTrend, Card, CardHeader, EmptyState, ItemCard, Notice, PageHeader, StatCard } from '@/Components/ui';
 import DashboardTiles, { type TilePreferences } from '@/Components/DashboardTiles';
 import { useCurrency } from '@/hooks/useShared';
 import { date, money, number, time, dayCount } from '@/lib/format';
@@ -64,16 +64,16 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
             )}
 
             {(Number(kpis.pending_transfers) > 0 || Number(kpis.low_stock) > 0) && (
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
                     {Number(kpis.pending_transfers) > 0 && (
-                        <Link href={route('club.payments.index', { status: 'pending' })} className="rounded-xl bg-amber-50 px-4 py-2 text-sm text-amber-800">
+                        <Notice tone="amber" icon={<Landmark />} href={route('club.payments.index', { status: 'pending' })}>
                             {number(kpis.pending_transfers)} تحويل بنكي بانتظار التأكيد
-                        </Link>
+                        </Notice>
                     )}
                     {Number(kpis.low_stock) > 0 && (
-                        <Link href={route('club.products.index', { low: 1 })} className="rounded-xl bg-red-50 px-4 py-2 text-sm text-red-700">
+                        <Notice tone="red" icon={<PackageX />} href={route('club.products.index', { low: 1 })}>
                             {number(kpis.low_stock)} منتج وصل لحد إعادة الطلب
-                        </Link>
+                        </Notice>
                     )}
                 </div>
             )}
@@ -93,16 +93,13 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
                         <ul className="space-y-2">
                             {today_sessions.map((s) => (
                                 <li key={s.id}>
-                                    <Link href={route('club.sessions.show', s.id)} className="flex items-center gap-3 rounded-xl border border-line p-3 hover:border-brand-200">
-                                        <span className="h-10 w-1 rounded-full" style={{ background: s.color }} />
-                                        <span className="min-w-0 flex-1">
-                                            <span className="block truncate text-sm font-medium">{s.program}</span>
-                                            <span className="text-xs text-muted">{time(s.time)} · {s.trainer ?? '—'}</span>
-                                        </span>
-                                        <Badge tone={s.booked >= s.capacity ? 'red' : 'brand'}>
-                                            {s.booked >= s.capacity ? 'مكتملة' : <span className="num">{s.booked}/{s.capacity}</span>}
-                                        </Badge>
-                                    </Link>
+                                    <ItemCard
+                                        href={route('club.sessions.show', s.id)}
+                                        accent={s.color}
+                                        title={s.program}
+                                        meta={`${time(s.time)} · ${s.trainer ?? '—'}`}
+                                        trailing={<Badge tone={s.booked >= s.capacity ? 'red' : 'brand'}>{s.booked >= s.capacity ? 'مكتملة' : <span className="num">{s.booked}/{s.capacity}</span>}</Badge>}
+                                    />
                                 </li>
                             ))}
                         </ul>

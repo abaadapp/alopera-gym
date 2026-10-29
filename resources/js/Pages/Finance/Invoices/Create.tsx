@@ -63,8 +63,8 @@ export default function InvoiceCreate() {
                     <Card>
                         <CardHeader title="العميل" subtitle="اختر عضوًا أو اكتب اسم عميل نقدي" />
                         {form.data.member_id ? (
-                            <div className="flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
-                                <span className="flex items-center gap-2 text-sm font-medium"><UserRound className="size-4 text-brand" /> {form.data.member_label}</span>
+                            <div className="flex items-center justify-between gap-3 rounded-[12px] border border-line bg-[#fafafa] px-4 py-3">
+                                <span className="flex items-center gap-2 text-sm font-medium"><UserRound className="size-4 text-[#6b7280]" /> {form.data.member_label}</span>
                                 <button type="button" className="text-muted hover:text-ink" onClick={() => form.setData((d) => ({ ...d, member_id: null, member_label: '' }))} aria-label="إزالة">
                                     <X className="size-4" />
                                 </button>

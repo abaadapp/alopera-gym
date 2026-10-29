@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import { CalendarClock, ImagePlus, Link2, Mail, Pencil, Phone, Plus, Trash2, UserRound, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
+import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { WEEKDAYS, phone as fmtPhone } from '@/lib/format';
 import type { Option } from '@/types';
 
@@ -145,9 +145,9 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                     <EmptyState icon={<UserRound className="size-6" />} title="لا يوجد مدربون بعد" action={<Button onClick={openCreate}>إضافة مدرب</Button>} />
                 </Card>
             ) : (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {trainers.map((t) => (
-                        <Card key={t.id} className={t.is_active ? '' : 'opacity-60'}>
+                        <Card key={t.id} fill className={t.is_active ? '' : 'opacity-60'}>
                             <div className="flex items-start gap-4">
                                 {t.photo_url ? (
                                     <img src={t.photo_url} alt="" className="size-16 rounded-2xl object-cover" loading="lazy" />
@@ -155,7 +155,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                                     <span className="grid size-16 place-items-center rounded-2xl font-display text-xl text-white" style={{ background: t.color ?? 'var(--brand)' }}>{t.name[0]}</span>
                                 )}
                                 <div className="min-w-0 flex-1">
-                                    <p className="truncate font-semibold">{t.name}</p>
+                                    <p className="truncate text-[15px] font-semibold text-[#111]">{t.name}</p>
                                     <div className="mt-1 flex flex-wrap gap-1.5">
                                         {t.is_public ? <Badge tone="green">في الموقع</Badge> : <Badge tone="gray">مخفي</Badge>}
                                         {!t.is_active && <Badge tone="gray">موقوف</Badge>}
@@ -184,13 +184,13 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                                     </ul>
                                 )}
                             </div>
-                            <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-3">
+                            <CardFooter>
                                 <Button size="sm" variant="outline" icon={<Pencil className="size-3.5" />} onClick={() => openEdit(t)}>تعديل</Button>
                                 <Button size="sm" variant="secondary" icon={<CalendarClock className="size-3.5" />} onClick={() => openAvailability(t)}>أوقات التوفر</Button>
                                 <ConfirmAction url={route('club.trainers.destroy', t.id)} method="delete" title="حذف المدرب" message="سيُخفى من الموقع والقوائم. الحصص السابقة لا تتأثر." variant="ghost" icon={<Trash2 className="size-3.5" />} confirmLabel="حذف">
                                     حذف
                                 </ConfirmAction>
-                            </div>
+                            </CardFooter>
                         </Card>
                     ))}
                 </div>

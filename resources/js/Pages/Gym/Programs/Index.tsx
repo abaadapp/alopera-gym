@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import { Clock, Dumbbell, Eye, EyeOff, ImagePlus, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
+import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { number } from '@/lib/format';
 
 type Program = {
@@ -132,9 +132,9 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                     <EmptyState icon={<Dumbbell className="size-6" />} title="لا توجد برامج بعد" description="أضف أول برنامج (زومبا، بيلاتس، تمارين قوة…) ثم أضفه للجدول الأسبوعي." action={<Button onClick={openCreate}>إضافة برنامج</Button>} />
                 </Card>
             ) : (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {programs.map((p) => (
-                        <Card key={p.id} padded={false} className={p.is_active ? 'overflow-hidden' : 'overflow-hidden opacity-60'}>
+                        <Card key={p.id} padded={false} fill className={p.is_active ? 'overflow-hidden' : 'overflow-hidden opacity-60'}>
                             <div className="relative h-32" style={{ background: `linear-gradient(135deg, ${p.color}, ${p.color}99)` }}>
                                 {p.image_url && <img src={p.image_url} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />}
                                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent p-3">
@@ -145,7 +145,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                                     {p.is_public ? <Badge tone="green">ظاهر في الموقع</Badge> : <Badge tone="gray">مخفي</Badge>}
                                 </div>
                             </div>
-                            <div className="p-4">
+                            <div className="flex flex-1 flex-col p-5">
                                 <div className="flex flex-wrap gap-1.5">
                                     <Badge tone="brand">{CATEGORIES[p.category] ?? p.category}</Badge>
                                     <Badge tone="violet">{LEVELS[p.level] ?? p.level}</Badge>
@@ -156,7 +156,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                                     <span className="inline-flex items-center gap-1"><Users className="size-3.5" />سعة <span className="num">{p.default_capacity}</span></span>
                                     <span>في الجدول: <span className="num">{number(p.schedules_count)}</span></span>
                                 </div>
-                                <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-3">
+                                <CardFooter>
                                     <Button size="sm" variant="outline" icon={<Pencil className="size-3.5" />} onClick={() => openEdit(p)}>تعديل</Button>
                                     <Button size="sm" variant="ghost" icon={p.is_public ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />} onClick={() => togglePublic(p)}>
                                         {p.is_public ? 'إخفاء من الموقع' : 'إظهار في الموقع'}
@@ -172,7 +172,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                                     >
                                         حذف
                                     </ConfirmAction>
-                                </div>
+                                </CardFooter>
                             </div>
                         </Card>
                     ))}

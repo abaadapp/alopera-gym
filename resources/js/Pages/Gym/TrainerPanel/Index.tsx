@@ -1,8 +1,8 @@
 import { Link } from '@inertiajs/react';
-import { CalendarDays, ChevronLeft, Link2Off, Phone, Users } from 'lucide-react';
+import { CalendarDays, CalendarRange, ChevronLeft, Link2Off, Phone, UserRound, Users } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PtCloseActions from '@/Components/PtCloseActions';
-import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, StatCard } from '@/Components/ui';
+import { Badge, Button, Card, CardHeader, EmptyState, ItemCard, PageHeader, StatCard, StatGrid } from '@/Components/ui';
 import { dayName, phone as fmtPhone, time } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
@@ -35,18 +35,21 @@ const todayStr = new Date().toLocaleDateString('en-CA');
 function SessionCard({ s }: { s: SessionItem }) {
     const isToday = s.date === todayStr;
     return (
-        <Link href={route('club.trainer.session', s.id)} className={cn('flex items-center gap-3 rounded-2xl border bg-white p-4 transition hover:shadow-md', isToday ? 'border-brand-300' : 'border-line')}>
-            <span className="h-12 w-1.5 shrink-0 rounded-full" style={{ background: s.color ?? 'var(--brand)' }} />
-            <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{s.program}</p>
-                <p className="text-sm text-muted">{isToday ? 'اليوم' : dayName(s.date)} · {time(s.time)}{s.room ? ` · ${s.room}` : ''}</p>
-            </div>
-            <div className="text-end">
-                {s.status === 'cancelled' ? <Badge tone="red">ملغاة</Badge> : s.is_full ? <Badge tone="red">مكتملة</Badge> : null}
-                <p className="mt-1 text-sm"><Users className="me-1 inline size-3.5 text-muted" /><span className="num">{s.booked}/{s.capacity}</span></p>
-            </div>
-            <ChevronLeft className="size-4 text-muted" />
-        </Link>
+        <ItemCard
+            href={route('club.trainer.session', s.id)}
+            accent={s.color}
+            title={s.program}
+            meta={`${isToday ? 'اليوم' : dayName(s.date)} · ${time(s.time)}${s.room ? ` · ${s.room}` : ''}`}
+            trailing={
+                <span className="flex items-center gap-2">
+                    <span className="text-end">
+                        {s.status === 'cancelled' ? <Badge tone="red">ملغاة</Badge> : s.is_full ? <Badge tone="red">مكتملة</Badge> : null}
+                        <span className="mt-1 block text-sm"><Users className="me-1 inline size-3.5 text-muted" /><span className="num">{s.booked}/{s.capacity}</span></span>
+                    </span>
+                    <ChevronLeft className="size-4 text-[#d1d5db]" />
+                </span>
+            }
+        />
     );
 }
 
@@ -70,11 +73,11 @@ export default function TrainerPanel({ trainer, sessions, recent, pt }: { traine
         <ClubLayout title="لوحة المدرب">
             <PageHeader title={`أهلًا ${trainer.name.split(' ')[0]}`} subtitle="حصصك وجلساتك هذا الأسبوع — اضغط على الحصة لتسجيل الحضور" />
 
-            <div className="mb-6 grid grid-cols-3 gap-3">
+            <StatGrid cols={3} className="mb-6">
                 <StatCard label="حصص اليوم" value={today.length} icon={<CalendarDays className="size-5" />} />
-                <StatCard label="حصص الأسبوع" value={sessions.length} tone="blue" />
-                <StatCard label="جلسات فردية" value={ptUpcoming.length} tone="violet" />
-            </div>
+                <StatCard label="حصص الأسبوع" value={sessions.length} tone="blue" icon={<CalendarRange className="size-5" />} />
+                <StatCard label="جلسات فردية" value={ptUpcoming.length} tone="violet" icon={<UserRound className="size-5" />} />
+            </StatGrid>
 
             <div className="grid gap-6 lg:grid-cols-3">
                 <div className="space-y-6 lg:col-span-2">
@@ -103,7 +106,7 @@ export default function TrainerPanel({ trainer, sessions, recent, pt }: { traine
                             {pt.map((p) => {
                                 const [pl, ptone] = PT_STATUS[p.status] ?? [p.status, 'gray'];
                                 return (
-                                    <li key={p.id} className="rounded-xl border border-line p-3">
+                                    <li key={p.id} className="rounded-[12px] border border-line p-3">
                                         <div className="flex items-start justify-between gap-2">
                                             <div className="min-w-0">
                                                 <p className="truncate text-sm font-medium">{p.member}</p>

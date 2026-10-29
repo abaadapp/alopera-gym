@@ -227,8 +227,8 @@ function CampaignModal({ onClose, templates, segments, plans, programs }: Omit<P
                     <Input type="datetime-local" value={form.data.scheduled_at} onChange={(e) => form.setData('scheduled_at', e.target.value)} />
                 </Field>
 
-                <div className="flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
-                    <Users className="size-5 text-brand" />
+                <div className="flex items-center gap-3 rounded-[12px] border border-line bg-[#fafafa] px-4 py-3">
+                    <Users className="size-5 text-[#6b7280]" />
                     <p className="text-sm">
                         الجمهور المتوقع: <b className="num">{counting && count === null ? '…' : number(count ?? 0)}</b> عضو
                         <span className="block text-xs text-muted">يشمل فقط من وافق على الرسائل التسويقية ولم يُلغِ الاشتراك.</span>

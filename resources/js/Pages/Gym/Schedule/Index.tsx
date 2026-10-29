@@ -170,7 +170,7 @@ export default function ScheduleIndex({ slots, programs, trainers, branches }: {
                     {WEEK_ORDER.map((day) => {
                         const daySlots = byDay(day);
                         return (
-                            <div key={day} className="flex flex-col rounded-2xl border border-line bg-white">
+                            <div key={day} className="card flex flex-col">
                                 <div className="flex items-center justify-between border-b border-line px-3 py-2.5">
                                     <p className="text-sm font-semibold">{WEEKDAYS[day]}</p>
                                     <span className="text-xs text-muted num">{daySlots.length}</span>
@@ -182,7 +182,7 @@ export default function ScheduleIndex({ slots, programs, trainers, branches }: {
                                             key={s.id}
                                             type="button"
                                             onClick={() => openEdit(s)}
-                                            className={`block w-full rounded-xl border p-2.5 text-start transition ${s.is_active ? 'border-transparent hover:shadow-md' : 'border-dashed border-line opacity-60'}`}
+                                            className={`block w-full rounded-[12px] border p-2.5 text-start transition ${s.is_active ? 'border-transparent hover:shadow-[0_8px_30px_-12px_rgba(17,17,17,0.14)]' : 'border-dashed border-line opacity-60'}`}
                                             style={{ background: s.is_active ? `${s.color ?? '#db2777'}14` : undefined, borderInlineStartColor: s.color ?? undefined, borderInlineStartWidth: 3 }}
                                         >
                                             <p className="text-xs font-semibold num" dir="ltr" style={{ textAlign: 'end' }}>{s.starts_at} – {endTime(s.starts_at, s.duration_minutes)}</p>
@@ -196,7 +196,7 @@ export default function ScheduleIndex({ slots, programs, trainers, branches }: {
                                         </button>
                                     ))}
                                     {manage && (
-                                        <button type="button" onClick={() => openCreate(day)} className="flex w-full items-center justify-center gap-1 rounded-xl border border-dashed border-line py-1.5 text-xs text-muted hover:border-brand-300 hover:text-brand">
+                                        <button type="button" onClick={() => openCreate(day)} className="flex w-full items-center justify-center gap-1 rounded-[12px] border border-dashed border-line py-1.5 text-xs text-muted transition hover:border-[#111] hover:text-[#111]">
                                             <Plus className="size-3.5" /> إضافة
                                         </button>
                                     )}

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { router } from '@inertiajs/react';
 import { ArrowLeft, ArrowRight, Check, EyeOff, Plus, RotateCcw, SlidersHorizontal, X } from 'lucide-react';
-import { Button } from '@/Components/ui';
+import { Button, StatGrid } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 
 export type TilePreferences = { order: string[]; hidden: string[] };
@@ -12,7 +12,7 @@ export type TilePreferences = { order: string[]; hidden: string[] };
  * the server for this user (another user keeps theirs). A tile the user may not see (money, without the financial
  * reports permission) is null and stays out of both the grid and the chips.
  *
- * The grid: one tile per row on phones, two on tablets, four on wide screens, 16px apart.
+ * The grid is the stat grid: one tile per row on phones, two on tablets, four on wide screens, rows of one height.
  */
 export default function DashboardTiles({ tiles, preferences }: { tiles: Record<string, { label: string; node: ReactNode } | null>; preferences: TilePreferences }) {
     const [editing, setEditing] = useState(false);
@@ -80,10 +80,10 @@ export default function DashboardTiles({ tiles, preferences }: { tiles: Record<s
                 )}
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatGrid>
                 {shown.map((key, i) => (
-                    <div key={key} className={cn('relative', editing && 'rounded-[16px] ring-2 ring-[#111]/10 ring-offset-2 ring-offset-[#f7f8f9]')}>
-                        <div className={cn(editing && 'pointer-events-none select-none')}>{tiles[key]!.node}</div>
+                    <div key={key} className={cn('relative h-full', editing && 'rounded-[16px] ring-2 ring-[#111]/10 ring-offset-2 ring-offset-[#f7f8f9]')}>
+                        <div className={cn('h-full', editing && 'pointer-events-none select-none')}>{tiles[key]!.node}</div>
                         {editing && (
                             <div className="absolute end-2 top-2 flex gap-1 rounded-[10px] border border-[#e8e8e8] bg-white p-0.5 shadow-sm" role="group" aria-label={`ترتيب: ${tiles[key]!.label}`}>
                                 <TileButton label="قبلها" disabled={i === 0} onClick={() => move(key, -1)}><ArrowRight /></TileButton>
@@ -93,7 +93,7 @@ export default function DashboardTiles({ tiles, preferences }: { tiles: Record<s
                         )}
                     </div>
                 ))}
-            </div>
+            </StatGrid>
             {shown.length === 0 && <p className="rounded-[16px] border border-dashed border-[#d1d5db] p-6 text-center text-sm text-[#6b7280]">أخفيت كل البطاقات. أعد ما تحتاجه من «تخصيص البطاقات».</p>}
         </div>
     );

@@ -131,13 +131,8 @@ export const NAV: NavGroup[] = [
             {
                 label: 'التقارير',
                 icon: BarChart3,
-                // One page, three views of it: the tab is the `section` query parameter.
-                tabs: [
-                    { label: 'المالية', route: 'club.reports.index', params: { section: 'finance' }, permission: 'reports.financial' },
-                    { label: 'العضويات والأعضاء', route: 'club.reports.index', params: { section: 'members' }, permission: 'reports.view' },
-                    { label: 'الحصص والحضور', route: 'club.reports.index', params: { section: 'classes' }, permission: 'reports.view' },
-                ],
-                match: ['club.reports.*'],
+                // One page: every report in categories; each card opens its report (club.reports.show or its section).
+                tabs: [{ label: 'التقارير', route: 'club.reports.index', permission: 'reports.view', match: 'club.reports.*' }],
             },
             {
                 label: 'الموقع الإلكتروني',

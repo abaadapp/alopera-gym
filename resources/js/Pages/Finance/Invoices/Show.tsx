@@ -3,7 +3,7 @@ import { Link, useForm } from '@inertiajs/react';
 import { toast } from 'sonner';
 import { ArrowRight, Banknote, Check, Copy, CreditCard, ExternalLink, FileDown, FileMinus, MessageCircle, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Stat, Textarea } from '@/Components/ui';
+import { Badge, Button, Card, CardHeader, ChoiceCard, ConfirmAction, EmptyState, Field, Input, Modal, Notice, PageHeader, Select, Stat, Textarea } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, money } from '@/lib/format';
@@ -143,9 +143,9 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
             />
 
             {invoice.status === 'void' && (
-                <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <Notice tone="red" className="mb-6">
                     هذه الفاتورة ملغاة{invoice.void_reason ? `: ${invoice.void_reason}` : '.'}
-                </div>
+                </Notice>
             )}
 
             <div className="grid gap-6 lg:grid-cols-3">
@@ -437,14 +437,9 @@ function RecordPaymentModal({ open, onClose, invoice, currency }: { open: boolea
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                     {methods.map(({ key, label: text, icon: Icon }) => (
-                        <button
-                            type="button"
-                            key={key}
-                            onClick={() => form.setData('method', key)}
-                            className={cn('flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition', form.data.method === key ? 'border-brand bg-brand-50 text-brand-700' : 'border-line hover:border-brand-200')}
-                        >
+                        <ChoiceCard key={key} selected={form.data.method === key} onClick={() => form.setData('method', key)} className="flex items-center gap-2 py-2.5 text-sm">
                             <Icon className="size-4" /> {text}
-                        </button>
+                        </ChoiceCard>
                     ))}
                 </div>
                 {form.errors.method && <p className="text-xs text-red-600">{form.errors.method}</p>}

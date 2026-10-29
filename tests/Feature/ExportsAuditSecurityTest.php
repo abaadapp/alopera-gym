@@ -129,8 +129,8 @@ class ExportsAuditSecurityTest extends TestCase
         $this->activeMembership($club, $this->member($club));
         $this->activeMembership($club, $this->member($club));
 
-        $this->actingAs($this->owner($club))->get(route('club.reports.index', ['from' => today()->subDays(29)->toDateString(), 'to' => today()->toDateString()]))
-            ->assertInertia(fn ($page) => $page->component('Reports/Index')
+        $this->actingAs($this->owner($club))->get(route('club.reports.show', ['report' => 'members', 'from' => today()->subDays(29)->toDateString(), 'to' => today()->toDateString()]))
+            ->assertInertia(fn ($page) => $page->component('Reports/Show')
                 ->where('report.comparison.new_memberships.current', 2)
                 ->where('report.comparison.new_memberships.previous', 1)
                 ->where('report.comparison.new_memberships.change', 100));

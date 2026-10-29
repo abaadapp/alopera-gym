@@ -86,7 +86,7 @@ composer dev                  # أمر واحد للتطوير: الخادم + V
 ## الاختبارات
 
 ```bash
-php artisan test              # 277 اختبارًا على PostgreSQL (alopera_gym_testing)
+php artisan test              # 282 اختبارًا على PostgreSQL (alopera_gym_testing)
 php artisan platform:preflight  # فحص جاهزية الإنتاج (يفشل محليًا عمدًا: بيئة تجريبية)
 php artisan clubs list          # إدارة الأندية من الخادم (list | create | suspend | activate) بدل لوحة المنصة
 php artisan accounting:sync     # بناء الدفاتر المحاسبية للسجلات القديمة (آمن للتكرار)

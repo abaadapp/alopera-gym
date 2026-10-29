@@ -1,7 +1,7 @@
 import { Link } from '@inertiajs/react';
 import { AlertTriangle, CircleCheck, CircleDashed, ShieldCheck } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Card, CardHeader, EmptyState, Field, Input, PageHeader } from '@/Components/ui';
+import { Badge, Card, CardHeader, EmptyState, Field, Input, Notice, PageHeader } from '@/Components/ui';
 import { CheckList, CopyRow, IntegrationBack, IntegrationSummary, KeysForm, VerifyButton, type IntegrationStatusData, type ProviderForm } from '@/Components/Integrations';
 import { number } from '@/lib/format';
 
@@ -69,10 +69,9 @@ export default function WhatsAppIntegration({ integration, status, number: num, 
             </IntegrationSummary>
 
             {platform.driver === 'log' && (
-                <p className="mb-6 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-900">
-                    <AlertTriangle className="mt-1 size-4 shrink-0" />
+                <Notice tone="amber" icon={<AlertTriangle />} className="mb-6">
                     الخادم في وضع التطوير: الرسائل تُسجَّل في سجل الخادم ولا تُرسل إلى واتساب، حتى لو اكتمل الربط. يُغيَّر من إعدادات الخادم (WHATSAPP_DRIVER=meta).
-                </p>
+                </Notice>
             )}
 
             <div className="grid gap-6 lg:grid-cols-5 [&>*]:min-w-0">
@@ -137,9 +136,9 @@ export default function WhatsAppIntegration({ integration, status, number: num, 
                 <CardHeader title="ما يُرسل عبر واتساب" subtitle="كل وظيفة وقوالبها؛ لا يُرسل قالب قبل اعتماده" />
                 <div className="grid gap-4 md:grid-cols-2">
                     {features.map((f) => (
-                        <div key={f.key} className="rounded-xl border border-line p-4">
+                        <div key={f.key} className="rounded-[12px] border border-line p-4">
                             <div className="flex items-center justify-between gap-2">
-                                <h4 className="font-semibold text-ink">{f.label}</h4>
+                                <h4 className="text-[14px] font-semibold text-[#111]">{f.label}</h4>
                                 <Link href={route(f.route)} className="text-xs text-muted underline hover:text-ink">فتح</Link>
                             </div>
                             <p className="mt-1 text-[13px] leading-6 text-muted">{f.detail}</p>

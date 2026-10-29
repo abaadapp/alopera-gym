@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, router } from '@inertiajs/react';
 import { ArrowRight, Check, Phone, UserRound, Users, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Card, EmptyState } from '@/Components/ui';
+import { Badge, Card, EmptyState, Notice } from '@/Components/ui';
 import { dayName, phone as fmtPhone, time } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
@@ -49,15 +49,15 @@ export default function TrainerSession({ session, bookings }: { session: Session
                 </div>
             </div>
 
-            {session.status === 'cancelled' && <Card className="mb-4 border-red-200 bg-red-50/60"><p className="text-sm text-red-700">الحصة ملغاة.</p></Card>}
-            {!canMark && session.status !== 'cancelled' && <p className="mb-4 rounded-xl bg-sky-50 p-3 text-sm text-sky-800">يُفتح تسجيل الحضور قبل الحصة بنصف ساعة.</p>}
+            {session.status === 'cancelled' && <Notice tone="red" className="mb-4">الحصة ملغاة.</Notice>}
+            {!canMark && session.status !== 'cancelled' && <Notice tone="blue" className="mb-4">يُفتح تسجيل الحضور قبل الحصة بنصف ساعة.</Notice>}
 
             {bookings.length === 0 ? (
                 <Card><EmptyState icon={<Users className="size-6" />} title="لا حجوزات في هذه الحصة" /></Card>
             ) : (
                 <ul className="space-y-3">
                     {bookings.map((b) => (
-                        <li key={b.id} className={cn('rounded-2xl border bg-white p-4', b.status === 'attended' ? 'border-emerald-300 bg-emerald-50/40' : b.status === 'no_show' ? 'border-red-200 bg-red-50/40' : 'border-line')}>
+                        <li key={b.id} className={cn('rounded-[12px] border bg-white p-4', b.status === 'attended' ? 'border-[#a7f3d0] bg-[#ecfdf5]/50' : b.status === 'no_show' ? 'border-[#fecaca] bg-[#fef2f2]/50' : 'border-line')}>
                             <div className="flex items-center gap-3">
                                 <span className="grid size-11 shrink-0 place-items-center rounded-full bg-brand-50 text-brand"><UserRound className="size-5" /></span>
                                 <div className="min-w-0 flex-1">

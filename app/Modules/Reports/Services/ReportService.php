@@ -5,6 +5,7 @@ namespace App\Modules\Reports\Services;
 use App\Core\Auth\PermissionRegistry;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
+use App\Models\Branch;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\Invoice;
@@ -15,6 +16,8 @@ use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\MembershipEvent;
+use App\Modules\Gym\Models\PtSession;
+use App\Modules\Gym\Models\Trainer;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\SaleItem;
 use Carbon\CarbonImmutable;
@@ -267,6 +270,111 @@ final class ReportService
                 'attendance_rate' => ($r->attended + $r->no_show) > 0 ? round($r->attended / ($r->attended + $r->no_show) * 100, 1) : 0,
                 'avg_per_session' => $r->sessions > 0 ? round($r->bookings / $r->sessions, 1) : 0,
             ])->all();
+    }
+
+    /**
+     * Each trainer's classes (sessions, bookings, attended, no-shows) and completed personal-training sessions in the
+     * period, with the team's totals compared with the earlier period.
+     *
+     * @return array{rows: list<array<string, mixed>>, comparison: array<string, array{current: int|float, previous: int|float, change: float|null}>}
+     */
+    public function trainers(CarbonImmutable $from, CarbonImmutable $to, CarbonImmutable $prevFrom, CarbonImmutable $prevTo): array
+    {
+        $rows = $this->trainerRows($from, $to);
+        $totals = fn (array $rows) => [
+            'trainers' => count(array_filter($rows, fn ($r) => $r['sessions'] > 0 || $r['pt_completed'] > 0)),
+            'sessions' => array_sum(array_column($rows, 'sessions')),
+            'bookings' => array_sum(array_column($rows, 'bookings')),
+            'attendance_rate' => ($a = array_sum(array_column($rows, 'attended'))) + ($n = array_sum(array_column($rows, 'no_show'))) > 0 ? round($a / ($a + $n) * 100, 1) : 0,
+            'pt_completed' => array_sum(array_column($rows, 'pt_completed')),
+        ];
+
+        return ['rows' => $rows, 'comparison' => $this->compare($totals($rows), $totals($this->trainerRows($prevFrom, $prevTo)))];
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function trainerRows(CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        $classes = DB::table('gym_class_sessions as s')
+            ->leftJoin('gym_bookings as b', function ($j) {
+                $j->on('b.class_session_id', '=', 's.id')->where('b.status', '!=', Booking::CANCELLED);
+            })
+            ->where('s.tenant_id', app(TenantContext::class)->require()->id)
+            ->whereNotNull('s.trainer_id')
+            ->whereBetween('s.starts_at', [$from, $to->endOfDay()])
+            ->where('s.status', '!=', ClassSession::CANCELLED)
+            ->groupBy('s.trainer_id')
+            ->selectRaw("s.trainer_id, count(distinct s.id) as sessions, count(b.id) as bookings,
+                sum(case when b.status = 'attended' then 1 else 0 end) as attended,
+                sum(case when b.status = 'no_show' then 1 else 0 end) as no_show")
+            ->get()->keyBy('trainer_id');
+        $pt = PtSession::where('status', PtSession::COMPLETED)->whereBetween('starts_at', [$from, $to->endOfDay()])
+            ->selectRaw('trainer_id, count(*) as total')->groupBy('trainer_id')->pluck('total', 'trainer_id');
+        $names = Trainer::whereIn('id', $classes->keys()->merge($pt->keys())->unique())->pluck('name', 'id');
+
+        return $names->map(function (string $name, int $id) use ($classes, $pt) {
+            $c = $classes->get($id);
+            $attended = (int) ($c->attended ?? 0);
+            $noShow = (int) ($c->no_show ?? 0);
+
+            return [
+                'id' => $id, 'trainer' => $name, 'sessions' => (int) ($c->sessions ?? 0), 'bookings' => (int) ($c->bookings ?? 0),
+                'attended' => $attended, 'no_show' => $noShow, 'attendance_rate' => $attended + $noShow > 0 ? round($attended / ($attended + $noShow) * 100, 1) : 0,
+                'pt_completed' => (int) ($pt[$id] ?? 0),
+            ];
+        })->sortByDesc(fn ($r) => [$r['bookings'], $r['pt_completed']])->values()->all();
+    }
+
+    /**
+     * Each branch's period figures with their change against the earlier period, and its active members now. Records
+     * without a branch count as the main branch's (BranchContext::narrow), so the branches add up to the club.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function branches(CarbonImmutable $from, CarbonImmutable $to, CarbonImmutable $prevFrom, CarbonImmutable $prevTo, bool $financial): array
+    {
+        $context = app(BranchContext::class);
+        $figures = function (int $branch, CarbonImmutable $from, CarbonImmutable $to) use ($context, $financial): array {
+            $end = $to->endOfDay();
+            $in = fn ($query) => $context->narrow($query, $branch);
+            $row = [
+                'new_members' => $in(Member::whereBetween('joined_on', [$from, $to]))->count(),
+                'memberships_sold' => $in(Membership::whereBetween('activated_at', [$from, $end]))->count(),
+                'checkins' => $in(CheckIn::where('result', 'allowed')->whereBetween('checked_in_at', [$from, $end]))->count(),
+                'sessions' => $in(ClassSession::whereBetween('starts_at', [$from, $end])->where('status', '!=', ClassSession::CANCELLED))->count(),
+            ];
+            if ($financial) {
+                $row['revenue'] = (float) $this->netCollected($from, $end, $branch);
+                $row['expenses'] = round((float) $in(Expense::whereBetween('expense_date', [$from, $to]))->sum('amount'), 3);
+            }
+
+            return $row;
+        };
+
+        return Branch::orderByDesc('is_main')->orderBy('name')->get()->map(fn (Branch $b) => [
+            'id' => $b->id,
+            'name' => $b->name,
+            'is_main' => $b->is_main,
+            'is_active' => $b->is_active,
+            'active_members' => $context->narrow(Membership::where('status', Membership::ACTIVE), $b->id)->distinct('member_id')->count('member_id'),
+            'comparison' => $this->compare($figures($b->id, $from, $to), $figures($b->id, $prevFrom, $prevTo)),
+        ])->all();
+    }
+
+    /**
+     * @param  array<string, int|float>  $current
+     * @param  array<string, int|float>  $previous
+     * @return array<string, array{current: int|float, previous: int|float, change: float|null}>
+     */
+    private function compare(array $current, array $previous): array
+    {
+        $out = [];
+        foreach ($current as $key => $value) {
+            $prev = (float) ($previous[$key] ?? 0);
+            $out[$key] = ['current' => $value, 'previous' => $previous[$key] ?? 0, 'change' => $prev == 0.0 ? null : round(((float) $value - $prev) / abs($prev) * 100, 1)];
+        }
+
+        return $out;
     }
 
     /** @return list<array<string, mixed>> */

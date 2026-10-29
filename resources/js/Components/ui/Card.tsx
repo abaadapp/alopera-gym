@@ -6,8 +6,21 @@ import SectionTabs from '@/Components/SectionTabs';
 import { cn } from '@/lib/cn';
 import { useAdmin } from './AdminScope';
 
-export function Card({ children, className, padded = true }: { children: ReactNode; className?: string; padded?: boolean }) {
-    return <div className={cn('card', padded && 'p-5', className)}>{children}</div>;
+/**
+ * The content card: white, 16px corners, a hairline edge and the faintest shadow; 20px inside. `fill` makes it take
+ * the height of its row as a column, so a CardFooter sits at the same height in every card of the row.
+ */
+export function Card({ children, className, padded = true, fill = false }: { children: ReactNode; className?: string; padded?: boolean; fill?: boolean }) {
+    return <div className={cn('card', padded && 'p-5', fill && 'flex h-full flex-col', className)}>{children}</div>;
+}
+
+/** The foot of a card: its actions or a closing line, under a hairline, pushed to the bottom of a `fill` card. */
+export function CardFooter({ children, className }: { children: ReactNode; className?: string }) {
+    return (
+        <div className="mt-auto pt-4">
+            <div className={cn('flex flex-wrap items-center gap-2 border-t border-line pt-3', className)}>{children}</div>
+        </div>
+    );
 }
 
 export function CardHeader({ title, subtitle, actions, className }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; className?: string }) {
@@ -71,7 +84,7 @@ export function Badge({ children, tone = 'gray', className }: { children: ReactN
 }
 
 /* Stat tiles take the status colours: a pale fill with a deeper icon. */
-const statTones = {
+export const statTones = {
     brand: 'bg-brand-50 text-brand-700',
     green: 'bg-[#ecfdf5] text-[#047857]',
     amber: 'bg-[#fffbeb] text-[#d97706]',
@@ -101,15 +114,28 @@ export function TrendLine({ trend, className }: { trend: StatTrend; className?: 
     );
 }
 
-/** The grid for stat tiles, everywhere: one per row on phones, two on tablets, three or four on wide screens. */
+/**
+ * The grid for stat tiles, everywhere: one per row on phones, two on tablets, three or four on wide screens, 16px
+ * apart. Every row takes the height of the tallest tile, so tiles of one grid are the same size whether or not
+ * one of them has a comparison or a note.
+ */
 export function StatGrid({ cols = 4, className, children }: { cols?: 3 | 4; className?: string; children: ReactNode }) {
-    return <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2', cols === 4 ? 'xl:grid-cols-4' : 'xl:grid-cols-3', className)}>{children}</div>;
+    return <div className={cn('grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2', cols === 4 ? 'xl:grid-cols-4' : 'xl:grid-cols-3', className)}>{children}</div>;
 }
 
-/** A stat tile. With `href` it is a link (a filter tile when `active` marks the filter in use). */
+/** The hover of every card that opens something: a darker edge and a soft lift. */
+export const cardHover = 'transition hover:border-[#d4d4d4] hover:shadow-[0_8px_30px_-12px_rgba(17,17,17,0.14)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#111]/10';
+/** A card or tile that is the filter or choice in use: a dark edge. */
+export const cardActive = 'border-[#111] shadow-[0_0_0_1px_#111] hover:border-[#111]';
+
+/**
+ * A stat tile. The label, the figure and the icon keep their place at the top; the comparison and the note sit at
+ * the foot, so in a row of tiles the figures line up whatever lines follow them. With `href` it is a link (a filter
+ * tile when `active` marks the filter in use).
+ */
 export function StatCard({ label, value, hint, icon, tone = 'brand', href, trend, active }: { label: ReactNode; value: ReactNode; hint?: ReactNode; icon?: ReactNode; tone?: keyof typeof tones; href?: string; trend?: StatTrend | null; active?: boolean }) {
     const body = (
-        <div className={cn('card @container h-full p-4', href && 'transition hover:border-[#dcdcdc] hover:shadow-[0_8px_30px_-12px_rgba(17,17,17,0.14)]', active && 'border-[#111] shadow-[0_0_0_1px_#111] hover:border-[#111]')}>
+        <div className={cn('card @container flex h-full flex-col p-4', href && cardHover, active && cardActive)}>
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="truncate text-[13px] text-[#6b7280]">{label}</p>
@@ -117,11 +143,15 @@ export function StatCard({ label, value, hint, icon, tone = 'brand', href, trend
                 </div>
                 {icon && <span className={cn('hidden size-10 shrink-0 place-items-center rounded-[12px] @[13rem]:grid [&_svg]:size-5', statTones[tone])}>{icon}</span>}
             </div>
-            {trend && <TrendLine trend={trend} className="mt-3" />}
-            {hint && <p className={cn('text-[12px] text-[#6b7280]', trend ? 'mt-1' : 'mt-3')}>{hint}</p>}
+            {(trend || hint) && (
+                <div className="mt-auto pt-3">
+                    {trend && <TrendLine trend={trend} />}
+                    {hint && <p className={cn('text-[12px] leading-5 text-[#6b7280]', trend && 'mt-1')}>{hint}</p>}
+                </div>
+            )}
         </div>
     );
-    return href ? <Link href={href} preserveScroll className="block h-full" aria-current={active ? 'true' : undefined}>{body}</Link> : body;
+    return href ? <Link href={href} preserveScroll className="block h-full rounded-2xl" aria-current={active ? 'true' : undefined}>{body}</Link> : body;
 }
 
 export function EmptyState({ icon, title, description, action }: { icon?: ReactNode; title: ReactNode; description?: ReactNode; action?: ReactNode }) {

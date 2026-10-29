@@ -17,7 +17,7 @@ class ReportComparisonTest extends TestCase
         $club = $this->club();
         $range = [];
         $this->actingAs($this->owner($club))
-            ->get(route('club.reports.index', ['from' => '2026-10-01', 'to' => '2026-10-28'] + $query))
+            ->get(route('club.reports.show', ['report' => 'members', 'from' => '2026-10-01', 'to' => '2026-10-28'] + $query))
             ->assertOk()
             ->assertInertia(function (AssertableInertia $page) use (&$range) {
                 $range = [$page->toArray()['props']['filters']['compare'], $page->toArray()['props']['report']['range']['previous_from'], $page->toArray()['props']['report']['range']['previous_to']];

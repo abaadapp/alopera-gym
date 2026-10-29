@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { ArrowRight, Package, Pencil, Plus, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
+import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { money } from '@/lib/format';
 import type { Option } from '@/types';
@@ -72,12 +72,12 @@ export default function PtPackages({ packages, trainers }: { packages: PtPackage
             {packages.length === 0 ? (
                 <Card><EmptyState icon={<Package className="size-6" />} title="لا توجد باقات" action={<Button onClick={() => openForm(null)}>إضافة باقة</Button>} /></Card>
             ) : (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {packages.map((p) => (
-                        <Card key={p.id} className={p.is_active ? '' : 'opacity-60'}>
+                        <Card key={p.id} fill className={p.is_active ? '' : 'opacity-60'}>
                             <div className="flex items-start justify-between gap-2">
                                 <div>
-                                    <p className="font-semibold">{p.name}</p>
+                                    <p className="text-[15px] font-semibold text-[#111]">{p.name}</p>
                                     <p className="text-xs text-muted">{p.trainer ?? 'أي مدرب'}</p>
                                 </div>
                                 <div className="flex flex-col items-end gap-1">
@@ -85,17 +85,17 @@ export default function PtPackages({ packages, trainers }: { packages: PtPackage
                                     {!p.is_active && <Badge tone="gray">موقوفة</Badge>}
                                 </div>
                             </div>
-                            <p className="mt-4 font-display text-2xl font-semibold text-brand">{money(p.price, currency)}</p>
+                            <p className="mt-3 text-[22px] font-bold leading-8 tracking-tight text-[#111]"><span className="num">{money(p.price, currency)}</span></p>
                             <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                                 <div className="rounded-xl bg-canvas p-2"><p className="text-lg font-semibold num">{p.sessions_count}</p><p className="text-[11px] text-muted">جلسة</p></div>
                                 <div className="rounded-xl bg-canvas p-2"><p className="text-lg font-semibold num">{p.session_minutes}</p><p className="text-[11px] text-muted">دقيقة</p></div>
                                 <div className="rounded-xl bg-canvas p-2"><p className="text-lg font-semibold num">{p.validity_days}</p><p className="text-[11px] text-muted">يوم صلاحية</p></div>
                             </div>
                             {p.description && <p className="mt-3 line-clamp-2 text-sm text-muted">{p.description}</p>}
-                            <div className="mt-4 flex gap-2 border-t border-line pt-3">
+                            <CardFooter>
                                 <Button size="sm" variant="outline" icon={<Pencil className="size-3.5" />} onClick={() => openForm(p)}>تعديل</Button>
                                 <ConfirmAction url={route('club.pt-packages.destroy', p.id)} method="delete" title="حذف الباقة" message="الاشتراكات المباعة سابقًا لا تتأثر." variant="ghost" icon={<Trash2 className="size-3.5" />} confirmLabel="حذف">حذف</ConfirmAction>
-                            </div>
+                            </CardFooter>
                         </Card>
                     ))}
                 </div>

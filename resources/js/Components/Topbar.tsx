@@ -6,6 +6,7 @@ import { Dropdown, DropdownItem, DropdownLabel, DropdownSeparator } from '@/Comp
 import { useCan, useShared } from '@/hooks/useShared';
 import { NAV } from '@/lib/nav';
 import { cn } from '@/lib/cn';
+import { fold } from '@/lib/format';
 import type { StaffNotification } from '@/types';
 
 /* 40px square icon buttons with an 18px line icon, quiet grey that darkens on hover. */
@@ -343,15 +344,6 @@ function UserMenu({ unread }: { unread: number }) {
 
 type Hit = { key: string; label: string; hint?: string; href: string };
 type Group = { key: string; label: string; items: { label: string; hint?: string; url: string }[] };
-
-/** Arabic-Indic digits as digits and the interchangeable letters folded, so «احمد» finds «أحمد». */
-function fold(text: string): string {
-    return text
-        .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
-        .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
-        .replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
-        .trim();
-}
 
 /**
  * Search in the top bar: the panel's pages this user may open (instantly, in the browser) and, from the server,

@@ -1,5 +1,5 @@
 import { Link, router } from '@inertiajs/react';
-import { HandCoins } from 'lucide-react';
+import { AlertTriangle, CalendarClock, CircleAlert, HandCoins, Hourglass } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Card, Checkbox, EmptyState, PageHeader, StatCard } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
@@ -38,11 +38,11 @@ export default function Dues({ invoices, aging, total, filters }: Props) {
         <ClubLayout title="المستحقات">
             <PageHeader title="المستحقات والمتأخرات" subtitle={`إجمالي غير المحصّل: ${money(total, currency)}`} />
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <StatCard label="غير مستحقة بعد" value={money(aging.current, currency)} tone="blue" />
-                <StatCard label="متأخرة 1–30 يومًا" value={money(aging['1_30'], currency)} tone="amber" />
-                <StatCard label="متأخرة 31–60 يومًا" value={money(aging['31_60'], currency)} tone="red" />
-                <StatCard label="أكثر من 60 يومًا" value={money(aging['60_plus'], currency)} tone="red" />
+            <div className="grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard label="غير مستحقة بعد" value={money(aging.current, currency)} icon={<CalendarClock />} tone="blue" />
+                <StatCard label="متأخرة 1–30 يومًا" value={money(aging['1_30'], currency)} icon={<Hourglass />} tone="amber" />
+                <StatCard label="متأخرة 31–60 يومًا" value={money(aging['31_60'], currency)} icon={<AlertTriangle />} tone="red" />
+                <StatCard label="أكثر من 60 يومًا" value={money(aging['60_plus'], currency)} icon={<CircleAlert />} tone="red" />
             </div>
 
             <Card className="mt-6" padded={false}>

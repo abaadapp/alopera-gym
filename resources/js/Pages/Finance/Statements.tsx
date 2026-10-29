@@ -1,8 +1,8 @@
 import { Link } from '@inertiajs/react';
-import { Download, Printer } from 'lucide-react';
+import { Download, Printer, TrendingDown, TrendingUp } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PeriodFilter from '@/Components/PeriodFilter';
-import { Badge, Button, Card, CardHeader, PageHeader } from '@/Components/ui';
+import { Badge, Button, Card, CardHeader, PageHeader, SummaryCard } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, money } from '@/lib/format';
@@ -48,15 +48,15 @@ export default function FinanceStatements({ income, trial, filters }: Props) {
                 <div className="grid gap-4 lg:grid-cols-2">
                     <Section title="الإيرادات" rows={income.revenue} total={income.total_revenue} m={m} />
                     <Section title="المصروفات" rows={income.expenses} total={income.total_expenses} m={m} />
-                    <Card className="lg:col-span-2">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                                <p className="text-[13px] text-muted">صافي النتيجة للفترة</p>
-                                <p className={cn('mt-1 text-2xl font-bold tracking-tight num', Number(income.net) < 0 ? 'text-red-700' : 'text-emerald-700')}>{m(income.net)}</p>
-                            </div>
-                            <Badge tone={Number(income.net) < 0 ? 'red' : 'green'}>{Number(income.net) < 0 ? 'خسارة' : 'ربح'}</Badge>
-                        </div>
-                    </Card>
+                    <SummaryCard
+                        className="lg:col-span-2"
+                        label="صافي النتيجة للفترة"
+                        value={m(income.net)}
+                        negative={Number(income.net) < 0}
+                        icon={Number(income.net) < 0 ? <TrendingDown /> : <TrendingUp />}
+                        tone={Number(income.net) < 0 ? 'red' : 'green'}
+                        hint={<Badge tone={Number(income.net) < 0 ? 'red' : 'green'}>{Number(income.net) < 0 ? 'خسارة' : 'ربح'}</Badge>}
+                    />
                 </div>
             ) : (
                 <Card padded={false}>

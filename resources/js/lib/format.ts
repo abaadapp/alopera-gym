@@ -56,3 +56,13 @@ export function dayCount(value: number | null | undefined): string {
     if (n >= 3 && n <= 10) return `${n} أيام`;
     return n === 0 ? '0 يوم' : `${n} يومًا`;
 }
+
+/** For searching: Arabic-Indic digits as digits, the interchangeable letters folded and Latin in lower case, so «احمد» finds «أحمد». */
+export function fold(text: string): string {
+    return text
+        .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+        .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+        .replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
+        .toLowerCase()
+        .trim();
+}

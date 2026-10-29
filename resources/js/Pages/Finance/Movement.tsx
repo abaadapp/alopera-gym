@@ -50,7 +50,7 @@ export default function FinanceMovement({ lines, stats, opening, closing, accoun
                 ))}
             </PeriodFilter>
 
-            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mb-6 grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="داخل" value={m(stats.in)} icon={<ArrowDownLeft className="size-5" />} tone="green" />
                 <StatCard label="خارج" value={m(stats.out)} icon={<ArrowUpRight className="size-5" />} tone="red" />
                 <StatCard label="الصافي" value={m(stats.net)} icon={<Scale className="size-5" />} tone="brand" />

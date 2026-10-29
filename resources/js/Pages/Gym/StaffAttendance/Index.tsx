@@ -30,7 +30,7 @@ export default function StaffAttendanceIndex({ rows, summary, staff, filters }: 
                 actions={<Button icon={<LogIn className="size-4" />} onClick={() => router.post(route('club.staff-attendance.punch'), {}, { preserveScroll: true })}>تسجيل حضوري/انصرافي</Button>}
             />
 
-            <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mb-4 grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <StatCard label="سجلات الفترة" value={number(rows.total)} icon={<UserRoundCheck className="size-5" />} />
                 <StatCard label="ساعات العمل في الفترة" value={number(totalHours, 1)} icon={<Clock className="size-5" />} tone="blue" />
                 <StatCard label="لم يُسجّل انصرافه" value={number(open)} icon={<Fingerprint className="size-5" />} tone="amber" />

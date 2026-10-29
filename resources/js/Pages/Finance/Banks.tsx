@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { ArrowLeftRight, Banknote, CreditCard, Landmark, Pencil, Plus, Scale, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Select, StatCard, Toggle } from '@/Components/ui';
+import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Select, StatCard, SummaryCard, Toggle } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, money } from '@/lib/format';
@@ -39,45 +39,44 @@ export default function FinanceBanks({ accounts, totals, kinds, canManage }: Pro
                 )}
             />
 
-            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mb-6 grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <StatCard label="الصناديق النقدية" value={m(totals.cash)} icon={<Banknote className="size-5" />} tone="green" />
                 <StatCard label="الحسابات البنكية" value={m(totals.banks)} icon={<Landmark className="size-5" />} tone="blue" />
                 <StatCard label="قيد التسوية" value={m(totals.clearing)} hint="بطاقات وPaymob لم تصل البنك بعد" icon={<CreditCard className="size-5" />} tone="violet" />
             </div>
 
             {accounts.length ? (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {accounts.map((a) => {
                         const Icon = kindIcon[a.kind] ?? Wallet;
                         return (
-                            <div key={a.id} className={cn('card flex flex-col p-5', !a.is_active && 'opacity-60')}>
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                        <p className="truncate font-semibold text-ink">{a.name}</p>
-                                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                                            <Badge>{kinds[a.kind]}</Badge>
-                                            {a.system && <Badge tone="blue">أساسي</Badge>}
-                                            {!a.is_active && <Badge tone="amber">موقوف</Badge>}
-                                        </div>
-                                        {(a.bank_name || a.masked) && <p className="mt-2 text-[12px] text-muted">{a.bank_name} <span dir="ltr" className="font-mono">{a.masked}</span></p>}
+                            <SummaryCard
+                                key={a.id}
+                                className={cn(!a.is_active && 'opacity-60')}
+                                label={<span className="flex flex-wrap items-center gap-1.5"><span className="text-[13px] font-semibold text-[#111]">{a.name}</span><span className="num">{a.code}</span></span>}
+                                value={m(a.balance)}
+                                negative={Number(a.balance) < 0}
+                                icon={<Icon />}
+                                hint={(a.bank_name || a.masked) ? <>{a.bank_name} <span dir="ltr" className="font-mono">{a.masked}</span></> : undefined}
+                                action={
+                                    <div className="flex w-full flex-wrap gap-2 border-t border-line pt-3">
+                                        <Button size="sm" variant="ghost" href={route('club.finance.movement', { account_id: a.id })} icon={<Scale className="size-3.5" />}>الحركة</Button>
+                                        {canManage && (
+                                            <>
+                                                <Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(a)}>تعديل</Button>
+                                                {a.is_active && <Button size="sm" variant="ghost" onClick={() => setOpening(a)}>الرصيد الافتتاحي</Button>}
+                                            </>
+                                        )}
                                     </div>
-                                    <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-[#f2f2f0] text-ink"><Icon className="size-5" /></span>
+                                }
+                            >
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                    <Badge>{kinds[a.kind]}</Badge>
+                                    {a.system && <Badge tone="blue">أساسي</Badge>}
+                                    {!a.is_active && <Badge tone="amber">موقوف</Badge>}
                                 </div>
-                                <div className="mt-4 flex items-end justify-between gap-3">
-                                    <p className={cn('text-xl font-bold tracking-tight num', Number(a.balance) < 0 && 'text-red-700')}>{m(a.balance)}</p>
-                                    <span className="text-[12px] text-muted num">{a.code}</span>
-                                </div>
-                                {a.opening && <p className="mt-1 text-[12px] text-muted">رصيد افتتاحي {m(a.opening.amount)} في {date(a.opening.date)}</p>}
-                                <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
-                                    <Button size="sm" variant="ghost" href={route('club.finance.movement', { account_id: a.id })} icon={<Scale className="size-3.5" />}>الحركة</Button>
-                                    {canManage && (
-                                        <>
-                                            <Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(a)}>تعديل</Button>
-                                            {a.is_active && <Button size="sm" variant="ghost" onClick={() => setOpening(a)}>الرصيد الافتتاحي</Button>}
-                                        </>
-                                    )}
-                                </div>
-                            </div>
+                                {a.opening && <p className="mt-2 text-[12px] text-muted">رصيد افتتاحي {m(a.opening.amount)} في {date(a.opening.date)}</p>}
+                            </SummaryCard>
                         );
                     })}
                 </div>

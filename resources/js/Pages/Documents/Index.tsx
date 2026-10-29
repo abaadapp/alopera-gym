@@ -72,7 +72,7 @@ export default function DocumentsIndex(props: Props) {
         <ClubLayout title={title}>
             <PageHeader title={title} subtitle={subtitle} actions={can.create && <Button icon={<Plus />} onClick={() => setEditing('new')}>مستند جديد</Button>} />
 
-            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mb-6 grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="المستندات السارية" value={number(stats.total)} icon={<FileText />} tone="gray" href={route('club.business-documents.index', { view: 'all' })} />
                 <StatCard label="قريبة الانتهاء" value={number(stats.expiring)} hint={`خلال ${dayCount(soon)}`} icon={<FileClock />} tone={stats.expiring ? 'amber' : 'gray'} href={route('club.business-documents.index', { view: 'expiring' })} />
                 <StatCard label="منتهية" value={number(stats.expired)} icon={<FileX />} tone={stats.expired ? 'red' : 'gray'} href={route('club.business-documents.index', { view: 'expired' })} />
