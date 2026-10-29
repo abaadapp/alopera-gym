@@ -2,6 +2,7 @@ import { Link } from '@inertiajs/react';
 import { CalendarClock, CalendarX, CreditCard, FileClock, LogIn, Snowflake, UserPlus, Users, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, BarTrend, Card, CardHeader, EmptyState, PageHeader, StatCard } from '@/Components/ui';
+import DashboardTiles, { type TilePreferences } from '@/Components/DashboardTiles';
 import { useCurrency } from '@/hooks/useShared';
 import { date, money, number, time, dayCount } from '@/lib/format';
 
@@ -12,9 +13,13 @@ interface Props {
     revenue_trend: { date: string; amount: number }[];
     /** Business document alerts (null without documents.view). */
     documents: { expiring: number; expired: number; alerts: { id: number; name: string; expiry_date: string; days_left: number | null }[] } | null;
+    /** Change against the period before, only where there is something to compare with. */
+    trends: Record<string, { change: number; label: string }>;
+    /** The user's tile order and hidden tiles. */
+    tiles: TilePreferences;
 }
 
-export default function Dashboard({ kpis, expiring, today_sessions, revenue_trend, documents }: Props) {
+export default function Dashboard({ kpis, expiring, today_sessions, revenue_trend, documents, trends, tiles }: Props) {
     const currency = useCurrency();
     const financial = kpis.revenue_month !== null;
 
@@ -22,16 +27,19 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
         <ClubLayout title="لوحة التحكم">
             <PageHeader title="لوحة التحكم" subtitle="نظرة سريعة على حالة النادي اليوم" />
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <StatCard label="عضويات نشطة" value={number(kpis.active_members)} icon={<Users className="size-5" />} href={route('club.memberships.index', { filter: 'active' })} />
-                <StatCard label="تنتهي خلال 7 أيام" value={number(kpis.expiring_7_days)} tone="amber" icon={<CalendarClock className="size-5" />} href={route('club.memberships.index', { filter: 'expiring' })} />
-                <StatCard label="منتهية" value={number(kpis.expired_members)} tone="gray" icon={<CalendarX className="size-5" />} href={route('club.members.index', { membership: 'expired' })} />
-                <StatCard label="مجمّدة" value={number(kpis.frozen_members)} tone="violet" icon={<Snowflake className="size-5" />} />
-                {financial && <StatCard label="إيرادات الشهر" value={money(kpis.revenue_month, currency)} tone="green" icon={<Wallet className="size-5" />} hint={`اليوم: ${money(kpis.revenue_today, currency)}`} />}
-                {financial && <StatCard label="المستحقات" value={money(kpis.outstanding, currency)} tone="red" icon={<CreditCard className="size-5" />} hint={`${number(kpis.overdue_invoices)} فاتورة متأخرة`} href={route('club.dues')} />}
-                <StatCard label="دخول اليوم" value={number(kpis.checkins_today)} tone="blue" icon={<LogIn className="size-5" />} />
-                <StatCard label="أعضاء جدد هذا الشهر" value={number(kpis.new_members_month)} icon={<UserPlus className="size-5" />} hint={`تجديدات: ${number(kpis.renewals_month)} · إلغاءات: ${number(kpis.cancellations_month)}`} />
-            </div>
+            <DashboardTiles
+                preferences={tiles}
+                tiles={{
+                    active_members: { label: 'عضويات نشطة', node: <StatCard label="عضويات نشطة" value={number(kpis.active_members)} icon={<Users className="size-5" />} href={route('club.memberships.index', { filter: 'active' })} /> },
+                    expiring_7_days: { label: 'تنتهي خلال 7 أيام', node: <StatCard label="تنتهي خلال 7 أيام" value={number(kpis.expiring_7_days)} tone="amber" icon={<CalendarClock className="size-5" />} href={route('club.memberships.index', { filter: 'expiring' })} /> },
+                    expired_members: { label: 'منتهية', node: <StatCard label="منتهية" value={number(kpis.expired_members)} tone="gray" icon={<CalendarX className="size-5" />} href={route('club.members.index', { membership: 'expired' })} /> },
+                    frozen_members: { label: 'مجمّدة', node: <StatCard label="مجمّدة" value={number(kpis.frozen_members)} tone="violet" icon={<Snowflake className="size-5" />} /> },
+                    revenue_month: financial ? { label: 'إيرادات الشهر', node: <StatCard label="إيرادات الشهر" value={money(kpis.revenue_month, currency)} tone="green" icon={<Wallet className="size-5" />} trend={trends.revenue_month} hint={`اليوم: ${money(kpis.revenue_today, currency)}`} /> } : null,
+                    outstanding: financial ? { label: 'المستحقات', node: <StatCard label="المستحقات" value={money(kpis.outstanding, currency)} tone="red" icon={<CreditCard className="size-5" />} hint={`${number(kpis.overdue_invoices)} فاتورة متأخرة`} href={route('club.dues')} /> } : null,
+                    checkins_today: { label: 'دخول اليوم', node: <StatCard label="دخول اليوم" value={number(kpis.checkins_today)} tone="blue" icon={<LogIn className="size-5" />} trend={trends.checkins_today} /> },
+                    new_members_month: { label: 'أعضاء جدد هذا الشهر', node: <StatCard label="أعضاء جدد هذا الشهر" value={number(kpis.new_members_month)} icon={<UserPlus className="size-5" />} trend={trends.new_members_month} hint={`تجديدات: ${number(kpis.renewals_month)} · إلغاءات: ${number(kpis.cancellations_month)}`} /> },
+                }}
+            />
 
             {documents && (documents.alerts.length > 0 || documents.expired > 0) && (
                 <Card className="mt-4">

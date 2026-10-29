@@ -52,7 +52,7 @@ export default function SalesReports({ period, days, products, methods, staff, s
 
             <PeriodFilter routeName="club.sales.reports" from={period.from} to={period.to} />
 
-            <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <StatCard label="إجمالي المبيعات" value={m(total)} tone="brand" />
                 <StatCard label="عدد العمليات" value={number(count)} tone="gray" />
                 <StatCard label="الملغاة والمستردة" value={m(voided.total)} hint={`${number(voided.count)} عملية لا تدخل في الإجمالي`} icon={<Undo2 />} tone={voided.count ? 'amber' : 'gray'} />

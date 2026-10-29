@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Core\Audit\Auditable;
+use App\Core\Notifications\StaffAlerts;
+use App\Core\Notifications\StaffNotifier;
 use App\Core\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
@@ -75,12 +77,14 @@ class TenantIntegration extends Model
             'last_error_at' => null,
             'settings' => array_merge($this->settings ?? [], $settings),
         ])->saveQuietly();
+        app(StaffNotifier::class)->resolve('integration-error:'.$this->provider.':*');
     }
 
     /** The provider refused or could not be reached. The message is shown to the club owner; it never holds a secret. */
     public function markFailed(string $message): void
     {
         $this->forceFill(['last_error' => mb_substr($message, 0, 250), 'last_error_at' => now(), 'last_checked_at' => now()])->saveQuietly();
+        app(StaffAlerts::class)->integrationError($this);
     }
 
     /** The provider called back with a valid signature. */

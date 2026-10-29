@@ -55,7 +55,7 @@ export default function Employees({ employees, stats, jobTitles, branches, users
                 )}
             />
 
-            <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="على رأس العمل" value={stats.active} icon={<Users className="size-5" />} tone="green" />
                 <StatCard label="في إجازة" value={stats.on_leave} icon={<Users className="size-5" />} tone="amber" />
                 <StatCard label="لهم حساب دخول" value={stats.with_account} icon={<UserCheck className="size-5" />} tone="blue" />

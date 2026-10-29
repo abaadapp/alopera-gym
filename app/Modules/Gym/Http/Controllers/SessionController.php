@@ -3,6 +3,7 @@
 namespace App\Modules\Gym\Http\Controllers;
 
 use App\Core\Support\BusinessRuleException;
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -29,7 +30,7 @@ class SessionController extends Controller
 
         return Inertia::render('Gym/Sessions/Index', [
             'week' => $weekStart->toDateString(),
-            'sessions' => ClassSession::with(['program:id,name,color', 'trainer:id,name'])
+            'sessions' => BranchContext::scope(ClassSession::with(['program:id,name,color', 'trainer:id,name']))
                 ->between($weekStart, $weekStart->addWeek())
                 ->when($request->integer('trainer_id'), fn ($q, $id) => $q->where('trainer_id', $id))
                 ->when($request->integer('program_id'), fn ($q, $id) => $q->where('program_id', $id))

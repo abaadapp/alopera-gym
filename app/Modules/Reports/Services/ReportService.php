@@ -26,14 +26,18 @@ use Illuminate\Support\Facades\DB;
 final class ReportService
 {
     /** @return array<string, mixed> */
-    public function dashboard(): array
+    /**
+     * The dashboard's figures, for one branch when $branch is given (its records and those tied to no branch).
+     */
+    public function dashboard(?int $branch = null): array
     {
+        $b = fn ($query, string $column = 'branch_id') => $branch ? $query->where(fn ($w) => $w->where($column, $branch)->orWhereNull($column)) : $query;
         $today = CarbonImmutable::today();
         $monthStart = $today->startOfMonth();
 
-        $active = Membership::where('status', Membership::ACTIVE)->distinct('member_id')->count('member_id');
-        $frozen = Membership::where('status', Membership::FROZEN)->distinct('member_id')->count('member_id');
-        $expiringSoon = Membership::with('member:id,full_name,phone,member_no')
+        $active = $b(Membership::where('status', Membership::ACTIVE))->distinct('member_id')->count('member_id');
+        $frozen = $b(Membership::where('status', Membership::FROZEN))->distinct('member_id')->count('member_id');
+        $expiringSoon = $b(Membership::with('member:id,full_name,phone,member_no'))
             ->expiringWithin(7, $today)
             ->orderBy('ends_on')
             ->limit(10)
@@ -48,11 +52,11 @@ final class ReportService
                 'days_left' => $m->daysRemaining($today),
             ]);
 
-        $expired = Member::whereHas('memberships', fn ($q) => $q->where('status', Membership::EXPIRED))
+        $expired = $b(Member::query())->whereHas('memberships', fn ($q) => $q->where('status', Membership::EXPIRED))
             ->whereDoesntHave('memberships', fn ($q) => $q->whereIn('status', [Membership::ACTIVE, Membership::FROZEN, Membership::SCHEDULED]))
             ->count();
 
-        $todaySessions = ClassSession::with(['program:id,name,color', 'trainer:id,name'])
+        $todaySessions = $b(ClassSession::with(['program:id,name,color', 'trainer:id,name']))
             ->whereDate('starts_at', $today)
             ->where('status', '!=', ClassSession::CANCELLED)
             ->orderBy('starts_at')
@@ -72,27 +76,34 @@ final class ReportService
                 'active_members' => $active,
                 'frozen_members' => $frozen,
                 'expired_members' => $expired,
-                'expiring_7_days' => Membership::expiringWithin(7, $today)->count(),
-                'new_members_month' => Member::where('joined_on', '>=', $monthStart)->count(),
-                'renewals_month' => Membership::where('kind', Membership::KIND_RENEWAL)->whereNotNull('activated_at')->where('activated_at', '>=', $monthStart)->count(),
-                'cancellations_month' => Membership::where('status', Membership::CANCELLED)->where('cancelled_at', '>=', $monthStart)->where(fn ($q) => $q->whereNull('cancel_reason')->orWhereNotIn('cancel_reason', ['upgraded', 'invoice_voided']))->count(),
-                'revenue_month' => $this->netCollected($monthStart, $today->endOfDay()),
-                'revenue_today' => $this->netCollected($today, $today->endOfDay()),
-                'outstanding' => (string) Invoice::open()->sum(DB::raw('total - credited_total - paid_total')),
-                'overdue_invoices' => Invoice::overdue()->count(),
-                'pending_transfers' => Payment::where('status', Payment::PENDING)->count(),
-                'checkins_today' => CheckIn::where('result', 'allowed')->where('checked_in_at', '>=', $today)->count(),
+                'expiring_7_days' => $b(Membership::expiringWithin(7, $today))->count(),
+                'new_members_month' => $b(Member::where('joined_on', '>=', $monthStart))->count(),
+                'renewals_month' => $b(Membership::query())->where('kind', Membership::KIND_RENEWAL)->whereNotNull('activated_at')->where('activated_at', '>=', $monthStart)->count(),
+                'cancellations_month' => $b(Membership::query())->where('status', Membership::CANCELLED)->where('cancelled_at', '>=', $monthStart)->where(fn ($q) => $q->whereNull('cancel_reason')->orWhereNotIn('cancel_reason', ['upgraded', 'invoice_voided']))->count(),
+                'revenue_month' => $this->netCollected($monthStart, $today->endOfDay(), $branch),
+                'revenue_today' => $this->netCollected($today, $today->endOfDay(), $branch),
+                'outstanding' => (string) $b(Invoice::open())->sum(DB::raw('total - credited_total - paid_total')),
+                'overdue_invoices' => $b(Invoice::overdue())->count(),
+                'pending_transfers' => $b(Payment::where('status', Payment::PENDING))->count(),
+                'checkins_today' => $b(CheckIn::where('result', 'allowed'))->where('checked_in_at', '>=', $today)->count(),
                 'low_stock' => PermissionRegistry::moduleEnabled('sales') ? Product::where('is_active', true)->lowStock()->count() : 0,
             ],
             'expiring' => $expiringSoon,
             'today_sessions' => $todaySessions,
-            'revenue_trend' => $this->dailyRevenue($today->subDays(29), $today),
+            'revenue_trend' => $this->dailyRevenue($today->subDays(29), $today, $branch),
         ];
     }
 
-    private function netCollected(CarbonImmutable $from, CarbonImmutable $to): string
+    /** Net money collected in a period (payments less refunds), for one branch when given. */
+    public function collected(CarbonImmutable $from, CarbonImmutable $to, ?int $branch = null): string
+    {
+        return $this->netCollected($from, $to, $branch);
+    }
+
+    private function netCollected(CarbonImmutable $from, CarbonImmutable $to, ?int $branch = null): string
     {
         $row = Payment::completed()->whereBetween('paid_at', [$from, $to])
+            ->when($branch, fn ($q) => $q->where(fn ($w) => $w->where('branch_id', $branch)->orWhereNull('branch_id')))
             ->selectRaw("coalesce(sum(case when kind = 'refund' then -amount else amount end), 0) as net")
             ->first();
 
@@ -100,9 +111,10 @@ final class ReportService
     }
 
     /** @return list<array{date: string, amount: float}> */
-    public function dailyRevenue(CarbonImmutable $from, CarbonImmutable $to): array
+    public function dailyRevenue(CarbonImmutable $from, CarbonImmutable $to, ?int $branch = null): array
     {
         $rows = Payment::completed()->whereBetween('paid_at', [$from->startOfDay(), $to->endOfDay()])
+            ->when($branch, fn ($q) => $q->where(fn ($w) => $w->where('branch_id', $branch)->orWhereNull('branch_id')))
             ->selectRaw("date(paid_at) as d, sum(case when kind = 'refund' then -amount else amount end) as net")
             ->groupBy('d')->pluck('net', 'd');
 

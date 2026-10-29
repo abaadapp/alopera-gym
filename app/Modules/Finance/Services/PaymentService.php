@@ -3,6 +3,8 @@
 namespace App\Modules\Finance\Services;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Notifications\StaffAlerts;
+use App\Core\Notifications\StaffNotifier;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
@@ -65,6 +67,7 @@ final class PaymentService
 
             if ($pending) {
                 TransferSubmitted::dispatch($payment);
+                app(StaffAlerts::class)->pendingPayment($payment);
             } else {
                 $this->apply($invoice, $payment);
             }
@@ -92,6 +95,8 @@ final class PaymentService
             ]);
             $this->apply($invoice, $payment);
 
+            app(StaffNotifier::class)->resolve('payment-pending:'.$payment->id);
+
             return $payment;
         });
     }
@@ -111,6 +116,8 @@ final class PaymentService
                 'confirmed_by' => Auth::guard('web')->id(),
                 'confirmed_at' => now(),
             ])->save();
+
+            app(StaffNotifier::class)->resolve('payment-pending:'.$payment->id);
 
             return $payment;
         });

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Messaging\Http\Controllers;
 
+use App\Core\Notifications\StaffNotifier;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Gym\Models\Member;
@@ -25,6 +26,7 @@ class InboxController extends Controller
     public function show(Request $request, Conversation $conversation): Response
     {
         $conversation->forceFill(['unread_count' => 0])->save();
+        app(StaffNotifier::class)->resolve('inbox:'.$conversation->id.':*');
 
         return $this->render($request, $conversation);
     }

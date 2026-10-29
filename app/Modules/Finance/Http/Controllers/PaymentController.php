@@ -2,6 +2,7 @@
 
 namespace App\Modules\Finance\Http\Controllers;
 
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
@@ -21,7 +22,7 @@ class PaymentController extends Controller
     public function index(Request $request): Response
     {
         return Inertia::render('Finance/Payments/Index', [
-            'payments' => Payment::with(['invoice:id,number,customer_name', 'receiver:id,name'])
+            'payments' => BranchContext::scope(Payment::with(['invoice:id,number,customer_name', 'receiver:id,name']))
                 ->when($request->string('status')->toString(), fn ($q, $s) => $q->where('status', $s))
                 ->when($request->string('method')->toString(), fn ($q, $m) => $q->where('method', $m))
                 ->when($request->date('from'), fn ($q, $d) => $q->where('paid_at', '>=', $d))
@@ -31,7 +32,7 @@ class PaymentController extends Controller
                     'invoice' => $p->invoice?->number, 'customer' => $p->invoice?->customer_name, 'receiver' => $p->receiver?->name,
                     'paid_at' => $p->paid_at?->format('Y-m-d H:i'), 'has_proof' => $p->proof_path !== null,
                 ]),
-            'pendingCount' => Payment::where('status', Payment::PENDING)->count(),
+            'pendingCount' => BranchContext::scope(Payment::where('status', Payment::PENDING))->count(),
             'filters' => $request->only('status', 'method', 'from', 'to'),
         ]);
     }

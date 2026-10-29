@@ -24,7 +24,7 @@ export default function SalesSummary({ period, stats, bySource, topProducts, rec
         <ClubLayout title="ملخص المبيعات">
             <PageHeader title="ملخص المبيعات" subtitle={`المبيعات المكتملة من نقطة البيع والموقع من ${date(period.from)} إلى ${date(period.to)}`} />
 
-            <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="مبيعات اليوم" value={m(stats.today)} icon={<Wallet />} tone="green" />
                 <StatCard label="طلبات الموقع المفتوحة" value={number(stats.open_orders)} hint="بانتظار التجهيز أو التسليم" icon={<Globe />} tone={stats.open_orders ? 'amber' : 'gray'} href={can('orders.manage') ? route('club.sales.orders.index') : undefined} />
                 <StatCard label="منتجات تحتاج إعادة طلب" value={number(stats.low_stock)} icon={<Package />} tone={stats.low_stock ? 'red' : 'gray'} href={can('products.manage') ? route('club.products.index', { low: 1 }) : undefined} />
@@ -33,7 +33,7 @@ export default function SalesSummary({ period, stats, bySource, topProducts, rec
 
             <PeriodFilter routeName="club.sales.summary" from={period.from} to={period.to} />
 
-            <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <StatCard label="إجمالي المبيعات" value={m(stats.total)} icon={<TrendingUp />} tone="brand" href={route('club.sales.reports', period)} />
                 <StatCard label="عدد العمليات" value={number(stats.count)} icon={<ReceiptText />} tone="gray" />
                 <StatCard label="متوسط العملية" value={m(stats.average)} icon={<Wallet />} tone="gray" />

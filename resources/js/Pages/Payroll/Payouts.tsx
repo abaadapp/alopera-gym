@@ -32,7 +32,7 @@ export default function PayrollPayouts({ runs, run, payouts, waiting, accounts, 
         <ClubLayout title="صرف الرواتب">
             <PageHeader title="صرف الرواتب" subtitle="رواتب المسيرات المعتمدة: اصرف لموظف أو أكثر من الصندوق أو حساب بنكي، دون انتظار صرف الجميع" />
 
-            <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <StatCard label="بانتظار الصرف في كل المسيرات" value={m(waiting)} icon={<Clock className="size-5" />} tone={Number(waiting) ? 'amber' : 'gray'} />
                 <StatCard label={run ? `المتبقي في ${run.label}` : 'المتبقي'} value={m(run?.unpaid ?? '0')} icon={<Wallet className="size-5" />} tone="blue" />
                 <StatCard label="دفعات الصرف المسجلة" value={payouts.length} icon={<Banknote className="size-5" />} tone="green" />

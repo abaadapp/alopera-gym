@@ -73,7 +73,7 @@ export default function CampaignShow({ campaign, messages }: Props) {
                 }
             />
 
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="المستلمون" value={number(total || campaign.audience_size || 0)} icon={<Users className="size-5" />} hint={total === 0 && campaign.audience_size !== null ? 'الجمهور المتوقع قبل الإطلاق' : undefined} />
                 <StatCard label="أُرسلت" value={number(campaign.sent_count)} tone="blue" icon={<Send className="size-5" />} hint={`${pct(campaign.sent_count)}%`} />
                 <StatCard label="وصلت" value={number(campaign.delivered_count)} tone="green" icon={<CheckCheck className="size-5" />} hint={`${pct(campaign.delivered_count)}%`} />

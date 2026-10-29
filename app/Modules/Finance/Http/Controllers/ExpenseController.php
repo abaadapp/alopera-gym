@@ -5,6 +5,7 @@ namespace App\Modules\Finance\Http\Controllers;
 use App\Core\Auth\PermissionRegistry;
 use App\Core\Export\TableExporter;
 use App\Core\Support\NumberSequence;
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -100,7 +101,7 @@ class ExpenseController extends Controller
 
     private function filtered(Request $request)
     {
-        return Expense::query()
+        return BranchContext::scope(Expense::query())
             ->when($request->integer('category_id'), fn ($q, $id) => $q->where('expense_category_id', $id))
             ->when($request->date('from'), fn ($q, $d) => $q->where('expense_date', '>=', $d))
             ->when($request->date('to'), fn ($q, $d) => $q->where('expense_date', '<=', $d))

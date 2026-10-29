@@ -2,6 +2,7 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -31,7 +32,7 @@ class DeviceController extends Controller
     public function index(TenantContext $tenants, IntegrationHub $hub): Response
     {
         $tid = $tenants->require()->id;
-        $devices = AccessDevice::with('branch:id,name')->orderBy('name')->get();
+        $devices = BranchContext::scope(AccessDevice::with('branch:id,name'))->orderBy('name')->get();
 
         return Inertia::render('Integrations/Devices', [
             'devices' => $devices->map(fn (AccessDevice $d) => $d->only(

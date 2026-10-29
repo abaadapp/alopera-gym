@@ -1,11 +1,15 @@
 <?php
 
+use App\Http\Controllers\Club\AccountController;
 use App\Http\Controllers\Club\AuditController;
 use App\Http\Controllers\Club\BackupController;
 use App\Http\Controllers\Club\BillingController;
 use App\Http\Controllers\Club\BranchController;
+use App\Http\Controllers\Club\BranchSwitchController;
 use App\Http\Controllers\Club\DashboardController;
+use App\Http\Controllers\Club\NotificationController;
 use App\Http\Controllers\Club\RoleController;
+use App\Http\Controllers\Club\SearchController;
 use App\Http\Controllers\Club\SettingsController;
 use App\Http\Controllers\Club\UserController;
 use Illuminate\Support\Facades\Route;
@@ -14,6 +18,22 @@ use Illuminate\Support\Facades\Route;
 // opening one settings screen under /settings/*. Route names are kept from the flat layout.
 
 Route::get('/', [DashboardController::class, 'index'])->middleware('can:dashboard.view')->name('dashboard');
+Route::put('/dashboard/tiles', [DashboardController::class, 'saveTiles'])->middleware('can:dashboard.view')->name('dashboard.tiles');
+Route::post('/branch', BranchSwitchController::class)->middleware('throttle:30,1')->name('branch.switch');
+
+// The top bar's quick search; each group of results checks its own permission.
+Route::get('/search', SearchController::class)->middleware('throttle:120,1')->name('search');
+
+// «حسابي»: the signed-in user's own account (no permission needed — it is their own).
+Route::get('/account', [AccountController::class, 'show'])->name('account.show');
+Route::put('/account', [AccountController::class, 'update'])->name('account.update');
+Route::put('/account/password', [AccountController::class, 'password'])->middleware('throttle:6,1')->name('account.password');
+
+// The bell: every staff member's own notifications (no permission — each sees only their own rows).
+Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
+Route::get('/notifications/{notification}/open', [NotificationController::class, 'open'])->whereNumber('notification')->name('notifications.open');
+Route::post('/notifications/{notification}/read', [NotificationController::class, 'read'])->whereNumber('notification')->name('notifications.read');
 
 Route::prefix('settings')->group(function () {
     Route::get('/', [SettingsController::class, 'index'])->name('settings.index');

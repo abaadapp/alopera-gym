@@ -30,7 +30,7 @@ export default function FinanceSummary({ summary, accounts, overdue, unpaidSalar
         <ClubLayout title="الملخص المالي">
             <PageHeader title="الملخص المالي" subtitle={`أين أموال النادي الآن، وما له وما عليه، ونتيجة الفترة من ${date(filters.from)} إلى ${date(filters.to)}`} />
 
-            <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="الصندوق" value={m(summary.cash)} icon={<Banknote className="size-5" />} tone="green" href={route('club.finance.banks')} />
                 <StatCard label="الحسابات البنكية" value={m(summary.banks)} icon={<Landmark className="size-5" />} tone="blue" href={route('club.finance.banks')} />
                 <StatCard label="بطاقات وPaymob قيد التسوية" value={m(summary.clearing)} hint="تصل إلى البنك عند التسوية" icon={<CreditCard className="size-5" />} tone="violet" />
@@ -39,7 +39,7 @@ export default function FinanceSummary({ summary, accounts, overdue, unpaidSalar
 
             <PeriodFilter routeName="club.finance.summary" from={filters.from} to={filters.to} />
 
-            <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="الإيرادات" value={m(summary.revenue)} icon={<TrendingUp className="size-5" />} tone="green" />
                 <StatCard label="المصروفات" value={m(summary.expenses)} hint={`منها الرواتب ${m(summary.salaries)}`} icon={<TrendingDown className="size-5" />} tone="red" />
                 <StatCard label="صافي النتيجة" value={<span className={cn(negative && 'text-red-700')}>{m(summary.net)}</span>} icon={<Scale className="size-5" />} tone={negative ? 'red' : 'brand'} href={route('club.finance.statements', filters)} />

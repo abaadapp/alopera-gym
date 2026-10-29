@@ -1,3 +1,4 @@
+import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { useState } from 'react';
 import { number } from '@/lib/format';
 
@@ -67,12 +68,15 @@ export function HBars({ data, format = (v: number) => number(v) }: { data: { lab
     );
 }
 
-export function Delta({ change }: { change: number | null }) {
+/** A change in percent with an arrow (the direction) and a colour (good or bad; `inverted` where less is better). */
+export function Delta({ change, inverted = false }: { change: number | null; inverted?: boolean }) {
     if (change === null || change === undefined) return <span className="text-xs text-muted">—</span>;
     const up = change >= 0;
+    const good = up !== inverted;
     return (
-        <span className={`text-xs font-medium num ${up ? 'text-emerald-600' : 'text-red-600'}`}>
-            {up ? '▲' : '▼'} {Math.abs(change)}%
+        <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${good ? 'text-[#047857]' : 'text-[#b91c1c]'}`}>
+            {up ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />}
+            <span className="num" dir="ltr">{up ? '+' : ''}{change}%</span>
         </span>
     );
 }

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Finance\Http\Controllers;
 
+use App\Core\Tenancy\BranchContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
 use Illuminate\Http\Request;
@@ -13,7 +14,7 @@ class DuesController extends Controller
 {
     public function __invoke(Request $request): Response
     {
-        $open = Invoice::open()->orderBy('due_date')->get();
+        $open = BranchContext::scope(Invoice::open())->orderBy('due_date')->get();
         $today = today();
 
         $aging = ['current' => 0.0, '1_30' => 0.0, '31_60' => 0.0, '60_plus' => 0.0];

@@ -5,6 +5,7 @@ namespace App\Modules\Gym\Http\Controllers;
 use App\Core\Export\TableExporter;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Gym\Http\GymPresenter;
@@ -31,7 +32,7 @@ class MembershipController extends Controller
     {
         $filter = $request->string('filter')->toString() ?: 'active';
 
-        $query = Membership::with('member:id,full_name,member_no,phone')
+        $query = BranchContext::scope(Membership::with('member:id,full_name,member_no,phone'))
             ->when($filter === 'expiring', fn ($q) => $q->expiringWithin((int) ($request->integer('days') ?: 7))->orderBy('ends_on'))
             ->when(in_array($filter, ['active', 'frozen', 'pending', 'scheduled', 'expired', 'cancelled'], true), fn ($q) => $q->where('status', $filter))
             ->when($request->integer('plan_id'), fn ($q, $id) => $q->where('membership_plan_id', $id))
@@ -53,8 +54,8 @@ class MembershipController extends Controller
             'memberships' => $query->paginate(25)->withQueryString()->through(fn (Membership $m) => GymPresenter::membership($m) + [
                 'member' => $m->member?->only('id', 'full_name', 'member_no', 'phone'),
             ]),
-            'counts' => Membership::selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status')
-                ->put('expiring', Membership::expiringWithin(7)->count()),
+            'counts' => BranchContext::scope(Membership::selectRaw('status, count(*) as total'))->groupBy('status')->pluck('total', 'status')
+                ->put('expiring', BranchContext::scope(Membership::expiringWithin(7))->count()),
             'plans' => MembershipPlan::orderBy('sort')->get(['id', 'name']),
             'filters' => ['filter' => $filter, 'plan_id' => $request->integer('plan_id') ?: null],
         ]);

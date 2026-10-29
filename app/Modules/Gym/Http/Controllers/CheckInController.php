@@ -2,6 +2,7 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Gym\Access\AccessControlService;
@@ -18,7 +19,7 @@ class CheckInController extends Controller
     public function index(Request $request): Response
     {
         return Inertia::render('Gym/CheckIns/Index', [
-            'checkins' => CheckIn::with(['member:id,full_name,member_no', 'device:id,name', 'performer:id,name'])
+            'checkins' => BranchContext::scope(CheckIn::with(['member:id,full_name,member_no', 'device:id,name', 'performer:id,name']))
                 ->when($request->string('result')->toString(), fn ($q, $r) => $q->where('result', $r))
                 ->when($request->date('date'), fn ($q, $d) => $q->whereDate('checked_in_at', $d))
                 ->latest('id')->paginate(50)->withQueryString()

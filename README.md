@@ -86,12 +86,13 @@ composer dev                  # أمر واحد للتطوير: الخادم + V
 ## الاختبارات
 
 ```bash
-php artisan test              # 256 اختبارًا على PostgreSQL (alopera_gym_testing)
+php artisan test              # 269 اختبارًا على PostgreSQL (alopera_gym_testing)
 php artisan platform:preflight  # فحص جاهزية الإنتاج (يفشل محليًا عمدًا: بيئة تجريبية)
 php artisan clubs list          # إدارة الأندية من الخادم (list | create | suspend | activate) بدل لوحة المنصة
 php artisan accounting:sync     # بناء الدفاتر المحاسبية للسجلات القديمة (آمن للتكرار)
 php artisan documents:alerts    # تنبيهات انتهاء المستندات (يومي، لا يكرر تنبيهًا)
 php artisan sales:expire-orders # إلغاء طلبات المتجر غير المدفوعة بعد مهلتها
+php artisan notifications:sync  # أجراس الموظفين: ما زال مفتوحًا (كل ساعة، لا يكرر إشعارًا)
 php artisan gym:class-reminders # تذكير واتساب قبل الحصص المحجوزة (حسب إعداد النادي، متوقف افتراضيًا)
 npx tsc --noEmit              # فحص أنواع TypeScript
 vendor/bin/pint --test        # تنسيق PHP

@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { router } from '@inertiajs/react';
 import { CalendarRange, Download } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { BarTrend, Button, Card, CardHeader, Delta, EmptyState, HBars, Input, PageHeader } from '@/Components/ui';
+import { BarTrend, Button, Card, CardHeader, Delta, EmptyState, HBars, Input, PageHeader, StatCard } from '@/Components/ui';
 import { useCan, useCurrency, useShared } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, money, number } from '@/lib/format';
@@ -151,7 +151,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
 
             {view === 'finance' && canFinancial && (
                 <Section title="المالية" exports={canExport ? [['revenue', 'الإيرادات'], ['expenses', 'المصروفات'], ...(inventory ? [['sales', 'المبيعات'] as [string, string]] : [])] : []} exportLink={exportLink}>
-                    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                         <Kpi label="صافي التحصيل" metric={m('revenue')} format={fmtMoney} metricKey="revenue" />
                         <Kpi label="المصروفات" metric={m('expenses')} format={fmtMoney} metricKey="expenses" />
                         <Kpi label="صافي الربح التشغيلي" metric={m('net')} format={fmtMoney} metricKey="net" />
@@ -221,7 +221,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
 
             {view === 'members' && (
                 <Section title="العضويات والأعضاء" exports={canExport ? [['memberships', 'العضويات'], ...(can('members.export') ? [['members', 'الأعضاء'] as [string, string]] : [])] : []} exportLink={exportLink}>
-                    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                         <Kpi label="اشتراكات جديدة" metric={m('new_memberships')} format={fmtNum} metricKey="new_memberships" />
                         <Kpi label="تجديدات" metric={m('renewals')} format={fmtNum} metricKey="renewals" />
                         <Kpi label="تغيير/ترقية باقة" metric={m('upgrades')} format={fmtNum} metricKey="upgrades" />
@@ -258,7 +258,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
 
             {view === 'classes' && (
                 <Section title="الحصص والحضور" exports={canExport ? [['classes', 'الحصص']] : []} exportLink={exportLink}>
-                    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                         <Kpi label="الحصص" metric={m('sessions')} format={fmtNum} metricKey="sessions" />
                         <Kpi label="الحجوزات" metric={m('bookings')} format={fmtNum} metricKey="bookings" />
                         <Kpi label="نسبة الحضور" metric={m('attendance_rate')} format={fmtPct} metricKey="attendance_rate" hint="الحاضرون من الحضور + الغياب" />
@@ -346,27 +346,14 @@ function Section({ title, children, exports, exportLink }: { title: string; chil
 }
 
 function Kpi({ label, metric, format, metricKey, hint }: { label: string; metric: Metric; format: (v: number | string) => string; metricKey: string; hint?: string }) {
-    const inverted = lowerIsBetter.has(metricKey);
+    const comparison = `المقارنة: ${format(metric.previous)}`;
     return (
-        <div className="card p-4">
-            <p className="text-sm text-muted">{label}</p>
-            <p className="mt-1 text-xl font-semibold sm:text-2xl"><span className="num">{format(metric.current)}</span></p>
-            <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs text-muted">
-                <span>المقارنة: <span className="num">{format(metric.previous)}</span></span>
-                {inverted ? <InvertedDelta change={metric.change} /> : <Delta change={metric.change} />}
-            </div>
-            {hint && <p className="mt-1 text-[11px] text-muted">{hint}</p>}
-        </div>
+        <StatCard
+            label={label}
+            value={format(metric.current)}
+            trend={metric.change === null || metric.change === undefined ? null : { change: metric.change, label: comparison, inverted: lowerIsBetter.has(metricKey) }}
+            hint={[metric.change === null || metric.change === undefined ? comparison : null, hint].filter(Boolean).join(' · ') || undefined}
+        />
     );
 }
 
-/** Arrow shows the real direction; colour shows whether that is good (a drop in expenses is green). */
-function InvertedDelta({ change }: { change: number | null }) {
-    if (change === null || change === undefined) return <span className="text-xs text-muted">—</span>;
-    const up = change >= 0;
-    return (
-        <span className={`text-xs font-medium num ${up ? 'text-red-600' : 'text-emerald-600'}`}>
-            {up ? '▲' : '▼'} {Math.abs(change)}%
-        </span>
-    );
-}

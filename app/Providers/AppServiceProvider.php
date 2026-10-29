@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Core\Audit\AuditLogger;
 use App\Core\Auth\PermissionRegistry;
+use App\Core\Notifications\StaffNotifier;
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Models\User;
@@ -39,6 +41,8 @@ class AppServiceProvider extends ServiceProvider
     {
         // Reset for every request and every queued job.
         $this->app->scoped(TenantContext::class);
+        $this->app->scoped(BranchContext::class);
+        $this->app->scoped(StaffNotifier::class);
         $this->app->scoped(AuditLogger::class);
     }
 

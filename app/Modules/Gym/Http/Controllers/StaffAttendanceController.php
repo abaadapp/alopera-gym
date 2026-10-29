@@ -2,6 +2,7 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -21,7 +22,7 @@ class StaffAttendanceController extends Controller
         $from = CarbonImmutable::parse($request->string('from')->toString() ?: now()->startOfMonth()->toDateString());
         $to = CarbonImmutable::parse($request->string('to')->toString() ?: today()->toDateString());
 
-        $rows = StaffAttendance::with(['user:id,name', 'device:id,name'])
+        $rows = BranchContext::scope(StaffAttendance::with(['user:id,name', 'device:id,name']))
             ->whereBetween('clock_in_at', [$from->startOfDay(), $to->endOfDay()])
             ->when($request->integer('user_id'), fn ($q, $id) => $q->where('user_id', $id))
             ->latest('clock_in_at')->paginate(50)->withQueryString()
@@ -32,7 +33,7 @@ class StaffAttendanceController extends Controller
             ]);
 
         // Per person over the whole period (not just this page): days present, hours worked, punches left open.
-        $summary = StaffAttendance::with('user:id,name')
+        $summary = BranchContext::scope(StaffAttendance::with('user:id,name'))
             ->whereBetween('clock_in_at', [$from->startOfDay(), $to->endOfDay()])
             ->when($request->integer('user_id'), fn ($q, $id) => $q->where('user_id', $id))
             ->get()->groupBy('user_id')

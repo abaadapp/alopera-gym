@@ -3,6 +3,7 @@
 namespace App\Modules\Payments\Services;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Notifications\StaffAlerts;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Tenancy\TenantContext;
@@ -139,6 +140,7 @@ final class OnlinePaymentService
                         'failure_reason' => Str::limit((string) Arr::get($obj, 'data.message', 'declined'), 250),
                     ])->save();
                     OnlinePaymentFailed::dispatch($intent);
+                    app(StaffAlerts::class)->paymentFailed($intent);
                 }
 
                 return $this->log($intent->tenant_id, $transactionId, $reference, true, 'failed_payment', $payload, $ip);

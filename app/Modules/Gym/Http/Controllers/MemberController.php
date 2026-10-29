@@ -6,6 +6,7 @@ use App\Core\Audit\AuditLogger;
 use App\Core\Export\TableExporter;
 use App\Core\Support\ImageStore;
 use App\Core\Support\Money;
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
@@ -41,7 +42,7 @@ class MemberController extends Controller
     {
         $status = $request->string('membership')->toString();
 
-        $members = Member::with(['currentMembership', 'upcomingMembership'])
+        $members = BranchContext::scope(Member::with(['currentMembership', 'upcomingMembership']))
             ->search($request->string('q')->toString())
             ->when($status === 'active', fn ($q) => $q->whereHas('memberships', fn ($m) => $m->where('status', Membership::ACTIVE)))
             ->when($status === 'frozen', fn ($q) => $q->whereHas('memberships', fn ($m) => $m->where('status', Membership::FROZEN)))

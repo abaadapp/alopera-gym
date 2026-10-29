@@ -5,6 +5,7 @@ namespace App\Modules\Payroll\Http\Controllers;
 use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -32,7 +33,7 @@ class EmployeeController extends Controller
         JobTitle::ensureDefaults();
         $confidential = $request->user()->hasPermission('payroll.salaries');
 
-        $employees = Employee::with(['jobTitle:id,name', 'branch:id,name', 'user:id,name,email,role_id', 'user.role:id,name', 'trainer:id,name'])
+        $employees = BranchContext::scope(Employee::with(['jobTitle:id,name', 'branch:id,name', 'user:id,name,email,role_id', 'user.role:id,name', 'trainer:id,name']))
             ->when($request->string('q')->toString(), fn ($q, $s) => $q->where(fn ($w) => $w->where('name', 'ilike', "%{$s}%")->orWhere('phone', 'ilike', "%{$s}%")->orWhere('email', 'ilike', "%{$s}%")))
             ->when($request->string('status')->toString(), fn ($q, $s) => $q->where('status', $s))
             ->when($request->integer('job_title_id'), fn ($q, $id) => $q->where('job_title_id', $id))

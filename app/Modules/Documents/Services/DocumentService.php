@@ -3,6 +3,8 @@
 namespace App\Modules\Documents\Services;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Notifications\StaffAlerts;
+use App\Core\Notifications\StaffNotifier;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
@@ -175,6 +177,7 @@ final class DocumentService
                     return;
                 }
                 $raised++;
+                app(StaffAlerts::class)->documentAlert($alert->setRelation('document', $document));
                 if ($settings['whatsapp']) {
                     $alert->forceFill(['whatsapp_status' => $this->sendWhatsApp($document, $alert)])->save();
                 }
@@ -186,6 +189,7 @@ final class DocumentService
     public function acknowledge(DocumentAlert $alert): void
     {
         $alert->forceFill(['acknowledged_at' => now(), 'acknowledged_by' => Auth::guard('web')->id()])->save();
+        app(StaffNotifier::class)->resolve('document-alert:'.$alert->id);
     }
 
     /** queued | skipped:<reason> — never a promise: only an enabled integration, an approved template and an authorised recipient send. */
@@ -213,9 +217,12 @@ final class DocumentService
     /** Alerts about an expiry date that no longer applies are closed. */
     private function resolveAlerts(BusinessDocument $document): void
     {
-        DocumentAlert::where('document_id', $document->id)->whereNull('acknowledged_at')
-            ->where(fn ($q) => $document->expiry_date ? $q->where('expiry_date', '!=', $document->expiry_date->toDateString()) : $q)
-            ->update(['acknowledged_at' => now(), 'acknowledged_by' => Auth::guard('web')->id()]);
+        $stale = DocumentAlert::where('document_id', $document->id)->whereNull('acknowledged_at')
+            ->where(fn ($q) => $document->expiry_date ? $q->where('expiry_date', '!=', $document->expiry_date->toDateString()) : $q);
+        foreach ((clone $stale)->pluck('id') as $id) {
+            app(StaffNotifier::class)->resolve('document-alert:'.$id);
+        }
+        $stale->update(['acknowledged_at' => now(), 'acknowledged_by' => Auth::guard('web')->id()]);
     }
 
     private function attach(BusinessDocument $document, UploadedFile $file): void

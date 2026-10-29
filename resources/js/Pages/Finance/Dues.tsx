@@ -38,7 +38,7 @@ export default function Dues({ invoices, aging, total, filters }: Props) {
         <ClubLayout title="المستحقات">
             <PageHeader title="المستحقات والمتأخرات" subtitle={`إجمالي غير المحصّل: ${money(total, currency)}`} />
 
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="غير مستحقة بعد" value={money(aging.current, currency)} tone="blue" />
                 <StatCard label="متأخرة 1–30 يومًا" value={money(aging['1_30'], currency)} tone="amber" />
                 <StatCard label="متأخرة 31–60 يومًا" value={money(aging['31_60'], currency)} tone="red" />

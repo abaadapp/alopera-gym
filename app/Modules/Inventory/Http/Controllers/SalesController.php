@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Core\Export\TableExporter;
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -150,7 +151,8 @@ class SalesController extends Controller
     /** Sales this user may see: all of the club's, or only their branch's when they are assigned to one. */
     public static function scopedFor(User $user): Builder
     {
-        return Sale::query()->when($user->branch_id, fn ($q, $branch) => $q->where(fn ($w) => $w->where('branch_id', $branch)->orWhereNull('branch_id')));
+        // The user's branch when tied to one, otherwise the branch chosen in the top bar (or all of them).
+        return app(BranchContext::class)->apply(Sale::query(), 'branch_id', $user);
     }
 
     public static function ensureBranch(User $user, Sale $sale): void

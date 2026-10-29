@@ -2,6 +2,7 @@
 
 namespace App\Modules\Website\Http\Controllers;
 
+use App\Core\Notifications\StaffNotifier;
 use App\Core\Support\ImageStore;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -128,6 +129,7 @@ class CmsController extends Controller
     public function markRead(ContactMessage $message): RedirectResponse
     {
         $message->update(['status' => 'read']);
+        app(StaffNotifier::class)->resolve('contact:'.$message->id);
 
         return back();
     }

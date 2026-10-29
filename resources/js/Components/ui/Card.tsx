@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from '@inertiajs/react';
+import { ArrowDownRight, ArrowUpRight, Building2 } from 'lucide-react';
+import { useShared } from '@/hooks/useShared';
 import SectionTabs from '@/Components/SectionTabs';
 import { cn } from '@/lib/cn';
 import { useAdmin } from './AdminScope';
@@ -20,6 +22,20 @@ export function CardHeader({ title, subtitle, actions, className }: { title: Rea
     );
 }
 
+/* Pages that always show the whole club, whatever branch the top bar is on (the books, payroll, reports…). */
+const CLUB_WIDE = ['club.finance.*', 'club.reports.*', 'club.payroll.*', 'club.schedule.*', 'club.trainers.*', 'club.pt.*', 'club.pt-packages.*', 'club.products.*'];
+
+function BranchNote() {
+    const { auth } = useShared();
+    const branch = auth?.branch?.current;
+    if (!branch || !CLUB_WIDE.some((pattern) => route().current(pattern))) return null;
+    return (
+        <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-[#f2f2f0] px-3 py-1 text-[12px] text-[#4b4b4b]">
+            <Building2 className="size-3.5" /> تعرض هذه الصفحة كل الفروع؛ اختيار «{branch.name}» لا يغيّرها.
+        </p>
+    );
+}
+
 /** A page's title, description and actions; on a page that is one tab of a section, the section's tabs follow. */
 export function PageHeader({ title, subtitle, actions, back }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; back?: ReactNode }) {
     return (
@@ -32,6 +48,7 @@ export function PageHeader({ title, subtitle, actions, back }: { title: ReactNod
                 </div>
                 {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
             </div>
+            <BranchNote />
             <SectionTabs className="mt-5" />
         </div>
     );
@@ -69,7 +86,27 @@ const statTones = {
  * icon sits in a 40px, 12px-rounded square of its status colour on the far side. Padding 16px. In a narrow tile
  * (two to a row on a phone) the icon steps aside so the figure keeps its room.
  */
-export function StatCard({ label, value, hint, icon, tone = 'brand', href }: { label: ReactNode; value: ReactNode; hint?: ReactNode; icon?: ReactNode; tone?: keyof typeof tones; href?: string }) {
+export type StatTrend = { change: number; label: string; inverted?: boolean };
+
+/** The change against an earlier period: the arrow shows the direction; the colour whether that is good (for a figure
+ *  where less is better — expenses, cancellations — a drop is green). */
+export function TrendLine({ trend, className }: { trend: StatTrend; className?: string }) {
+    const good = (trend.change >= 0) !== Boolean(trend.inverted);
+    return (
+        <p className={cn('flex items-center gap-1 text-[12px] font-medium', good ? 'text-[#047857]' : 'text-[#b91c1c]', className)}>
+            {trend.change >= 0 ? <ArrowUpRight className="size-3.5 shrink-0" /> : <ArrowDownRight className="size-3.5 shrink-0" />}
+            <span className="num" dir="ltr">{trend.change > 0 ? '+' : ''}{trend.change}%</span>
+            <span className="truncate font-normal text-[#6b7280]">{trend.label}</span>
+        </p>
+    );
+}
+
+/** The grid for stat tiles, everywhere: one per row on phones, two on tablets, three or four on wide screens. */
+export function StatGrid({ cols = 4, className, children }: { cols?: 3 | 4; className?: string; children: ReactNode }) {
+    return <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2', cols === 4 ? 'xl:grid-cols-4' : 'xl:grid-cols-3', className)}>{children}</div>;
+}
+
+export function StatCard({ label, value, hint, icon, tone = 'brand', href, trend }: { label: ReactNode; value: ReactNode; hint?: ReactNode; icon?: ReactNode; tone?: keyof typeof tones; href?: string; trend?: StatTrend | null }) {
     const body = (
         <div className={cn('card @container h-full p-4', href && 'transition hover:border-[#dcdcdc] hover:shadow-[0_8px_30px_-12px_rgba(17,17,17,0.14)]')}>
             <div className="flex items-start justify-between gap-3">
@@ -79,7 +116,8 @@ export function StatCard({ label, value, hint, icon, tone = 'brand', href }: { l
                 </div>
                 {icon && <span className={cn('hidden size-10 shrink-0 place-items-center rounded-[12px] @[13rem]:grid [&_svg]:size-5', statTones[tone])}>{icon}</span>}
             </div>
-            {hint && <p className="mt-3 text-[12px] text-[#6b7280]">{hint}</p>}
+            {trend && <TrendLine trend={trend} className="mt-3" />}
+            {hint && <p className={cn('text-[12px] text-[#6b7280]', trend ? 'mt-1' : 'mt-3')}>{hint}</p>}
         </div>
     );
     return href ? <Link href={href} className="block h-full">{body}</Link> : body;

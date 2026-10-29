@@ -3,6 +3,7 @@
 namespace App\Modules\Messaging\Services;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Notifications\StaffAlerts;
 use App\Core\Support\Phone;
 use App\Core\Tenancy\TenantContext;
 use App\Models\TenantIntegration;
@@ -115,6 +116,7 @@ final class InboundProcessor
                 'last_message_at' => now(),
                 'last_inbound_at' => now(),
             ])->save();
+            app(StaffAlerts::class)->inbox($conversation);
 
             $normalized = mb_strtolower(trim($text));
 

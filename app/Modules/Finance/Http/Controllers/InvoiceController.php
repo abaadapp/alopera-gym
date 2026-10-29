@@ -2,6 +2,7 @@
 
 namespace App\Modules\Finance\Http\Controllers;
 
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -21,7 +22,7 @@ class InvoiceController extends Controller
 {
     public function index(Request $request): Response
     {
-        $invoices = Invoice::query()
+        $invoices = BranchContext::scope(Invoice::query())
             ->when($request->string('status')->toString(), fn ($q, $s) => $s === 'open' ? $q->open() : $q->where('status', $s))
             ->when($request->string('type')->toString(), fn ($q, $t) => $q->where('type', $t))
             ->when($request->string('q')->toString(), fn ($q, $term) => $q->where(fn ($w) => $w->where('number', 'ilike', "%{$term}%")->orWhere('customer_name', 'ilike', "%{$term}%")->orWhere('customer_phone', 'like', '%'.preg_replace('/\D/', '', $term).'%')))

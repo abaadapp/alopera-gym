@@ -39,7 +39,7 @@ export default function FinanceBanks({ accounts, totals, kinds, canManage }: Pro
                 )}
             />
 
-            <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <StatCard label="الصناديق النقدية" value={m(totals.cash)} icon={<Banknote className="size-5" />} tone="green" />
                 <StatCard label="الحسابات البنكية" value={m(totals.banks)} icon={<Landmark className="size-5" />} tone="blue" />
                 <StatCard label="قيد التسوية" value={m(totals.clearing)} hint="بطاقات وPaymob لم تصل البنك بعد" icon={<CreditCard className="size-5" />} tone="violet" />

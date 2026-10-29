@@ -71,7 +71,7 @@ export default function PayrollRuns({ runs, run, months, can }: Props) {
                                 </div>
                             </Card>
 
-                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                                 <StatCard label="المستحقات" value={m(run.gross)} hint="أساسي + بدلات + إضافي" tone="blue" />
                                 <StatCard label="الخصومات" value={m(run.deductions)} tone="amber" />
                                 <StatCard label="الصافي" value={m(run.net)} hint={`${run.items.length} موظف`} tone="green" />

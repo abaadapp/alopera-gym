@@ -3,9 +3,11 @@
 namespace App\Http\Middleware;
 
 use App\Core\Auth\PermissionRegistry;
-use App\Core\Notifications\StaffNotifications;
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
+use App\Http\Controllers\Club\NotificationController;
 use App\Models\Branch;
+use App\Models\StaffNotification;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -38,9 +40,12 @@ class HandleInertiaRequests extends Middleware
             'tenant' => fn () => $this->tenant(),
             'modules' => ['sales' => PermissionRegistry::moduleEnabled('sales'), 'inventory' => PermissionRegistry::moduleEnabled('inventory')],
             'member' => fn () => $this->member(),
-            // The bell of the club panel's top bar (App\Core\Notifications\StaffNotifications).
-            'notifications' => fn () => $request->routeIs('club.*') && $request->user('web') instanceof User && app(TenantContext::class)->get()
-                ? app(StaffNotifications::class)->for($request->user('web'))
+            // The bell of the club panel's top bar: unread count and the latest few (App\Core\Notifications).
+            'notifications' => fn () => $request->routeIs('club.*') && $request->user('web') instanceof User && app(TenantContext::class)->id() === $request->user('web')->tenant_id
+                ? [
+                    'unread' => StaffNotification::for($request->user('web'))->unread()->count(),
+                    'items' => StaffNotification::for($request->user('web'))->latest('id')->limit(8)->get()->map(fn (StaffNotification $n) => NotificationController::row($n))->all(),
+                ]
                 : null,
             'flash' => fn () => [
                 'success' => $request->session()->get('success'),
@@ -68,11 +73,32 @@ class HandleInertiaRequests extends Middleware
                 'role' => $user->role?->name,
                 'role_key' => $user->role?->key,
                 'is_platform_admin' => $user->isPlatformAdmin(),
-                // For the branch label of the top bar: the user's branch, and how many the club has.
-                'branch' => app(TenantContext::class)->get() ? $user->branch?->name : null,
-                'branches' => app(TenantContext::class)->get() ? Branch::where('is_active', true)->count() : 0,
             ],
             'permissions' => $user->permissions(),
+            'branch' => $this->branch($user),
+        ];
+    }
+
+    /**
+     * The top bar's branch: the one shown, whether the user is tied to it, and — for a club-wide user of a club with
+     * more than one branch — the branches to choose from.
+     *
+     * @return array{current: array{id: int, name: string}|null, locked: bool, options: list<array{id: int, name: string}>}|null
+     */
+    private function branch(User $user): ?array
+    {
+        // Only inside the user's own club (a staff member may also be looking at another club's website).
+        if (app(TenantContext::class)->id() === null || app(TenantContext::class)->id() !== $user->tenant_id) {
+            return null;
+        }
+        $context = app(BranchContext::class);
+        $current = $context->current($user);
+        $options = $context->canSwitch($user) ? Branch::where('is_active', true)->orderByDesc('is_main')->orderBy('name')->get(['id', 'name']) : collect();
+
+        return [
+            'current' => $current ? ['id' => $current->id, 'name' => $current->name] : null,
+            'locked' => ! $context->canSwitch($user),
+            'options' => $options->count() > 1 ? $options->map(fn (Branch $b) => ['id' => $b->id, 'name' => $b->name])->all() : [],
         ];
     }
 

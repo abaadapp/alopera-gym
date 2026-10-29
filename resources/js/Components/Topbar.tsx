@@ -1,13 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, router } from '@inertiajs/react';
-import { Bell, Building2, ChevronDown, Clock, Globe, LoaderCircle, LogOut, Menu, Search, Settings, Store, User as UserIcon, X } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { Bell, Blocks, Building2, Check, CheckCheck, ChevronDown, Clock, CreditCard, FileText, Globe, LoaderCircle, Lock, LogOut, Mail, Menu, MessageCircle, Search, Settings, ShoppingBag, Store, Ticket, UserRound, X } from 'lucide-react';
 import { Dropdown, DropdownItem, DropdownLabel, DropdownSeparator } from '@/Components/ui/Dropdown';
 import { useCan, useShared } from '@/hooks/useShared';
 import { NAV } from '@/lib/nav';
 import { cn } from '@/lib/cn';
+import type { StaffNotification } from '@/types';
 
 /* 40px square icon buttons with an 18px line icon, quiet grey that darkens on hover. */
 const iconButton = 'relative grid size-10 shrink-0 place-items-center rounded-[10px] text-[#4b4b4b] transition-colors hover:bg-[rgba(17,17,17,0.045)] hover:text-[#111] [&_svg]:size-[18px]';
+
+const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'billing.view', 'accounting.manage', 'documents.manage'];
+
+export const NOTIFICATION_ICONS: Record<StaffNotification['kind'], LucideIcon> = {
+    document: FileText, order: ShoppingBag, payment: CreditCard, membership: Ticket, integration: Blocks, contact: Mail, inbox: MessageCircle,
+};
 
 function initials(name?: string | null): string {
     const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
@@ -16,7 +24,7 @@ function initials(name?: string | null): string {
 
 export function Avatar({ name, size = 32 }: { name?: string | null; size?: number }) {
     return (
-        <span className="grid shrink-0 place-items-center rounded-full bg-[#f2f2f0] font-semibold text-[#4b4b4b]" style={{ width: size, height: size, fontSize: size >= 40 ? 14 : 12 }}>
+        <span className="grid shrink-0 place-items-center rounded-full bg-[#f2f2f0] font-semibold text-[#4b4b4b]" style={{ width: size, height: size, fontSize: size >= 40 ? 14 : 12 }} aria-hidden>
             {initials(name)}
         </span>
     );
@@ -28,10 +36,8 @@ export function Avatar({ name, size = 32 }: { name?: string | null; size?: numbe
  * shown only to whoever may use it.
  */
 export default function Topbar({ onMenu }: { onMenu: () => void }) {
-    const { auth, tenant, modules } = useShared();
+    const { tenant, modules } = useShared();
     const can = useCan();
-    const user = auth?.user;
-    const branch = user?.branch ?? (user && user.branches > 1 ? 'كل الفروع' : null);
 
     return (
         <header className="no-print sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-[#e8e8e8] bg-white/95 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-white/80 lg:px-6">
@@ -39,29 +45,24 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
                 <Menu />
             </button>
 
-            <TopSearch />
+            <TopSearch className="max-w-sm max-md:hidden" />
+            <MobileSearch />
 
             <div className="ms-auto flex shrink-0 items-center gap-1.5">
-                {branch && (
-                    // The user's branch (or all of them); there is no switching between branches in this system.
-                    <span className="hidden h-9 max-w-[11rem] items-center gap-1.5 rounded-[10px] px-2 text-[13px] font-medium text-[#111] md:inline-flex" title="الفرع">
-                        <Building2 className="size-4 shrink-0 text-[#6b7280]" />
-                        <span className="truncate">{branch}</span>
-                    </span>
-                )}
+                <BranchPicker />
 
                 {tenant?.status === 'trial' && (
                     <span className="hidden rounded-full border border-[#e8e8e8] bg-[#f2f2f0] px-2.5 py-1 text-[12px] font-medium text-[#444] xl:inline">فترة تجريبية حتى {tenant.trial_ends_at}</span>
                 )}
 
                 {modules.sales && can('pos.sell') && (
-                    <Link href={route('club.pos.index')} className={iconButton} title="نقطة البيع">
+                    <Link href={route('club.pos.index')} className={cn(iconButton, 'max-sm:hidden')} title="نقطة البيع">
                         <Store />
                         <span className="sr-only">نقطة البيع</span>
                     </Link>
                 )}
                 {tenant && can('website.manage') && (
-                    <a href={route('site.home', { club: tenant.slug })} target="_blank" rel="noreferrer" className={iconButton} title="موقع النادي">
+                    <a href={route('site.home', { club: tenant.slug })} target="_blank" rel="noreferrer" className={cn(iconButton, 'max-sm:hidden')} title="موقع النادي">
                         <Globe />
                         <span className="sr-only">موقع النادي</span>
                     </a>
@@ -79,13 +80,96 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
 }
 
 /**
- * The bell: a red badge with the number of things waiting, and a list of them. Each entry opens its screen; a
- * document alert can be marked as seen from here (the documents section's own «acknowledge»).
+ * The branch: a club-wide user of a club with several branches picks one (or all of them) — the server checks the
+ * branch belongs to the club and narrows the pages to it. A user tied to a branch sees it, locked.
  */
+function BranchPicker() {
+    const { auth } = useShared();
+    const branch = auth?.branch;
+    if (!branch) return null;
+    const label = branch.current?.name ?? 'كل الفروع';
+
+    if (branch.options.length === 0) {
+        if (!branch.current) return null;
+        return (
+            <span className="hidden h-9 max-w-[11rem] items-center gap-1.5 rounded-[10px] px-2 text-[13px] font-medium text-[#111] md:inline-flex" title={branch.locked ? 'فرعك — يحدده مدير المستخدمين' : 'الفرع'}>
+                <Building2 className="size-4 shrink-0 text-[#6b7280]" />
+                <span className="truncate">{label}</span>
+                {branch.locked && <Lock className="size-3 shrink-0 text-[#9ca3af]" />}
+            </span>
+        );
+    }
+
+    const pick = (id: number | null) => router.post(route('club.branch.switch'), { branch_id: id }, { preserveScroll: true });
+
+    return (
+        <Dropdown
+            label="الفرع"
+            className="max-md:hidden"
+            panelClassName="w-60"
+            trigger={() => (
+                <span className="inline-flex h-9 max-w-[11rem] items-center gap-1.5 rounded-[10px] px-2 text-[13px] font-medium text-[#111] transition-colors hover:bg-[rgba(17,17,17,0.045)]">
+                    <Building2 className="size-4 shrink-0 text-[#6b7280]" />
+                    <span className="truncate">{label}</span>
+                    <ChevronDown className="size-3.5 shrink-0 opacity-50" />
+                </span>
+            )}
+        >
+            {(close) => (
+                <>
+                    <DropdownLabel className="font-normal">الفرع</DropdownLabel>
+                    <DropdownItem onClick={() => { close(); pick(null); }}>
+                        <span className="flex-1">كل الفروع</span>
+                        {!branch.current && <Check />}
+                    </DropdownItem>
+                    {branch.options.map((b) => (
+                        <DropdownItem key={b.id} onClick={() => { close(); pick(b.id); }}>
+                            <span className="flex-1 truncate">{b.name}</span>
+                            {branch.current?.id === b.id && <Check />}
+                        </DropdownItem>
+                    ))}
+                </>
+            )}
+        </Dropdown>
+    );
+}
+
+/** One notification row: kind icon, text and time; opening it marks it read and leads to its screen. */
+export function NotificationRow({ n, onOpen, compact = false }: { n: StaffNotification; onOpen?: () => void; compact?: boolean }) {
+    const Icon = NOTIFICATION_ICONS[n.kind] ?? Bell;
+    return (
+        <div className={cn('group flex items-start gap-1 rounded-[8px] px-1 transition-colors hover:bg-[#f5f5f4]', !n.read && 'bg-[#fafaf9]')}>
+            <Link href={route('club.notifications.open', n.id)} onClick={onOpen} className={cn('flex min-w-0 flex-1 items-start gap-2.5 px-2', compact ? 'py-2' : 'py-3')}>
+                <span className={cn('relative mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-[#f2f2f0]', n.read ? 'text-[#9ca3af]' : 'text-[#111]')}>
+                    <Icon className="size-4" />
+                    {!n.read && <span className="absolute -end-0.5 -top-0.5 size-2.5 rounded-full border-2 border-white bg-[#dc2626]" />}
+                </span>
+                <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className={cn('text-[13px] leading-5', n.read ? 'text-[#6b7280]' : 'font-medium text-[#111]')}>{n.text}</span>
+                    <span className="text-[12px] text-[#9ca3af]">{n.kind_label} · {n.time}</span>
+                    {!n.read && <span className="sr-only">غير مقروء</span>}
+                </span>
+            </Link>
+            {!n.read && (
+                <button
+                    type="button"
+                    onClick={() => router.post(route('club.notifications.read', n.id), {}, { preserveScroll: true })}
+                    aria-label="تعليم كمقروء"
+                    title="تعليم كمقروء"
+                    className={cn('flex size-6 shrink-0 items-center justify-center rounded-full text-[#9ca3af] transition-colors hover:bg-[#e8e8e6] hover:text-[#111]', compact ? 'mt-2' : 'mt-3')}
+                >
+                    <Check className="size-3.5" />
+                </button>
+            )}
+        </div>
+    );
+}
+
+/** The bell: a red badge with the unread count, the latest notifications, «mark all read» and the full list. */
 function NotificationBell() {
     const { notifications } = useShared();
     if (!notifications) return null;
-    const { count, items } = notifications;
+    const { unread, items } = notifications;
 
     return (
         <Dropdown
@@ -94,9 +178,9 @@ function NotificationBell() {
             trigger={() => (
                 <span className={iconButton}>
                     <Bell />
-                    {count > 0 && (
+                    {unread > 0 && (
                         <span className="absolute end-1.5 top-1.5 flex size-4 items-center justify-center rounded-full bg-[#dc2626] text-[10px] font-semibold text-white">
-                            {count > 9 ? '9+' : count}
+                            {unread > 9 ? '9+' : unread}
                         </span>
                     )}
                 </span>
@@ -106,7 +190,15 @@ function NotificationBell() {
                 <>
                     <div className="flex items-center justify-between gap-2 px-3 py-1.5">
                         <span className="text-sm font-semibold text-[#111]">الإشعارات</span>
-                        {count > 0 && <span className="text-[12px] text-[#9ca3af]">{count > 99 ? '99+' : count} بانتظارك</span>}
+                        {unread > 0 && (
+                            <button
+                                type="button"
+                                onClick={() => router.post(route('club.notifications.read-all'), {}, { preserveScroll: true })}
+                                className="inline-flex items-center gap-1 text-[12px] text-[#6b7280] transition-colors hover:text-[#111]"
+                            >
+                                <CheckCheck className="size-3.5" /> تعليم الكل كمقروء
+                            </button>
+                        )}
                     </div>
                     <DropdownSeparator />
                     {items.length === 0 ? (
@@ -116,27 +208,13 @@ function NotificationBell() {
                         </div>
                     ) : (
                         <div className="max-h-[55vh] overflow-y-auto">
-                            {items.map((item) => (
-                                <div key={item.key} className="group flex items-start gap-1 rounded-[8px] px-1 transition-colors hover:bg-[#f5f5f4]">
-                                    <Link href={item.url} onClick={close} className="flex min-w-0 flex-1 flex-col gap-0.5 px-2 py-2" role="menuitem">
-                                        <span className="text-[13px] font-medium leading-5 text-[#111]">{item.text}</span>
-                                        {item.time && <span className="text-[12px] text-[#6b7280]">{item.time}</span>}
-                                    </Link>
-                                    {item.dismiss && (
-                                        <button
-                                            type="button"
-                                            onClick={() => router.post(item.dismiss!, {}, { preserveScroll: true })}
-                                            aria-label="تمت المشاهدة"
-                                            title="تمت المشاهدة"
-                                            className="mt-2 flex size-6 shrink-0 items-center justify-center rounded-full text-[#9ca3af] transition-colors hover:bg-[#e8e8e6] hover:text-[#111]"
-                                        >
-                                            <X className="size-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
+                            {items.map((n) => <NotificationRow key={n.id} n={n} onOpen={close} compact />)}
                         </div>
                     )}
+                    <DropdownSeparator />
+                    <Link href={route('club.notifications.index')} onClick={close} className="block rounded-[8px] px-3 py-2 text-center text-[13px] font-medium text-[#111] transition-colors hover:bg-[#f2f2f0]">
+                        عرض كل الإشعارات
+                    </Link>
                 </>
             )}
         </Dropdown>
@@ -145,11 +223,11 @@ function NotificationBell() {
 
 /** The user: a 32px circle with initials, the name and the role beneath it; the menu opens on hover or click. */
 function UserMenu() {
-    const { auth, tenant } = useShared();
+    const { auth, tenant, notifications } = useShared();
     const can = useCan();
     const user = auth?.user;
     if (!user) return null;
-    const settings = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'billing.view', 'accounting.manage', 'documents.manage'].some(can);
+    const unread = notifications?.unread ?? 0;
 
     return (
         <Dropdown
@@ -174,14 +252,21 @@ function UserMenu() {
                         <div className="min-w-0 text-start">
                             <p className="truncate text-[14px] font-bold text-[#111]">{user.name}</p>
                             <p className="truncate text-[12px] text-[#6b7280]" dir="ltr">{user.email}</p>
+                            <p className="truncate text-[12px] text-[#9ca3af]">{[user.role, auth?.branch?.current?.name, tenant?.name].filter(Boolean).join(' · ')}</p>
                         </div>
                     </div>
-                    <DropdownLabel className="flex items-center gap-2 font-normal"><UserIcon className="size-3.5" />{user.role}{tenant ? ` · ${tenant.name}` : ''}</DropdownLabel>
                     <DropdownSeparator />
+                    <DropdownItem href={route('club.account.show')} onClick={close}>
+                        <UserRound /> حسابي
+                    </DropdownItem>
+                    <DropdownItem href={route('club.notifications.index')} onClick={close}>
+                        <Bell /> <span className="flex-1">الإشعارات</span>
+                        {unread > 0 && <span className="rounded-full bg-[#dc2626] px-1.5 text-[10px] font-semibold leading-4 text-white">{unread > 99 ? '99+' : unread}</span>}
+                    </DropdownItem>
                     <DropdownItem onClick={() => { close(); router.post(route('club.staff-attendance.punch'), {}, { preserveScroll: true }); }}>
                         <Clock /> تسجيل حضور/انصراف
                     </DropdownItem>
-                    {settings && (
+                    {SETTINGS_PERMISSIONS.some(can) && (
                         <DropdownItem href={route('club.settings.index')} onClick={close}>
                             <Settings /> الإعدادات
                         </DropdownItem>
@@ -196,47 +281,57 @@ function UserMenu() {
     );
 }
 
-type Hit = { key: string; label: string; hint?: string; href: string; group: 'pages' | 'members' };
+type Hit = { key: string; label: string; hint?: string; href: string };
+type Group = { key: string; label: string; items: { label: string; hint?: string; url: string }[] };
+
+/** Arabic-Indic digits as digits and the interchangeable letters folded, so «احمد» finds «أحمد». */
+function fold(text: string): string {
+    return text
+        .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+        .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+        .replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
+        .trim();
+}
 
 /**
- * Search in the top bar: the panel's pages this user may open (instantly) and, for whoever sees members, members by
- * name, phone or number (the members search the panel already has). Arrow keys move, Enter opens.
+ * Search in the top bar: the panel's pages this user may open (instantly, in the browser) and, from the server,
+ * members, sales and website orders, invoices and documents — each group only for whoever may open it. Arrow keys
+ * move, Enter opens, Escape closes; on a computer «/» jumps into it.
  */
-function TopSearch() {
+function TopSearch({ className, autoFocus, onDone }: { className?: string; autoFocus?: boolean; onDone?: () => void }) {
     const can = useCan();
     const { auth } = useShared();
     const [q, setQ] = useState('');
     const [open, setOpen] = useState(false);
-    const [members, setMembers] = useState<Hit[]>([]);
+    const [groups, setGroups] = useState<Group[]>([]);
     const [loading, setLoading] = useState(false);
     const [index, setIndex] = useState(0);
     const box = useRef<HTMLDivElement>(null);
+    const input = useRef<HTMLInputElement>(null);
 
     const pages = useMemo((): Hit[] => {
         const allowed = (p?: string | string[]) => !p || (Array.isArray(p) ? p : [p]).some(can);
         return NAV.flatMap((g) => g.sections.flatMap((s) => s.tabs.filter((t) => allowed(t.permission) && (!t.roleKey || auth?.user.role_key === t.roleKey || can('classes.manage'))).map((t) => ({
-            key: `${t.route}-${JSON.stringify(t.params ?? {})}`,
+            key: `page-${t.route}-${JSON.stringify(t.params ?? {})}`,
             label: t.label === s.label ? s.label : `${s.label} · ${t.label}`,
             href: String(route(t.route, t.params ?? {})),
-            group: 'pages' as const,
         }))));
     }, [auth?.permissions]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const term = q.trim();
-    const pageHits = term ? pages.filter((p) => p.label.includes(term)).slice(0, 6) : [];
+    const term = fold(q);
+    const pageHits = term ? pages.filter((p) => fold(p.label).includes(term)).slice(0, 5) : [];
 
     useEffect(() => {
-        if (term.length < 2 || !can('members.view')) {
-            setMembers([]);
+        if (term.length < 2) {
+            setGroups([]);
             return;
         }
         const controller = new AbortController();
         setLoading(true);
         const t = setTimeout(async () => {
             try {
-                const res = await fetch(route('club.members.search', { q: term }), { headers: { Accept: 'application/json' }, signal: controller.signal });
-                const rows = (await res.json()) as { id: number; full_name: string; member_no: string; phone_display?: string }[];
-                setMembers(rows.slice(0, 6).map((m) => ({ key: `m${m.id}`, label: m.full_name, hint: [m.member_no, m.phone_display].filter(Boolean).join(' · '), href: String(route('club.members.show', m.id)), group: 'members' as const })));
+                const res = await fetch(route('club.search', { q: q.trim() }), { headers: { Accept: 'application/json' }, signal: controller.signal });
+                setGroups(((await res.json()) as { groups: Group[] }).groups);
             } catch {
                 /* aborted or offline: keep the page results */
             } finally {
@@ -256,20 +351,40 @@ function TopSearch() {
         return () => document.removeEventListener('pointerdown', onDown);
     }, [open]);
 
-    const hits = [...pageHits, ...members];
-    useEffect(() => setIndex(0), [term, members.length]);
+    // «/» focuses the search, unless the user is typing somewhere.
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement;
+            if (e.key === '/' && !e.metaKey && !e.ctrlKey && !['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) && !target.isContentEditable) {
+                e.preventDefault();
+                input.current?.focus();
+            }
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, []);
+
+    const sections = [
+        { key: 'pages', label: 'الصفحات', hits: pageHits },
+        ...groups.map((g) => ({ key: g.key, label: g.label, hits: g.items.map((i, n): Hit => ({ key: `${g.key}-${n}`, label: i.label, hint: i.hint, href: i.url })) })),
+    ].filter((s) => s.hits.length > 0);
+    const hits = sections.flatMap((s) => s.hits);
+    useEffect(() => setIndex(0), [term, groups]);
 
     const go = (hit?: Hit) => {
         if (!hit) return;
         setOpen(false);
         setQ('');
+        onDone?.();
         router.visit(hit.href);
     };
 
     return (
-        <div ref={box} className="relative w-full min-w-0 max-w-sm max-md:hidden">
+        <div ref={box} className={cn('relative w-full min-w-0', className)}>
             <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[#9ca3af]" />
             <input
+                ref={input}
+                autoFocus={autoFocus}
                 type="search"
                 value={q}
                 onChange={(e) => { setQ(e.target.value); setOpen(true); }}
@@ -278,48 +393,68 @@ function TopSearch() {
                     if (e.key === 'ArrowDown') { e.preventDefault(); setIndex((i) => Math.min(i + 1, hits.length - 1)); }
                     if (e.key === 'ArrowUp') { e.preventDefault(); setIndex((i) => Math.max(i - 1, 0)); }
                     if (e.key === 'Enter') { e.preventDefault(); go(hits[index]); }
-                    if (e.key === 'Escape') setOpen(false);
+                    if (e.key === 'Escape') { setOpen(false); input.current?.blur(); onDone?.(); }
                 }}
-                placeholder={can('members.view') ? 'ابحث عن عضو أو صفحة…' : 'ابحث عن صفحة…'}
+                placeholder="ابحث عن عضو، فاتورة، بيع، مستند أو صفحة…"
                 aria-label="بحث"
                 className="h-10 w-full rounded-[12px] border border-[#dcdcdc] bg-white pe-9 ps-9 text-sm text-[#111] outline-none transition placeholder:text-[#9ca3af] focus:border-[#111] focus:shadow-[0_0_0_4px_rgba(17,17,17,0.08)] [&::-webkit-search-cancel-button]:hidden"
             />
-            {loading && <LoaderCircle className="absolute end-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-[#9ca3af]" />}
+            {loading ? (
+                <LoaderCircle className="absolute end-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-[#9ca3af]" />
+            ) : (
+                !q && <kbd className="pointer-events-none absolute end-3 top-1/2 hidden -translate-y-1/2 rounded-[6px] border border-[#e8e8e8] px-1.5 text-[11px] text-[#9ca3af] lg:block">/</kbd>
+            )}
 
             {open && term && (
-                <div className="absolute start-0 top-full z-40 mt-2 max-h-[70vh] w-full overflow-y-auto rounded-[14px] border border-[#e8e8e8] bg-white shadow-lg" role="listbox">
+                <div className="absolute start-0 top-full z-40 mt-2 max-h-[70vh] w-full overflow-y-auto rounded-[14px] border border-[#e8e8e8] bg-white shadow-lg" role="listbox" aria-label="نتائج البحث">
                     {hits.length === 0 ? (
                         <p className="px-4 py-8 text-center text-sm text-[#9ca3af]">{loading ? 'جارٍ البحث…' : 'لا نتائج'}</p>
                     ) : (
-                        (['pages', 'members'] as const).map((group) => {
-                            const rows = hits.filter((h) => h.group === group);
-                            if (rows.length === 0) return null;
-                            return (
-                                <div key={group}>
-                                    <div className="border-b border-[#e8e8e8] bg-[#fbfbfa] px-4 py-2 text-[12px] font-semibold text-[#6b7280]">{group === 'pages' ? 'الصفحات' : 'الأعضاء'}</div>
-                                    {rows.map((hit) => {
-                                        const active = hits[index]?.key === hit.key;
-                                        return (
-                                            <button
-                                                key={hit.key}
-                                                type="button"
-                                                role="option"
-                                                aria-selected={active}
-                                                onMouseEnter={() => setIndex(hits.indexOf(hit))}
-                                                onClick={() => go(hit)}
-                                                className={cn('flex w-full items-center justify-between gap-3 px-4 py-2.5 text-start', active ? 'bg-[#f5f5f4]' : 'hover:bg-[#fafafa]')}
-                                            >
-                                                <span className="truncate text-sm text-[#111]">{hit.label}</span>
-                                                {hit.hint && <span className="shrink-0 truncate text-[12px] text-[#9ca3af]" dir="ltr">{hit.hint}</span>}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            );
-                        })
+                        sections.map((section) => (
+                            <div key={section.key}>
+                                <div className="border-b border-[#e8e8e8] bg-[#fbfbfa] px-4 py-2 text-[12px] font-semibold text-[#6b7280]">{section.label}</div>
+                                {section.hits.map((hit) => {
+                                    const active = hits[index]?.key === hit.key;
+                                    return (
+                                        <button
+                                            key={hit.key}
+                                            type="button"
+                                            role="option"
+                                            aria-selected={active}
+                                            onMouseEnter={() => setIndex(hits.indexOf(hit))}
+                                            onClick={() => go(hit)}
+                                            className={cn('flex w-full items-center justify-between gap-3 px-4 py-2.5 text-start', active ? 'bg-[#f5f5f4]' : 'hover:bg-[#fafafa]')}
+                                        >
+                                            <span className="truncate text-sm text-[#111]">{hit.label}</span>
+                                            {hit.hint && <span className="shrink-0 truncate text-[12px] text-[#9ca3af]" dir="ltr">{hit.hint}</span>}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        ))
                     )}
                 </div>
             )}
         </div>
+    );
+}
+
+/** Phones: a search button that opens the same search across the top of the screen. */
+function MobileSearch() {
+    const [open, setOpen] = useState(false);
+    return (
+        <>
+            <button className={cn(iconButton, 'md:hidden')} onClick={() => setOpen(true)} aria-label="بحث">
+                <Search />
+            </button>
+            {open && (
+                <div className="fixed inset-x-0 top-0 z-40 flex items-center gap-2 border-b border-[#e8e8e8] bg-white px-3 py-3 shadow-sm md:hidden">
+                    <TopSearch autoFocus onDone={() => setOpen(false)} />
+                    <button className={cn(iconButton, 'shrink-0')} onClick={() => setOpen(false)} aria-label="إغلاق البحث">
+                        <X />
+                    </button>
+                </div>
+            )}
+        </>
     );
 }

@@ -3,6 +3,8 @@
 namespace App\Modules\Inventory\Services;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Notifications\StaffAlerts;
+use App\Core\Notifications\StaffNotifier;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
@@ -113,6 +115,8 @@ final class OrderService
 
             $this->audit->as('customer', $member?->id, $sale->customer_name, fn () => $this->audit->log('sale.order_placed', $sale, ['total' => $sale->total, 'method' => $method]));
 
+            app(StaffAlerts::class)->order($sale);
+
             return $sale->load('items');
         });
     }
@@ -140,6 +144,7 @@ final class OrderService
             }
             $sale->forceFill(['fulfillment' => $step])->save();
             $this->audit->log('sale.order_'.$step, $sale);
+            app(StaffNotifier::class)->resolve('order:'.$sale->id); // someone is on it
 
             return $sale;
         });
@@ -181,6 +186,8 @@ final class OrderService
             ])->save();
             $this->audit->log('sale.order_delivered', $sale, ['method' => $sale->payment_method]);
 
+            app(StaffNotifier::class)->resolve('order:'.$sale->id);
+
             return $sale;
         });
     }
@@ -221,6 +228,8 @@ final class OrderService
                 }
             }
             $this->audit->log('sale.order_cancelled', $sale, ['reason' => $reason, 'refunded' => $paid]);
+
+            app(StaffNotifier::class)->resolve('order:'.$sale->id);
 
             return $sale;
         });

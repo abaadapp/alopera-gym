@@ -36,6 +36,7 @@ final class TenantTables
         'tenant_subscriptions' => 'owned by the platform, not by the club',
         'platform_invoices' => 'owned by the platform, not by the club',
         'payment_webhook_events' => 'platform-level gateway log',
+        'staff_notifications' => 'the bell: transient, rebuilt from open items by notifications:sync',
     ];
 
     /** Child tables without their own tenant_id: [table => [fk column, parent table]]. */

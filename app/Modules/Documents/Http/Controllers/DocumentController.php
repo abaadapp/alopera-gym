@@ -2,6 +2,7 @@
 
 namespace App\Modules\Documents\Http\Controllers;
 
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -33,7 +34,7 @@ class DocumentController extends Controller
         $soon = DocumentService::soonDays($tenant);
         $today = CarbonImmutable::today();
         $view = in_array($request->query('view'), ['expiring', 'expired'], true) ? $request->query('view') : 'all';
-        $visible = fn () => BusinessDocument::visibleTo($user);
+        $visible = fn () => BranchContext::scope(BusinessDocument::visibleTo($user));
         $active = fn () => $visible()->where('status', 'active');
 
         $documents = $visible()->with(['type:id,name', 'branch:id,name', 'responsible:id,name'])

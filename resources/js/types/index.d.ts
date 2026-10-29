@@ -7,20 +7,24 @@ export interface StaffUser {
     role: string | null;
     role_key: string | null;
     is_platform_admin: boolean;
-    /** The user's branch, and how many active branches the club has (top bar branch label). */
-    branch: string | null;
-    branches: number;
 }
 
-/** One entry of the top bar bell: a single alert (dismissable) or a count of things waiting in a screen. */
+/** The branch the panel shows: the current one (null = all), whether the user is tied to it, the choices. */
+export interface BranchState {
+    current: { id: number; name: string } | null;
+    locked: boolean;
+    options: { id: number; name: string }[];
+}
+
+/** One notification of the bell / the notifications page (App\Http\Controllers\Club\NotificationController::row). */
 export interface StaffNotification {
-    key: string;
-    kind: 'document' | 'count';
-    count: number;
+    id: number;
+    kind: 'document' | 'order' | 'payment' | 'membership' | 'integration' | 'contact' | 'inbox';
+    kind_label: string;
     text: string;
-    time: string | null;
-    url: string;
-    dismiss: string | null;
+    read: boolean;
+    time: string;
+    at: string;
 }
 
 export interface TenantInfo {
@@ -40,13 +44,13 @@ export interface SharedProps {
     appName: string;
     locale: string;
     dir: 'rtl' | 'ltr';
-    auth: { user: StaffUser; permissions: string[] } | null;
+    auth: { user: StaffUser; permissions: string[]; branch: BranchState | null } | null;
     tenant: TenantInfo | null;
     /** Optional modules switched on for this installation (config gym.modules). */
     modules: { sales: boolean; inventory: boolean };
     member: { id: number; name: string; member_no: string } | null;
     /** The club panel's bell; null outside the club panel. */
-    notifications: { count: number; items: StaffNotification[] } | null;
+    notifications: { unread: number; items: StaffNotification[] } | null;
     flash: { success: string | null; error: string | null; token: string | null; id: string | null };
     errors: Record<string, string>;
     [key: string]: unknown;

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Website\Http\Controllers;
 
+use App\Core\Notifications\StaffAlerts;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Gym\Http\GymPresenter;
@@ -156,7 +157,7 @@ class SiteController extends Controller
         ]);
         unset($data['website']);
 
-        ContactMessage::create($data + ['ip_address' => $request->ip()]);
+        app(StaffAlerts::class)->contact(ContactMessage::create($data + ['ip_address' => $request->ip()]));
 
         return back()->with('success', 'وصلتنا رسالتك، وسنتواصل معك قريبًا.');
     }
