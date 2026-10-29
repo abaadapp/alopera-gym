@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
-import { Bot, Pencil, Plus, Settings2, Trash2 } from 'lucide-react';
+import { MessageSquareReply, Pencil, Plus, Settings2, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { useCan } from '@/hooks/useShared';
@@ -68,7 +68,7 @@ export default function Automation({ autoReplies, rules }: Props) {
                     />
                 </div>
                 {autoReplies.length === 0 ? (
-                    <EmptyState icon={<Bot className="size-6" />} title="لا توجد ردود آلية" description="مثال: كلمة «الأسعار» ← رابط صفحة الباقات." />
+                    <EmptyState icon={<MessageSquareReply className="size-6" />} title="لا توجد ردود آلية" description="مثال: كلمة «الأسعار» ← رابط صفحة الباقات." />
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="table-base">

@@ -975,7 +975,7 @@ function DocumentsTab({ documents, member }: Props) {
                     <ul className="divide-y divide-line">
                         {documents.map((d) => (
                             <li key={d.id} className="flex items-center gap-3 px-5 py-3">
-                                <span className="grid size-10 place-items-center rounded-xl bg-brand-50 text-brand"><FileText className="size-5" /></span>
+                                <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-[#f2f2f0] text-ink"><FileText className="size-5" /></span>
                                 <div className="min-w-0 flex-1">
                                     <p className="truncate text-sm font-medium">{d.title}</p>
                                     <p className="text-xs text-muted">

@@ -65,11 +65,11 @@ export default function CheckInsIndex({ checkins, filters }: { checkins: Paginat
                                         <td className="text-xs text-muted">{c.device ?? c.by ?? '—'}</td>
                                         <td>
                                             {c.result === 'allowed' ? (
-                                                <Badge tone="green"><CheckCircle2 className="size-3" /> مسموح</Badge>
+                                                <Badge tone="green"><CheckCircle2 className="size-3.5" /> مسموح</Badge>
                                             ) : c.result === 'duplicate' ? (
-                                                <Badge tone="amber"><Clock className="size-3" /> مكرر — لم يُحتسب</Badge>
+                                                <Badge tone="amber"><Clock className="size-3.5" /> مكرر — لم يُحتسب</Badge>
                                             ) : (
-                                                <Badge tone="red"><XCircle className="size-3" /> {c.reason_label ?? 'مرفوض'}</Badge>
+                                                <Badge tone="red"><XCircle className="size-3.5" /> {c.reason_label ?? 'مرفوض'}</Badge>
                                             )}
                                         </td>
                                     </tr>

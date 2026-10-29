@@ -1,6 +1,6 @@
 import { Link } from '@inertiajs/react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
-import { Loader2 } from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useAdmin } from './AdminScope';
 
@@ -29,10 +29,11 @@ const adminVariants: Record<keyof typeof variants, string> = {
     success: 'bg-[#059669] text-white hover:bg-[#047857]',
 };
 
+/* The button sets its icon's size, whatever the page passed: 16px small, 18px medium, 20px large. */
 const adminSizes: Record<keyof typeof sizes, string> = {
-    sm: 'h-8 px-3 text-[13px] gap-1.5 rounded-[10px]',
-    md: 'h-10 px-4 text-sm gap-2 rounded-[10px]',
-    lg: 'h-12 px-6 text-[15px] gap-2 rounded-[10px]',
+    sm: 'h-8 px-3 text-[13px] gap-1.5 rounded-[10px] [&_svg]:size-4',
+    md: 'h-10 px-4 text-sm gap-2 rounded-[10px] [&_svg]:size-[18px]',
+    lg: 'h-12 px-6 text-[15px] gap-2 rounded-[10px] [&_svg]:size-5',
 };
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -47,7 +48,7 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
 export default function Button({ variant = 'primary', size = 'md', href, loading, icon, className, children, disabled, external, ...rest }: Props) {
     const admin = useAdmin();
     const classes = cn(
-        'inline-flex shrink-0 items-center justify-center font-medium whitespace-nowrap transition disabled:cursor-not-allowed disabled:opacity-60',
+        'inline-flex shrink-0 items-center justify-center font-medium whitespace-nowrap transition disabled:cursor-not-allowed disabled:opacity-60 [&_svg]:shrink-0',
         admin ? adminVariants[variant] : variants[variant],
         admin ? adminSizes[size] : sizes[size],
         className,
@@ -56,7 +57,7 @@ export default function Button({ variant = 'primary', size = 'md', href, loading
     const linkProps = { 'aria-label': rest['aria-label'], title: rest.title };
     const content = (
         <>
-            {loading ? <Loader2 className="size-4 animate-spin" /> : icon}
+            {loading ? <LoaderCircle className="size-4 animate-spin" /> : icon}
             {children}
         </>
     );

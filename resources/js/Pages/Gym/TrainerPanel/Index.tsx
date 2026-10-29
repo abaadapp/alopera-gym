@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { CalendarDays, ChevronLeft, Phone, Sparkles, Users } from 'lucide-react';
+import { CalendarDays, ChevronLeft, Link2Off, Phone, Users } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PtCloseActions from '@/Components/PtCloseActions';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, StatCard } from '@/Components/ui';
@@ -56,7 +56,7 @@ export default function TrainerPanel({ trainer, sessions, recent, pt }: { traine
             <ClubLayout title="شاشة المدربة">
                 <PageHeader title="شاشة المدربة" subtitle="حصص المدربة وجلساتها هذا الأسبوع" />
                 <Card>
-                    <EmptyState icon={<Sparkles className="size-6" />} title="حسابك غير مرتبط بملف مدربة" description="اطلبي من الإدارة ربط حسابك بملفك في صفحة المدربات لتظهر حصصك هنا." />
+                    <EmptyState icon={<Link2Off className="size-6" />} title="حسابك غير مرتبط بملف مدربة" description="اطلبي من الإدارة ربط حسابك بملفك في صفحة المدربات لتظهر حصصك هنا." />
                 </Card>
             </ClubLayout>
         );
@@ -68,7 +68,7 @@ export default function TrainerPanel({ trainer, sessions, recent, pt }: { traine
 
     return (
         <ClubLayout title="شاشة المدربة">
-            <PageHeader title={`أهلًا ${trainer.name.split(' ')[0]} 👋`} subtitle="حصصك وجلساتك هذا الأسبوع — اضغطي على الحصة لتسجيل الحضور" />
+            <PageHeader title={`أهلًا ${trainer.name.split(' ')[0]}`} subtitle="حصصك وجلساتك هذا الأسبوع — اضغطي على الحصة لتسجيل الحضور" />
 
             <div className="mb-6 grid grid-cols-3 gap-3">
                 <StatCard label="حصص اليوم" value={today.length} icon={<CalendarDays className="size-5" />} />
@@ -108,7 +108,7 @@ export default function TrainerPanel({ trainer, sessions, recent, pt }: { traine
                                             <div className="min-w-0">
                                                 <p className="truncate text-sm font-medium">{p.member}</p>
                                                 <p className="text-xs text-muted">{dayName(p.starts_at.slice(0, 10))} · {time(p.starts_at)}</p>
-                                                {p.phone && <a href={`tel:+${p.phone}`} className="text-xs text-muted num"><Phone className="me-0.5 inline size-3" />{fmtPhone(p.phone)}</a>}
+                                                {p.phone && <a href={`tel:+${p.phone}`} className="text-xs text-muted num"><Phone className="me-0.5 inline size-3.5" />{fmtPhone(p.phone)}</a>}
                                             </div>
                                             <Badge tone={ptone}>{pl}</Badge>
                                         </div>

@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { AlertTriangle, CalendarClock, CreditCard, LogIn, Snowflake, UserPlus, Users, Wallet } from 'lucide-react';
+import { CalendarClock, CalendarX, CreditCard, LogIn, Snowflake, UserPlus, Users, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, BarTrend, Card, CardHeader, EmptyState, PageHeader, StatCard } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
@@ -23,7 +23,7 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
             <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
                 <StatCard label="عضويات نشطة" value={number(kpis.active_members)} icon={<Users className="size-5" />} href={route('club.memberships.index', { filter: 'active' })} />
                 <StatCard label="تنتهي خلال 7 أيام" value={number(kpis.expiring_7_days)} tone="amber" icon={<CalendarClock className="size-5" />} href={route('club.memberships.index', { filter: 'expiring' })} />
-                <StatCard label="منتهية" value={number(kpis.expired_members)} tone="gray" icon={<AlertTriangle className="size-5" />} href={route('club.members.index', { membership: 'expired' })} />
+                <StatCard label="منتهية" value={number(kpis.expired_members)} tone="gray" icon={<CalendarX className="size-5" />} href={route('club.members.index', { membership: 'expired' })} />
                 <StatCard label="مجمّدة" value={number(kpis.frozen_members)} tone="violet" icon={<Snowflake className="size-5" />} />
                 {financial && <StatCard label="إيرادات الشهر" value={money(kpis.revenue_month, currency)} tone="green" icon={<Wallet className="size-5" />} hint={`اليوم: ${money(kpis.revenue_today, currency)}`} />}
                 {financial && <StatCard label="المستحقات" value={money(kpis.outstanding, currency)} tone="red" icon={<CreditCard className="size-5" />} hint={`${number(kpis.overdue_invoices)} فاتورة متأخرة`} href={route('club.dues')} />}

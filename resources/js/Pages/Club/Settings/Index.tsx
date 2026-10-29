@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { BellRing, Building2, ChevronLeft, Clock, Database, KeyRound, Landmark, ScrollText, Settings, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { BellRing, Building2, ChevronLeft, Clock, Database, Landmark, Plug, ScrollText, SlidersHorizontal, UserCog, type LucideIcon } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { PageHeader } from '@/Components/ui';
 import { useCan } from '@/hooks/useShared';
@@ -11,15 +11,15 @@ const SECTIONS: { title: string; items: Entry[] }[] = [
     {
         title: 'النادي',
         items: [
-            { title: 'إعدادات النادي', description: 'الاسم والشعار والألوان، قواعد الحجز والحضور، الفواتير والضريبة', route: 'club.settings.edit', permission: 'settings.manage', icon: Settings },
+            { title: 'إعدادات النادي', description: 'الاسم والشعار والألوان، قواعد الحجز والحضور، الفواتير والضريبة', route: 'club.settings.edit', permission: 'settings.manage', icon: SlidersHorizontal },
             { title: 'الفروع', description: 'فروع النادي وعناوينها وأرقام التواصل', route: 'club.branches.index', permission: 'branches.manage', icon: Building2 },
-            { title: 'المستخدمون والصلاحيات', description: 'حسابات الدخول وأدوارها، وما يراه كل دور وما يستطيع تنفيذه', route: 'club.users.index', permission: ['users.manage', 'roles.manage'], icon: ShieldCheck },
+            { title: 'المستخدمون والصلاحيات', description: 'حسابات الدخول وأدوارها، وما يراه كل دور وما يستطيع تنفيذه', route: 'club.users.index', permission: ['users.manage', 'roles.manage'], icon: UserCog },
         ],
     },
     {
         title: 'الربط والإشعارات',
         items: [
-            { title: 'الربط مع واتساب وPaymob', description: 'واتساب للأعمال وبوابة الدفع الإلكتروني للمشتركات', route: 'club.integrations.index', permission: 'integrations.manage', icon: KeyRound },
+            { title: 'الربط مع واتساب وPaymob', description: 'واتساب للأعمال وبوابة الدفع الإلكتروني للمشتركات', route: 'club.integrations.index', permission: 'integrations.manage', icon: Plug },
             { title: 'الإشعارات', description: 'تذكيرات انتهاء العضوية والمتابعة وإشعارات الحصص', route: 'club.settings.notifications', permission: 'settings.manage', icon: BellRing },
         ],
     },
@@ -60,8 +60,8 @@ export default function SettingsIndex() {
                                     href={route(name === 'club.users.index' && !can('users.manage') ? 'club.roles.index' : name)}
                                     className="group flex items-center gap-4 rounded-2xl border border-line bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-[#dcdcdc] hover:shadow-[0_8px_30px_-12px_rgba(17,17,17,0.14)] focus-visible:ring-4 focus-visible:ring-brand/15 focus-visible:outline-none"
                                 >
-                                    <span className="grid size-13 shrink-0 place-items-center rounded-[14px] bg-brand-50 text-brand transition-colors group-hover:bg-brand group-hover:text-white">
-                                        <Icon className="size-6" />
+                                    <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-[#f2f2f0] text-ink transition-colors group-hover:bg-brand-50 group-hover:text-brand">
+                                        <Icon className="size-5" />
                                     </span>
                                     <span className="min-w-0 flex-1">
                                         <span className="block text-[15px] font-semibold text-ink">{title}</span>

@@ -92,7 +92,7 @@ export default function Templates({ templates }: Props) {
             <div className="mb-6">
                 <Card>
                     <div className="flex items-start gap-3">
-                        <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand"><Bell className="size-5" /></div>
+                        <div className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-[#f2f2f0] text-ink"><Bell className="size-5" /></div>
                         <div className="text-sm leading-7 text-ink/80">
                             <p className="font-semibold text-ink">كيف تعمل القوالب؟</p>
                             يرسل النظام رسائل الخدمة تلقائيًا (ترحيب، فواتير، تأكيد، تذكير، حجوزات) فقط عندما يكون القالب <b>معتمدًا</b> و<b>مفعّلًا</b> هنا. أنشئي القالب في WhatsApp Manager بنفس الاسم واللغة،

@@ -61,7 +61,7 @@ export default function FinanceBanks({ accounts, totals, kinds, canManage }: Pro
                                         </div>
                                         {(a.bank_name || a.masked) && <p className="mt-2 text-[12px] text-muted">{a.bank_name} <span dir="ltr" className="font-mono">{a.masked}</span></p>}
                                     </div>
-                                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#f2f2f0] text-[#4b4b4b]"><Icon className="size-5" /></span>
+                                    <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-[#f2f2f0] text-ink"><Icon className="size-5" /></span>
                                 </div>
                                 <div className="mt-4 flex items-end justify-between gap-3">
                                     <p className={cn('text-xl font-bold tracking-tight num', Number(a.balance) < 0 && 'text-red-700')}>{m(a.balance)}</p>

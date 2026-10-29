@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
-import { CalendarClock, ImagePlus, Link2, Mail, Pencil, Phone, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { CalendarClock, ImagePlus, Link2, Mail, Pencil, Phone, Plus, Trash2, UserRound, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { WEEKDAYS, phone as fmtPhone } from '@/lib/format';
@@ -142,7 +142,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
 
             {trainers.length === 0 ? (
                 <Card>
-                    <EmptyState icon={<Sparkles className="size-6" />} title="لا توجد مدربات بعد" action={<Button onClick={openCreate}>إضافة مدربة</Button>} />
+                    <EmptyState icon={<UserRound className="size-6" />} title="لا توجد مدربات بعد" action={<Button onClick={openCreate}>إضافة مدربة</Button>} />
                 </Card>
             ) : (
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -159,7 +159,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                                     <div className="mt-1 flex flex-wrap gap-1.5">
                                         {t.is_public ? <Badge tone="green">في الموقع</Badge> : <Badge tone="gray">مخفية</Badge>}
                                         {!t.is_active && <Badge tone="gray">موقوفة</Badge>}
-                                        {t.user ? <Badge tone="blue"><Link2 className="size-3" />{t.user.name}</Badge> : <Badge tone="amber">بدون حساب دخول</Badge>}
+                                        {t.user ? <Badge tone="blue"><Link2 className="size-3.5" />{t.user.name}</Badge> : <Badge tone="amber">بدون حساب دخول</Badge>}
                                     </div>
                                 </div>
                             </div>

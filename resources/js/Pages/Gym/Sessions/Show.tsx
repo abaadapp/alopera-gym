@@ -160,7 +160,7 @@ export default function SessionShow({ session, bookings, trainers }: { session: 
                                             ) : '—'}
                                             <p className="text-xs text-muted">
                                                 <span className="num">{b.member?.member_no}</span>
-                                                {b.member?.phone && <> · <a href={`tel:+${b.member.phone}`} className="num inline-flex items-center gap-0.5"><Phone className="size-3" />{fmtPhone(b.member.phone)}</a></>}
+                                                {b.member?.phone && <> · <a href={`tel:+${b.member.phone}`} className="num inline-flex items-center gap-0.5"><Phone className="size-3.5" />{fmtPhone(b.member.phone)}</a></>}
                                                 {' · '}{SOURCES[b.source] ?? b.source}
                                             </p>
                                         </div>

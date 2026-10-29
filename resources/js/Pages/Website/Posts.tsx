@@ -67,7 +67,7 @@ export default function Posts({ posts }: { posts: Post[] }) {
                             </div>
                             <div className="p-4">
                                 <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                                    <Badge tone={p.type === 'offer' ? 'brand' : 'blue'}>{p.type === 'offer' ? <><Tag className="size-3" /> عرض</> : 'خبر'}</Badge>
+                                    <Badge tone={p.type === 'offer' ? 'brand' : 'blue'}>{p.type === 'offer' ? <><Tag className="size-3.5" /> عرض</> : 'خبر'}</Badge>
                                     {p.is_published ? <Badge tone="green">منشور</Badge> : <Badge>مسودة</Badge>}
                                     {p.ends_on && <span className="text-xs text-muted">حتى {date(p.ends_on)}</span>}
                                 </div>

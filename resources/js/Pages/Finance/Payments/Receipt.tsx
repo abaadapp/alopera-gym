@@ -68,7 +68,7 @@ export default function Receipt({ payment, club }: Props) {
                         </dl>
                     )}
                     {payment.receiver && <p className="mt-3 text-center">استلمته: {payment.receiver}</p>}
-                    <p className="mt-3 text-center">شكرًا لكِ 🌸</p>
+                    <p className="mt-3 text-center">شكرًا لكِ</p>
                 </article>
             </div>
         </>

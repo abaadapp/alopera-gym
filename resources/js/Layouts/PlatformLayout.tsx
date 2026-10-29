@@ -1,12 +1,12 @@
 import { useEffect, type ReactNode } from 'react';
 import { Head, router } from '@inertiajs/react';
-import { Building2, FileText, LayoutDashboard, Layers, LogOut, ScrollText, Webhook } from 'lucide-react';
+import { Building2, FileText, Layers, LayoutGrid, LogOut, ScrollText, Webhook } from 'lucide-react';
 import PanelShell from '@/Components/PanelShell';
 import { useShared } from '@/hooks/useShared';
 
 /** The platform owner's menu: the overview | clubs and their subscriptions | the logs. */
 const groups = [
-    [{ label: 'الرئيسية', route: 'platform.dashboard', icon: LayoutDashboard }],
+    [{ label: 'الرئيسية', route: 'platform.dashboard', icon: LayoutGrid }],
     [
         { label: 'الأندية', route: 'platform.tenants.index', match: 'platform.tenants.*', icon: Building2 },
         { label: 'باقات المنصة', route: 'platform.plans.index', icon: Layers },
@@ -46,7 +46,7 @@ export default function PlatformLayout({ title, children }: { title: string; chi
                     <>
                         <span className="hidden text-sm text-ink md:inline">{auth?.user.name}</span>
                         <button onClick={() => router.post(route('logout'))} className="grid size-10 place-items-center rounded-[10px] text-muted hover:bg-ink/[0.045] hover:text-ink" title="تسجيل الخروج">
-                            <LogOut className="size-4" />
+                            <LogOut className="size-[18px]" />
                         </button>
                     </>
                 }

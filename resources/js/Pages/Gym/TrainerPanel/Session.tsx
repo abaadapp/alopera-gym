@@ -64,7 +64,7 @@ export default function TrainerSession({ session, bookings }: { session: Session
                                     <p className="truncate font-medium">{b.member?.full_name ?? '—'}</p>
                                     <p className="text-xs text-muted">
                                         <span className="num">{b.member?.member_no}</span>
-                                        {b.member?.phone && <> · <a href={`tel:+${b.member.phone}`} className="num"><Phone className="me-0.5 inline size-3" />{fmtPhone(b.member.phone)}</a></>}
+                                        {b.member?.phone && <> · <a href={`tel:+${b.member.phone}`} className="num"><Phone className="me-0.5 inline size-3.5" />{fmtPhone(b.member.phone)}</a></>}
                                     </p>
                                 </div>
                                 {b.status === 'attended' && <Badge tone="green">حضرت</Badge>}

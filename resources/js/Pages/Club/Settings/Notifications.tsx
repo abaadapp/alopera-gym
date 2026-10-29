@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
-import { Bot, FileText, Plus, X } from 'lucide-react';
+import { FileText, Plus, Workflow, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import SettingsBack from '@/Components/SettingsBack';
 import { Button, Card, CardHeader, Field, PageHeader, Toggle } from '@/Components/ui';
@@ -50,7 +50,7 @@ export default function NotificationSettings({ rules }: { rules: Rules }) {
                         <CardHeader title="القوالب والردود" subtitle="ما تقوله الرسائل نفسها" />
                         <div className="space-y-2">
                             <Button variant="outline" className="w-full justify-start" href={route('club.templates.index')} icon={<FileText className="size-4" />}>قوالب واتساب</Button>
-                            <Button variant="outline" className="w-full justify-start" href={route('club.automation.index')} icon={<Bot className="size-4" />}>الأتمتة والردود الآلية</Button>
+                            <Button variant="outline" className="w-full justify-start" href={route('club.automation.index')} icon={<Workflow className="size-4" />}>الأتمتة والردود الآلية</Button>
                         </div>
                         <p className="mt-3 text-xs leading-6 text-muted">لا تُرسل أي رسالة تلقائية إلا إذا كان قالبها معتمدًا من Meta ومفعّلًا، ووافقت المشتركة على الرسائل.</p>
                     </Card>
@@ -94,7 +94,7 @@ function DaysField({ label, values, onChange, min, max, error }: { label: string
                                 }
                             }}
                         />
-                        <button type="button" onClick={add} className="grid size-8 place-items-center rounded-lg border border-line hover:bg-brand-50" aria-label="إضافة"><Plus className="size-3.5" /></button>
+                        <button type="button" onClick={add} className="grid size-8 place-items-center rounded-lg border border-line hover:bg-brand-50" aria-label="إضافة"><Plus className="size-4" /></button>
                     </span>
                 )}
             </div>

@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { AlertCircle, Building2, CircleDollarSign, FileWarning, PauseCircle, Plus, Sparkles, Users } from 'lucide-react';
+import { AlertCircle, Building2, CircleDollarSign, FileWarning, Hourglass, PauseCircle, Plus, Users } from 'lucide-react';
 import PlatformLayout from '@/Layouts/PlatformLayout';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, StatCard } from '@/Components/ui';
 import { money, number } from '@/lib/format';
@@ -23,7 +23,7 @@ export default function PlatformDashboard({ stats, recent }: Props) {
             </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                <Link href={route('platform.tenants.index', { status: 'trial' })} className="card flex items-center gap-3 p-4 hover:border-brand-200"><Sparkles className="size-5 text-sky-600" /><span className="text-sm">فترة تجريبية: <b className="num">{number(stats.trial)}</b></span></Link>
+                <Link href={route('platform.tenants.index', { status: 'trial' })} className="card flex items-center gap-3 p-4 hover:border-brand-200"><Hourglass className="size-5 text-sky-600" /><span className="text-sm">فترة تجريبية: <b className="num">{number(stats.trial)}</b></span></Link>
                 <Link href={route('platform.tenants.index', { status: 'past_due' })} className="card flex items-center gap-3 p-4 hover:border-brand-200"><AlertCircle className="size-5 text-amber-600" /><span className="text-sm">متأخرة السداد: <b className="num">{number(stats.past_due)}</b></span></Link>
                 <Link href={route('platform.tenants.index', { status: 'suspended' })} className="card flex items-center gap-3 p-4 hover:border-brand-200"><PauseCircle className="size-5 text-red-600" /><span className="text-sm">موقوفة: <b className="num">{number(stats.suspended)}</b></span></Link>
             </div>

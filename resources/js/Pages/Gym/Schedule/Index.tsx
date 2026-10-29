@@ -189,8 +189,8 @@ export default function ScheduleIndex({ slots, programs, trainers, branches }: {
                                             <p className="mt-0.5 truncate text-sm font-medium">{s.program}</p>
                                             <p className="truncate text-xs text-muted">{s.trainer ?? 'بدون مدربة'}</p>
                                             <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-muted">
-                                                <span className="inline-flex items-center gap-0.5"><Users className="size-3" /><span className="num">{s.capacity}</span></span>
-                                                {s.room && <span className="inline-flex items-center gap-0.5"><MapPin className="size-3" />{s.room}</span>}
+                                                <span className="inline-flex items-center gap-0.5"><Users className="size-3.5" /><span className="num">{s.capacity}</span></span>
+                                                {s.room && <span className="inline-flex items-center gap-0.5"><MapPin className="size-3.5" />{s.room}</span>}
                                                 {!s.is_active && <Badge tone="gray">موقوفة</Badge>}
                                             </div>
                                         </button>

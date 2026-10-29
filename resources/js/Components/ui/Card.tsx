@@ -50,14 +50,14 @@ const tones = {
 export function Badge({ children, tone = 'gray', className }: { children: ReactNode; tone?: keyof typeof tones; className?: string }) {
     // In a control panel the neutral badge is grey, not warm stone.
     const admin = useAdmin();
-    return <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap', admin && tone === 'gray' ? 'bg-[#f2f2f0] text-[#4b4b4b]' : tones[tone], className)}>{children}</span>;
+    return <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap', admin && '[&_svg]:size-3.5 [&_svg]:shrink-0', admin && tone === 'gray' ? 'bg-[#f2f2f0] text-[#4b4b4b]' : tones[tone], className)}>{children}</span>;
 }
 
 export function StatCard({ label, value, hint, icon, tone = 'brand', href }: { label: ReactNode; value: ReactNode; hint?: ReactNode; icon?: ReactNode; tone?: keyof typeof tones; href?: string }) {
     const body = (
         // Two to a row on phones: icon above the figures; side by side from sm up.
         <div className="card flex h-full flex-col items-start gap-3 p-4 transition hover:border-[#dcdcdc] sm:flex-row sm:gap-4 sm:p-5">
-            {icon && <div className={cn('grid size-9 shrink-0 place-items-center rounded-xl sm:size-11', tones[tone])}>{icon}</div>}
+            {icon && <div className={cn('grid size-10 shrink-0 place-items-center rounded-[12px] [&_svg]:size-5', tones[tone])}>{icon}</div>}
             <div className="min-w-0">
                 <p className="text-sm text-muted">{label}</p>
                 <p className="mt-1 text-xl font-semibold text-ink sm:text-2xl"><span className="num">{value}</span></p>
@@ -69,9 +69,11 @@ export function StatCard({ label, value, hint, icon, tone = 'brand', href }: { l
 }
 
 export function EmptyState({ icon, title, description, action }: { icon?: ReactNode; title: ReactNode; description?: ReactNode; action?: ReactNode }) {
+    // In a control panel the empty state is quiet grey; the club's colour stays for what needs attention.
+    const admin = useAdmin();
     return (
         <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-            {icon && <div className="mb-3 grid size-14 place-items-center rounded-2xl bg-brand-50 text-brand">{icon}</div>}
+            {icon && <div className={cn('mb-3 grid size-14 place-items-center rounded-2xl [&_svg]:size-6', admin ? 'bg-[#f2f2f0] text-[#4b4b4b]' : 'bg-brand-50 text-brand')}>{icon}</div>}
             <p className="font-semibold text-ink">{title}</p>
             {description && <p className="mt-1 max-w-sm text-sm text-muted">{description}</p>}
             {action && <div className="mt-4">{action}</div>}

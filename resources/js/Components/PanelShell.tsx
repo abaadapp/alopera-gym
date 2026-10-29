@@ -86,7 +86,7 @@ export default function PanelShell({ title, identity, groups, actions, children 
             <header className="no-print sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-line bg-white/85 px-4 backdrop-blur lg:px-8">
                 <div className="flex min-w-0 items-center gap-2">
                     <button className="grid size-10 shrink-0 place-items-center rounded-[10px] hover:bg-ink/[0.045] lg:hidden" onClick={() => setOpen(true)} aria-label="القائمة">
-                        <Menu className="size-5" />
+                        <Menu className="size-[18px]" />
                     </button>
                     <h2 className="truncate text-sm font-medium text-muted">{title}</h2>
                 </div>

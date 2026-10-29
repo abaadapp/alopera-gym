@@ -38,13 +38,13 @@ export default function Roles({ roles, groups }: { roles: Role[]; groups: Group[
                     <Card key={r.id} className="flex flex-col">
                         <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-3">
-                                <div className="grid size-10 place-items-center rounded-xl bg-brand-50 text-brand">{r.is_locked ? <Lock className="size-5" /> : <ShieldCheck className="size-5" />}</div>
+                                <div className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-[#f2f2f0] text-ink">{r.is_locked ? <Lock className="size-5" /> : <ShieldCheck className="size-5" />}</div>
                                 <div>
                                     <p className="font-semibold">{r.name}</p>
                                     <p className="text-xs text-muted">{r.is_system ? 'دور افتراضي' : 'دور مخصص'}</p>
                                 </div>
                             </div>
-                            <Badge tone="gray"><Users className="size-3" /> <span className="num">{r.users_count}</span></Badge>
+                            <Badge tone="gray"><Users className="size-3.5" /> <span className="num">{r.users_count}</span></Badge>
                         </div>
                         {r.description && <p className="mt-3 text-sm text-muted">{r.description}</p>}
                         <div className="mt-4">

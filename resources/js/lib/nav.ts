@@ -1,6 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
-import { BarChart3, Briefcase, DoorOpen, Dumbbell, Globe, LayoutDashboard, MessageCircle, ScanLine, Settings, Ticket, Users, Wallet } from 'lucide-react';
+import { BarChart3, Briefcase, DoorOpen, Dumbbell, Globe, LayoutGrid, MessageCircle, ScanLine, Settings, Ticket, Users, Wallet } from 'lucide-react';
 import { useCan, useShared } from '@/hooks/useShared';
 
 /**
@@ -21,7 +21,7 @@ const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manag
 export const NAV: NavGroup[] = [
     {
         sections: [
-            { label: 'لوحة التحكم', icon: LayoutDashboard, tabs: [{ label: 'لوحة التحكم', route: 'club.dashboard', permission: 'dashboard.view' }] },
+            { label: 'لوحة التحكم', icon: LayoutGrid, tabs: [{ label: 'لوحة التحكم', route: 'club.dashboard', permission: 'dashboard.view' }] },
             { label: 'الاستقبال', icon: ScanLine, tabs: [{ label: 'الاستقبال', route: 'club.reception', permission: 'checkin.perform' }] },
         ],
     },

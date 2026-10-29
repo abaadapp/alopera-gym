@@ -143,7 +143,7 @@ export default function SessionsIndex({ week, sessions, programs, trainers, filt
                                             {!cancelled && (
                                                 <div className="mt-2">
                                                     <div className="flex items-center justify-between text-[11px] text-muted">
-                                                        <span className="inline-flex items-center gap-0.5"><Users className="size-3" /><span className="num">{s.booked}/{s.capacity}</span></span>
+                                                        <span className="inline-flex items-center gap-0.5"><Users className="size-3.5" /><span className="num">{s.booked}/{s.capacity}</span></span>
                                                         {!s.is_full && <span>متبقي <span className="num">{s.seats_left}</span></span>}
                                                     </div>
                                                     <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white">

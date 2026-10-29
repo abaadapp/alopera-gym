@@ -147,7 +147,7 @@ export default function DevicesIndex({ devices, staffCredentials, staff, branche
                                             </td>
                                             <td>{d.branch ?? '—'}</td>
                                             <td>
-                                                {!d.is_active ? <Badge tone="gray">موقوف</Badge> : isOnline ? <Badge tone="green"><Wifi className="size-3" />متصل</Badge> : <Badge tone="amber"><WifiOff className="size-3" />غير متصل</Badge>}
+                                                {!d.is_active ? <Badge tone="gray">موقوف</Badge> : isOnline ? <Badge tone="green"><Wifi className="size-3.5" />متصل</Badge> : <Badge tone="amber"><WifiOff className="size-3.5" />غير متصل</Badge>}
                                                 <p className="mt-0.5 text-[11px] text-muted num">{d.last_seen_at ?? 'لم يتصل بعد'}{d.last_ip ? ` · ${d.last_ip}` : ''}</p>
                                             </td>
                                             <td><span className="font-mono text-xs text-muted" dir="ltr">…{d.token_last4}</span></td>

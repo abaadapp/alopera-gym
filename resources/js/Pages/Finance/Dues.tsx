@@ -55,7 +55,7 @@ export default function Dues({ invoices, aging, total, filters }: Props) {
                     />
                 </div>
                 {invoices.length === 0 ? (
-                    <EmptyState icon={<HandCoins className="size-6" />} title="لا توجد مستحقات" description="كل الفواتير مسددة 🎉" />
+                    <EmptyState icon={<HandCoins className="size-6" />} title="لا توجد مستحقات" description="كل الفواتير مسددة." />
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="table-base">

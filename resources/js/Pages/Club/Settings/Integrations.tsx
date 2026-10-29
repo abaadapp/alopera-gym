@@ -50,7 +50,7 @@ export default function Integrations({ integrations, endpoints, paymob_ready, wh
                 <ProviderCard
                     provider="whatsapp"
                     title="WhatsApp Business Platform"
-                    icon={<MessageCircle className="size-5" />}
+                    icon={<MessageCircle className="size-[18px]" />}
                     integration={integrations.whatsapp}
                     fields={WHATSAPP_FIELDS}
                     status={
@@ -73,7 +73,7 @@ export default function Integrations({ integrations, endpoints, paymob_ready, wh
                 <ProviderCard
                     provider="paymob"
                     title="Paymob — الدفع الإلكتروني"
-                    icon={<CreditCard className="size-5" />}
+                    icon={<CreditCard className="size-[18px]" />}
                     integration={integrations.paymob}
                     fields={PAYMOB_FIELDS}
                     status={paymob_ready ? <Badge tone="green">جاهز لاستقبال المدفوعات</Badge> : <Badge tone="amber">غير مكتمل</Badge>}
@@ -130,7 +130,7 @@ function ProviderCard({
 
     return (
         <Card>
-            <CardHeader title={<span className="flex items-center gap-2"><span className="grid size-9 place-items-center rounded-xl bg-brand-50 text-brand">{icon}</span>{title}</span>} actions={status} />
+            <CardHeader title={<span className="flex items-center gap-2"><span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[#f2f2f0] text-ink">{icon}</span>{title}</span>} actions={status} />
             <form onSubmit={submit} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                     <Toggle checked={form.data.is_enabled} onChange={(v) => form.setData('is_enabled', v)} label="تفعيل" />
@@ -150,7 +150,7 @@ function ProviderCard({
                             label={
                                 <span className="flex w-full items-center justify-between">
                                     <span dir="ltr">{f.label}</span>
-                                    {saved ? <Badge tone="green"><Check className="size-3" /> محفوظ</Badge> : <Badge>غير مُدخل</Badge>}
+                                    {saved ? <Badge tone="green"><Check className="size-3.5" /> محفوظ</Badge> : <Badge>غير مُدخل</Badge>}
                                 </span>
                             }
                             hint={f.hint}

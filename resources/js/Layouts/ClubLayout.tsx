@@ -36,11 +36,11 @@ export default function ClubLayout({ title, children }: { title: string; childre
                             className="hidden items-center gap-1.5 rounded-[10px] border border-[#dcdcdc] bg-white px-3 py-1.5 text-xs text-ink hover:bg-[#fafafa] sm:inline-flex"
                             title="تسجيل حضور/انصراف"
                         >
-                            <Clock className="size-3.5" /> حضور/انصراف
+                            <Clock className="size-4" /> حضور/انصراف
                         </button>
                         <span className="hidden text-sm text-ink md:inline">{auth?.user.name}</span>
                         <button onClick={() => router.post(route('logout'))} className="grid size-10 place-items-center rounded-[10px] text-muted hover:bg-ink/[0.045] hover:text-ink" title="تسجيل الخروج">
-                            <LogOut className="size-4" />
+                            <LogOut className="size-[18px]" />
                         </button>
                     </>
                 }
