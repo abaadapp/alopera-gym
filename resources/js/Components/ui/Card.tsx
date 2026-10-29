@@ -53,16 +53,33 @@ export function Badge({ children, tone = 'gray', className }: { children: ReactN
     return <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap', admin && '[&_svg]:size-3.5 [&_svg]:shrink-0', admin && tone === 'gray' ? 'bg-[#f2f2f0] text-[#4b4b4b]' : tones[tone], className)}>{children}</span>;
 }
 
+/* Stat tiles take the status colours: a pale fill with a deeper icon. */
+const statTones = {
+    brand: 'bg-brand-50 text-brand-700',
+    green: 'bg-[#ecfdf5] text-[#047857]',
+    amber: 'bg-[#fffbeb] text-[#d97706]',
+    red: 'bg-[#fef2f2] text-[#b91c1c]',
+    gray: 'bg-[#f2f2f0] text-[#4b4b4b]',
+    blue: 'bg-[#eff6ff] text-[#2563eb]',
+    violet: 'bg-[#f5f3ff] text-[#6d28d9]',
+};
+
+/**
+ * A stat tile: the label (13px grey), the figure (20px bold) under it, and a secondary line (12px) at the foot; the
+ * icon sits in a 40px, 12px-rounded square of its status colour on the far side. Padding 16px. In a narrow tile
+ * (two to a row on a phone) the icon steps aside so the figure keeps its room.
+ */
 export function StatCard({ label, value, hint, icon, tone = 'brand', href }: { label: ReactNode; value: ReactNode; hint?: ReactNode; icon?: ReactNode; tone?: keyof typeof tones; href?: string }) {
     const body = (
-        // Two to a row on phones: icon above the figures; side by side from sm up.
-        <div className="card flex h-full flex-col items-start gap-3 p-4 transition hover:border-[#dcdcdc] sm:flex-row sm:gap-4 sm:p-5">
-            {icon && <div className={cn('grid size-10 shrink-0 place-items-center rounded-[12px] [&_svg]:size-5', tones[tone])}>{icon}</div>}
-            <div className="min-w-0">
-                <p className="text-sm text-muted">{label}</p>
-                <p className="mt-1 text-xl font-semibold text-ink sm:text-2xl"><span className="num">{value}</span></p>
-                {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
+        <div className={cn('card @container h-full p-4', href && 'transition hover:border-[#dcdcdc] hover:shadow-[0_8px_30px_-12px_rgba(17,17,17,0.14)]')}>
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="truncate text-[13px] text-[#6b7280]">{label}</p>
+                    <p className="mt-1.5 text-[20px] font-bold leading-7 tracking-tight break-words text-[#111]"><span className="num">{value}</span></p>
+                </div>
+                {icon && <span className={cn('hidden size-10 shrink-0 place-items-center rounded-[12px] @[13rem]:grid [&_svg]:size-5', statTones[tone])}>{icon}</span>}
             </div>
+            {hint && <p className="mt-3 text-[12px] text-[#6b7280]">{hint}</p>}
         </div>
     );
     return href ? <Link href={href} className="block h-full">{body}</Link> : body;

@@ -3,7 +3,9 @@
 namespace App\Http\Middleware;
 
 use App\Core\Auth\PermissionRegistry;
+use App\Core\Notifications\StaffNotifications;
 use App\Core\Tenancy\TenantContext;
+use App\Models\Branch;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -36,6 +38,10 @@ class HandleInertiaRequests extends Middleware
             'tenant' => fn () => $this->tenant(),
             'modules' => ['sales' => PermissionRegistry::moduleEnabled('sales'), 'inventory' => PermissionRegistry::moduleEnabled('inventory')],
             'member' => fn () => $this->member(),
+            // The bell of the club panel's top bar (App\Core\Notifications\StaffNotifications).
+            'notifications' => fn () => $request->routeIs('club.*') && $request->user('web') instanceof User && app(TenantContext::class)->get()
+                ? app(StaffNotifications::class)->for($request->user('web'))
+                : null,
             'flash' => fn () => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
@@ -62,6 +68,9 @@ class HandleInertiaRequests extends Middleware
                 'role' => $user->role?->name,
                 'role_key' => $user->role?->key,
                 'is_platform_admin' => $user->isPlatformAdmin(),
+                // For the branch label of the top bar: the user's branch, and how many the club has.
+                'branch' => app(TenantContext::class)->get() ? $user->branch?->name : null,
+                'branches' => app(TenantContext::class)->get() ? Branch::where('is_active', true)->count() : 0,
             ],
             'permissions' => $user->permissions(),
         ];
