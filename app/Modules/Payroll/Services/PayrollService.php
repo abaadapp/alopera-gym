@@ -38,7 +38,7 @@ final class PayrollService
     {
         $period = CarbonImmutable::createFromFormat('!Y-m', $month);
         if (! $period || $period->format('Y-m') !== $month) {
-            throw new BusinessRuleException('payroll.month', 'اختاري شهرًا صحيحًا.', 'month');
+            throw new BusinessRuleException('payroll.month', 'اختر شهرًا صحيحًا.', 'month');
         }
         if (PayrollRun::where('period', $period->toDateString())->exists()) {
             throw new BusinessRuleException('payroll.exists', 'توجد مسيرة لهذا الشهر بالفعل.', 'month');
@@ -51,7 +51,7 @@ final class PayrollService
             ->filter(fn (Employee $e) => Money::cmp($e->basic_salary, 0) > 0 || Money::cmp($e->allowancesTotal(), 0) > 0);
 
         if ($employees->isEmpty()) {
-            throw new BusinessRuleException('payroll.no_staff', 'لا توجد موظفات على رأس العمل برواتب مسجّلة. أضيفي الرواتب في ملفات الموظفين أولًا.', 'month');
+            throw new BusinessRuleException('payroll.no_staff', 'لا يوجد موظفون على رأس العمل برواتب مسجّلة. أضف الرواتب في ملفات الموظفين أولًا.', 'month');
         }
 
         $attendance = $this->attendance($employees, $period, $end);
@@ -177,7 +177,7 @@ final class PayrollService
         return DB::transaction(function () use ($run, $itemIds, $account, $date, $reference) {
             $run = PayrollRun::whereKey($run->id)->lockForUpdate()->firstOrFail();
             if ($run->status === PayrollRun::DRAFT) {
-                throw new BusinessRuleException('payroll.not_approved', 'اعتمدي المسيرة قبل صرف رواتبها.');
+                throw new BusinessRuleException('payroll.not_approved', 'اعتمد المسيرة قبل صرف رواتبها.');
             }
 
             $items = PayrollItem::where('payroll_run_id', $run->id)->whereIn('id', $itemIds)->whereNull('paid_at')
@@ -236,7 +236,7 @@ final class PayrollService
             }
         }
         if (Money::cmp($item->deductions, $item->earnings()) > 0) {
-            throw new BusinessRuleException('payroll.deductions', "خصومات {$item->employee_name} أكبر من مستحقاتها.", 'deductions');
+            throw new BusinessRuleException('payroll.deductions', "خصومات {$item->employee_name} أكبر من إجمالي المستحقات.", 'deductions');
         }
     }
 

@@ -43,7 +43,7 @@ class DeviceController extends Controller
         $token = $device->issueToken();
         $device->save();
 
-        return back()->with('success', 'تمت إضافة الجهاز. انسخي رمز الجهاز الآن؛ لن يظهر مرة أخرى.')->with('device_token', $token);
+        return back()->with('success', 'تمت إضافة الجهاز. انسخ رمز الجهاز الآن؛ لن يظهر مرة أخرى.')->with('device_token', $token);
     }
 
     public function update(Request $request, AccessDevice $device): RedirectResponse
@@ -81,7 +81,7 @@ class DeviceController extends Controller
 
         AccessCredential::create($data + ['holder_type' => 'user']);
 
-        return back()->with('success', 'تم ربط بصمة/بطاقة الموظفة.');
+        return back()->with('success', 'تم ربط بصمة/بطاقة الموظف.');
     }
 
     public function destroyStaffCredential(AccessCredential $credential): RedirectResponse
@@ -89,7 +89,7 @@ class DeviceController extends Controller
         abort_unless($credential->holder_type === 'user', 404);
         $credential->delete();
 
-        return back()->with('success', 'تم حذف وسيلة دخول الموظفة.');
+        return back()->with('success', 'تم حذف وسيلة دخول الموظف.');
     }
 
     /** @return array<string, mixed> */

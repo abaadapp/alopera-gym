@@ -15,7 +15,7 @@ export interface MemberHit {
 }
 
 /** Search members by name, phone or number (uses club.members.search). */
-export default function MemberPicker({ onSelect, autoFocus, placeholder = 'ابحثي بالاسم أو الهاتف أو رقم العضوية…' }: { onSelect: (m: MemberHit) => void; autoFocus?: boolean; placeholder?: string }) {
+export default function MemberPicker({ onSelect, autoFocus, placeholder = 'ابحث بالاسم أو الهاتف أو رقم العضوية…' }: { onSelect: (m: MemberHit) => void; autoFocus?: boolean; placeholder?: string }) {
     const [q, setQ] = useState('');
     const [hits, setHits] = useState<MemberHit[]>([]);
     const [loading, setLoading] = useState(false);

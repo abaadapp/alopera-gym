@@ -35,7 +35,7 @@ interface Props {
 const skipReasons: Record<string, string> = {
     template_missing: 'لا يوجد قالب لهذا الحدث',
     template_not_approved: 'القالب غير معتمد',
-    opted_out: 'المشتركة أوقفت رسائل واتساب',
+    opted_out: 'العضو أوقف رسائل واتساب',
     no_marketing_consent: 'لا توجد موافقة تسويقية',
     no_phone: 'لا يوجد رقم',
     not_configured: 'واتساب غير مفعّل',
@@ -95,7 +95,7 @@ export default function Messages({ messages, stats, filters }: Props) {
                             <thead>
                                 <tr>
                                     <th>الوقت</th>
-                                    <th>المشتركة</th>
+                                    <th>العضو</th>
                                     <th>النوع</th>
                                     <th>المحتوى</th>
                                     <th>الحالة</th>

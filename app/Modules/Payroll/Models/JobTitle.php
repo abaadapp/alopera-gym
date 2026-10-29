@@ -17,7 +17,7 @@ class JobTitle extends Model
     protected $attributes = ['is_active' => true];
 
     /** A new club starts with the jobs a gym usually has. */
-    public const DEFAULTS = ['مدربة', 'موظفة استقبال', 'محاسبة', 'مديرة النادي', 'عاملة نظافة'];
+    public const DEFAULTS = ['مدرب', 'موظف استقبال', 'محاسب', 'مدير النادي', 'عامل نظافة'];
 
     protected function casts(): array
     {

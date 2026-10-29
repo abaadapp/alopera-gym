@@ -53,7 +53,7 @@ class TemplateController extends Controller
         $data['variables'] = array_values(array_intersect($data['variables'] ?? [], TemplateCatalog::CAMPAIGN_VARIABLES));
         MessageTemplate::create($data + ['key' => 'custom_'.substr(md5($data['name'].microtime()), 0, 10)]);
 
-        return back()->with('success', 'تمت إضافة القالب. اعتمديه في WhatsApp Manager ثم غيّري حالته إلى «معتمد».');
+        return back()->with('success', 'تمت إضافة القالب. اعتمده في WhatsApp Manager ثم غيّر حالته إلى «معتمد».');
     }
 
     public function update(Request $request, MessageTemplate $template): RedirectResponse

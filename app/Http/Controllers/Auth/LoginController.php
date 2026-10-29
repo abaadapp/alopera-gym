@@ -50,7 +50,7 @@ class LoginController extends Controller
         }
         if (! $user->isPlatformAdmin() && ! $user->tenant?->isOperational() && ! $user->hasPermission('billing.view')) {
             Auth::guard('web')->logout();
-            throw ValidationException::withMessages(['email' => 'حساب النادي موقوف. تواصلي مع إدارة النادي.']);
+            throw ValidationException::withMessages(['email' => 'حساب النادي موقوف. تواصل مع إدارة النادي.']);
         }
 
         return redirect()->intended(route($user->homeRoute()));

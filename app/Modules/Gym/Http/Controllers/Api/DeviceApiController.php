@@ -41,7 +41,7 @@ class DeviceApiController extends Controller
         // A staff credential on a door that admits staff: record attendance and open.
         if ($holder instanceof User) {
             if (! $device->acceptsStaff()) {
-                return response()->json(['allowed' => false, 'reason' => 'device_not_for_staff', 'message' => 'الجهاز غير مخصص للموظفات'], 200);
+                return response()->json(['allowed' => false, 'reason' => 'device_not_for_staff', 'message' => 'الجهاز غير مخصص للموظفين'], 200);
             }
             $record = $access->staffPunch($holder, $device, $data['credential_type']);
 

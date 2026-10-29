@@ -24,12 +24,13 @@ class ProductController extends Controller
             'products' => Product::with('category:id,name')
                 ->when($request->string('q')->toString(), fn ($q, $t) => $q->where(fn ($w) => $w->where('name', 'ilike', "%{$t}%")->orWhere('sku', $t)->orWhere('barcode', $t)))
                 ->when($request->boolean('low'), fn ($q) => $q->lowStock())
+                ->when($request->boolean('website'), fn ($q) => $q->where('show_on_website', true))
                 ->orderBy('name')->paginate(30)->withQueryString()
-                ->through(fn (Product $p) => $p->only('id', 'name', 'sku', 'barcode', 'description', 'price', 'cost', 'stock_quantity', 'reorder_level', 'track_stock', 'is_active', 'product_category_id') + [
+                ->through(fn (Product $p) => $p->only('id', 'name', 'sku', 'barcode', 'description', 'price', 'cost', 'stock_quantity', 'reorder_level', 'track_stock', 'is_active', 'show_on_website', 'product_category_id') + [
                     'category' => $p->category?->name, 'low' => $p->isLowStock(), 'image_url' => $p->imageUrl(),
                 ]),
             'categories' => ProductCategory::orderBy('name')->get(['id', 'name']),
-            'filters' => ['q' => $request->string('q')->toString(), 'low' => $request->boolean('low')],
+            'filters' => ['q' => $request->string('q')->toString(), 'low' => $request->boolean('low'), 'website' => $request->boolean('website')],
         ]);
     }
 
@@ -111,6 +112,7 @@ class ProductController extends Controller
             'reorder_level' => ['nullable', 'numeric', 'min:0'],
             'track_stock' => ['boolean'],
             'is_active' => ['boolean'],
+            'show_on_website' => ['boolean'],
             'product_category_id' => ['nullable', TenantRule::exists('product_categories')],
             'category_name' => ['nullable', 'string', 'max:80'],
             'opening_stock' => ['nullable', 'numeric', 'min:0'],

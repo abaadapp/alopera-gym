@@ -42,15 +42,15 @@ export default function Employees({ employees, stats, jobTitles, branches, users
         <ClubLayout title="الموظفون">
             <PageHeader
                 title="الموظفون"
-                subtitle="ملفات فريق النادي: الوظيفة والفرع وحساب الدخول، والراتب والبيانات البنكية لمن لديها الصلاحية"
+                subtitle="ملفات فريق النادي: الوظيفة والفرع وحساب الدخول، والراتب والبيانات البنكية لمن لديه الصلاحية"
                 actions={manage && (
                     <>
                         {unlinkedTrainers > 0 && (
-                            <ConfirmAction url={route('club.employees.import-trainers')} title="ملفات للمدربات" message={`ستُنشأ ملفات وظيفية لـ ${unlinkedTrainers} مدربة مرتبطة بملفاتهن الحالية دون تكرار.`} icon={<UserPlus className="size-4" />}>
-                                إضافة المدربات ({unlinkedTrainers})
+                            <ConfirmAction url={route('club.employees.import-trainers')} title="ملفات للمدربين" message={`ستُنشأ ملفات وظيفية لـ ${unlinkedTrainers} مدرب مرتبطة بملفاتهم الحالية دون تكرار.`} icon={<UserPlus className="size-4" />}>
+                                إضافة المدربين ({unlinkedTrainers})
                             </ConfirmAction>
                         )}
-                        <Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>موظفة جديدة</Button>
+                        <Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>موظف جديد</Button>
                     </>
                 )}
             />
@@ -58,7 +58,7 @@ export default function Employees({ employees, stats, jobTitles, branches, users
             <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
                 <StatCard label="على رأس العمل" value={stats.active} icon={<Users className="size-5" />} tone="green" />
                 <StatCard label="في إجازة" value={stats.on_leave} icon={<Users className="size-5" />} tone="amber" />
-                <StatCard label="لهن حساب دخول" value={stats.with_account} icon={<UserCheck className="size-5" />} tone="blue" />
+                <StatCard label="لهم حساب دخول" value={stats.with_account} icon={<UserCheck className="size-5" />} tone="blue" />
                 <StatCard label="الرواتب الشهرية" value={stats.monthly !== null ? money(stats.monthly, currency) : <span className="inline-flex items-center gap-1 text-base text-muted"><Lock className="size-4" /> سري</span>} icon={<Wallet className="size-5" />} tone="brand" />
             </div>
 
@@ -77,13 +77,13 @@ export default function Employees({ employees, stats, jobTitles, branches, users
                 {employees.length ? (
                     <div className="overflow-x-auto">
                         <table className="table-base">
-                            <thead><tr><th>الموظفة</th><th>المسمى</th><th>الفرع</th><th>حساب الدخول</th><th>الحالة</th><th>التعيين</th>{confidential && <th className="text-end">الشهري</th>}<th /></tr></thead>
+                            <thead><tr><th>الموظف</th><th>المسمى</th><th>الفرع</th><th>حساب الدخول</th><th>الحالة</th><th>التعيين</th>{confidential && <th className="text-end">الشهري</th>}<th /></tr></thead>
                             <tbody>
                                 {employees.map((e) => (
                                     <tr key={e.id}>
                                         <td>
                                             <span className="font-medium">{e.name}</span>
-                                            {e.trainer && <Badge tone="violet" className="ms-2">مدربة</Badge>}
+                                            {e.trainer && <Badge tone="violet" className="ms-2">مدرب</Badge>}
                                             {e.phone && <span className="block text-xs text-muted num">{phone(e.phone)}</span>}
                                         </td>
                                         <td>{e.job_title ?? <span className="text-muted">—</span>}</td>
@@ -99,7 +99,7 @@ export default function Employees({ employees, stats, jobTitles, branches, users
                         </table>
                     </div>
                 ) : (
-                    <EmptyState icon={<Users className="size-6" />} title="لا موظفات بعد" description="أضيفي ملفات الفريق، أو أنشئي ملفات المدربات الحاليات بضغطة واحدة." action={manage && <Button variant="outline" onClick={() => setEditing('new')}>موظفة جديدة</Button>} />
+                    <EmptyState icon={<Users className="size-6" />} title="لا موظفين بعد" description="أضف ملفات الفريق، أو أنشئ ملفات المدربين الحاليين بضغطة واحدة." action={manage && <Button variant="outline" onClick={() => setEditing('new')}>موظف جديد</Button>} />
                 )}
             </Card>
             {!confidential && <p className="mt-3 flex items-center gap-1.5 text-[12px] text-muted"><Lock className="size-3.5" /> الرواتب والبيانات البنكية مخفية: تحتاج صلاحية «عرض الرواتب والبيانات البنكية».</p>}
@@ -127,7 +127,7 @@ function EmployeeForm({ employee, jobTitles, branches, users, trainers, statuses
     const setAllowance = (i: number, patch: Partial<Allowance>) => form.setData('allowances', form.data.allowances.map((a, j) => (j === i ? { ...a, ...patch } : a)));
 
     return (
-        <Modal open onClose={onClose} size="lg" title={employee ? `ملف ${employee.name}` : 'موظفة جديدة'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
+        <Modal open onClose={onClose} size="lg" title={employee ? `ملف ${employee.name}` : 'موظف جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
             <form onSubmit={submit} className="space-y-6">
                 <section>
                     <CardHeader title="البيانات الأساسية" className="mb-3" />
@@ -147,15 +147,15 @@ function EmployeeForm({ employee, jobTitles, branches, users, trainers, statuses
                     </div>
                 </section>
                 <section>
-                    <CardHeader title="الربط" subtitle="حساب الدخول يحدد صلاحياتها (من الإعدادات ← المستخدمون). ربط المدربة يمنع تكرار ملفها." className="mb-3" />
+                    <CardHeader title="الربط" subtitle="حساب الدخول يحدد صلاحياته (من الإعدادات ← المستخدمون). ربط المدرب يمنع تكرار ملفه." className="mb-3" />
                     <div className="grid gap-4 sm:grid-cols-2">
                         <Field label="حساب الدخول" error={errors.user_id}>
                             <Select value={form.data.user_id} onChange={(e) => form.setData('user_id', e.target.value)} placeholder="بدون حساب">
                                 {users.filter((u) => !u.linked || String(u.id) === String(employee?.user_id)).map((u) => <option key={u.id} value={u.id}>{u.name}{u.role ? ` — ${u.role}` : ''}</option>)}
                             </Select>
                         </Field>
-                        <Field label="ملف المدربة" error={errors.trainer_id}>
-                            <Select value={form.data.trainer_id} onChange={(e) => form.setData('trainer_id', e.target.value)} placeholder="ليست مدربة">
+                        <Field label="ملف المدرب" error={errors.trainer_id}>
+                            <Select value={form.data.trainer_id} onChange={(e) => form.setData('trainer_id', e.target.value)} placeholder="ليس مدربًا">
                                 {trainers.filter((t) => !t.linked || String(t.id) === String(employee?.trainer_id)).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </Select>
                         </Field>

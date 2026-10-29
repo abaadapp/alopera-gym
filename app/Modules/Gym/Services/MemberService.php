@@ -27,7 +27,7 @@ final class MemberService
             }
 
             if (Member::withTrashed()->where('phone', $data['phone'])->exists()) {
-                throw new BusinessRuleException('member.phone_taken', 'رقم الهاتف مسجّل لمشتركة أخرى.', 'phone');
+                throw new BusinessRuleException('member.phone_taken', 'رقم الهاتف مسجّل لعضو آخر.', 'phone');
             }
 
             $member = new Member($data);
@@ -55,7 +55,7 @@ final class MemberService
             $data['phone'] = Phone::normalize($data['phone']);
             $taken = Member::withTrashed()->where('phone', $data['phone'])->whereKeyNot($member->id)->exists();
             if ($taken) {
-                throw new BusinessRuleException('member.phone_taken', 'رقم الهاتف مسجّل لمشتركة أخرى.', 'phone');
+                throw new BusinessRuleException('member.phone_taken', 'رقم الهاتف مسجّل لعضو آخر.', 'phone');
             }
         }
 

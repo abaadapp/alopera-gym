@@ -19,7 +19,7 @@ export default function PlatformDashboard({ stats, recent }: Props) {
                 <StatCard label="الأندية" value={number(stats.tenants)} icon={<Building2 className="size-5" />} hint={`نشطة ${number(stats.active)} · تجريبية ${number(stats.trial)}`} href={route('platform.tenants.index')} />
                 <StatCard label="الإيراد الشهري المتكرر (MRR)" value={money(stats.mrr, 'OMR')} tone="green" icon={<CircleDollarSign className="size-5" />} hint="الاشتراكات السنوية موزعة على 12 شهرًا" />
                 <StatCard label="فواتير غير مدفوعة" value={number(stats.unpaid_invoices)} tone="amber" icon={<FileWarning className="size-5" />} hint={money(stats.unpaid_amount, 'OMR')} href={route('platform.invoices.index', { status: 'unpaid' })} />
-                <StatCard label="المشتركات في كل الأندية" value={number(stats.members)} tone="violet" icon={<Users className="size-5" />} />
+                <StatCard label="الأعضاء في كل الأندية" value={number(stats.members)} tone="violet" icon={<Users className="size-5" />} />
             </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-3">

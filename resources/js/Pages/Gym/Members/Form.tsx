@@ -34,7 +34,7 @@ export const SOURCES: Record<string, string> = {
     website: 'الموقع الإلكتروني',
     instagram: 'إنستغرام',
     tiktok: 'تيك توك',
-    referral: 'ترشيح صديقة',
+    referral: 'ترشيح صديق',
     whatsapp: 'واتساب',
     other: 'أخرى',
 };
@@ -82,13 +82,13 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
     const err = form.errors as Record<string, string | undefined>;
 
     return (
-        <ClubLayout title={editing ? 'تعديل بيانات مشتركة' : 'مشتركة جديدة'}>
+        <ClubLayout title={editing ? 'تعديل بيانات عضو' : 'عضو جديد'}>
             <PageHeader
-                title={editing ? `تعديل: ${member.full_name}` : 'تسجيل مشتركة جديدة'}
-                subtitle={editing ? 'تحديث البيانات الأساسية والتواصل والموافقات' : 'سيُنشأ رقم العضوية تلقائيًا، ثم يمكنك بيع العضوية من ملفها'}
+                title={editing ? `تعديل: ${member.full_name}` : 'تسجيل عضو جديد'}
+                subtitle={editing ? 'تحديث البيانات الأساسية والتواصل والموافقات' : 'سيُنشأ رقم العضوية تلقائيًا، ثم يمكنك بيع العضوية من ملفه'}
                 back={
                     <Link href={editing ? route('club.members.show', member.id) : route('club.members.index')} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-brand">
-                        <ArrowRight className="size-4" /> {editing ? 'ملف المشتركة' : 'المشتركات'}
+                        <ArrowRight className="size-4" /> {editing ? 'ملف العضو' : 'الأعضاء'}
                     </Link>
                 }
             />
@@ -135,7 +135,7 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
                                 <Input dir="ltr" inputMode="tel" value={form.data.emergency_contact_phone} onChange={(e) => form.setData('emergency_contact_phone', e.target.value)} />
                             </Field>
                             <Field label="ملاحظات صحية" error={err.health_notes} className="sm:col-span-2">
-                                <Textarea rows={3} value={form.data.health_notes} onChange={(e) => form.setData('health_notes', e.target.value)} placeholder="إصابات، أمراض مزمنة، حمل…" />
+                                <Textarea rows={3} value={form.data.health_notes} onChange={(e) => form.setData('health_notes', e.target.value)} placeholder="إصابات، أمراض مزمنة، حساسية…" />
                             </Field>
                             <Field label="الأهداف" error={err.goals} className="sm:col-span-2">
                                 <Textarea rows={2} value={form.data.goals} onChange={(e) => form.setData('goals', e.target.value)} placeholder="إنقاص الوزن، لياقة عامة، تقوية…" />
@@ -194,11 +194,11 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
                                 </Field>
                             )}
                             {editing && (
-                                <Field label="حالة الحساب" error={err.status} hint="«موقوفة» تمنع الدخول والحجز وبيع العضويات">
+                                <Field label="حالة الحساب" error={err.status} hint="«موقوف» يمنع الدخول والحجز وبيع العضويات">
                                     <Select value={form.data.status} onChange={(e) => form.setData('status', e.target.value)}>
-                                        <option value="active">نشطة</option>
-                                        <option value="inactive">غير نشطة</option>
-                                        <option value="blocked">موقوفة</option>
+                                        <option value="active">نشط</option>
+                                        <option value="inactive">غير نشط</option>
+                                        <option value="blocked">موقوف</option>
                                     </Select>
                                 </Field>
                             )}
@@ -218,13 +218,13 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
                                 checked={form.data.marketing_opt_in}
                                 onChange={(v) => form.setData('marketing_opt_in', v)}
                                 label="الرسائل التسويقية والعروض"
-                                hint="لا تُرسل الحملات إلا لمن وافقت صراحةً"
+                                hint="لا تُرسل الحملات إلا لمن وافق صراحةً"
                             />
                         </div>
                     </Card>
 
                     <div className="flex gap-2">
-                        <Button type="submit" className="flex-1" loading={form.processing}>{editing ? 'حفظ التعديلات' : 'تسجيل المشتركة'}</Button>
+                        <Button type="submit" className="flex-1" loading={form.processing}>{editing ? 'حفظ التعديلات' : 'تسجيل العضو'}</Button>
                         <Button type="button" variant="outline" href={editing ? route('club.members.show', member.id) : route('club.members.index')}>إلغاء</Button>
                     </div>
                 </div>

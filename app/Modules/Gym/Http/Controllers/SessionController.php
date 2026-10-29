@@ -108,7 +108,7 @@ class SessionController extends Controller
         $data = $request->validate(['reason' => ['required', 'string', 'max:255']]);
         $bookings->cancelSession($session, $data['reason']);
 
-        return back()->with('success', 'تم إلغاء الحصة وإبلاغ المحجوزات واستعادة حصصهن.');
+        return back()->with('success', 'تم إلغاء الحصة وإبلاغ الأعضاء المحجوزين واستعادة حصصهم.');
     }
 
     /** Change trainer, room, capacity or time of a single session; booked members are notified. */
@@ -125,7 +125,7 @@ class SessionController extends Controller
             throw new BusinessRuleException('session.closed', 'لا يمكن تعديل حصة ملغاة أو منتهية.');
         }
         if ($data['capacity'] < $session->booked_count) {
-            throw new BusinessRuleException('session.capacity', 'السعة أقل من عدد المحجوزات الحالي ('.$session->booked_count.').', 'capacity');
+            throw new BusinessRuleException('session.capacity', 'السعة أقل من عدد الحجوزات الحالي ('.$session->booked_count.').', 'capacity');
         }
 
         $start = CarbonImmutable::parse($data['starts_at']);
@@ -135,7 +135,7 @@ class SessionController extends Controller
             $changes[] = 'الموعد الجديد '.$start->format('Y/m/d H:i');
         }
         if ((int) ($data['trainer_id'] ?? 0) !== (int) $session->trainer_id) {
-            $changes[] = 'المدربة: '.(Trainer::find($data['trainer_id'])?->name ?? '—');
+            $changes[] = 'المدرب: '.(Trainer::find($data['trainer_id'])?->name ?? '—');
         }
         if (($data['room'] ?? null) !== $session->room && ! empty($data['room'])) {
             $changes[] = 'القاعة: '.$data['room'];
@@ -153,6 +153,6 @@ class SessionController extends Controller
             ClassSessionChanged::dispatch($session, implode('، ', $changes));
         }
 
-        return back()->with('success', 'تم تعديل الحصة'.($changes ? ' وإبلاغ المحجوزات.' : '.'));
+        return back()->with('success', 'تم تعديل الحصة'.($changes ? ' وإبلاغ الأعضاء المحجوزين.' : '.'));
     }
 }

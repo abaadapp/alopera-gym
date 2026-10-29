@@ -147,7 +147,7 @@ function EntryForm({ accounts, onClose }: { accounts: Props['accounts']; onClose
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <Button type="button" variant="outline" size="sm" icon={<Plus className="size-3.5" />} onClick={() => form.setData('lines', [...form.data.lines, blank()])}>سطر</Button>
                     <span className={cn('rounded-full px-3 py-1 text-[13px] font-medium', diff === 0 && sum('debit') > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>
-                        {diff === 0 ? (sum('debit') > 0 ? `متوازن · ${money(sum('debit'), currency)}` : 'أدخلي المبالغ') : `الفرق ${money(Math.abs(diff), currency)}`}
+                        {diff === 0 ? (sum('debit') > 0 ? `متوازن · ${money(sum('debit'), currency)}` : 'أدخل المبالغ') : `الفرق ${money(Math.abs(diff), currency)}`}
                     </span>
                 </div>
             </form>

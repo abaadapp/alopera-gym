@@ -44,10 +44,10 @@ class ReportController extends Controller
         if (in_array($report, ['revenue', 'expenses', 'sales'], true)) {
             abort_unless($request->user()->can('reports.financial'), 403);
         }
-        abort_if($report === 'sales' && ! PermissionRegistry::moduleEnabled('inventory'), 404);
+        abort_if($report === 'sales' && ! PermissionRegistry::moduleEnabled('sales'), 404);
 
         return match ($report) {
-            'memberships' => TableExporter::download('memberships', ['الرقم', 'المشتركة', 'الباقة', 'النوع', 'الحالة', 'من', 'إلى', 'الإجمالي', 'تاريخ التفعيل'],
+            'memberships' => TableExporter::download('memberships', ['الرقم', 'العضو', 'الباقة', 'النوع', 'الحالة', 'من', 'إلى', 'الإجمالي', 'تاريخ التفعيل'],
                 (function () use ($from, $end) {
                     foreach (Membership::with('member:id,full_name,member_no')->whereBetween('created_at', [$from, $end])->orderBy('id')->lazy(500) as $m) {
                         yield [$m->member?->member_no, $m->member?->full_name, $m->plan_snapshot['name'] ?? '', Membership::KIND_LABELS[$m->kind] ?? $m->kind, Membership::STATUS_LABELS[$m->status] ?? $m->status, $m->starts_on->toDateString(), $m->ends_on->toDateString(), $m->total, $m->activated_at?->format('Y-m-d H:i')];
@@ -59,7 +59,7 @@ class ReportController extends Controller
                         yield [$p->receipt_number, $p->paid_at?->format('Y-m-d H:i'), Payment::KIND_LABELS[$p->kind] ?? $p->kind, Payment::METHOD_LABELS[$p->method] ?? $p->method, $p->kind === 'refund' ? -1 * (float) $p->amount : (float) $p->amount, $p->invoice?->number, $p->invoice?->customer_name, $p->reference];
                     }
                 })(), $format),
-            'classes' => TableExporter::download('classes', ['التاريخ', 'الوقت', 'البرنامج', 'المدربة', 'السعة', 'المحجوز', 'الحالة'],
+            'classes' => TableExporter::download('classes', ['التاريخ', 'الوقت', 'البرنامج', 'المدرب', 'السعة', 'المحجوز', 'الحالة'],
                 (function () use ($from, $end) {
                     foreach (ClassSession::with(['program:id,name', 'trainer:id,name'])->whereBetween('starts_at', [$from, $end])->orderBy('starts_at')->lazy(500) as $s) {
                         yield [$s->starts_at->toDateString(), $s->starts_at->format('H:i'), $s->program?->name, $s->trainer?->name, $s->capacity, $s->booked_count, ClassSession::STATUS_LABELS[$s->status] ?? $s->status];

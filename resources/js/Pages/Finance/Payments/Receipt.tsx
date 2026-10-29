@@ -67,8 +67,8 @@ export default function Receipt({ payment, club }: Props) {
                             <Line label="المتبقي" value={<span className="num">{money(payment.invoice.balance, currency)}</span>} />
                         </dl>
                     )}
-                    {payment.receiver && <p className="mt-3 text-center">استلمته: {payment.receiver}</p>}
-                    <p className="mt-3 text-center">شكرًا لكِ</p>
+                    {payment.receiver && <p className="mt-3 text-center">استلمه: {payment.receiver}</p>}
+                    <p className="mt-3 text-center">شكرًا لك</p>
                 </article>
             </div>
         </>

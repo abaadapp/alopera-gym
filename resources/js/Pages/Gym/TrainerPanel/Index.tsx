@@ -26,7 +26,7 @@ type PtItem = { id: number; member: string | null; phone: string | null; starts_
 const PT_STATUS: Record<string, [string, 'blue' | 'green' | 'red' | 'gray']> = {
     scheduled: ['مجدولة', 'blue'],
     completed: ['تمت', 'green'],
-    no_show: ['غابت', 'red'],
+    no_show: ['غاب', 'red'],
     cancelled: ['ملغاة', 'gray'],
 };
 
@@ -53,10 +53,10 @@ function SessionCard({ s }: { s: SessionItem }) {
 export default function TrainerPanel({ trainer, sessions, recent, pt }: { trainer: { id: number; name: string } | null; sessions: SessionItem[]; recent: SessionItem[]; pt: PtItem[] }) {
     if (!trainer) {
         return (
-            <ClubLayout title="شاشة المدربة">
-                <PageHeader title="شاشة المدربة" subtitle="حصص المدربة وجلساتها هذا الأسبوع" />
+            <ClubLayout title="لوحة المدرب">
+                <PageHeader title="لوحة المدرب" subtitle="حصص المدرب وجلساته هذا الأسبوع" />
                 <Card>
-                    <EmptyState icon={<Link2Off className="size-6" />} title="حسابك غير مرتبط بملف مدربة" description="اطلبي من الإدارة ربط حسابك بملفك في صفحة المدربات لتظهر حصصك هنا." />
+                    <EmptyState icon={<Link2Off className="size-6" />} title="حسابك غير مرتبط بملف مدرب" description="اطلب من الإدارة ربط حسابك بملفك في صفحة فريق التدريب لتظهر حصصك هنا." />
                 </Card>
             </ClubLayout>
         );
@@ -67,8 +67,8 @@ export default function TrainerPanel({ trainer, sessions, recent, pt }: { traine
     const ptUpcoming = pt.filter((p) => p.status === 'scheduled');
 
     return (
-        <ClubLayout title="شاشة المدربة">
-            <PageHeader title={`أهلًا ${trainer.name.split(' ')[0]}`} subtitle="حصصك وجلساتك هذا الأسبوع — اضغطي على الحصة لتسجيل الحضور" />
+        <ClubLayout title="لوحة المدرب">
+            <PageHeader title={`أهلًا ${trainer.name.split(' ')[0]}`} subtitle="حصصك وجلساتك هذا الأسبوع — اضغط على الحصة لتسجيل الحضور" />
 
             <div className="mb-6 grid grid-cols-3 gap-3">
                 <StatCard label="حصص اليوم" value={today.length} icon={<CalendarDays className="size-5" />} />
@@ -80,7 +80,7 @@ export default function TrainerPanel({ trainer, sessions, recent, pt }: { traine
                 <div className="space-y-6 lg:col-span-2">
                     <section>
                         <h2 className="mb-3 text-sm font-semibold text-muted">اليوم</h2>
-                        {today.length === 0 ? <Card><p className="text-center text-sm text-muted">لا حصص لكِ اليوم.</p></Card> : <div className="space-y-2">{today.map((s) => <SessionCard key={s.id} s={s} />)}</div>}
+                        {today.length === 0 ? <Card><p className="text-center text-sm text-muted">لا حصص لك اليوم.</p></Card> : <div className="space-y-2">{today.map((s) => <SessionCard key={s.id} s={s} />)}</div>}
                     </section>
                     <section>
                         <h2 className="mb-3 text-sm font-semibold text-muted">الأيام القادمة</h2>

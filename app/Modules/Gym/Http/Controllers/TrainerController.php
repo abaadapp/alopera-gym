@@ -44,7 +44,7 @@ class TrainerController extends Controller
         }
         $trainer->save();
 
-        return back()->with('success', 'تمت إضافة المدربة.');
+        return back()->with('success', 'تمت إضافة المدرب.');
     }
 
     public function update(Request $request, Trainer $trainer): RedirectResponse
@@ -59,7 +59,7 @@ class TrainerController extends Controller
         }
         $trainer->save();
 
-        return back()->with('success', 'تم حفظ بيانات المدربة.');
+        return back()->with('success', 'تم حفظ بيانات المدرب.');
     }
 
     public function destroy(Trainer $trainer): RedirectResponse
@@ -67,7 +67,7 @@ class TrainerController extends Controller
         $trainer->update(['is_active' => false, 'is_public' => false]);
         $trainer->delete();
 
-        return back()->with('success', 'تم حذف المدربة.');
+        return back()->with('success', 'تم حذف المدرب.');
     }
 
     public function availability(Request $request, Trainer $trainer): RedirectResponse
@@ -86,7 +86,7 @@ class TrainerController extends Controller
             }
         });
 
-        return back()->with('success', 'تم حفظ أوقات توفر المدربة.');
+        return back()->with('success', 'تم حفظ أوقات توفر المدرب.');
     }
 
     /** @return array<string, mixed> */

@@ -1,0 +1,190 @@
+<?php
+
+namespace App\Modules\Inventory\Http\Controllers;
+
+use App\Core\Export\TableExporter;
+use App\Core\Tenancy\TenantContext;
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Modules\Finance\Models\Payment;
+use App\Modules\Inventory\Models\Product;
+use App\Modules\Inventory\Models\Sale;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
+use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+
+/**
+ * The sales section: summary, the list of sales from both sources, reports, export and the printed receipt.
+ * Counted sales are completed ones (paid and handed over); voided and cancelled ones are listed but not summed.
+ */
+class SalesController extends Controller
+{
+    public const SOURCE_LABELS = [Sale::POS => 'نقطة البيع', Sale::WEBSITE => 'الموقع الإلكتروني'];
+
+    public const STATUS_LABELS = [Sale::PENDING => 'قيد التنفيذ', Sale::COMPLETED => 'مكتملة', Sale::VOIDED => 'ملغاة ومستردة', Sale::CANCELLED => 'ملغاة'];
+
+    public const METHOD_LABELS = Payment::METHOD_LABELS + ['pickup' => 'الدفع عند الاستلام'];
+
+    public function summary(Request $request): Response
+    {
+        [$from, $to] = $this->period($request);
+        $done = $this->scoped($request)->where('status', Sale::COMPLETED)->whereBetween('created_at', [$from, $to->endOfDay()]);
+
+        $totals = (clone $done)->toBase()->selectRaw('count(*) as n, coalesce(sum(total), 0) as total')->first();
+        $today = $this->scoped($request)->where('status', Sale::COMPLETED)->whereDate('created_at', today())->sum('total');
+        $bySource = (clone $done)->toBase()->select('source', DB::raw('count(*) as n'), DB::raw('sum(total) as total'))->groupBy('source')->get()
+            ->map(fn ($r) => ['source' => $r->source, 'label' => self::SOURCE_LABELS[$r->source] ?? $r->source, 'count' => (int) $r->n, 'total' => $this->m($r->total)]);
+
+        return Inertia::render('Sales/Summary', [
+            'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            'stats' => [
+                'total' => $this->m($totals->total),
+                'count' => (int) $totals->n,
+                'average' => $totals->n ? $this->m($totals->total / $totals->n) : '0.000',
+                'today' => $this->m($today),
+                'open_orders' => $this->scoped($request)->where('source', Sale::WEBSITE)->where('status', Sale::PENDING)->count(),
+                'low_stock' => Product::where('is_active', true)->lowStock()->count(),
+                'on_website' => Product::onWebsite()->count(),
+            ],
+            'bySource' => $bySource,
+            'topProducts' => $this->topProducts($request, $from, $to, 5),
+            'recent' => $this->scoped($request)->with(['customer', 'cashier:id,name'])->latest('id')->limit(8)->get()->map(fn (Sale $s) => $this->row($s)),
+        ]);
+    }
+
+    public function index(Request $request): Response
+    {
+        $sales = $this->scoped($request)->with(['cashier:id,name', 'deliveredBy:id,name', 'items', 'customer'])
+            ->when($request->string('q')->trim()->toString(), fn ($q, $t) => $q->where(fn ($w) => $w->where('number', 'ilike', "%{$t}%")->orWhere('customer_name', 'ilike', "%{$t}%")->orWhere('customer_phone', 'ilike', "%{$t}%")))
+            ->when(in_array($request->query('source'), [Sale::POS, Sale::WEBSITE], true), fn ($q) => $q->where('source', $request->query('source')))
+            ->when(array_key_exists((string) $request->query('status'), self::STATUS_LABELS), fn ($q) => $q->where('status', $request->query('status')))
+            ->when($request->date('from'), fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
+            ->when($request->date('to'), fn ($q, $d) => $q->whereDate('created_at', '<=', $d))
+            ->latest('id')->paginate(30)->withQueryString()
+            ->through(fn (Sale $s) => $this->row($s) + ['items' => $s->items->map(fn ($i) => $i->only('name', 'quantity', 'unit_price', 'line_total'))]);
+
+        return Inertia::render('Inventory/Sales', [
+            'sales' => $sales,
+            'filters' => $request->only('q', 'source', 'status', 'from', 'to'),
+            'labels' => ['sources' => self::SOURCE_LABELS, 'statuses' => self::STATUS_LABELS],
+            'can' => ['refund' => $request->user()->can('sales.refund')],
+        ]);
+    }
+
+    public function reports(Request $request): Response
+    {
+        [$from, $to] = $this->period($request);
+        $done = fn () => $this->scoped($request)->where('status', Sale::COMPLETED)->whereBetween('sales.created_at', [$from, $to->endOfDay()])->toBase();
+
+        $days = $done()->selectRaw('date(created_at) as day, count(*) as n, sum(total) as total')->groupBy('day')->orderBy('day')->get()
+            ->map(fn ($r) => ['day' => (string) $r->day, 'count' => (int) $r->n, 'total' => $this->m($r->total)]);
+        $methods = $done()->select('payment_method', DB::raw('count(*) as n'), DB::raw('sum(total) as total'))->groupBy('payment_method')->get()
+            ->map(fn ($r) => ['label' => self::METHOD_LABELS[$r->payment_method] ?? $r->payment_method, 'count' => (int) $r->n, 'total' => $this->m($r->total)]);
+        $staff = $done()->leftJoin('users', 'users.id', '=', 'sales.cashier_id')
+            ->select(DB::raw("coalesce(users.name, '—') as name"), DB::raw('count(*) as n'), DB::raw('sum(sales.total) as total'))->groupBy('users.name')->orderByDesc('total')->get()
+            ->map(fn ($r) => ['name' => $r->name, 'count' => (int) $r->n, 'total' => $this->m($r->total)]);
+        $sources = $done()->select('source', DB::raw('count(*) as n'), DB::raw('sum(total) as total'))->groupBy('source')->get()
+            ->map(fn ($r) => ['label' => self::SOURCE_LABELS[$r->source] ?? $r->source, 'count' => (int) $r->n, 'total' => $this->m($r->total)]);
+        $voided = $this->scoped($request)->whereIn('status', [Sale::VOIDED, Sale::CANCELLED])->whereBetween('created_at', [$from, $to->endOfDay()])
+            ->toBase()->selectRaw('count(*) as n, coalesce(sum(total), 0) as total')->first();
+
+        return Inertia::render('Sales/Reports', [
+            'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+            'days' => $days,
+            'products' => $this->topProducts($request, $from, $to, 50),
+            'methods' => $methods,
+            'staff' => $staff,
+            'sources' => $sources,
+            'voided' => ['count' => (int) $voided->n, 'total' => $this->m($voided->total)],
+        ]);
+    }
+
+    public function export(Request $request): StreamedResponse
+    {
+        [$from, $to] = $this->period($request);
+        $rows = $this->scoped($request)->with(['cashier:id,name', 'customer'])->whereBetween('created_at', [$from, $to->endOfDay()])->orderBy('id')->get()
+            ->map(fn (Sale $s) => [$s->number, $s->created_at->format('Y-m-d H:i'), self::SOURCE_LABELS[$s->source] ?? $s->source, $s->buyerName(),
+                self::METHOD_LABELS[$s->payment_method] ?? $s->payment_method, $s->discount, $s->total, self::STATUS_LABELS[$s->status] ?? $s->status, $s->cashier?->name]);
+
+        return TableExporter::download("sales-{$from->toDateString()}-{$to->toDateString()}",
+            ['الرقم', 'التاريخ', 'المصدر', 'العميل', 'طريقة الدفع', 'الخصم', 'الإجمالي', 'الحالة', 'الموظف'], $rows,
+            $request->query('format') === 'xlsx' ? 'xlsx' : 'csv');
+    }
+
+    /** A sale's printable receipt: for whoever sells or follows sales. */
+    public function receipt(Request $request, Sale $sale, TenantContext $tenants): Response
+    {
+        abort_unless($request->user()->canAny(['pos.sell', 'sales.view', 'orders.manage']), 403);
+        $this->ensureBranch($request->user(), $sale);
+        $sale->load(['items', 'cashier:id,name', 'customer', 'invoice:id,number,tax_rate,tax_total,paid_total']);
+        $tenant = $tenants->require();
+
+        return Inertia::render('Sales/Receipt', [
+            'sale' => $this->row($sale) + [
+                'subtotal' => $sale->subtotal, 'discount' => $sale->discount, 'tax' => $sale->tax,
+                'invoice' => $sale->invoice?->number, 'phone' => $sale->customer_phone,
+                'items' => $sale->items->map(fn ($i) => $i->only('name', 'quantity', 'unit_price', 'line_total')),
+            ],
+            'club' => ['name' => $tenant->name, 'phone' => $tenant->phone, 'logo' => $tenant->logoUrl(), 'currency' => $tenant->currency],
+        ]);
+    }
+
+    /** @return array<string, mixed> */
+    public static function row(Sale $s): array
+    {
+        return $s->only('id', 'number', 'source', 'status', 'fulfillment', 'total', 'discount', 'payment_method', 'invoice_id') + [
+            'buyer' => $s->buyerName(),
+            'at' => $s->created_at->format('Y-m-d H:i'),
+            'cashier' => $s->cashier?->name,
+            'paid' => $s->source === Sale::POS ? $s->status !== Sale::CANCELLED : $s->paid_at !== null,
+            'source_label' => self::SOURCE_LABELS[$s->source] ?? $s->source,
+            'status_label' => self::STATUS_LABELS[$s->status] ?? $s->status,
+            'method_label' => self::METHOD_LABELS[$s->payment_method] ?? $s->payment_method,
+        ];
+    }
+
+    /** Sales this user may see: all of the club's, or only their branch's when they are assigned to one. */
+    public static function scopedFor(User $user): Builder
+    {
+        return Sale::query()->when($user->branch_id, fn ($q, $branch) => $q->where(fn ($w) => $w->where('branch_id', $branch)->orWhereNull('branch_id')));
+    }
+
+    public static function ensureBranch(User $user, Sale $sale): void
+    {
+        abort_if($user->branch_id && $sale->branch_id && $sale->branch_id !== $user->branch_id, 404);
+    }
+
+    private function scoped(Request $request): Builder
+    {
+        return self::scopedFor($request->user());
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function topProducts(Request $request, CarbonImmutable $from, CarbonImmutable $to, int $limit): array
+    {
+        $ids = $this->scoped($request)->where('status', Sale::COMPLETED)->whereBetween('created_at', [$from, $to->endOfDay()])->select('id');
+
+        return DB::table('sale_items')->whereIn('sale_id', $ids)
+            ->select('name', DB::raw('sum(quantity) as qty'), DB::raw('sum(line_total) as total'))
+            ->groupBy('name')->orderByDesc('total')->limit($limit)->get()
+            ->map(fn ($r) => ['name' => $r->name, 'quantity' => (float) $r->qty, 'total' => $this->m($r->total)])->all();
+    }
+
+    /** @return array{0: CarbonImmutable, 1: CarbonImmutable} */
+    private function period(Request $request): array
+    {
+        $from = $request->date('from')?->toImmutable() ?? CarbonImmutable::today()->startOfMonth();
+        $to = $request->date('to')?->toImmutable() ?? CarbonImmutable::today();
+
+        return $from->greaterThan($to) ? [$to->startOfDay(), $from->startOfDay()] : [$from->startOfDay(), $to->startOfDay()];
+    }
+
+    private function m(mixed $value): string
+    {
+        return number_format((float) $value, 3, '.', '');
+    }
+}

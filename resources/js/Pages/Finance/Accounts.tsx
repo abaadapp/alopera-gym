@@ -98,7 +98,7 @@ function AccountForm({ account, groups, onClose }: { account: Account | null; gr
             <form onSubmit={submit} className="space-y-4">
                 {!account && (
                     <Field label="تحت الحساب الرئيسي" error={form.errors.parent_id} required>
-                        <Select value={form.data.parent_id} onChange={(e) => form.setData('parent_id', e.target.value)} placeholder="اختاري">
+                        <Select value={form.data.parent_id} onChange={(e) => form.setData('parent_id', e.target.value)} placeholder="اختر">
                             {groups.map((g) => <option key={g.id} value={g.id}>{g.code} · {g.name}</option>)}
                         </Select>
                     </Field>
@@ -106,7 +106,7 @@ function AccountForm({ account, groups, onClose }: { account: Account | null; gr
                 <Field label="اسم الحساب" error={form.errors.name} required><Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} autoFocus /></Field>
                 {!account && (
                     <>
-                        <Field label="الرمز" error={form.errors.code} hint="اتركيه فارغًا ليُختار الرمز التالي تلقائيًا"><Input dir="ltr" value={form.data.code} onChange={(e) => form.setData('code', e.target.value)} /></Field>
+                        <Field label="الرمز" error={form.errors.code} hint="اتركه فارغًا ليُختار الرمز التالي تلقائيًا"><Input dir="ltr" value={form.data.code} onChange={(e) => form.setData('code', e.target.value)} /></Field>
                         <Checkbox label="حساب رئيسي (عنوان تُضاف تحته حسابات أخرى)" checked={form.data.is_group} onChange={(e) => form.setData('is_group', e.target.checked)} />
                     </>
                 )}

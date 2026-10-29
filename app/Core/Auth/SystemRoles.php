@@ -23,7 +23,7 @@ final class SystemRoles
     {
         return [
             self::OWNER => [
-                'name' => 'مالكة النادي',
+                'name' => 'مالك النادي',
                 'description' => 'كل الصلاحيات، ولا يمكن تعديل هذا الدور.',
                 'permissions' => ['*'],
                 'home' => 'club.dashboard',
@@ -35,25 +35,27 @@ final class SystemRoles
                     'roles.manage', 'backups.manage', 'billing.view', 'integrations.manage', 'members.delete', ...PermissionRegistry::OWNER_ONLY,
                     // Salaries stay confidential, approved by the owner and paid by finance.
                     'payroll.salaries', 'payroll.approve', 'payroll.pay', 'accounting.manage',
+                    // Sensitive business documents are the owner's unless shared one by one.
+                    'documents.confidential',
                 ])),
                 'home' => 'club.dashboard',
             ],
             self::RECEPTION => [
                 'name' => 'الاستقبال',
-                'description' => 'تسجيل الدخول والحجوزات وبيع العضويات وتحصيل الدفعات.',
+                'description' => 'تسجيل الدخول والحجوزات وبيع العضويات والمنتجات وتحصيل الدفعات وتسليم طلبات الموقع.',
                 'permissions' => [
                     'members.view', 'members.manage', 'members.documents',
                     'memberships.view', 'memberships.sell', 'memberships.freeze',
                     'classes.view', 'bookings.manage', 'attendance.mark',
                     'checkin.perform', 'checkin.view',
                     'invoices.view', 'invoices.manage', 'payments.record',
-                    'pos.sell', 'whatsapp.inbox', 'whatsapp.send',
+                    'pos.sell', 'orders.manage', 'whatsapp.inbox', 'whatsapp.send',
                 ],
                 'home' => 'club.reception',
             ],
             self::FINANCE => [
                 'name' => 'المالية',
-                'description' => 'الفواتير والتحصيل والمصروفات والحسابات، وإعداد الرواتب وصرفها بعد اعتماد المالكة.',
+                'description' => 'الفواتير والتحصيل والمصروفات والحسابات، وإعداد الرواتب وصرفها بعد اعتماد المالك.',
                 'permissions' => [
                     'dashboard.view', 'members.view', 'memberships.view',
                     'invoices.view', 'invoices.manage', 'invoices.void', 'invoices.credit',
@@ -61,14 +63,14 @@ final class SystemRoles
                     'expenses.manage', 'dues.view',
                     'accounting.view', 'accounting.manage',
                     'employees.view', 'payroll.salaries', 'payroll.prepare', 'payroll.pay', 'payroll.reports',
-                    'products.manage', 'suppliers.manage', 'purchases.manage', 'pos.sell',
+                    'sales.view', 'sales.refund', 'products.manage', 'suppliers.manage', 'purchases.manage', 'pos.sell',
                     'reports.view', 'reports.financial', 'reports.export',
                 ],
                 'home' => 'club.dashboard',
             ],
             self::TRAINER => [
-                'name' => 'المدربة',
-                'description' => 'حصصها وجلساتها الفردية وتسجيل حضور مشتركاتها.',
+                'name' => 'المدرب',
+                'description' => 'حصصه وجلساته الفردية وتسجيل حضور أعضائه.',
                 'permissions' => ['classes.view', 'attendance.mark'],
                 'home' => 'club.trainer',
             ],

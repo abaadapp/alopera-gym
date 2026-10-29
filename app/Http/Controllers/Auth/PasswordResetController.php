@@ -51,7 +51,7 @@ class PasswordResetController extends Controller
         );
 
         return $status === Password::PASSWORD_RESET
-            ? redirect()->route('login')->with('success', 'تم تغيير كلمة المرور. سجّلي الدخول.')
+            ? redirect()->route('login')->with('success', 'تم تغيير كلمة المرور. سجّل الدخول.')
             : back()->withErrors(['email' => 'رابط إعادة التعيين غير صالح أو منتهي.']);
     }
 }

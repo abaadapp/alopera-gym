@@ -31,7 +31,7 @@ export default function FinanceSettings({ methods, receipt, spending, accounts, 
             <PageHeader back={<SettingsBack />} title="الإعدادات المالية" subtitle="إلى أي حساب يذهب كل تحصيل، ومن أي حساب يخرج كل مصروف — حسب طريقة الدفع. تُطبَّق على العمليات الجديدة." />
             <form onSubmit={submit} className="grid gap-4 lg:grid-cols-2">
                 <Card>
-                    <CardHeader title="التحصيل من المشتركات" subtitle="البطاقات وPaymob تنتظر في حسابات التسوية حتى تصل البنك" />
+                    <CardHeader title="التحصيل من الأعضاء" subtitle="البطاقات وPaymob تنتظر في حسابات التسوية حتى تصل البنك" />
                     <div className="space-y-4">
                         {Object.entries(methods).map(([method, label]) => <Field key={method} label={label}>{select('receipt', method)}</Field>)}
                     </div>

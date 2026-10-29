@@ -18,7 +18,7 @@ export default function Contact({ site, seo }: { site: SiteInfo; seo: { title: s
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero title="تواصلي معنا" subtitle="يسعدنا الرد على استفساراتك حول الاشتراكات والحصص والعروض." icon={<MessageCircle className="size-6" />} />
+            <PageHero title="تواصل معنا" subtitle="يسعدنا الرد على استفساراتك حول الاشتراكات والحصص والعروض." icon={<MessageCircle className="size-6" />} />
 
             <section className="mx-auto grid max-w-6xl gap-8 px-4 py-12 lg:grid-cols-5">
                 <div className="space-y-4 lg:col-span-2">
@@ -34,7 +34,7 @@ export default function Contact({ site, seo }: { site: SiteInfo; seo: { title: s
                             {site.whatsapp_number && (
                                 <li className="flex items-center gap-3">
                                     <span className="grid size-10 place-items-center rounded-xl bg-emerald-50 text-emerald-600"><MessageCircle className="size-4" /></span>
-                                    <a href={whatsappUrl(site.whatsapp_number)} target="_blank" rel="noreferrer" className="hover:text-brand">راسلينا على واتساب</a>
+                                    <a href={whatsappUrl(site.whatsapp_number)} target="_blank" rel="noreferrer" className="hover:text-brand">راسلنا على واتساب</a>
                                 </li>
                             )}
                             {site.contact_email && (
@@ -69,7 +69,7 @@ export default function Contact({ site, seo }: { site: SiteInfo; seo: { title: s
                                 <iframe src={embed} title="الموقع على الخريطة" loading="lazy" className="h-64 w-full border-0" referrerPolicy="no-referrer-when-downgrade" />
                             ) : (
                                 <a href={site.map_url} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 p-5 text-sm font-medium text-brand hover:bg-brand-50">
-                                    <MapPin className="size-4" /> افتحي الموقع على الخريطة
+                                    <MapPin className="size-4" /> افتح الموقع على الخريطة
                                 </a>
                             )}
                         </div>
@@ -77,7 +77,7 @@ export default function Contact({ site, seo }: { site: SiteInfo; seo: { title: s
                 </div>
 
                 <form onSubmit={submit} className="rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-8 lg:col-span-3">
-                    <h2 className="font-display text-xl font-semibold">أرسلي رسالة</h2>
+                    <h2 className="font-display text-xl font-semibold">أرسل رسالة</h2>
                     <p className="mt-1 text-sm text-muted">سنعاود التواصل معك في أقرب وقت.</p>
                     <div className="mt-6 grid gap-4 sm:grid-cols-2">
                         <Field label="الاسم" error={form.errors.name} required className="sm:col-span-2">
@@ -103,7 +103,7 @@ export default function Contact({ site, seo }: { site: SiteInfo; seo: { title: s
                     <Button type="submit" className="mt-6 w-full rounded-full sm:w-auto" size="lg" loading={form.processing} icon={<Send className="size-4" />}>
                         إرسال
                     </Button>
-                    {form.recentlySuccessful && <p className="mt-3 text-sm text-emerald-600">وصلتنا رسالتك، شكرًا لكِ.</p>}
+                    {form.recentlySuccessful && <p className="mt-3 text-sm text-emerald-600">وصلتنا رسالتك، شكرًا لك.</p>}
                 </form>
             </section>
         </SiteLayout>

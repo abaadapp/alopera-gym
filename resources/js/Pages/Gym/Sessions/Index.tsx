@@ -99,7 +99,7 @@ export default function SessionsIndex({ week, sessions, programs, trainers, filt
                         </span>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        <Select value={filters.trainer_id ?? ''} onChange={(e) => go({ trainer_id: e.target.value || undefined })} placeholder="كل المدربات" className="h-9 w-44 py-1.5">
+                        <Select value={filters.trainer_id ?? ''} onChange={(e) => go({ trainer_id: e.target.value || undefined })} placeholder="كل المدربين" className="h-9 w-44 py-1.5">
                             {trainers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                         </Select>
                         <Select value={filters.program_id ?? ''} onChange={(e) => go({ program_id: e.target.value || undefined })} placeholder="كل البرامج" className="h-9 w-44 py-1.5">
@@ -162,7 +162,7 @@ export default function SessionsIndex({ week, sessions, programs, trainers, filt
 
             {sessions.length === 0 && (
                 <p className="mt-4 text-center text-sm text-muted">
-                    لا حصص في هذا الأسبوع. {manage && <>ابني <Link href={route('club.schedule.index')} className="text-brand underline">الجدول الأسبوعي</Link> ثم اضغطي «توليد من الجدول».</>}
+                    لا حصص في هذا الأسبوع. {manage && <>ابنِ <Link href={route('club.schedule.index')} className="text-brand underline">الجدول الأسبوعي</Link> ثم اضغط «توليد من الجدول».</>}
                 </p>
             )}
 
@@ -189,7 +189,7 @@ export default function SessionsIndex({ week, sessions, programs, trainers, filt
                     <Field label="الموعد" error={form.errors.starts_at} required>
                         <Input type="datetime-local" dir="ltr" value={form.data.starts_at} onChange={(e) => form.setData('starts_at', e.target.value)} required />
                     </Field>
-                    <Field label="المدربة" error={form.errors.trainer_id}>
+                    <Field label="المدرب" error={form.errors.trainer_id}>
                         <Select value={form.data.trainer_id} onChange={(e) => form.setData('trainer_id', e.target.value)} placeholder="— بدون —">
                             {trainers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                         </Select>

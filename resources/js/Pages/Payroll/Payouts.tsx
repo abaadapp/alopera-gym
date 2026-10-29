@@ -30,7 +30,7 @@ export default function PayrollPayouts({ runs, run, payouts, waiting, accounts, 
 
     return (
         <ClubLayout title="صرف الرواتب">
-            <PageHeader title="صرف الرواتب" subtitle="رواتب المسيرات المعتمدة: اصرفي لموظفة أو أكثر من الصندوق أو حساب بنكي، دون انتظار صرف الجميع" />
+            <PageHeader title="صرف الرواتب" subtitle="رواتب المسيرات المعتمدة: اصرف لموظف أو أكثر من الصندوق أو حساب بنكي، دون انتظار صرف الجميع" />
 
             <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <StatCard label="بانتظار الصرف في كل المسيرات" value={m(waiting)} icon={<Clock className="size-5" />} tone={Number(waiting) ? 'amber' : 'gray'} />
@@ -60,7 +60,7 @@ export default function PayrollPayouts({ runs, run, payouts, waiting, accounts, 
                                         <thead>
                                             <tr>
                                                 <th className="w-10">{can.pay && unpaid.length > 0 && <input type="checkbox" aria-label="تحديد الكل" className="size-4 accent-[var(--brand)]" checked={selected.length === unpaid.length} onChange={(e) => setSelected(e.target.checked ? unpaid.map((i) => i.id) : [])} />}</th>
-                                                <th>الموظفة</th><th>طريقة الصرف</th><th className="text-end">الصافي</th><th>الحالة</th>
+                                                <th>الموظف</th><th>طريقة الصرف</th><th className="text-end">الصافي</th><th>الحالة</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -83,7 +83,7 @@ export default function PayrollPayouts({ runs, run, payouts, waiting, accounts, 
                                 {payouts.length ? (
                                     <div className="overflow-x-auto">
                                         <table className="table-base">
-                                            <thead><tr><th>الرقم</th><th>المسيرة</th><th>التاريخ</th><th>من حساب</th><th>الموظفات</th><th>المرجع</th><th className="text-end">المبلغ</th></tr></thead>
+                                            <thead><tr><th>الرقم</th><th>المسيرة</th><th>التاريخ</th><th>من حساب</th><th>الموظفون</th><th>المرجع</th><th className="text-end">المبلغ</th></tr></thead>
                                             <tbody>
                                                 {payouts.map((p) => (
                                                     <tr key={p.id}>
@@ -128,7 +128,7 @@ function PayForm({ run, ids, accounts, defaultAccount, onClose }: { run: RunDeta
         <Modal open onClose={onClose} title={`صرف رواتب ${run.label}`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>تسجيل الصرف</Button></>}>
             <form onSubmit={submit} className="space-y-4">
                 <div className="rounded-xl bg-[#f2f2f0] p-4">
-                    <p className="text-[13px] text-muted">{items.length} موظفة</p>
+                    <p className="text-[13px] text-muted">{items.length} موظف</p>
                     <p className="mt-1 text-xl font-bold num">{money(total, currency)}</p>
                 </div>
                 <Field label="من حساب" error={errors.account_id} required>
@@ -141,7 +141,7 @@ function PayForm({ run, ids, accounts, defaultAccount, onClose }: { run: RunDeta
                     <Field label="المرجع" error={errors.reference}><Input value={form.data.reference} onChange={(e) => form.setData('reference', e.target.value)} placeholder="رقم التحويل البنكي" /></Field>
                 </div>
                 {errors.error && <p className="text-xs font-medium text-red-600">{errors.error}</p>}
-                <p className="text-[12px] text-muted">يُسجَّل الصرف في الحسابات (تُخفض الرواتب المستحقة ورصيد الحساب). التسجيل هنا لا ينفّذ تحويلًا بنكيًا؛ نفّذي التحويل من البنك.</p>
+                <p className="text-[12px] text-muted">يُسجَّل الصرف في الحسابات (تُخفض الرواتب المستحقة ورصيد الحساب). التسجيل هنا لا ينفّذ تحويلًا بنكيًا؛ نفّذ التحويل من البنك.</p>
             </form>
         </Modal>
     );

@@ -34,7 +34,7 @@ export default function FinanceSummary({ summary, accounts, overdue, unpaidSalar
                 <StatCard label="الصندوق" value={m(summary.cash)} icon={<Banknote className="size-5" />} tone="green" href={route('club.finance.banks')} />
                 <StatCard label="الحسابات البنكية" value={m(summary.banks)} icon={<Landmark className="size-5" />} tone="blue" href={route('club.finance.banks')} />
                 <StatCard label="بطاقات وPaymob قيد التسوية" value={m(summary.clearing)} hint="تصل إلى البنك عند التسوية" icon={<CreditCard className="size-5" />} tone="violet" />
-                <StatCard label="ذمم المشتركات" value={m(summary.receivable)} hint={overdue.count ? `${overdue.count} فاتورة متأخرة بـ ${m(overdue.amount)}` : 'لا فواتير متأخرة'} icon={<Users className="size-5" />} tone={overdue.count ? 'amber' : 'gray'} href={route('club.dues')} />
+                <StatCard label="ذمم الأعضاء" value={m(summary.receivable)} hint={overdue.count ? `${overdue.count} فاتورة متأخرة بـ ${m(overdue.amount)}` : 'لا فواتير متأخرة'} icon={<Users className="size-5" />} tone={overdue.count ? 'amber' : 'gray'} href={route('club.dues')} />
             </div>
 
             <PeriodFilter routeName="club.finance.summary" from={filters.from} to={filters.to} />

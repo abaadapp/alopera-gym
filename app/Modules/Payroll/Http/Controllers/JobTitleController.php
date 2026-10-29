@@ -40,7 +40,7 @@ class JobTitleController extends Controller
     public function destroy(JobTitle $jobTitle): RedirectResponse
     {
         if ($jobTitle->employees()->exists()) {
-            throw new BusinessRuleException('job_title.in_use', 'المسمى مستخدم في ملفات موظفين؛ أوقفيه بدل حذفه.');
+            throw new BusinessRuleException('job_title.in_use', 'المسمى مستخدم في ملفات موظفين؛ أوقفه بدل حذفه.');
         }
         $jobTitle->delete();
 

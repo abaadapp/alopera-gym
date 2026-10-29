@@ -14,10 +14,10 @@ final class TemplateCatalog
     /** @var array<string, array{label: string, category: string, variables: list<string>, body: string}> */
     public const EVENTS = [
         'member_welcome' => [
-            'label' => 'الترحيب بمشتركة جديدة',
+            'label' => 'الترحيب بعضو جديد',
             'category' => 'utility',
             'variables' => ['member_name', 'club_name', 'member_no'],
-            'body' => 'أهلًا {{1}} 🌸 يسعدنا انضمامك إلى {{2}}. رقم عضويتك: {{3}}.',
+            'body' => 'أهلًا {{1}}، يسعدنا انضمامك إلى {{2}}. رقم عضويتك: {{3}}.',
         ],
         'invoice_issued' => [
             'label' => 'إرسال الفاتورة ورابطها',
@@ -47,13 +47,13 @@ final class TemplateCatalog
             'label' => 'تأكيد الاشتراك',
             'category' => 'utility',
             'variables' => ['member_name', 'plan_name', 'starts_on', 'ends_on'],
-            'body' => 'تم تفعيل اشتراكك يا {{1}} في باقة {{2}} من {{3}} حتى {{4}}. نراكِ قريبًا 💪',
+            'body' => 'تم تفعيل اشتراكك يا {{1}} في باقة {{2}} من {{3}} حتى {{4}}. نراك قريبًا 💪',
         ],
         'membership_renewed' => [
             'label' => 'تأكيد التجديد',
             'category' => 'utility',
             'variables' => ['member_name', 'plan_name', 'ends_on'],
-            'body' => 'تم تجديد اشتراكك يا {{1}} في باقة {{2}} حتى {{3}}. شكرًا لثقتك بنا 🌷',
+            'body' => 'تم تجديد اشتراكك يا {{1}} في باقة {{2}} حتى {{3}}. شكرًا لثقتك بنا.',
         ],
         'membership_expiring' => [
             'label' => 'تذكير قبل انتهاء العضوية',
@@ -65,13 +65,13 @@ final class TemplateCatalog
             'label' => 'انتهاء العضوية',
             'category' => 'utility',
             'variables' => ['member_name', 'renew_link'],
-            'body' => 'انتهى اشتراكك يا {{1}}. اشتقنا لكِ! جددي اشتراكك من هنا: {{2}}',
+            'body' => 'انتهى اشتراكك يا {{1}}. اشتقنا لك! جدد اشتراكك من هنا: {{2}}',
         ],
         'membership_followup' => [
             'label' => 'متابعة بعد انتهاء العضوية',
             'category' => 'marketing',
             'variables' => ['member_name', 'club_name', 'renew_link'],
-            'body' => 'اشتقنا لكِ يا {{1}} في {{2}} 💕 عودي لتمارينك وجددي اشتراكك من هنا: {{3}}',
+            'body' => 'اشتقنا لك يا {{1}} في {{2}}. عُد إلى تمارينك وجدد اشتراكك من هنا: {{3}}',
         ],
         'membership_frozen' => [
             'label' => 'تأكيد التجميد',
@@ -98,10 +98,16 @@ final class TemplateCatalog
             'body' => 'تم إلغاء حجزك في حصة {{2}} يوم {{3}} الساعة {{4}}. السبب: {{5}}',
         ],
         'class_changed' => [
-            'label' => 'تعديل موعد/مدربة الحصة',
+            'label' => 'تعديل موعد/مدرب الحصة',
             'category' => 'utility',
             'variables' => ['member_name', 'class_name', 'date', 'time', 'change'],
             'body' => 'تنبيه يا {{1}}: تم تعديل حصة {{2}} يوم {{3}} الساعة {{4}}. التعديل: {{5}}',
+        ],
+        'document_expiry' => [
+            'label' => 'تنبيه انتهاء مستند (للموظف المسؤول عنه)',
+            'category' => 'utility',
+            'variables' => ['user_name', 'document_name', 'expiry_date', 'days_left'],
+            'body' => 'مرحبًا {{1}}، المستند «{{2}}» ينتهي بتاريخ {{3}} (متبقٍ {{4}} يوم). يرجى متابعة تجديده.',
         ],
     ];
 

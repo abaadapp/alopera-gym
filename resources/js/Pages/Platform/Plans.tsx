@@ -49,8 +49,8 @@ export default function Plans({ plans }: { plans: Plan[] }) {
                             </div>
                             <p className="text-xs text-muted">سنويًا: <span className="num">{money(p.price_yearly, p.currency)}</span> · تجربة <span className="num">{p.trial_days}</span> يوم</p>
                             <ul className="mt-4 space-y-1.5 text-sm">
-                                <li>المشتركات: <b className="num">{p.max_members ? number(p.max_members) : 'بلا حد'}</b></li>
-                                <li>المستخدمات: <b className="num">{p.max_staff ? number(p.max_staff) : 'بلا حد'}</b></li>
+                                <li>الأعضاء: <b className="num">{p.max_members ? number(p.max_members) : 'بلا حد'}</b></li>
+                                <li>المستخدمون: <b className="num">{p.max_staff ? number(p.max_staff) : 'بلا حد'}</b></li>
                                 <li>الفروع: <b className="num">{p.max_branches ? number(p.max_branches) : 'بلا حد'}</b></li>
                                 {(p.features ?? []).map((f) => <li key={f} className="flex items-center gap-1.5 text-ink/80"><Check className="size-3.5 text-emerald-600" />{f}</li>)}
                             </ul>
@@ -104,8 +104,8 @@ function PlanModal({ plan, onClose }: { plan: Plan | null; onClose: () => void }
                 <Field label="الوصف" error={errors.description} className="sm:col-span-2"><Input value={form.data.description} onChange={(e) => form.setData('description', e.target.value)} /></Field>
                 <Field label="السعر الشهري (ر.ع)" error={errors.price_monthly} required><Input type="number" step="0.001" min="0" value={form.data.price_monthly} onChange={(e) => form.setData('price_monthly', e.target.value)} /></Field>
                 <Field label="السعر السنوي (ر.ع)" error={errors.price_yearly} required><Input type="number" step="0.001" min="0" value={form.data.price_yearly} onChange={(e) => form.setData('price_yearly', e.target.value)} /></Field>
-                <Field label="حد المشتركات" error={errors.max_members} hint="فارغ = بلا حد"><Input type="number" min="1" value={form.data.max_members} onChange={(e) => form.setData('max_members', e.target.value)} /></Field>
-                <Field label="حد المستخدمات" error={errors.max_staff} hint="فارغ = بلا حد"><Input type="number" min="1" value={form.data.max_staff} onChange={(e) => form.setData('max_staff', e.target.value)} /></Field>
+                <Field label="حد الأعضاء" error={errors.max_members} hint="فارغ = بلا حد"><Input type="number" min="1" value={form.data.max_members} onChange={(e) => form.setData('max_members', e.target.value)} /></Field>
+                <Field label="حد المستخدمين" error={errors.max_staff} hint="فارغ = بلا حد"><Input type="number" min="1" value={form.data.max_staff} onChange={(e) => form.setData('max_staff', e.target.value)} /></Field>
                 <Field label="حد الفروع" error={errors.max_branches} hint="فارغ = بلا حد"><Input type="number" min="1" value={form.data.max_branches} onChange={(e) => form.setData('max_branches', e.target.value)} /></Field>
                 <Field label="أيام التجربة" error={errors.trial_days}><Input type="number" min="0" max="90" value={form.data.trial_days} onChange={(e) => form.setData('trial_days', e.target.value)} /></Field>
                 <Field label="المميزات (سطر لكل ميزة)" error={errors.features} className="sm:col-span-2"><Textarea rows={4} value={features} onChange={(e) => setFeatures(e.target.value)} /></Field>

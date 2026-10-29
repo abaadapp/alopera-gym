@@ -19,7 +19,7 @@ interface ContactMessage {
 export default function ContactMessages({ messages }: { messages: Paginated<ContactMessage> }) {
     return (
         <ClubLayout title="رسائل التواصل">
-            <PageHeader title="رسائل نموذج التواصل" subtitle="ما يصل من صفحة «تواصلي معنا» في الموقع" />
+            <PageHeader title="رسائل نموذج التواصل" subtitle="ما يصل من صفحة «تواصل معنا» في الموقع" />
 
             <Card padded={false}>
                 {messages.data.length === 0 ? (

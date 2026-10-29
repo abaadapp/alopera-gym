@@ -52,7 +52,7 @@ export default function PurchasesIndex({ orders, suppliers, products, filters }:
             />
             {suppliers.length === 0 && (
                 <p className="mb-4 rounded-xl bg-amber-50 px-4 py-2 text-sm text-amber-800">
-                    أضيفي موردًا أولًا من <Link href={route('club.suppliers.index')} className="underline">صفحة الموردين</Link>.
+                    أضف موردًا أولًا من <Link href={route('club.suppliers.index')} className="underline">صفحة الموردين</Link>.
                 </p>
             )}
 
@@ -171,7 +171,7 @@ function CreateOrderModal({ suppliers, products, onClose, currency }: { supplier
                                                 const p = products.find((x) => String(x.id) === e.target.value);
                                                 setLine(i, { product_id: e.target.value, unit_cost: line.unit_cost || (p ? String(Number(p.cost)) : '') });
                                             }}
-                                            placeholder="اختاري المنتج"
+                                            placeholder="اختر المنتج"
                                             required
                                         >
                                             {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}

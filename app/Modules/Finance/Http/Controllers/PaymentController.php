@@ -44,7 +44,7 @@ class PaymentController extends Controller
             'reference' => ['nullable', 'string', 'max:120', 'required_if:method,card'],
             'notes' => ['nullable', 'string', 'max:500'],
             'proof' => ['nullable', 'file', 'max:'.config('gym.max_document_kb'), 'mimes:pdf,jpg,jpeg,png,webp,heic'],
-        ], ['reference.required_if' => 'أدخلي رقم العملية من جهاز الشبكة.']);
+        ], ['reference.required_if' => 'أدخل رقم العملية من جهاز الشبكة.']);
 
         $proof = $request->hasFile('proof')
             ? $request->file('proof')->store('tenants/'.$tenants->require()->id.'/payment-proofs', 'local')

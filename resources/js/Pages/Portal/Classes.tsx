@@ -89,7 +89,7 @@ export default function Classes({ site, seo, sessions, membership, cutoffHours, 
                                     ) : s.is_full ? (
                                         <span className="rounded-full border border-line px-4 py-2 text-xs text-muted">مكتملة</span>
                                     ) : (
-                                        <Button size="sm" className="rounded-full" loading={busy === s.id} onClick={() => book(s)}>احجزي</Button>
+                                        <Button size="sm" className="rounded-full" loading={busy === s.id} onClick={() => book(s)}>احجز</Button>
                                     )
                                 }
                             />
@@ -132,7 +132,7 @@ export default function Classes({ site, seo, sessions, membership, cutoffHours, 
             >
                 {cancelling && (
                     <p className="text-sm text-muted">
-                        هل تريدين إلغاء حجز <span className="font-medium text-ink">{cancelling.program}</span> يوم {dayName(cancelling.date)} الساعة {time(cancelling.time)}؟ ستُعاد الحصة إلى رصيدك.
+                        هل تريد إلغاء حجز <span className="font-medium text-ink">{cancelling.program}</span> يوم {dayName(cancelling.date)} الساعة {time(cancelling.time)}؟ ستُعاد الحصة إلى رصيدك.
                     </p>
                 )}
             </Modal>

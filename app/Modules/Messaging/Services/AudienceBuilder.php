@@ -14,12 +14,12 @@ use Illuminate\Database\Eloquent\Builder;
 final class AudienceBuilder
 {
     public const SEGMENTS = [
-        'all' => 'كل المشتركات الموافقات على التسويق',
+        'all' => 'كل الأعضاء الموافقين على التسويق',
         'active' => 'العضويات النشطة',
-        'expiring' => 'تنتهي عضويتها خلال (أيام)',
-        'expired' => 'انتهت عضويتها خلال آخر (أيام)',
-        'inactive' => 'لم تزر النادي منذ (أيام)',
-        'new' => 'انضمت خلال آخر (أيام)',
+        'expiring' => 'تنتهي عضويتهم خلال (أيام)',
+        'expired' => 'انتهت عضويتهم خلال آخر (أيام)',
+        'inactive' => 'لم يزوروا النادي منذ (أيام)',
+        'new' => 'انضموا خلال آخر (أيام)',
     ];
 
     /** @param array{segment?: string, days?: int|null, plan_ids?: list<int>|null, program_ids?: list<int>|null} $audience */

@@ -180,7 +180,7 @@ export default function MemberShow(props: Props) {
     return (
         <ClubLayout title={member.full_name}>
             <Link href={route('club.members.index')} className="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-brand">
-                <ArrowRight className="size-4" /> المشتركات
+                <ArrowRight className="size-4" /> الأعضاء
             </Link>
 
             {/* Header card */}
@@ -238,7 +238,7 @@ export default function MemberShow(props: Props) {
                                 </>
                             )}
                             {can('members.delete') && (
-                                <ConfirmAction url={route('club.members.destroy', member.id)} method="delete" title="حذف المشتركة" message="سيتم حذف ملف المشتركة. لا يمكن حذف مشتركة لديها عضوية سارية." confirmLabel="حذف" icon={<Trash2 className="size-4" />}>
+                                <ConfirmAction url={route('club.members.destroy', member.id)} method="delete" title="حذف العضو" message="سيتم حذف ملف العضو. لا يمكن حذف عضو لديه عضوية سارية." confirmLabel="حذف" icon={<Trash2 className="size-4" />}>
                                     حذف
                                 </ConfirmAction>
                             )}
@@ -267,7 +267,7 @@ export default function MemberShow(props: Props) {
                         <div className="rounded-2xl border border-line bg-white p-4">
                             <QRCode value={member.qr_token} size={200} />
                         </div>
-                        <p className="text-center text-sm text-muted">تظهر هذه الشيفرة أيضًا في بوابة المشتركة، وتُقرأ عند البوابة أو في الاستقبال.</p>
+                        <p className="text-center text-sm text-muted">تظهر هذه الشيفرة أيضًا في بوابة العضو، وتُقرأ عند البوابة أو في الاستقبال.</p>
                         <ConfirmAction
                             url={route('club.members.rotate-qr', member.id)}
                             title="إصدار رمز جديد"
@@ -329,9 +329,9 @@ function OverviewTab({ member }: { member: MemberDetail }) {
                 <Card>
                     <CardHeader title="الموافقات والبوابة" />
                     <ul className="space-y-2 text-sm">
-                        <li className="flex justify-between"><span>رسائل الخدمة (واتساب)</span><Badge tone={member.whatsapp_opt_in ? 'green' : 'gray'}>{member.whatsapp_opt_in ? 'موافقة' : 'غير موافقة'}</Badge></li>
-                        <li className="flex justify-between"><span>الرسائل التسويقية</span><Badge tone={member.marketing_opt_in ? 'green' : 'gray'}>{member.marketing_opt_in ? 'موافقة' : 'غير موافقة'}</Badge></li>
-                        <li className="flex justify-between"><span>بوابة المشتركة</span><Badge tone={member.has_portal_access ? 'green' : 'amber'}>{member.has_portal_access ? 'مفعّلة' : 'غير مفعّلة'}</Badge></li>
+                        <li className="flex justify-between"><span>رسائل الخدمة (واتساب)</span><Badge tone={member.whatsapp_opt_in ? 'green' : 'gray'}>{member.whatsapp_opt_in ? 'موافق' : 'غير موافق'}</Badge></li>
+                        <li className="flex justify-between"><span>الرسائل التسويقية</span><Badge tone={member.marketing_opt_in ? 'green' : 'gray'}>{member.marketing_opt_in ? 'موافق' : 'غير موافق'}</Badge></li>
+                        <li className="flex justify-between"><span>بوابة العضو</span><Badge tone={member.has_portal_access ? 'green' : 'amber'}>{member.has_portal_access ? 'مفعّلة' : 'غير مفعّلة'}</Badge></li>
                     </ul>
                 </Card>
             </div>
@@ -350,7 +350,7 @@ function MembershipsTab({ memberships, events, plans, member, onSell }: Props & 
     if (memberships.length === 0) {
         return (
             <Card>
-                <EmptyState icon={<CalendarPlus className="size-6" />} title="لا توجد عضويات بعد" description="بيع أول عضوية للمشتركة؛ تُفعّل بعد تأكيد الدفع." action={can('memberships.sell') ? <Button onClick={onSell}>بيع عضوية</Button> : undefined} />
+                <EmptyState icon={<CalendarPlus className="size-6" />} title="لا توجد عضويات بعد" description="بيع أول عضوية للعضو؛ تُفعّل بعد تأكيد الدفع." action={can('memberships.sell') ? <Button onClick={onSell}>بيع عضوية</Button> : undefined} />
             </Card>
         );
     }
@@ -478,7 +478,7 @@ function FreezeModal({ membership, onClose }: { membership: MembershipItem | nul
         >
             <form onSubmit={submit} className="space-y-4">
                 <p className="text-sm text-muted">تُلغى الحجوزات القادمة وتُستعاد حصصها، ويُمدَّد تاريخ الانتهاء عند الاستئناف بعدد الأيام الفعلية.</p>
-                <Field label="عدد أيام التجميد" error={form.errors.days} hint={left !== null ? `المتاح: ${dayCount(left)}` : 'اتركيه فارغًا ليبقى التجميد حتى الاستئناف اليدوي'}>
+                <Field label="عدد أيام التجميد" error={form.errors.days} hint={left !== null ? `المتاح: ${dayCount(left)}` : 'اتركه فارغًا ليبقى التجميد حتى الاستئناف اليدوي'}>
                     <Input type="number" min={1} max={left ?? 365} value={form.data.days} onChange={(e) => form.setData('days', e.target.value)} />
                 </Field>
                 <Field label="السبب" error={form.errors.reason}>
@@ -618,7 +618,7 @@ function SellModal({ open, onClose, member, current, plans, hasMemberships }: { 
                         </div>
                     </Field>
                     {form.data.mode === 'new' && (
-                        <Field label="تاريخ البدء" error={form.errors.starts_on} hint="اتركيه فارغًا ليبدأ اليوم. إن تأخر الدفع تبدأ الفترة يوم التفعيل.">
+                        <Field label="تاريخ البدء" error={form.errors.starts_on} hint="اتركه فارغًا ليبدأ اليوم. إن تأخر الدفع تبدأ الفترة يوم التفعيل.">
                             <Input type="date" value={form.data.starts_on} onChange={(e) => form.setData('starts_on', e.target.value)} />
                         </Field>
                     )}
@@ -669,7 +669,7 @@ function ChangePlanModal({ membership, onClose, plans, memberId }: { membership:
             <form onSubmit={submit} className="space-y-4">
                 <p className="text-sm text-muted">تبدأ الباقة الجديدة اليوم، وتُحتسب قيمة الأيام غير المستخدمة من «{membership?.plan}» رصيدًا. تبقى العضوية الحالية فعّالة حتى دفع فاتورة التغيير.</p>
                 <Field label="الباقة الجديدة" error={form.errors.membership_plan_id} required>
-                    <Select value={form.data.membership_plan_id} onChange={(e) => form.setData('membership_plan_id', e.target.value)} placeholder="اختاري الباقة">
+                    <Select value={form.data.membership_plan_id} onChange={(e) => form.setData('membership_plan_id', e.target.value)} placeholder="اختر الباقة">
                         {plans.filter((p) => p.id !== membership?.plan_id).map((p) => <option key={p.id} value={p.id}>{p.name} — {p.duration_label}</option>)}
                     </Select>
                 </Field>
@@ -692,12 +692,12 @@ function PortalPasswordModal({ open, onClose, memberId, hasAccess }: { open: boo
         <Modal
             open={open}
             onClose={onClose}
-            title={hasAccess ? 'تغيير كلمة مرور البوابة' : 'تفعيل بوابة المشتركة'}
+            title={hasAccess ? 'تغيير كلمة مرور البوابة' : 'تفعيل بوابة العضو'}
             size="sm"
             footer={<><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}
         >
             <form onSubmit={submit} className="space-y-3">
-                <p className="text-sm text-muted">تدخل المشتركة إلى البوابة برقم هاتفها وكلمة المرور هذه، ويمكنها تغييرها لاحقًا من ملفها.</p>
+                <p className="text-sm text-muted">يدخل العضو إلى البوابة برقم هاتفه وكلمة المرور هذه، ويمكنه تغييرها لاحقًا من ملفه.</p>
                 <Field label="كلمة المرور (8 أحرف على الأقل)" error={form.errors.password}>
                     <Input type="text" dir="ltr" autoComplete="new-password" value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} />
                 </Field>
@@ -858,7 +858,7 @@ function AttendanceTab({ bookings, checkins }: Props) {
                                         <tr key={b.id}>
                                             <td><Link href={route('club.sessions.show', b.session_id)} className="hover:text-brand">{b.program ?? '—'}</Link></td>
                                             <td className="text-xs num">{b.starts_at}</td>
-                                            <td className="text-xs text-muted">{{ reception: 'الاستقبال', portal: 'البوابة', website: 'الموقع', trainer: 'المدربة' }[b.source] ?? b.source}</td>
+                                            <td className="text-xs text-muted">{{ reception: 'الاستقبال', portal: 'البوابة', website: 'الموقع', trainer: 'المدرب' }[b.source] ?? b.source}</td>
                                             <td><Badge tone={tone}>{l}</Badge></td>
                                         </tr>
                                     );
@@ -912,7 +912,7 @@ function PtTab({ pt, ptPackages, trainers, member }: Props) {
                 {pt.length === 0 ? <EmptyState title="لا توجد باقات تدريب شخصي" /> : (
                     <div className="overflow-x-auto">
                         <table className="table-base">
-                            <thead><tr><th>الباقة</th><th>المدربة</th><th>الجلسات</th><th>تنتهي</th><th>الحالة</th></tr></thead>
+                            <thead><tr><th>الباقة</th><th>المدرب</th><th>الجلسات</th><th>تنتهي</th><th>الحالة</th></tr></thead>
                             <tbody>
                                 {pt.map((s) => {
                                     const [l, tone] = PT_STATUS[s.status] ?? [s.status, 'gray'];
@@ -936,12 +936,12 @@ function PtTab({ pt, ptPackages, trainers, member }: Props) {
                     <CardHeader title="بيع باقة تدريب شخصي" subtitle="تُفعّل بعد دفع الفاتورة" />
                     <form onSubmit={submit} className="space-y-4">
                         <Field label="الباقة" error={form.errors.pt_package_id} required>
-                            <Select value={form.data.pt_package_id} onChange={(e) => form.setData('pt_package_id', e.target.value)} placeholder="اختاري الباقة">
+                            <Select value={form.data.pt_package_id} onChange={(e) => form.setData('pt_package_id', e.target.value)} placeholder="اختر الباقة">
                                 {ptPackages.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.sessions_count} جلسات — {money(p.price, currency)}</option>)}
                             </Select>
                         </Field>
-                        <Field label="المدربة" error={form.errors.trainer_id}>
-                            <Select value={form.data.trainer_id} onChange={(e) => form.setData('trainer_id', e.target.value)} placeholder="مدربة الباقة الافتراضية">
+                        <Field label="المدرب" error={form.errors.trainer_id}>
+                            <Select value={form.data.trainer_id} onChange={(e) => form.setData('trainer_id', e.target.value)} placeholder="مدرب الباقة الافتراضي">
                                 {trainers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </Select>
                         </Field>
@@ -970,7 +970,7 @@ function DocumentsTab({ documents, member }: Props) {
     return (
         <div className="grid gap-6 lg:grid-cols-3">
             <Card padded={false} className="lg:col-span-2">
-                <div className="p-5 pb-0"><CardHeader title="المستندات والعقود" subtitle="محفوظة بشكل خاص ولا تُعرض إلا لمن لديها الصلاحية" /></div>
+                <div className="p-5 pb-0"><CardHeader title="المستندات والعقود" subtitle="محفوظة بشكل خاص ولا تُعرض إلا لمن لديه الصلاحية" /></div>
                 {documents.length === 0 ? <EmptyState icon={<FileText className="size-6" />} title="لا مستندات" /> : (
                     <ul className="divide-y divide-line">
                         {documents.map((d) => (
@@ -1068,7 +1068,7 @@ function CrmTab({ notes, member }: Props) {
                             </Field>
                         </div>
                         <Field label="التفاصيل" error={form.errors.body} required>
-                            <Textarea rows={4} value={form.data.body} onChange={(e) => form.setData('body', e.target.value)} placeholder="اتصلتُ بها بخصوص التجديد…" />
+                            <Textarea rows={4} value={form.data.body} onChange={(e) => form.setData('body', e.target.value)} placeholder="اتصلتُ به بخصوص التجديد…" />
                         </Field>
                         <Field label="موعد المتابعة" error={form.errors.follow_up_on}>
                             <Input type="date" value={form.data.follow_up_on} onChange={(e) => form.setData('follow_up_on', e.target.value)} />
@@ -1122,11 +1122,11 @@ function WhatsAppTab({ messages, templates, member }: Props) {
                 <Card>
                     <CardHeader title="إرسال قالب معتمد" subtitle="القوالب المعتمدة من واتساب فقط" />
                     {templates.length === 0 ? (
-                        <p className="text-sm text-muted">لا توجد قوالب معتمدة. أضيفيها من «واتساب ← القوالب».</p>
+                        <p className="text-sm text-muted">لا توجد قوالب معتمدة. أضفها من «واتساب ← القوالب».</p>
                     ) : (
                         <form onSubmit={submit} className="space-y-4">
                             <Field label="القالب" error={form.errors.template_key}>
-                                <Select value={form.data.template_key} onChange={(e) => form.setData('template_key', e.target.value)} placeholder="اختاري القالب">
+                                <Select value={form.data.template_key} onChange={(e) => form.setData('template_key', e.target.value)} placeholder="اختر القالب">
                                     {templates.map((t) => <option key={t.key} value={t.key}>{t.name}</option>)}
                                 </Select>
                             </Field>
@@ -1134,7 +1134,7 @@ function WhatsAppTab({ messages, templates, member }: Props) {
                             <Button type="submit" className="w-full" loading={form.processing} disabled={!form.data.template_key} icon={<Send className="size-4" />}>إرسال</Button>
                         </form>
                     )}
-                    {!member.whatsapp_opt_in && <p className="mt-3 text-xs text-amber-700">المشتركة غير موافقة على رسائل واتساب؛ لن تُرسل الرسائل.</p>}
+                    {!member.whatsapp_opt_in && <p className="mt-3 text-xs text-amber-700">العضو غير موافق على رسائل واتساب؛ لن تُرسل الرسائل.</p>}
                 </Card>
             )}
         </div>

@@ -4,7 +4,7 @@ import { Button, ConfirmAction } from '@/Components/ui';
 import { useCan } from '@/hooks/useShared';
 
 /**
- * «تمت» / «غابت» for a PT session (both consume it from the package). Before its start time only
+ * «تمت» / «غاب» for a PT session (both consume it from the package). Before its start time only
  * users with pt.close_early can close it, with a reason that goes to the audit log.
  */
 export default function PtCloseActions({ id, started }: { id: number; started: boolean }) {
@@ -15,7 +15,7 @@ export default function PtCloseActions({ id, started }: { id: number; started: b
         return (
             <>
                 <Button size="sm" variant="success" icon={<Check className="size-3.5" />} onClick={() => close('completed')}>تمت</Button>
-                <Button size="sm" variant="outline" icon={<UserX className="size-3.5" />} onClick={() => close('no_show')}>غابت</Button>
+                <Button size="sm" variant="outline" icon={<UserX className="size-3.5" />} onClick={() => close('no_show')}>غاب</Button>
             </>
         );
     }
@@ -30,8 +30,8 @@ export default function PtCloseActions({ id, started }: { id: number; started: b
             <ConfirmAction url={route('club.pt.close', id)} data={{ status: 'completed' }} title="إغلاق مبكر: تمت" message={message} reason="سبب الإغلاق المبكر" confirmLabel="تأكيد" tone="primary" variant="success" icon={<Check className="size-3.5" />}>
                 تمت مبكرًا
             </ConfirmAction>
-            <ConfirmAction url={route('club.pt.close', id)} data={{ status: 'no_show' }} title="إغلاق مبكر: غابت" message={message} reason="سبب الإغلاق المبكر" confirmLabel="تأكيد" tone="primary" variant="outline" icon={<UserX className="size-3.5" />}>
-                غابت مبكرًا
+            <ConfirmAction url={route('club.pt.close', id)} data={{ status: 'no_show' }} title="إغلاق مبكر: غاب" message={message} reason="سبب الإغلاق المبكر" confirmLabel="تأكيد" tone="primary" variant="outline" icon={<UserX className="size-3.5" />}>
+                غاب مبكرًا
             </ConfirmAction>
         </>
     );

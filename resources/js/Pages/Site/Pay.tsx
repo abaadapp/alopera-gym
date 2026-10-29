@@ -74,7 +74,7 @@ export default function Pay({ site, seo, invoice, token, onlinePayments }: { sit
 
                         <div className="mt-6">
                             {invoice.status === 'paid' && (
-                                <p className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-50 p-4 text-sm font-medium text-emerald-700"><CheckCircle2 className="size-5" /> تم سداد هذه الفاتورة بالكامل. شكرًا لكِ!</p>
+                                <p className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-50 p-4 text-sm font-medium text-emerald-700"><CheckCircle2 className="size-5" /> تم سداد هذه الفاتورة بالكامل. شكرًا لك!</p>
                             )}
                             {invoice.status === 'void' && (
                                 <p className="flex items-center justify-center gap-2 rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700"><XCircle className="size-5" /> هذه الفاتورة ملغاة.</p>
@@ -82,7 +82,7 @@ export default function Pay({ site, seo, invoice, token, onlinePayments }: { sit
                             {open && onlinePayments && (
                                 <>
                                     <Button size="lg" className="w-full rounded-full" loading={busy} onClick={pay} icon={<CreditCard className="size-5" />}>
-                                        ادفعي الآن <span className="num">{money(invoice.balance, currency)}</span>
+                                        ادفع الآن <span className="num">{money(invoice.balance, currency)}</span>
                                     </Button>
                                     <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted"><Lock className="size-3.5" /> دفع آمن عبر بوابة الدفع. يتم التفعيل تلقائيًا بعد تأكيد البنك.</p>
                                 </>

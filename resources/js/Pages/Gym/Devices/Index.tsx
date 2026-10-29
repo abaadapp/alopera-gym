@@ -47,7 +47,7 @@ const TYPE_LABELS: Record<string, string> = {
     kiosk: 'شاشة تسجيل ذاتي',
 };
 const DIRECTIONS: Record<string, string> = { in: 'دخول', out: 'خروج', both: 'دخول وخروج' };
-const PURPOSES: Record<string, string> = { members: 'المشتركات', staff: 'الموظفات', both: 'المشتركات والموظفات' };
+const PURPOSES: Record<string, string> = { members: 'الأعضاء', staff: 'الموظفون', both: 'الأعضاء والموظفون' };
 const CREDENTIAL_TYPES: Record<string, string> = { fingerprint: 'بصمة (رقم المستخدم في الجهاز)', card: 'بطاقة', pin: 'رمز PIN', barcode: 'باركود' };
 
 const blank: DeviceForm = { name: '', type: 'qr_reader', vendor: '', model: '', serial_number: '', direction: 'in', purpose: 'members', branch_id: null, is_active: true };
@@ -109,8 +109,8 @@ export default function DevicesIndex({ devices, staffCredentials, staff, branche
                     <div className="flex items-start gap-3">
                         <ShieldAlert className="mt-0.5 size-5 shrink-0 text-amber-700" />
                         <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-amber-900">رمز الجهاز — انسخيه الآن، لن يظهر مرة أخرى</p>
-                            <p className="mt-1 text-sm text-amber-800">أدخليه في إعدادات الجهاز (أو برنامج الربط) كترويسة <span className="font-mono" dir="ltr">Authorization: Bearer …</span></p>
+                            <p className="font-semibold text-amber-900">رمز الجهاز — انسخه الآن، لن يظهر مرة أخرى</p>
+                            <p className="mt-1 text-sm text-amber-800">أدخله في إعدادات الجهاز (أو برنامج الربط) كترويسة <span className="font-mono" dir="ltr">Authorization: Bearer …</span></p>
                             <div className="mt-3 flex flex-wrap items-center gap-2">
                                 <code className="block max-w-full overflow-x-auto rounded-lg bg-white px-3 py-2 font-mono text-sm text-ink" dir="ltr">{flash.token}</code>
                                 <Button size="sm" variant="outline" icon={<Copy className="size-3.5" />} onClick={() => { copy(flash.token!); setCopied(true); }}>
@@ -124,7 +124,7 @@ export default function DevicesIndex({ devices, staffCredentials, staff, branche
 
             <Card padded={false}>
                 {devices.length === 0 ? (
-                    <EmptyState icon={<Fingerprint className="size-6" />} title="لا توجد أجهزة" description="أضيفي جهازًا لتحصلي على رمز الربط. يمكن استخدام الدخول اليدوي وقارئ QR من شاشة الاستقبال بدون أجهزة." action={<Button onClick={() => openForm(null)}>إضافة جهاز</Button>} />
+                    <EmptyState icon={<Fingerprint className="size-6" />} title="لا توجد أجهزة" description="أضف جهازًا لتحصل على رمز الربط. يمكن استخدام الدخول اليدوي وقارئ QR من شاشة الاستقبال بدون أجهزة." action={<Button onClick={() => openForm(null)}>إضافة جهاز</Button>} />
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="table-base">
@@ -169,10 +169,10 @@ export default function DevicesIndex({ devices, staffCredentials, staff, branche
 
             <div className="mt-6 grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
                 <Card>
-                    <CardHeader title="بصمات وبطاقات الموظفات" subtitle="اربطي رقم المستخدمة في جهاز البصمة (أو رقم البطاقة) بحسابها لتسجيل الحضور والانصراف" />
+                    <CardHeader title="بصمات وبطاقات الموظفين" subtitle="اربط رقم المستخدم في جهاز البصمة (أو رقم البطاقة) بحسابه لتسجيل الحضور والانصراف" />
                     <form onSubmit={addCredential} className="grid gap-3 sm:grid-cols-2">
-                        <Field label="الموظفة" error={credForm.errors.holder_id}>
-                            <Select value={credForm.data.holder_id} onChange={(e) => credForm.setData('holder_id', e.target.value)} placeholder="اختاري…" required>
+                        <Field label="الموظف" error={credForm.errors.holder_id}>
+                            <Select value={credForm.data.holder_id} onChange={(e) => credForm.setData('holder_id', e.target.value)} placeholder="اختر…" required>
                                 {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                             </Select>
                         </Field>
@@ -214,7 +214,7 @@ export default function DevicesIndex({ devices, staffCredentials, staff, branche
                 <Card>
                     <CardHeader title="طريقة الربط" subtitle="بروتوكول JSON عام — يتطلب جهازًا أو برنامج وسيط يدعم إرسال طلبات HTTP" />
                     <ol className="list-decimal space-y-2 ps-5 text-sm text-ink/80">
-                        <li>أضيفي الجهاز وانسخي رمزه.</li>
+                        <li>أضف الجهاز وانسخ رمزه.</li>
                         <li>
                             يرسل الجهاز عند كل قراءة طلب <span className="font-mono text-xs" dir="ltr">POST</span> إلى:
                             <code className="mt-1 flex items-center justify-between gap-2 rounded-lg bg-canvas px-3 py-2 font-mono text-xs" dir="ltr">

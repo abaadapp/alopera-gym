@@ -82,7 +82,7 @@ class PortalController extends Controller
         ]);
 
         if (Membership::where('member_id', $member->id)->where('status', Membership::PENDING)->exists()) {
-            throw new BusinessRuleException('renew.pending', 'لديك طلب اشتراك بانتظار الدفع. أكملي دفعه من صفحة الفواتير.', 'membership_plan_id');
+            throw new BusinessRuleException('renew.pending', 'لديك طلب اشتراك بانتظار الدفع. أكمل دفعه من صفحة الفواتير.', 'membership_plan_id');
         }
 
         $membership = $memberships->renew($member, MembershipPlan::findOrFail($data['membership_plan_id']), array_filter(['coupon_code' => $data['coupon_code'] ?? null]));
@@ -92,7 +92,7 @@ class PortalController extends Controller
             return Inertia::location($online->start($invoice, 'portal')->checkout_url);
         }
 
-        return redirect()->route('portal.invoices')->with('success', $invoice->isOpen() ? 'تم إنشاء فاتورة التجديد. ادفعيها في الاستقبال لتفعيل الاشتراك.' : 'تم التجديد.');
+        return redirect()->route('portal.invoices')->with('success', $invoice->isOpen() ? 'تم إنشاء فاتورة التجديد. ادفعها في الاستقبال لتفعيل الاشتراك.' : 'تم التجديد.');
     }
 
     public function invoices(Request $request, OnlinePaymentService $online): Response
@@ -156,7 +156,7 @@ class PortalController extends Controller
     public function cancelBooking(Request $request, Booking $booking, BookingService $bookings): RedirectResponse
     {
         abort_unless($booking->member_id === $this->member($request)->id, 404);
-        $bookings->cancel($booking, false, 'إلغاء من المشتركة');
+        $bookings->cancel($booking, false, 'إلغاء من العضو');
 
         return back()->with('success', 'تم إلغاء الحجز.');
     }

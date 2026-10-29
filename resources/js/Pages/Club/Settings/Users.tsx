@@ -33,7 +33,7 @@ export default function Users({ users, roles, branches }: Props) {
 
     return (
         <ClubLayout title="المستخدمون">
-            <PageHeader back={<SettingsBack />} title="مستخدمات اللوحة" subtitle="حسابات الموظفات وأدوارهن. الصلاحيات تُطبّق على الخادم وليس على الواجهة فقط." actions={<Button icon={<UserPlus className="size-4" />} onClick={() => setEditing('new')}>مستخدمة جديدة</Button>} />
+            <PageHeader back={<SettingsBack />} title="مستخدمو اللوحة" subtitle="حسابات الموظفين وأدوارهم. الصلاحيات تُطبّق على الخادم وليس على الواجهة فقط." actions={<Button icon={<UserPlus className="size-4" />} onClick={() => setEditing('new')}>مستخدم جديد</Button>} />
             <Card padded={false}>
                 {users.length === 0 ? (
                     <EmptyState icon={<UsersIcon className="size-6" />} title="لا توجد حسابات" />
@@ -44,17 +44,17 @@ export default function Users({ users, roles, branches }: Props) {
                             <tbody>
                                 {users.map((u) => (
                                     <tr key={u.id} className={u.is_active ? '' : 'opacity-60'}>
-                                        <td className="font-medium">{u.name}{u.id === auth?.user.id && <span className="ms-1 text-xs text-muted">(أنتِ)</span>}</td>
+                                        <td className="font-medium">{u.name}{u.id === auth?.user.id && <span className="ms-1 text-xs text-muted">(أنت)</span>}</td>
                                         <td className="text-xs" dir="ltr">{u.email}</td>
                                         <td><Badge tone={u.role_key === 'owner' ? 'brand' : 'gray'}>{u.role ?? '—'}</Badge></td>
                                         <td className="text-xs">{u.branch ?? 'كل الفروع'}</td>
-                                        <td className="text-xs text-muted num">{u.last_login_at ?? 'لم تسجّل بعد'}</td>
+                                        <td className="text-xs text-muted num">{u.last_login_at ?? 'لم يسجّل بعد'}</td>
                                         <td>{u.is_active ? <Badge tone="green">نشط</Badge> : <Badge tone="red">موقوف</Badge>}</td>
                                         <td>
                                             <div className="flex justify-end gap-1">
                                                 <Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(u)}>تعديل</Button>
                                                 {u.is_active && u.id !== auth?.user.id && (
-                                                    <ConfirmAction url={route('club.users.destroy', u.id)} method="delete" title="إيقاف الحساب" message={`إيقاف حساب ${u.name}؟ لن تتمكن من الدخول.`} variant="ghost">إيقاف</ConfirmAction>
+                                                    <ConfirmAction url={route('club.users.destroy', u.id)} method="delete" title="إيقاف الحساب" message={`إيقاف حساب ${u.name}؟ لن يتمكن من الدخول.`} variant="ghost">إيقاف</ConfirmAction>
                                                 )}
                                             </div>
                                         </td>
@@ -89,7 +89,7 @@ function UserModal({ user, roles, branches, onClose }: { user: StaffRow | null; 
     };
 
     return (
-        <Modal open onClose={onClose} title={user ? `تعديل: ${user.name}` : 'مستخدمة جديدة'} footer={<><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
+        <Modal open onClose={onClose} title={user ? `تعديل: ${user.name}` : 'مستخدم جديد'} footer={<><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
                 <Field label="الاسم" error={form.errors.name} required className="sm:col-span-2">
                     <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} />
@@ -101,7 +101,7 @@ function UserModal({ user, roles, branches, onClose }: { user: StaffRow | null; 
                     <Input dir="ltr" value={form.data.phone} onChange={(e) => form.setData('phone', e.target.value)} />
                 </Field>
                 <Field label="الدور" error={form.errors.role_id} required>
-                    <Select value={form.data.role_id} onChange={(e) => form.setData('role_id', e.target.value)} placeholder="اختاري الدور">
+                    <Select value={form.data.role_id} onChange={(e) => form.setData('role_id', e.target.value)} placeholder="اختر الدور">
                         {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                     </Select>
                 </Field>
@@ -114,7 +114,7 @@ function UserModal({ user, roles, branches, onClose }: { user: StaffRow | null; 
                     <Input type="password" dir="ltr" autoComplete="new-password" value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} />
                 </Field>
                 {user && <Toggle checked={form.data.is_active} onChange={(v) => form.setData('is_active', v)} label="الحساب نشط" />}
-                <p className="text-xs text-muted sm:col-span-2">لربط حساب مدربة بملفها في الجدول، اختاري الحساب من صفحة المدربات.</p>
+                <p className="text-xs text-muted sm:col-span-2">لربط حساب مدرب بملفه في الجدول، اختر الحساب من صفحة فريق التدريب.</p>
             </form>
         </Modal>
     );

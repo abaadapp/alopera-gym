@@ -27,6 +27,7 @@ final class TenantTables
         'payment_intents',
         'gym_accounts', 'gym_journal_entries', 'gym_journal_lines',
         'gym_job_titles', 'gym_employees', 'gym_payroll_runs', 'gym_payroll_payouts', 'gym_payroll_items',
+        'gym_document_types', 'gym_documents', 'gym_document_renewals', 'gym_document_alerts',
     ];
 
     /** Tenant-related tables deliberately left out, with the reason. */

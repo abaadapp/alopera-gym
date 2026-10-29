@@ -109,10 +109,10 @@ export default function Home({ site, seo, sections, hero, features, about, stats
         plans: plans.length > 0 && (
                     <section className="bg-gradient-to-b from-transparent via-brand-50/60 to-transparent py-16">
                         <div className="mx-auto max-w-6xl px-4">
-                            <SectionTitle eyebrow="الباقات" title="اختاري باقتك" subtitle="أسعار واضحة بلا مفاجآت، وتفعيل فوري بعد الدفع." />
+                            <SectionTitle eyebrow="الباقات" title="اختر الباقة" subtitle="أسعار واضحة بلا مفاجآت، وتفعيل فوري بعد الدفع." />
                             <div className="grid gap-6 pt-3 sm:grid-cols-2 lg:grid-cols-3">
                                 {plans.map((plan) => (
-                                    <PlanCard key={plan.id} plan={plan} currency={currency} cta={site.signup_enabled ? { label: 'اشتركي الآن', href: route('site.join', { plan: plan.id }) } : undefined} />
+                                    <PlanCard key={plan.id} plan={plan} currency={currency} cta={site.signup_enabled ? { label: 'اشترك الآن', href: route('site.join', { plan: plan.id }) } : undefined} />
                                 ))}
                             </div>
                             <p className="mt-8 text-center">
@@ -134,7 +134,7 @@ export default function Home({ site, seo, sections, hero, features, about, stats
         // Trainers
         trainers: trainers.length > 0 && (
                     <section className="mx-auto max-w-6xl px-4 py-14">
-                        <SectionTitle eyebrow="المدربات" title="فريق يرافقكِ بشغف" />
+                        <SectionTitle eyebrow="فريق التدريب" title="فريق يرافقك بشغف" />
                         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">{trainers.map((t) => <TrainerCard key={t.id} trainer={t} compact />)}</div>
                     </section>
                 ),
@@ -163,10 +163,10 @@ export default function Home({ site, seo, sections, hero, features, about, stats
                     <section className="mx-auto max-w-6xl px-4 py-10">
                         <div className="relative overflow-hidden rounded-[2.5rem] bg-brand px-6 py-14 text-center text-white sm:px-14">
                             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.18),transparent_45%),radial-gradient(circle_at_85%_80%,rgba(255,255,255,0.12),transparent_40%)]" />
-                            <h2 className="relative font-display text-3xl font-semibold sm:text-4xl">ابدئي رحلتك اليوم</h2>
-                            <p className="relative mx-auto mt-3 max-w-lg text-white/85">سجّلي خلال دقيقة، ادفعي أونلاين، وابدئي حجز حصصك فورًا.</p>
+                            <h2 className="relative font-display text-3xl font-semibold sm:text-4xl">ابدأ رحلتك اليوم</h2>
+                            <p className="relative mx-auto mt-3 max-w-lg text-white/85">سجّل خلال دقيقة، ادفع أونلاين، وابدأ حجز حصصك فورًا.</p>
                             <Link href={route('site.join')} className="relative mt-8 inline-flex items-center gap-2 rounded-full bg-white px-8 py-3.5 font-medium text-brand-700 shadow-lg hover:bg-brand-50">
-                                اشتركي الآن <ArrowLeft className="size-4" />
+                                اشترك الآن <ArrowLeft className="size-4" />
                             </Link>
                         </div>
                     </section>

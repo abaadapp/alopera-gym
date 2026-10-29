@@ -25,7 +25,7 @@ class CreditNoteController extends Controller
             'refund_now' => ['boolean'],
             'method' => ['required_if:refund_now,true', 'nullable', 'in:cash,bank_transfer,card,other'],
             'reference' => ['nullable', 'string', 'max:120', 'required_if:method,card'],
-        ], ['reference.required_if' => 'أدخلي رقم العملية من جهاز الشبكة.']);
+        ], ['reference.required_if' => 'أدخل رقم العملية من جهاز الشبكة.']);
 
         abort_if($request->boolean('refund_now') && ! $request->user()->can('payments.refund'), 403);
 
@@ -33,7 +33,7 @@ class CreditNoteController extends Controller
             $request->boolean('refund_now') ? ['method' => $data['method'], 'reference' => $data['reference'] ?? null] : null);
 
         return back()->with('success', 'تم إصدار الإشعار الدائن '.$note->number
-            .(! Money::isZero($note->refunded_total) ? ' ورد '.$note->refunded_total.' للعميلة.' : '.'));
+            .(! Money::isZero($note->refunded_total) ? ' ورد '.$note->refunded_total.' للعميل.' : '.'));
     }
 
     /** Pay back money a credit note left overpaid (when it was not refunded at issue time). */
@@ -43,7 +43,7 @@ class CreditNoteController extends Controller
             'amount' => ['required', 'numeric', 'min:0.001'],
             'method' => ['required', 'in:cash,bank_transfer,card,other'],
             'reference' => ['nullable', 'string', 'max:120', 'required_if:method,card'],
-        ], ['reference.required_if' => 'أدخلي رقم العملية من جهاز الشبكة.']);
+        ], ['reference.required_if' => 'أدخل رقم العملية من جهاز الشبكة.']);
 
         $payments->refund($creditNote, $data['amount'], $data['method'], $data['reference'] ?? null);
 

@@ -53,7 +53,7 @@ const lowerIsBetter = new Set(['cancellations', 'freezes', 'expirations', 'expen
 export default function ReportsIndex({ report, filters, canFinancial, canExport }: Props) {
     const currency = useCurrency();
     const can = useCan();
-    const inventory = useShared().modules.inventory;
+    const inventory = useShared().modules.sales;
     const [from, setFrom] = useState(filters.from);
     const [to, setTo] = useState(filters.to);
     const [compareFrom, setCompareFrom] = useState(filters.compare_from);
@@ -220,12 +220,12 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
             )}
 
             {view === 'members' && (
-                <Section title="العضويات والمشتركات" exports={canExport ? [['memberships', 'العضويات'], ...(can('members.export') ? [['members', 'المشتركات'] as [string, string]] : [])] : []} exportLink={exportLink}>
+                <Section title="العضويات والأعضاء" exports={canExport ? [['memberships', 'العضويات'], ...(can('members.export') ? [['members', 'الأعضاء'] as [string, string]] : [])] : []} exportLink={exportLink}>
                     <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
                         <Kpi label="اشتراكات جديدة" metric={m('new_memberships')} format={fmtNum} metricKey="new_memberships" />
                         <Kpi label="تجديدات" metric={m('renewals')} format={fmtNum} metricKey="renewals" />
                         <Kpi label="تغيير/ترقية باقة" metric={m('upgrades')} format={fmtNum} metricKey="upgrades" />
-                        <Kpi label="مشتركات جديدات" metric={m('new_members')} format={fmtNum} metricKey="new_members" />
+                        <Kpi label="أعضاء جدد" metric={m('new_members')} format={fmtNum} metricKey="new_members" />
                         <Kpi label="إلغاءات" metric={m('cancellations')} format={fmtNum} metricKey="cancellations" />
                         <Kpi label="تجميدات" metric={m('freezes')} format={fmtNum} metricKey="freezes" />
                         <Kpi label="عضويات انتهت" metric={m('expirations')} format={fmtNum} metricKey="expirations" />
@@ -261,7 +261,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
                     <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
                         <Kpi label="الحصص" metric={m('sessions')} format={fmtNum} metricKey="sessions" />
                         <Kpi label="الحجوزات" metric={m('bookings')} format={fmtNum} metricKey="bookings" />
-                        <Kpi label="نسبة الحضور" metric={m('attendance_rate')} format={fmtPct} metricKey="attendance_rate" hint="الحاضرات من الحضور + الغياب" />
+                        <Kpi label="نسبة الحضور" metric={m('attendance_rate')} format={fmtPct} metricKey="attendance_rate" hint="الحاضرون من الحضور + الغياب" />
                         <Kpi label="نسبة الإشغال" metric={m('occupancy_rate')} format={fmtPct} metricKey="occupancy_rate" hint="الحجوزات من السعة المتاحة" />
                     </div>
                     <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -270,7 +270,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
                             {report.programs.length ? (
                                 <div className="overflow-x-auto">
                                     <table className="table-base">
-                                        <thead><tr><th>البرنامج</th><th>الحصص</th><th>الحجوزات</th><th>متوسط/حصة</th><th>حضرت</th><th>غابت</th><th>نسبة الحضور</th></tr></thead>
+                                        <thead><tr><th>البرنامج</th><th>الحصص</th><th>الحجوزات</th><th>متوسط/حصة</th><th>حضر</th><th>غاب</th><th>نسبة الحضور</th></tr></thead>
                                         <tbody>
                                             {report.programs.map((p, i) => (
                                                 <tr key={p.program}>
@@ -302,7 +302,7 @@ export default function ReportsIndex({ report, filters, canFinancial, canExport 
                             )}
                         </Card>
                         <Card>
-                            <CardHeader title="المدربات" subtitle="حسب الحجوزات" />
+                            <CardHeader title="فريق التدريب" subtitle="حسب الحجوزات" />
                             {report.trainers.length ? (
                                 <HBars data={report.trainers.map((t) => ({ label: `${t.trainer} (${t.sessions} حصة)`, value: t.bookings }))} />
                             ) : (

@@ -3,6 +3,7 @@ import { Link } from '@inertiajs/react';
 import { CheckCircle2, Clock, Loader2, RefreshCw, XCircle } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
 import { useShared } from '@/hooks/useShared';
+import { useCart } from '@/lib/cart';
 import { money } from '@/lib/format';
 
 interface Props {
@@ -13,6 +14,8 @@ interface Props {
     amount: string;
     currency: string;
     invoice: { number?: string; token?: string | null };
+    /** The link of the website order this payment is for, if any. */
+    order?: string | null;
 }
 
 const POLL_MS = 3000;
@@ -22,8 +25,22 @@ const MAX_POLLS = 40; // ~2 minutes
  * Landing page after the payment gateway. The query string from the gateway is
  * ignored on purpose: only the status recorded by the verified webhook is shown.
  */
-export default function PaymentReturn({ site, seo, reference, status: initial, amount, currency, invoice }: Props) {
+export default function PaymentReturn({ site, seo, reference, status: initial, amount, currency, invoice, order }: Props) {
     const { member } = useShared();
+    const cart = useCart();
+
+    // Back from paying for a shop order: the order exists, so the cart that made it is emptied.
+    useEffect(() => {
+        try {
+            if (order && sessionStorage.getItem('shop:placing')) {
+                sessionStorage.removeItem('shop:placing');
+                cart.clear();
+            }
+        } catch {
+            // ignore
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [order]);
     const [status, setStatus] = useState(initial);
     const [timedOut, setTimedOut] = useState(false);
     const polls = useRef(0);
@@ -97,7 +114,12 @@ export default function PaymentReturn({ site, seo, reference, status: initial, a
                     </dl>
 
                     <div className="mt-6 flex flex-col gap-2">
-                        {(status === 'failed' || status === 'expired') && invoice.token && (
+                        {order && (
+                            <Link href={route('site.shop.order', { token: order })} className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-sm font-medium text-white hover:bg-brand-600">
+                                عرض الطلب وحالته
+                            </Link>
+                        )}
+                        {!order && (status === 'failed' || status === 'expired') && invoice.token && (
                             <Link href={route('site.pay.show', { token: invoice.token })} className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-sm font-medium text-white hover:bg-brand-600">
                                 <RefreshCw className="size-4" /> المحاولة مرة أخرى
                             </Link>

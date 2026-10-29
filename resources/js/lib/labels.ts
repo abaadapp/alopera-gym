@@ -22,7 +22,7 @@ export const invoiceStatus: Record<string, [string, Tone]> = {
     credited: ['ملغاة بإشعار دائن', 'gray'],
 };
 
-export const invoiceType: Record<string, string> = { membership: 'عضوية', pt: 'تدريب شخصي', pos: 'نقطة بيع', other: 'أخرى' };
+export const invoiceType: Record<string, string> = { membership: 'عضوية', pt: 'تدريب شخصي', pos: 'مبيعات المنتجات', other: 'أخرى' };
 
 export const paymentStatus: Record<string, [string, Tone]> = {
     pending: ['بانتظار التأكيد', 'amber'],
@@ -41,8 +41,8 @@ export const paymentMethod: Record<string, string> = {
 
 export const bookingStatus: Record<string, [string, Tone]> = {
     booked: ['محجوز', 'blue'],
-    attended: ['حضرت', 'green'],
-    no_show: ['غابت', 'red'],
+    attended: ['حضر', 'green'],
+    no_show: ['غاب', 'red'],
     cancelled: ['ملغى', 'gray'],
 };
 
@@ -53,9 +53,9 @@ export const sessionStatus: Record<string, [string, Tone]> = {
 };
 
 export const memberStatus: Record<string, [string, Tone]> = {
-    active: ['نشطة', 'green'],
-    inactive: ['غير نشطة', 'gray'],
-    blocked: ['موقوفة', 'red'],
+    active: ['نشط', 'green'],
+    inactive: ['غير نشط', 'gray'],
+    blocked: ['موقوف', 'red'],
 };
 
 export const messageStatus: Record<string, [string, Tone]> = {

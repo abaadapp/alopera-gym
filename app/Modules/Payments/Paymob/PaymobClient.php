@@ -79,12 +79,12 @@ final class PaymobClient
                     'redirection_url' => $returnUrl,
                 ]);
         } catch (ConnectionException $e) {
-            throw new BusinessRuleException('paymob.connection', 'تعذّر الاتصال ببوابة الدفع. حاولي مرة أخرى.');
+            throw new BusinessRuleException('paymob.connection', 'تعذّر الاتصال ببوابة الدفع. حاول مرة أخرى.');
         }
 
         $clientSecret = (string) $response->json('client_secret', '');
         if (! $response->successful() || $clientSecret === '') {
-            throw new BusinessRuleException('paymob.rejected', 'رفضت بوابة الدفع فتح عملية الدفع. تواصلي مع النادي.');
+            throw new BusinessRuleException('paymob.rejected', 'رفضت بوابة الدفع فتح عملية الدفع. تواصل مع النادي.');
         }
 
         return [

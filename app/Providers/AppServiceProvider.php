@@ -7,6 +7,7 @@ use App\Core\Auth\PermissionRegistry;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Modules\Documents\Models\BusinessDocument;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
@@ -70,6 +71,7 @@ class AppServiceProvider extends ServiceProvider
             'product' => Product::class,
             'sale' => Sale::class,
             'purchase_order' => PurchaseOrder::class,
+            'business_document' => BusinessDocument::class,
         ]);
 
         Password::defaults(fn () => $this->app->isProduction()

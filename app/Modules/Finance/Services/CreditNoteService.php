@@ -41,7 +41,7 @@ final class CreditNoteService
                 throw new BusinessRuleException('credit.amount', 'المبلغ أكبر من صافي الفاتورة ('.$invoice->netTotal().').', 'amount');
             }
             if (Money::isZero($invoice->paid_total) && Money::cmp($amount, $invoice->netTotal()) === 0) {
-                throw new BusinessRuleException('credit.use_void', 'الفاتورة غير مدفوعة: لإلغائها بالكامل استخدمي «إلغاء الفاتورة».', 'amount');
+                throw new BusinessRuleException('credit.use_void', 'الفاتورة غير مدفوعة: لإلغائها بالكامل استخدم «إلغاء الفاتورة».', 'amount');
             }
 
             $wasOpen = $invoice->isOpen();

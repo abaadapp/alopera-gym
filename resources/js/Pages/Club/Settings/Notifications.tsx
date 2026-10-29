@@ -28,7 +28,7 @@ export default function NotificationSettings({ rules }: { rules: Rules }) {
 
     return (
         <ClubLayout title="الإشعارات والقوالب">
-            <PageHeader back={<SettingsBack />} title="الإشعارات والقوالب" subtitle="متى تُرسل رسائل واتساب التلقائية للمشتركات" />
+            <PageHeader back={<SettingsBack />} title="الإشعارات والقوالب" subtitle="متى تُرسل رسائل واتساب التلقائية للأعضاء" />
 
             <div className="grid gap-6 lg:grid-cols-3">
                 <form onSubmit={submit} className="lg:col-span-2">
@@ -37,7 +37,7 @@ export default function NotificationSettings({ rules }: { rules: Rules }) {
                         <DaysField label="تذكير قبل انتهاء العضوية بـ (أيام)" values={form.data.expiry_reminder_days} onChange={(v) => form.setData('expiry_reminder_days', v)} max={60} min={0} error={errors.expiry_reminder_days} />
                         <DaysField label="متابعة بعد الانتهاء بـ (أيام)" values={form.data.expired_followup_days} onChange={(v) => form.setData('expired_followup_days', v)} max={180} min={1} error={errors.expired_followup_days} />
                         <div className="mt-2">
-                            <Toggle checked={form.data.notify_class_changes} onChange={(v) => form.setData('notify_class_changes', v)} label="إبلاغ المحجوزات عند تعديل الحصة" hint="تغيير الموعد أو المدربة أو القاعة" />
+                            <Toggle checked={form.data.notify_class_changes} onChange={(v) => form.setData('notify_class_changes', v)} label="إبلاغ أصحاب الحجوزات عند تعديل الحصة" hint="تغيير الموعد أو المدرب أو القاعة" />
                         </div>
                         <div className="mt-6 flex justify-end">
                             <Button type="submit" loading={form.processing}>حفظ</Button>
@@ -52,7 +52,7 @@ export default function NotificationSettings({ rules }: { rules: Rules }) {
                             <Button variant="outline" className="w-full justify-start" href={route('club.templates.index')} icon={<FileText className="size-4" />}>قوالب واتساب</Button>
                             <Button variant="outline" className="w-full justify-start" href={route('club.automation.index')} icon={<Workflow className="size-4" />}>الأتمتة والردود الآلية</Button>
                         </div>
-                        <p className="mt-3 text-xs leading-6 text-muted">لا تُرسل أي رسالة تلقائية إلا إذا كان قالبها معتمدًا من Meta ومفعّلًا، ووافقت المشتركة على الرسائل.</p>
+                        <p className="mt-3 text-xs leading-6 text-muted">لا تُرسل أي رسالة تلقائية إلا إذا كان قالبها معتمدًا من Meta ومفعّلًا، ووافق العضو على الرسائل.</p>
                     </Card>
                 )}
             </div>

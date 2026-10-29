@@ -21,7 +21,7 @@ export default function WebsiteBranding({ club, siteUrl }: Props) {
         <ClubLayout title="الهوية والألوان">
             <PageHeader
                 title="الهوية والألوان"
-                subtitle="شعار النادي وألوانه كما تظهر في الموقع وبوابة المشتركات ولوحة النادي"
+                subtitle="شعار النادي وألوانه كما تظهر في الموقع وبوابة الأعضاء ولوحة النادي"
                 actions={<Button variant="outline" href={siteUrl} external icon={<ExternalLink className="size-4" />}>فتح الموقع</Button>}
             />
             <form onSubmit={submit} className="grid max-w-4xl gap-4 lg:grid-cols-2">
@@ -51,7 +51,7 @@ export default function WebsiteBranding({ club, siteUrl }: Props) {
                         ))}
                     </div>
                     <div className="mt-4 flex items-center gap-2">
-                        <span className="rounded-full px-4 py-2 text-sm font-medium text-white" style={{ background: form.data.primary_color }}>اشتركي الآن</span>
+                        <span className="rounded-full px-4 py-2 text-sm font-medium text-white" style={{ background: form.data.primary_color }}>اشترك الآن</span>
                         <span className="rounded-full px-4 py-2 text-sm font-medium" style={{ background: form.data.secondary_color }}>جدول الحصص</span>
                     </div>
                 </Card>

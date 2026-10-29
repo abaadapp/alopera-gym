@@ -40,7 +40,7 @@ type BookingRow = {
     created_at: string;
 };
 
-const SOURCES: Record<string, string> = { reception: 'الاستقبال', portal: 'البوابة', website: 'الموقع', trainer: 'المدربة' };
+const SOURCES: Record<string, string> = { reception: 'الاستقبال', portal: 'البوابة', website: 'الموقع', trainer: 'المدرب' };
 
 function parseLocal(value: string): Date {
     return new Date(value.replace(' ', 'T'));
@@ -85,8 +85,8 @@ export default function SessionShow({ session, bookings, trainers }: { session: 
                             <ConfirmAction
                                 url={route('club.sessions.cancel', session.id)}
                                 title="إلغاء الحصة"
-                                message={`سيُلغى ${live.length} حجز وتُستعاد حصصهن وتُبلَّغن عبر واتساب.`}
-                                reason="سبب الإلغاء (يصل للمشتركات)"
+                                message={`سيُلغى ${live.length} حجز وتُستعاد حصصهم ويُبلَّغون عبر واتساب.`}
+                                reason="سبب الإلغاء (يصل للأعضاء)"
                                 confirmLabel="إلغاء الحصة"
                                 size="md"
                                 icon={<Ban className="size-4" />}
@@ -109,7 +109,7 @@ export default function SessionShow({ session, bookings, trainers }: { session: 
                     <Card>
                         <dl className="grid grid-cols-2 gap-4">
                             <Stat label="الحالة" value={<Badge tone={statusTone}>{statusLabel}</Badge>} />
-                            <Stat label="المدربة" value={session.trainer ?? '—'} />
+                            <Stat label="المدرب" value={session.trainer ?? '—'} />
                             <Stat label="القاعة" value={session.room ? <span className="inline-flex items-center gap-1"><MapPin className="size-3.5" />{session.room}</span> : '—'} />
                             <Stat label="السعة" value={<span className="num">{session.capacity}</span>} />
                         </dl>
@@ -123,12 +123,12 @@ export default function SessionShow({ session, bookings, trainers }: { session: 
                             </div>
                             <p className="mt-1.5 text-sm num">{session.booked} / {session.capacity}</p>
                         </div>
-                        {attended > 0 && <p className="mt-3 text-sm text-emerald-700">حضرت <span className="num">{attended}</span> من <span className="num">{live.length}</span></p>}
+                        {attended > 0 && <p className="mt-3 text-sm text-emerald-700">حضر <span className="num">{attended}</span> من <span className="num">{live.length}</span></p>}
                     </Card>
 
                     {can('bookings.manage') && scheduled && upcoming && (
                         <Card>
-                            <CardHeader title="حجز لمشتركة" subtitle="يُتحقق من العضوية والسعة تلقائيًا" />
+                            <CardHeader title="حجز لعضو" subtitle="يُتحقق من العضوية والسعة تلقائيًا" />
                             {session.is_full ? (
                                 <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">اكتملت المقاعد — لا يمكن إضافة حجوزات.</p>
                             ) : (
@@ -142,7 +142,7 @@ export default function SessionShow({ session, bookings, trainers }: { session: 
                     <div className="p-5 pb-0">
                         <CardHeader
                             title={`الحجوزات (${live.length})`}
-                            subtitle={attendanceOpen && scheduled ? 'سجّلي الحضور والغياب' : upcoming ? 'يُفتح تسجيل الحضور قبل الحصة بنصف ساعة' : undefined}
+                            subtitle={attendanceOpen && scheduled ? 'سجّل الحضور والغياب' : upcoming ? 'يُفتح تسجيل الحضور قبل الحصة بنصف ساعة' : undefined}
                         />
                     </div>
                     {live.length === 0 ? (
@@ -168,12 +168,12 @@ export default function SessionShow({ session, bookings, trainers }: { session: 
                                         <div className="flex gap-1.5">
                                             {can('attendance.mark') && session.status !== 'cancelled' && (
                                                 <>
-                                                    <Button size="sm" variant={b.status === 'attended' ? 'success' : 'outline'} disabled={!attendanceOpen || busy === b.id} onClick={() => mark(b, 'attended')} icon={<UserCheck className="size-3.5" />}>حضرت</Button>
-                                                    <Button size="sm" variant={b.status === 'no_show' ? 'danger' : 'outline'} disabled={!attendanceOpen || busy === b.id} onClick={() => mark(b, 'no_show')} icon={<UserX className="size-3.5" />}>غابت</Button>
+                                                    <Button size="sm" variant={b.status === 'attended' ? 'success' : 'outline'} disabled={!attendanceOpen || busy === b.id} onClick={() => mark(b, 'attended')} icon={<UserCheck className="size-3.5" />}>حضر</Button>
+                                                    <Button size="sm" variant={b.status === 'no_show' ? 'danger' : 'outline'} disabled={!attendanceOpen || busy === b.id} onClick={() => mark(b, 'no_show')} icon={<UserX className="size-3.5" />}>غاب</Button>
                                                 </>
                                             )}
                                             {can('bookings.manage') && b.status === 'booked' && upcoming && (
-                                                <ConfirmAction url={route('club.bookings.cancel', b.id)} title="إلغاء الحجز" message="ستُستعاد الحصة لرصيد المشتركة وتُبلَّغ." reason="السبب" confirmLabel="إلغاء الحجز" variant="ghost" icon={<X className="size-3.5" />}>
+                                                <ConfirmAction url={route('club.bookings.cancel', b.id)} title="إلغاء الحجز" message="ستُستعاد الحصة لرصيد العضو ويُبلَّغ." reason="السبب" confirmLabel="إلغاء الحجز" variant="ghost" icon={<X className="size-3.5" />}>
                                                     إلغاء
                                                 </ConfirmAction>
                                             )}
@@ -214,7 +214,7 @@ export default function SessionShow({ session, bookings, trainers }: { session: 
                     <Field label="الموعد" error={form.errors.starts_at} className="sm:col-span-2">
                         <Input type="datetime-local" dir="ltr" value={form.data.starts_at} onChange={(e) => form.setData('starts_at', e.target.value)} required />
                     </Field>
-                    <Field label="المدربة" error={form.errors.trainer_id}>
+                    <Field label="المدرب" error={form.errors.trainer_id}>
                         <Select value={form.data.trainer_id} onChange={(e) => form.setData('trainer_id', e.target.value)} placeholder="— بدون —">
                             {trainers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                         </Select>
@@ -227,7 +227,7 @@ export default function SessionShow({ session, bookings, trainers }: { session: 
                     </Field>
                     <p className="flex items-start gap-2 rounded-xl bg-canvas p-3 text-xs text-muted sm:col-span-2">
                         <Clock className="mt-0.5 size-3.5 shrink-0" />
-                        عند تغيير الموعد أو المدربة أو القاعة تُبلَّغ المحجوزات تلقائيًا عبر واتساب (إن كان مفعّلًا).
+                        عند تغيير الموعد أو المدرب أو القاعة يُبلَّغ أصحاب الحجوزات تلقائيًا عبر واتساب (إن كان مفعّلًا).
                     </p>
                 </form>
             </Modal>

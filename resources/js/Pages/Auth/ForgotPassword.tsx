@@ -15,7 +15,7 @@ export default function ForgotPassword() {
     };
 
     return (
-        <AuthLayout title="استعادة كلمة المرور" subtitle="أدخلي بريدك وسنرسل لكِ رابطًا لتعيين كلمة مرور جديدة.">
+        <AuthLayout title="استعادة كلمة المرور" subtitle="أدخل بريدك وسنرسل لك رابطًا لتعيين كلمة مرور جديدة.">
             {flash?.success && (
                 <p className="mb-4 flex items-start gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">
                     <MailCheck className="mt-0.5 size-4 shrink-0" /> {flash.success}

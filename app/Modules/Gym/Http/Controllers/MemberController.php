@@ -81,7 +81,7 @@ class MemberController extends Controller
             $member->forceFill(['photo_path' => ImageStore::store($photo, 'members', 600)])->save();
         }
 
-        return redirect()->route('club.members.show', $member)->with('success', 'تم تسجيل المشتركة '.$member->member_no.'.');
+        return redirect()->route('club.members.show', $member)->with('success', 'تم تسجيل العضو '.$member->member_no.'.');
     }
 
     public function show(Request $request, Member $member, OnlinePaymentService $online): Response
@@ -160,17 +160,17 @@ class MemberController extends Controller
         unset($data['photo']);
         $this->members->update($member, $data);
 
-        return redirect()->route('club.members.show', $member)->with('success', 'تم حفظ بيانات المشتركة.');
+        return redirect()->route('club.members.show', $member)->with('success', 'تم حفظ بيانات العضو.');
     }
 
     public function destroy(Member $member): RedirectResponse
     {
         if ($member->memberships()->whereIn('status', [Membership::ACTIVE, Membership::FROZEN, Membership::SCHEDULED])->exists()) {
-            return back()->with('error', 'لا يمكن حذف مشتركة لديها عضوية سارية. ألغي العضوية أولًا.');
+            return back()->with('error', 'لا يمكن حذف عضو لديه عضوية سارية. ألغِ العضوية أولًا.');
         }
         $member->delete();
 
-        return redirect()->route('club.members.index')->with('success', 'تم حذف المشتركة.');
+        return redirect()->route('club.members.index')->with('success', 'تم حذف العضو.');
     }
 
     public function portalPassword(Request $request, Member $member, AuditLogger $audit): RedirectResponse
@@ -179,7 +179,7 @@ class MemberController extends Controller
         $member->forceFill(['password' => $data['password']])->save();
         $audit->log('member.portal_password_set', $member);
 
-        return back()->with('success', 'تم تعيين كلمة مرور بوابة المشتركة.');
+        return back()->with('success', 'تم تعيين كلمة مرور بوابة العضو.');
     }
 
     public function rotateQr(Member $member, AuditLogger $audit): RedirectResponse

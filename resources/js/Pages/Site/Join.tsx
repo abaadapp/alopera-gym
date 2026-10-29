@@ -44,13 +44,13 @@ export default function Join({ site, seo, plans, selected, onlinePayments, payAt
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero title="اشتركي الآن" subtitle="اختاري باقتك، أكملي بياناتك، وابدئي رحلتك خلال دقائق." icon={<Sparkles className="size-6" />} />
+            <PageHero title="اشترك الآن" subtitle="اختر الباقة، أكمل بياناتك، وابدأ رحلتك خلال دقائق." icon={<Sparkles className="size-6" />} />
 
             <form onSubmit={submit} className="mx-auto max-w-6xl px-4 py-12">
-                <h2 className="mb-1 font-display text-xl font-semibold"><span className="text-brand num">1.</span> اختاري الباقة</h2>
+                <h2 className="mb-1 font-display text-xl font-semibold"><span className="text-brand num">1.</span> اختر الباقة</h2>
                 {form.errors.membership_plan_id && <p className="mb-2 text-sm text-red-600">{form.errors.membership_plan_id}</p>}
                 {plans.length === 0 ? (
-                    <p className="py-10 text-center text-muted">لا توجد باقات متاحة للتسجيل الإلكتروني حاليًا. تواصلي مع النادي.</p>
+                    <p className="py-10 text-center text-muted">لا توجد باقات متاحة للتسجيل الإلكتروني حاليًا. تواصل مع النادي.</p>
                 ) : (
                     <div className="mt-5 grid gap-5 pt-3 sm:grid-cols-2 lg:grid-cols-3">
                         {plans.map((p) => (
@@ -78,7 +78,7 @@ export default function Join({ site, seo, plans, selected, onlinePayments, payAt
                             <Field label="كود الخصم" error={form.errors.coupon_code}>
                                 <Input dir="ltr" value={form.data.coupon_code} onChange={(e) => form.setData('coupon_code', e.target.value.toUpperCase())} placeholder="اختياري" />
                             </Field>
-                            <Field label="كلمة المرور" error={form.errors.password} required hint="لدخول بوابة المشتركة — 8 أحرف على الأقل">
+                            <Field label="كلمة المرور" error={form.errors.password} required hint="لدخول بوابة الأعضاء — 8 أحرف على الأقل">
                                 <Input type="password" dir="ltr" value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} autoComplete="new-password" required />
                             </Field>
                             <Field label="تأكيد كلمة المرور" error={form.errors.password_confirmation} required>
@@ -118,7 +118,7 @@ export default function Join({ site, seo, plans, selected, onlinePayments, payAt
                                     {form.data.coupon_code && <p className="text-xs text-muted">يُطبّق كود الخصم عند إصدار الفاتورة.</p>}
                                 </dl>
                             ) : (
-                                <p className="mt-3 text-sm text-muted">اختاري باقة أولًا.</p>
+                                <p className="mt-3 text-sm text-muted">اختر باقة أولًا.</p>
                             )}
                         </div>
 
@@ -142,7 +142,7 @@ export default function Join({ site, seo, plans, selected, onlinePayments, payAt
                                 {payOnline ? 'التسجيل والانتقال للدفع' : 'إتمام التسجيل'}
                             </Button>
                             <p className="mt-3 text-center text-xs text-muted">
-                                لديكِ حساب؟ <Link href={route('portal.login')} className="font-medium text-brand">سجّلي الدخول</Link>
+                                لديك حساب؟ <Link href={route('portal.login')} className="font-medium text-brand">سجّل الدخول</Link>
                             </p>
                         </div>
                     </aside>

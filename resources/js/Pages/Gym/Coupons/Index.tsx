@@ -64,7 +64,7 @@ export default function CouponsIndex({ coupons, plans }: { coupons: Coupon[]; pl
                                             </td>
                                             <td className="num font-medium">{c.type === 'percent' ? `${Number(c.value)}%` : money(c.value, currency)}</td>
                                             <td className="text-xs">{c.valid_from || c.valid_until ? `${date(c.valid_from)} ← ${date(c.valid_until)}` : 'مفتوحة'}</td>
-                                            <td className="text-xs num">{c.used_count}{c.max_uses !== null ? ` / ${c.max_uses}` : ''}{c.per_member_limit ? <span className="block text-muted">{c.per_member_limit} لكل مشتركة</span> : null}</td>
+                                            <td className="text-xs num">{c.used_count}{c.max_uses !== null ? ` / ${c.max_uses}` : ''}{c.per_member_limit ? <span className="block text-muted">{c.per_member_limit} لكل عضو</span> : null}</td>
                                             <td className="text-xs">{c.plan_ids && c.plan_ids.length > 0 ? c.plan_ids.map(planName).join('، ') : 'كل الباقات'}</td>
                                             <td><Badge tone={tone}>{l}</Badge></td>
                                             <td className="text-end whitespace-nowrap">
@@ -138,7 +138,7 @@ function CouponModal({ open, coupon, plans, onClose }: { open: boolean; coupon: 
                 <Field label="أقصى عدد استخدامات" error={err.max_uses} hint="فارغ = بلا حد">
                     <Input type="number" min={1} value={form.data.max_uses} onChange={(e) => form.setData('max_uses', e.target.value)} />
                 </Field>
-                <Field label="مرات لكل مشتركة" error={err.per_member_limit} hint="فارغ = بلا حد">
+                <Field label="مرات لكل عضو" error={err.per_member_limit} hint="فارغ = بلا حد">
                     <Input type="number" min={1} value={form.data.per_member_limit} onChange={(e) => form.setData('per_member_limit', e.target.value)} />
                 </Field>
                 <Field label="أقل مبلغ للاستخدام" error={err.min_amount}>

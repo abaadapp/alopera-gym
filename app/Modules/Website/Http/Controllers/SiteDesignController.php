@@ -69,7 +69,7 @@ class SiteDesignController extends Controller
         $tenant->forceFill(['primary_color' => $data['primary_color'], 'secondary_color' => $data['secondary_color']])->save();
         $audit->log('website.branding_updated', $tenant, [], $before, $tenant->only('primary_color', 'secondary_color'));
 
-        return back()->with('success', 'حُفظت الهوية. تظهر في الموقع ولوحة النادي وبوابة المشتركات.');
+        return back()->with('success', 'حُفظت الهوية. تظهر في الموقع ولوحة النادي وبوابة الأعضاء.');
     }
 
     private function site(): SiteSetting

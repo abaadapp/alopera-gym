@@ -3,6 +3,7 @@
 namespace App\Modules\Website\Http;
 
 use App\Core\Tenancy\TenantContext;
+use App\Modules\Inventory\Services\ShopSettings;
 use App\Modules\Website\Models\SiteSetting;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -37,6 +38,7 @@ trait RendersSite
                 'social_links' => $site->social_links ?? [],
                 'logo_url' => $tenant->logoUrl(),
                 'signup_enabled' => (bool) $tenant->setting('member_signup_enabled', true),
+                'shop_open' => app(ShopSettings::class)->shopOpen($tenant),
             ],
             'seo' => [
                 'title' => $title ? $title.' | '.$tenant->name : ($site->seo_title ?: $tenant->name),

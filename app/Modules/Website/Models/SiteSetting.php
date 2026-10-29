@@ -34,7 +34,7 @@ class SiteSetting extends Model
         'offers' => 'العروض',
         'plans' => 'العضويات والباقات',
         'programs' => 'البرامج',
-        'trainers' => 'المدربات',
+        'trainers' => 'فريق التدريب',
         'gallery' => 'معرض الصور',
         'news' => 'الأخبار',
         'cta' => 'دعوة للاشتراك والحجز',

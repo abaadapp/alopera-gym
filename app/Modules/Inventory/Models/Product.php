@@ -18,7 +18,7 @@ class Product extends Model
     /** Stock and cost only change through StockService so every change leaves a movement row. */
     protected $guarded = ['id', 'tenant_id', 'stock_quantity', 'cost'];
 
-    protected $attributes = ['is_active' => true, 'track_stock' => true, 'stock_quantity' => 0, 'cost' => 0, 'reorder_level' => 0];
+    protected $attributes = ['is_active' => true, 'show_on_website' => false, 'track_stock' => true, 'stock_quantity' => 0, 'cost' => 0, 'reorder_level' => 0];
 
     protected function casts(): array
     {
@@ -29,6 +29,7 @@ class Product extends Model
             'reorder_level' => 'decimal:3',
             'track_stock' => 'boolean',
             'is_active' => 'boolean',
+            'show_on_website' => 'boolean',
         ];
     }
 
@@ -40,6 +41,18 @@ class Product extends Model
     public function movements(): HasMany
     {
         return $this->hasMany(StockMovement::class)->latest('id');
+    }
+
+    /** On sale in the club's website shop: available and chosen to be shown there. */
+    public function scopeOnWebsite(Builder $query): Builder
+    {
+        return $query->where('is_active', true)->where('show_on_website', true);
+    }
+
+    /** What a customer can still order (null: not counted). */
+    public function available(): ?float
+    {
+        return $this->track_stock ? max(0, (float) $this->stock_quantity) : null;
     }
 
     public function scopeLowStock(Builder $query): Builder

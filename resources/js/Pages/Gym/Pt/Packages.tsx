@@ -78,7 +78,7 @@ export default function PtPackages({ packages, trainers }: { packages: PtPackage
                             <div className="flex items-start justify-between gap-2">
                                 <div>
                                     <p className="font-semibold">{p.name}</p>
-                                    <p className="text-xs text-muted">{p.trainer ?? 'أي مدربة'}</p>
+                                    <p className="text-xs text-muted">{p.trainer ?? 'أي مدرب'}</p>
                                 </div>
                                 <div className="flex flex-col items-end gap-1">
                                     {p.is_public ? <Badge tone="green">في الموقع</Badge> : <Badge tone="gray">داخلية</Badge>}
@@ -123,8 +123,8 @@ export default function PtPackages({ packages, trainers }: { packages: PtPackage
                     <Field label="الصلاحية (يوم)" error={form.errors.validity_days} hint="تبدأ من تاريخ التفعيل بعد الدفع">
                         <Input type="number" min={1} value={form.data.validity_days} onChange={(e) => form.setData('validity_days', e.target.value)} />
                     </Field>
-                    <Field label="المدربة" error={form.errors.trainer_id} className="sm:col-span-2">
-                        <Select value={form.data.trainer_id ?? ''} onChange={(e) => form.setData('trainer_id', e.target.value || null)} placeholder="أي مدربة">
+                    <Field label="المدرب" error={form.errors.trainer_id} className="sm:col-span-2">
+                        <Select value={form.data.trainer_id ?? ''} onChange={(e) => form.setData('trainer_id', e.target.value || null)} placeholder="أي مدرب">
                             {trainers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                         </Select>
                     </Field>

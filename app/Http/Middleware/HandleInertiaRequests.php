@@ -34,7 +34,7 @@ class HandleInertiaRequests extends Middleware
             'dir' => app()->getLocale() === 'ar' ? 'rtl' : 'ltr',
             'auth' => fn () => $this->staff($request),
             'tenant' => fn () => $this->tenant(),
-            'modules' => ['inventory' => PermissionRegistry::moduleEnabled('inventory')],
+            'modules' => ['sales' => PermissionRegistry::moduleEnabled('sales'), 'inventory' => PermissionRegistry::moduleEnabled('inventory')],
             'member' => fn () => $this->member(),
             'flash' => fn () => [
                 'success' => $request->session()->get('success'),

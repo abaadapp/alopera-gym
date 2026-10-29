@@ -77,13 +77,13 @@ final class TenantProvisioner
 
                 SiteSetting::create([
                     'hero_title' => $tenant->name,
-                    'hero_subtitle' => 'ناديك النسائي للياقة والصحة — برامج متنوعة، مدربات محترفات، وأجواء خاصة بكِ.',
-                    'hero_cta_label' => 'اشتركي الآن',
+                    'hero_subtitle' => 'ناديك للياقة والصحة — برامج متنوعة، فريق تدريب محترف، وأجواء تناسبك.',
+                    'hero_cta_label' => 'اشترك الآن',
                     'about_title' => 'عن النادي',
                     'contact_phone' => $tenant->phone,
                     'contact_email' => $tenant->email,
-                    'seo_title' => $tenant->name.' — نادي رياضي نسائي',
-                    'seo_description' => 'اشتركي في '.$tenant->name.': باقات مرنة، حصص جماعية، تدريب شخصي، وحجز أونلاين.',
+                    'seo_title' => $tenant->name.' — نادٍ رياضي',
+                    'seo_description' => 'اشترك في '.$tenant->name.': باقات مرنة، حصص جماعية، تدريب شخصي، وحجز أونلاين.',
                 ]);
 
                 foreach (self::EXPENSE_CATEGORIES as $name) {

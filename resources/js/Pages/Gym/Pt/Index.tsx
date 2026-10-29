@@ -70,7 +70,7 @@ export default function PtIndex({ subscriptions, upcoming, trainers, filters }: 
         <ClubLayout title="التدريب الشخصي">
             <PageHeader
                 title="التدريب الشخصي (PT)"
-                subtitle="باقات الجلسات الفردية وجدولة مواعيدها مع المدربات"
+                subtitle="باقات الجلسات الفردية وجدولة مواعيدها مع المدربين"
                 actions={<Button variant="outline" href={route('club.pt-packages.index')} icon={<Package className="size-4" />}>الباقات</Button>}
             />
 
@@ -80,12 +80,12 @@ export default function PtIndex({ subscriptions, upcoming, trainers, filters }: 
                         <Tabs tabs={TABS} value={filters.status || 'active'} onChange={(key) => router.get(route('club.pt.index'), { status: key }, { preserveState: true })} className="border-0" />
                     </div>
                     {subscriptions.data.length === 0 ? (
-                        <EmptyState icon={<UserCog className="size-6" />} title="لا توجد اشتراكات" description="يُباع التدريب الشخصي من ملف المشتركة (تبويب التدريب الشخصي)، ويُفعّل بعد الدفع." />
+                        <EmptyState icon={<UserCog className="size-6" />} title="لا توجد اشتراكات" description="يُباع التدريب الشخصي من ملف العضو (تبويب التدريب الشخصي)، ويُفعّل بعد الدفع." />
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="table-base">
                                 <thead>
-                                    <tr><th>المشتركة</th><th>الباقة</th><th>المدربة</th><th>الجلسات</th><th>تنتهي</th><th>الحالة</th><th /></tr>
+                                    <tr><th>العضو</th><th>الباقة</th><th>المدرب</th><th>الجلسات</th><th>تنتهي</th><th>الحالة</th><th /></tr>
                                 </thead>
                                 <tbody>
                                     {subscriptions.data.map((s) => {
@@ -128,7 +128,7 @@ export default function PtIndex({ subscriptions, upcoming, trainers, filters }: 
                 </Card>
 
                 <Card>
-                    <CardHeader title="الجلسات القادمة" subtitle="سجّلي إتمام الجلسة أو الغياب (كلاهما يُستهلك من الباقة)" />
+                    <CardHeader title="الجلسات القادمة" subtitle="سجّل إتمام الجلسة أو الغياب (كلاهما يُستهلك من الباقة)" />
                     {upcoming.length === 0 ? (
                         <EmptyState title="لا جلسات مجدولة" />
                     ) : (
@@ -178,11 +178,11 @@ export default function PtIndex({ subscriptions, upcoming, trainers, filters }: 
                     </p>
                 )}
                 <form id="pt-form" onSubmit={submit} className="space-y-4">
-                    <Field label="الموعد" error={form.errors.starts_at} hint="يجب أن يكون ضمن أوقات توفر المدربة ودون تعارض">
+                    <Field label="الموعد" error={form.errors.starts_at} hint="يجب أن يكون ضمن أوقات توفر المدرب ودون تعارض">
                         <Input type="datetime-local" dir="ltr" value={form.data.starts_at} onChange={(e) => form.setData('starts_at', e.target.value)} required />
                     </Field>
-                    <Field label="المدربة" error={form.errors.trainer_id}>
-                        <Select value={form.data.trainer_id} onChange={(e) => form.setData('trainer_id', e.target.value)} placeholder="مدربة الباقة">
+                    <Field label="المدرب" error={form.errors.trainer_id}>
+                        <Select value={form.data.trainer_id} onChange={(e) => form.setData('trainer_id', e.target.value)} placeholder="مدرب الباقة">
                             {trainers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                         </Select>
                     </Field>

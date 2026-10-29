@@ -29,8 +29,8 @@ export default function Post({ site, seo, post }: { site: SiteInfo; seo: { title
                 {post.body && <div className="mt-6 leading-9 whitespace-pre-line text-ink/80">{post.body}</div>}
                 {offer && site.signup_enabled && (
                     <div className="mt-10 rounded-3xl bg-brand-50 p-6 text-center">
-                        <p className="font-display text-xl font-semibold">استفيدي من العرض الآن</p>
-                        <Link href={route('site.join')} className="mt-4 inline-block rounded-full bg-brand px-7 py-3 text-sm font-medium text-white hover:bg-brand-600">اشتركي الآن</Link>
+                        <p className="font-display text-xl font-semibold">استفد من العرض الآن</p>
+                        <Link href={route('site.join')} className="mt-4 inline-block rounded-full bg-brand px-7 py-3 text-sm font-medium text-white hover:bg-brand-600">اشترك الآن</Link>
                     </div>
                 )}
             </article>

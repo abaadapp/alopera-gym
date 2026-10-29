@@ -149,7 +149,7 @@ export default function ScheduleIndex({ slots, programs, trainers, branches }: {
             {programs.length === 0 && manage && (
                 <Card className="mb-4 border-amber-200 bg-amber-50/50">
                     <p className="text-sm text-amber-800">
-                        أضيفي البرامج أولًا من <Link href={route('club.programs.index')} className="font-medium underline">صفحة البرامج</Link> ثم ارجعي لبناء الجدول.
+                        أضف البرامج أولًا من <Link href={route('club.programs.index')} className="font-medium underline">صفحة البرامج</Link> ثم ارجع لبناء الجدول.
                     </p>
                 </Card>
             )}
@@ -163,7 +163,7 @@ export default function ScheduleIndex({ slots, programs, trainers, branches }: {
 
             {visible.length === 0 ? (
                 <Card>
-                    <EmptyState icon={<CalendarDays className="size-6" />} title="الجدول فارغ" description="أضيفي الحصص الأسبوعية المتكررة (اليوم، الوقت، المدربة، السعة)." action={manage && programs.length > 0 ? <Button onClick={() => openCreate()}>إضافة حصة</Button> : undefined} />
+                    <EmptyState icon={<CalendarDays className="size-6" />} title="الجدول فارغ" description="أضف الحصص الأسبوعية المتكررة (اليوم، الوقت، المدرب، السعة)." action={manage && programs.length > 0 ? <Button onClick={() => openCreate()}>إضافة حصة</Button> : undefined} />
                 </Card>
             ) : (
                 <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-7">
@@ -187,7 +187,7 @@ export default function ScheduleIndex({ slots, programs, trainers, branches }: {
                                         >
                                             <p className="text-xs font-semibold num" dir="ltr" style={{ textAlign: 'end' }}>{s.starts_at} – {endTime(s.starts_at, s.duration_minutes)}</p>
                                             <p className="mt-0.5 truncate text-sm font-medium">{s.program}</p>
-                                            <p className="truncate text-xs text-muted">{s.trainer ?? 'بدون مدربة'}</p>
+                                            <p className="truncate text-xs text-muted">{s.trainer ?? 'بدون مدرب'}</p>
                                             <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-muted">
                                                 <span className="inline-flex items-center gap-0.5"><Users className="size-3.5" /><span className="num">{s.capacity}</span></span>
                                                 {s.room && <span className="inline-flex items-center gap-0.5"><MapPin className="size-3.5" />{s.room}</span>}
@@ -248,7 +248,7 @@ export default function ScheduleIndex({ slots, programs, trainers, branches }: {
                     <Field label="وقت البداية" error={form.errors.starts_at} hint={form.data.starts_at ? `تنتهي ${time(endTime(form.data.starts_at, Number(form.data.duration_minutes) || 0))}` : undefined}>
                         <Input type="time" dir="ltr" value={form.data.starts_at} onChange={(e) => form.setData('starts_at', e.target.value)} required />
                     </Field>
-                    <Field label="المدربة" error={form.errors.trainer_id}>
+                    <Field label="المدرب" error={form.errors.trainer_id}>
                         <Select value={form.data.trainer_id ?? ''} onChange={(e) => form.setData('trainer_id', e.target.value || null)} placeholder="— بدون —">
                             {trainers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                         </Select>
@@ -283,7 +283,7 @@ export default function ScheduleIndex({ slots, programs, trainers, branches }: {
                     {editing && (
                         <p className="flex items-start gap-2 rounded-xl bg-canvas p-3 text-xs text-muted sm:col-span-2">
                             <Clock className="mt-0.5 size-3.5 shrink-0" />
-                            عند الحفظ تُعاد بناء المواعيد القادمة غير المحجوزة. المواعيد المحجوزة تحتفظ بوقتها وتأخذ المدربة والقاعة والسعة الجديدة.
+                            عند الحفظ تُعاد بناء المواعيد القادمة غير المحجوزة. المواعيد المحجوزة تحتفظ بوقتها وتأخذ المدرب والقاعة والسعة الجديدة.
                         </p>
                     )}
                 </form>

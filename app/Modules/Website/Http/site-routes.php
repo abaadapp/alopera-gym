@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Inventory\Http\Controllers\ShopController;
 use App\Modules\Website\Http\Controllers\PayController;
 use App\Modules\Website\Http\Controllers\PortalAuthController;
 use App\Modules\Website\Http\Controllers\PortalController;
@@ -17,6 +18,14 @@ Route::get('/news/{slug}', [SiteController::class, 'showPost'])->name('site.post
 Route::get('/contact', [SiteController::class, 'contact'])->name('site.contact');
 Route::post('/contact', [SiteController::class, 'sendContact'])->middleware('throttle:public-forms')->name('site.contact.send');
 Route::get('/sitemap.xml', [SiteController::class, 'sitemap'])->name('site.sitemap');
+
+// Shop: the products the club shows on its website; orders land in the panel (sales module).
+Route::get('/shop', [ShopController::class, 'index'])->name('site.shop');
+Route::get('/shop/cart', [ShopController::class, 'cart'])->name('site.shop.cart');
+Route::get('/shop/{product}', [ShopController::class, 'show'])->whereNumber('product')->name('site.shop.product');
+Route::post('/shop/orders', [ShopController::class, 'store'])->middleware('throttle:public-forms')->name('site.shop.order.store');
+Route::get('/shop/orders/{token}', [ShopController::class, 'order'])->where('token', '[A-Za-z0-9]{40}')->name('site.shop.order');
+Route::post('/shop/orders/{token}/pay', [ShopController::class, 'pay'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:public-forms')->name('site.shop.order.pay');
 
 // Sign-up with plan choice
 Route::get('/join', [PortalAuthController::class, 'register'])->name('site.join');

@@ -117,7 +117,7 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                 subtitle="بحث، تسجيل دخول، بيع وتجديد، تحصيل، حجز، وتواصل — من شاشة واحدة"
                 actions={
                     <>
-                        {can('members.manage') && <Button href={route('club.members.create')} icon={<UserPlus className="size-4" />}>مشتركة جديدة</Button>}
+                        {can('members.manage') && <Button href={route('club.members.create')} icon={<UserPlus className="size-4" />}>عضو جديد</Button>}
                         {can('pos.sell') && <Button variant="outline" href={route('club.pos.index')} icon={<ShoppingBag className="size-4" />}>نقطة البيع</Button>}
                     </>
                 }
@@ -135,7 +135,7 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                     <Card>
                         <div className="grid gap-4 md:grid-cols-2">
                             <div>
-                                <p className="label">البحث عن مشتركة</p>
+                                <p className="label">البحث عن عضو</p>
                                 <MemberPicker onSelect={(m) => { setSelected(m); setDecision(null); setScanError(null); }} autoFocus={false} />
                             </div>
                             {can('checkin.perform') && (
@@ -143,7 +143,7 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                                     <p className="label">مسح رمز QR</p>
                                     <div className="relative">
                                         <QrCode className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted" />
-                                        <input ref={scanRef} className="input ps-9" value={qr} onChange={(e) => setQr(e.target.value)} placeholder="وجّهي القارئ إلى الرمز…" dir="ltr" autoComplete="off" />
+                                        <input ref={scanRef} className="input ps-9" value={qr} onChange={(e) => setQr(e.target.value)} placeholder="وجّه القارئ إلى الرمز…" dir="ltr" autoComplete="off" />
                                     </div>
                                 </form>
                             )}
@@ -156,7 +156,7 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                             {decision?.member?.photo_url && <img src={decision.member.photo_url} alt="" className="size-14 rounded-xl object-cover" />}
                             <div className="min-w-0 flex-1">
                                 <p className={`text-lg font-semibold ${decision?.allowed ? 'text-emerald-800' : 'text-red-800'}`}>
-                                    {decision ? (decision.allowed ? (decision.reason === 'duplicate_scan' ? 'دخول مسموح (مسجّلة قبل قليل — لم يُحتسب مرة أخرى)' : 'دخول مسموح') : `مرفوض: ${decision.message}`) : scanError}
+                                    {decision ? (decision.allowed ? (decision.reason === 'duplicate_scan' ? 'دخول مسموح (مسجّل قبل قليل — لم يُحتسب مرة أخرى)' : 'دخول مسموح') : `مرفوض: ${decision.message}`) : scanError}
                                 </p>
                                 {decision?.member && (
                                     <p className="text-sm text-ink/80">
@@ -212,7 +212,7 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                         </Card>
                     ) : (
                         <Card>
-                            <EmptyState icon={<ScanLine className="size-6" />} title="ابحثي عن مشتركة أو امسحي رمزها" description="تظهر حالة العضوية فورًا مع الإجراءات المتاحة." />
+                            <EmptyState icon={<ScanLine className="size-6" />} title="ابحث عن عضو أو امسح رمزه" description="تظهر حالة العضوية فورًا مع الإجراءات المتاحة." />
                         </Card>
                     )}
 
@@ -247,7 +247,7 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                                     <li key={c.id} className="flex items-center justify-between gap-2 py-2 text-sm">
                                         <span className="flex min-w-0 items-center gap-2">
                                             {c.result === 'allowed' ? <CheckCircle2 className="size-4 shrink-0 text-emerald-600" /> : c.result === 'duplicate' ? <CheckCircle2 className="size-4 shrink-0 text-amber-500" /> : <XCircle className="size-4 shrink-0 text-red-600" />}
-                                            {c.member_id ? <Link href={route('club.members.show', c.member_id)} className="truncate hover:text-brand">{c.member}</Link> : <span className="text-muted">غير معروفة</span>}
+                                            {c.member_id ? <Link href={route('club.members.show', c.member_id)} className="truncate hover:text-brand">{c.member}</Link> : <span className="text-muted">غير معروف</span>}
                                         </span>
                                         <span className="shrink-0 text-xs text-muted">
                                             {c.result === 'denied' && <span className="me-2 text-red-600">{checkinReason[c.reason ?? ''] ?? c.reason}</span>}
@@ -342,7 +342,7 @@ function QuickSellModal({ open, onClose, member, plans }: { open: boolean; onClo
                 <Field label="كود الخصم" error={form.errors.coupon_code}>
                     <Input dir="ltr" value={form.data.coupon_code} onChange={(e) => form.setData('coupon_code', e.target.value.toUpperCase())} />
                 </Field>
-                <p className="text-xs text-muted">{member.membership ? 'يبدأ التجديد بعد انتهاء العضوية الحالية، فلا تخسر المشتركة أي يوم.' : 'تبدأ العضوية اليوم.'} تُفعّل بعد اكتمال الدفع، وستنتقلين لصفحة الفاتورة للتحصيل.</p>
+                <p className="text-xs text-muted">{member.membership ? 'يبدأ التجديد بعد انتهاء العضوية الحالية، فلا يخسر العضو أي يوم.' : 'تبدأ العضوية اليوم.'} تُفعّل بعد اكتمال الدفع، وستنتقل لصفحة الفاتورة للتحصيل.</p>
             </form>
         </Modal>
     );
@@ -369,7 +369,7 @@ function QuickBookModal({ open, onClose, memberId, sessions }: { open: boolean; 
     return (
         <Modal open={open} onClose={onClose} title="حجز حصة اليوم" size="sm" footer={<><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={busy} disabled={!sessionId}>حجز</Button></>}>
             {upcoming.length === 0 ? (
-                <p className="text-sm text-muted">لا توجد حصص متبقية اليوم. للحجز في أيام أخرى افتحي «الحصص والحجوزات».</p>
+                <p className="text-sm text-muted">لا توجد حصص متبقية اليوم. للحجز في أيام أخرى افتح «الحصص والحجوزات».</p>
             ) : (
                 <div className="space-y-2">
                     {upcoming.map((s) => (

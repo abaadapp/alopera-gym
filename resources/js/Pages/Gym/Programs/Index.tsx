@@ -23,7 +23,7 @@ type Program = {
 };
 
 const CATEGORIES: Record<string, string> = { class: 'حصة جماعية', program: 'برنامج تدريبي', pt: 'تدريب شخصي' };
-const LEVELS: Record<string, string> = { all: 'كل المستويات', beginner: 'مبتدئات', intermediate: 'متوسطات', advanced: 'متقدمات' };
+const LEVELS: Record<string, string> = { all: 'كل المستويات', beginner: 'مبتدئ', intermediate: 'متوسط', advanced: 'متقدم' };
 
 type FormData = {
     name: string;
@@ -129,7 +129,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
 
             {programs.length === 0 ? (
                 <Card>
-                    <EmptyState icon={<Dumbbell className="size-6" />} title="لا توجد برامج بعد" description="أضيفي أول برنامج (زومبا، بيلاتس، تمارين قوة…) ثم أضيفيه للجدول الأسبوعي." action={<Button onClick={openCreate}>إضافة برنامج</Button>} />
+                    <EmptyState icon={<Dumbbell className="size-6" />} title="لا توجد برامج بعد" description="أضف أول برنامج (زومبا، بيلاتس، تمارين قوة…) ثم أضفه للجدول الأسبوعي." action={<Button onClick={openCreate}>إضافة برنامج</Button>} />
                 </Card>
             ) : (
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -226,7 +226,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                     <Field label="صورة البرنامج" error={form.errors.image} className="sm:col-span-2" hint="تُضغط تلقائيًا لتسريع الموقع">
                         <label className="flex cursor-pointer items-center gap-4 rounded-xl border border-dashed border-line p-3 hover:border-brand-300">
                             {preview ? <img src={preview} alt="" className="size-16 rounded-lg object-cover" /> : <span className="grid size-16 place-items-center rounded-lg bg-brand-50 text-brand"><ImagePlus className="size-6" /></span>}
-                            <span className="text-sm text-muted">اختاري صورة (JPG/PNG/WebP)</span>
+                            <span className="text-sm text-muted">اختر صورة (JPG/PNG/WebP)</span>
                             <input
                                 type="file"
                                 accept="image/*"

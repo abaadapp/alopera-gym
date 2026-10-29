@@ -27,12 +27,12 @@ interface Props {
 }
 
 const SEGMENT_LABELS: Record<string, string> = {
-    all: 'كل الموافقات على التسويق',
+    all: 'كل الموافقين على التسويق',
     active: 'العضويات النشطة',
-    expiring: 'تنتهي عضويتها خلال',
-    expired: 'انتهت عضويتها خلال آخر',
-    inactive: 'لم تزر النادي منذ',
-    new: 'انضمت خلال آخر',
+    expiring: 'تنتهي عضويته خلال',
+    expired: 'انتهت عضويته خلال آخر',
+    inactive: 'لم يزر النادي منذ',
+    new: 'انضم خلال آخر',
 };
 
 export default function CampaignShow({ campaign, messages }: Props) {
@@ -54,7 +54,7 @@ export default function CampaignShow({ campaign, messages }: Props) {
                             <ConfirmAction
                                 url={route('club.campaigns.launch', campaign.id)}
                                 title={campaign.scheduled_at ? 'جدولة الحملة' : 'إطلاق الحملة الآن'}
-                                message={`سيتم إرسال القالب إلى ${number(campaign.audience_size ?? 0)} مشتركة موافقة على التسويق. لا يمكن التراجع عن الرسائل المرسلة.`}
+                                message={`سيتم إرسال القالب إلى ${number(campaign.audience_size ?? 0)} عضو موافق على التسويق. لا يمكن التراجع عن الرسائل المرسلة.`}
                                 confirmLabel={campaign.scheduled_at ? 'جدولة' : 'إطلاق'}
                                 variant="primary"
                                 size="md"
@@ -74,7 +74,7 @@ export default function CampaignShow({ campaign, messages }: Props) {
             />
 
             <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-                <StatCard label="المستلمات" value={number(total || campaign.audience_size || 0)} icon={<Users className="size-5" />} hint={total === 0 && campaign.audience_size !== null ? 'الجمهور المتوقع قبل الإطلاق' : undefined} />
+                <StatCard label="المستلمون" value={number(total || campaign.audience_size || 0)} icon={<Users className="size-5" />} hint={total === 0 && campaign.audience_size !== null ? 'الجمهور المتوقع قبل الإطلاق' : undefined} />
                 <StatCard label="أُرسلت" value={number(campaign.sent_count)} tone="blue" icon={<Send className="size-5" />} hint={`${pct(campaign.sent_count)}%`} />
                 <StatCard label="وصلت" value={number(campaign.delivered_count)} tone="green" icon={<CheckCheck className="size-5" />} hint={`${pct(campaign.delivered_count)}%`} />
                 <StatCard label="قُرئت" value={number(campaign.read_count)} tone="violet" icon={<Eye className="size-5" />} hint={`${pct(campaign.read_count)}% · فشلت ${number(campaign.failed_count)}`} />
@@ -90,7 +90,7 @@ export default function CampaignShow({ campaign, messages }: Props) {
                                 {SEGMENT_LABELS[campaign.audience?.segment] ?? campaign.audience?.segment}
                                 {campaign.audience?.days ? <> <span className="num">{campaign.audience.days}</span> يوم</> : null}
                                 {campaign.audience?.plan_ids?.length ? <span className="block text-xs text-muted">مقيّدة بـ <span className="num">{campaign.audience.plan_ids.length}</span> باقة</span> : null}
-                                {campaign.audience?.program_ids?.length ? <span className="block text-xs text-muted">حجزن <span className="num">{campaign.audience.program_ids.length}</span> برنامجًا محددًا</span> : null}
+                                {campaign.audience?.program_ids?.length ? <span className="block text-xs text-muted">حجزوا <span className="num">{campaign.audience.program_ids.length}</span> برنامجًا محددًا</span> : null}
                             </dd>
                         </div>
                         {campaign.started_at && <div><dt className="text-xs text-muted">بدأ الإرسال</dt><dd className="num">{campaign.started_at}</dd></div>}
@@ -107,14 +107,14 @@ export default function CampaignShow({ campaign, messages }: Props) {
 
                 <Card padded={false} className="lg:col-span-2">
                     <div className="p-5 pb-0">
-                        <CardHeader title="المستلمات" subtitle="آخر 200 رسالة في هذه الحملة" />
+                        <CardHeader title="المستلمون" subtitle="آخر 200 رسالة في هذه الحملة" />
                     </div>
                     {messages.length === 0 ? (
                         <EmptyState title="لم تُرسل رسائل بعد" />
                     ) : (
                         <div className="max-h-[32rem] overflow-auto">
                             <table className="table-base">
-                                <thead><tr><th>المشتركة</th><th>الحالة</th><th>وقت الإرسال</th></tr></thead>
+                                <thead><tr><th>العضو</th><th>الحالة</th><th>وقت الإرسال</th></tr></thead>
                                 <tbody>
                                     {messages.map((m) => {
                                         const [l, t] = label(messageStatus, m.status);

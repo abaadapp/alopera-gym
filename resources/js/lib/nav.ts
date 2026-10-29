@@ -1,6 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
-import { BarChart3, Briefcase, DoorOpen, Dumbbell, Globe, LayoutGrid, MessageCircle, ScanLine, Settings, Ticket, Users, Wallet } from 'lucide-react';
+import { BarChart3, Briefcase, DoorOpen, Dumbbell, FolderOpen, Globe, LayoutGrid, MessageCircle, ScanLine, Settings, ShoppingBag, Ticket, Users, Wallet } from 'lucide-react';
 import { useCan, useShared } from '@/hooks/useShared';
 
 /**
@@ -16,7 +16,7 @@ export type NavSection = { label: string; icon: LucideIcon; tabs: NavTab[]; matc
 export type NavGroup = { sections: NavSection[]; footer?: boolean };
 
 /** Settings screens live behind the settings hub; none of them appears in the main menu. */
-const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'integrations.manage', 'audit.view', 'backups.manage', 'billing.view', 'accounting.manage'];
+const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'integrations.manage', 'audit.view', 'backups.manage', 'billing.view', 'accounting.manage', 'documents.manage'];
 
 export const NAV: NavGroup[] = [
     {
@@ -27,7 +27,7 @@ export const NAV: NavGroup[] = [
     },
     {
         sections: [
-            { label: 'المشتركات', icon: Users, tabs: [{ label: 'المشتركات', route: 'club.members.index', permission: 'members.view', match: 'club.members.*' }] },
+            { label: 'الأعضاء', icon: Users, tabs: [{ label: 'الأعضاء', route: 'club.members.index', permission: 'members.view', match: 'club.members.*' }] },
             {
                 label: 'العضويات والباقات',
                 icon: Ticket,
@@ -41,17 +41,17 @@ export const NAV: NavGroup[] = [
                 label: 'الحصص والتدريب',
                 icon: Dumbbell,
                 tabs: [
-                    { label: 'شاشة المدربة', route: 'club.trainer', permission: 'classes.view', roleKey: 'trainer', match: 'club.trainer.*' },
+                    { label: 'لوحة المدرب', route: 'club.trainer', permission: 'classes.view', roleKey: 'trainer', match: 'club.trainer.*' },
                     { label: 'الجدول الأسبوعي', route: 'club.schedule.index', permission: 'classes.view', match: 'club.schedule.*' },
                     { label: 'الحصص والحجوزات', route: 'club.sessions.index', permission: 'classes.view', match: ['club.sessions.*', 'club.bookings.*'] },
                     { label: 'البرامج', route: 'club.programs.index', permission: 'classes.manage', match: 'club.programs.*' },
-                    { label: 'المدربات', route: 'club.trainers.index', permission: 'trainers.manage', match: 'club.trainers.*' },
+                    { label: 'فريق التدريب', route: 'club.trainers.index', permission: 'trainers.manage', match: 'club.trainers.*' },
                     { label: 'التدريب الشخصي', route: 'club.pt.index', permission: 'pt.manage', match: 'club.pt.*' },
                     { label: 'باقات التدريب الشخصي', route: 'club.pt-packages.index', permission: 'pt.manage', match: 'club.pt-packages.*' },
                 ],
             },
             {
-                label: 'دخول المشتركات والحضور',
+                label: 'دخول الأعضاء والحضور',
                 icon: DoorOpen,
                 tabs: [
                     { label: 'سجل الدخول', route: 'club.checkins.index', permission: 'checkin.view', match: 'club.checkins.*' },
@@ -62,6 +62,18 @@ export const NAV: NavGroup[] = [
     },
     {
         sections: [
+            {
+                label: 'المبيعات',
+                icon: ShoppingBag,
+                tabs: [
+                    { label: 'ملخص المبيعات', route: 'club.sales.summary', permission: 'sales.view' },
+                    { label: 'نقطة البيع', route: 'club.pos.index', permission: 'pos.sell' },
+                    { label: 'عمليات البيع', route: 'club.sales.index', permission: 'sales.view' },
+                    { label: 'المنتجات', route: 'club.products.index', permission: 'products.manage' },
+                    { label: 'طلبات الموقع الإلكتروني', route: 'club.sales.orders.index', permission: 'orders.manage' },
+                    { label: 'تقارير المبيعات', route: 'club.sales.reports', permission: 'sales.view' },
+                ],
+            },
             {
                 label: 'المالية',
                 icon: Wallet,
@@ -89,6 +101,19 @@ export const NAV: NavGroup[] = [
                     { label: 'المسميات الوظيفية', route: 'club.job-titles.index', permission: 'employees.view', match: 'club.job-titles.*' },
                 ],
             },
+            {
+                label: 'المستندات',
+                icon: FolderOpen,
+                // One list page with views (the `view` query parameter), the renewal log and the document types.
+                tabs: [
+                    { label: 'جميع المستندات', route: 'club.business-documents.index', params: { view: 'all' }, permission: 'documents.view' },
+                    { label: 'قريبة الانتهاء', route: 'club.business-documents.index', params: { view: 'expiring' }, permission: 'documents.view' },
+                    { label: 'منتهية', route: 'club.business-documents.index', params: { view: 'expired' }, permission: 'documents.view' },
+                    { label: 'سجل التجديدات', route: 'club.business-documents.renewals', permission: 'documents.view' },
+                    { label: 'أنواع المستندات', route: 'club.document-types.index', permission: 'documents.manage' },
+                ],
+                match: ['club.business-documents.*', 'club.document-types.*'],
+            },
         ],
     },
     {
@@ -110,7 +135,7 @@ export const NAV: NavGroup[] = [
                 // One page, three views of it: the tab is the `section` query parameter.
                 tabs: [
                     { label: 'المالية', route: 'club.reports.index', params: { section: 'finance' }, permission: 'reports.financial' },
-                    { label: 'العضويات والمشتركات', route: 'club.reports.index', params: { section: 'members' }, permission: 'reports.view' },
+                    { label: 'العضويات والأعضاء', route: 'club.reports.index', params: { section: 'members' }, permission: 'reports.view' },
                     { label: 'الحصص والحضور', route: 'club.reports.index', params: { section: 'classes' }, permission: 'reports.view' },
                 ],
                 match: ['club.reports.*'],

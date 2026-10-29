@@ -31,7 +31,7 @@ export default function Invoice({ site, seo, invoice, club }: Props) {
                     <div className="flex gap-2">
                         {invoice.pay_url && (
                             <a href={invoice.pay_url} className="inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-600">
-                                <CreditCard className="size-4" /> ادفعي المتبقي
+                                <CreditCard className="size-4" /> ادفع المتبقي
                             </a>
                         )}
                         <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-4 py-2 text-sm hover:bg-brand-50">

@@ -73,13 +73,13 @@ export default function Inbox({ conversations, active, enabled, filters }: Props
 
     return (
         <ClubLayout title="محادثات واتساب">
-            <PageHeader title="محادثات واتساب" subtitle="الرسائل الواردة من المشتركات والرد عليها خلال نافذة الـ24 ساعة" />
+            <PageHeader title="محادثات واتساب" subtitle="الرسائل الواردة من الأعضاء والرد عليها خلال نافذة الـ24 ساعة" />
 
             {!enabled && (
                 <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                     ربط واتساب غير مفعّل لهذا النادي، لذلك لن تصل رسائل جديدة ولن تُرسل الردود.
                     {can('integrations.manage') && (
-                        <Link href={route('club.integrations.index')} className="ms-2 font-medium underline">فعّليه من إعدادات الربط</Link>
+                        <Link href={route('club.integrations.index')} className="ms-2 font-medium underline">فعّله من إعدادات الربط</Link>
                     )}
                 </div>
             )}
@@ -118,7 +118,7 @@ export default function Inbox({ conversations, active, enabled, filters }: Props
                                                         <span className="shrink-0 text-[11px] text-muted num">{c.last_message_at?.slice(5) ?? ''}</span>
                                                     </span>
                                                     <span className="flex items-center justify-between gap-2">
-                                                        <span className="truncate text-xs text-muted">{c.member ? `مشتركة · ${c.member.member_no}` : <span className="num">{phone(c.phone)}</span>}</span>
+                                                        <span className="truncate text-xs text-muted">{c.member ? `عضو · ${c.member.member_no}` : <span className="num">{phone(c.phone)}</span>}</span>
                                                         {c.unread_count > 0 && <span className="rounded-full bg-brand px-1.5 text-[11px] text-white num">{c.unread_count}</span>}
                                                     </span>
                                                 </span>
@@ -134,7 +134,7 @@ export default function Inbox({ conversations, active, enabled, filters }: Props
                     <section className={cn('flex min-h-[70vh] flex-col', !active && 'hidden lg:flex')}>
                         {!active ? (
                             <div className="grid flex-1 place-items-center">
-                                <EmptyState icon={<MessageCircle className="size-6" />} title="اختاري محادثة" description="تظهر هنا الرسائل الواردة والردود والقوالب المرسلة." />
+                                <EmptyState icon={<MessageCircle className="size-6" />} title="اختر محادثة" description="تظهر هنا الرسائل الواردة والردود والقوالب المرسلة." />
                             </div>
                         ) : (
                             <>
@@ -151,7 +151,7 @@ export default function Inbox({ conversations, active, enabled, filters }: Props
                                     <div className="flex items-center gap-2">
                                         {active.member_id && can('members.view') && (
                                             <Button variant="outline" size="sm" href={route('club.members.show', active.member_id)} icon={<UserRound className="size-3.5" />}>
-                                                ملف المشتركة
+                                                ملف العضو
                                             </Button>
                                         )}
                                         <Button variant={active.status === 'open' ? 'secondary' : 'outline'} size="sm" icon={<CheckCheck className="size-3.5" />} onClick={() => router.post(route('club.inbox.close', active.id), {}, { preserveScroll: true })}>
@@ -188,7 +188,7 @@ export default function Inbox({ conversations, active, enabled, filters }: Props
                                             <div className="flex items-start gap-2 rounded-xl bg-stone-100 px-3 py-2.5 text-sm text-stone-600">
                                                 <Lock className="mt-0.5 size-4 shrink-0" />
                                                 <span>
-                                                    انتهت نافذة الـ24 ساعة منذ آخر رسالة من المشتركة؛ يسمح واتساب بالرد الحر داخلها فقط. لإرسال رسالة الآن استخدمي قالبًا معتمدًا من ملف المشتركة.
+                                                    انتهت نافذة الـ24 ساعة منذ آخر رسالة من العضو؛ يسمح واتساب بالرد الحر داخلها فقط. لإرسال رسالة الآن استخدم قالبًا معتمدًا من ملف العضو.
                                                 </span>
                                             </div>
                                         ) : (
@@ -204,7 +204,7 @@ export default function Inbox({ conversations, active, enabled, filters }: Props
                                                             send(e as unknown as FormEvent);
                                                         }
                                                     }}
-                                                    placeholder="اكتبي ردك… (Enter للإرسال)"
+                                                    placeholder="اكتب ردك… (Enter للإرسال)"
                                                     disabled={!enabled}
                                                 />
                                                 <Button type="submit" loading={form.processing} disabled={!enabled || form.data.body.trim() === ''} icon={<Send className="size-4" />}>

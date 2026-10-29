@@ -207,7 +207,7 @@ class PayrollTest extends TestCase
 
         $this->asTenant($club, function () {
             $this->assertSame(2, Employee::count());
-            $this->assertSame('مدربة', Employee::firstWhere('name', 'كوتش دانة')->jobTitle->name);
+            $this->assertSame('مدرب', Employee::firstWhere('name', 'كوتش دانة')->jobTitle->name);
         });
     }
 

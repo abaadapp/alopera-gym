@@ -24,8 +24,8 @@ class LandingController extends Controller
                 ->map(fn (Tenant $t) => ['name' => $t->name, 'slug' => $t->slug, 'city' => $t->city, 'logo_url' => $t->logoUrl()]),
             'contactEmail' => config('gym.platform_sales_email'),
             'seo' => [
-                'title' => config('app.name').' — منصة إدارة الأندية الرياضية النسائية',
-                'description' => 'إدارة العضويات والحصص والحجوزات والمدفوعات وواتساب لنوادي اللياقة النسائية.',
+                'title' => config('app.name').' — منصة إدارة الأندية الرياضية',
+                'description' => 'إدارة العضويات والحصص والحجوزات والمدفوعات وواتساب لأندية اللياقة البدنية.',
             ],
         ]);
     }

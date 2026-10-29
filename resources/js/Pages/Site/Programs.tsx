@@ -14,7 +14,7 @@ export interface ProgramData {
     image_url: string | null;
 }
 
-export const LEVELS: Record<string, string> = { all: 'لجميع المستويات', beginner: 'مبتدئات', intermediate: 'متوسط', advanced: 'متقدم' };
+export const LEVELS: Record<string, string> = { all: 'لجميع المستويات', beginner: 'مبتدئ', intermediate: 'متوسط', advanced: 'متقدم' };
 export const CATEGORIES: Record<string, string> = { class: 'حصة جماعية', program: 'برنامج تدريبي', pt: 'تدريب شخصي' };
 
 export function ProgramCard({ program }: { program: ProgramData }) {

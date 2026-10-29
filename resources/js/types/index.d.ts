@@ -29,7 +29,7 @@ export interface SharedProps {
     auth: { user: StaffUser; permissions: string[] } | null;
     tenant: TenantInfo | null;
     /** Optional modules switched on for this installation (config gym.modules). */
-    modules: { inventory: boolean };
+    modules: { sales: boolean; inventory: boolean };
     member: { id: number; name: string; member_no: string } | null;
     flash: { success: string | null; error: string | null; token: string | null; id: string | null };
     errors: Record<string, string>;

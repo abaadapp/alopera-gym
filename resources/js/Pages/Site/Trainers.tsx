@@ -44,7 +44,7 @@ export function TrainerCard({ trainer, compact = false }: { trainer: TrainerData
 export default function Trainers({ site, seo, trainers }: { site: SiteInfo; seo: { title: string }; trainers: TrainerData[] }) {
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero title="فريق المدربات" subtitle="مدربات معتمدات يرافقنك خطوة بخطوة نحو هدفك." icon={<Sparkles className="size-6" />} />
+            <PageHero title="فريق التدريب" subtitle="مدربون معتمدون يرافقونك خطوة بخطوة نحو هدفك." icon={<Sparkles className="size-6" />} />
             <section className="mx-auto max-w-6xl px-4 py-12">
                 {trainers.length === 0 ? (
                     <p className="py-16 text-center text-muted">سنعرّفك بفريقنا قريبًا.</p>

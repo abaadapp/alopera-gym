@@ -46,7 +46,7 @@ class BackupController extends Controller
         ]);
 
         if ($request->string('confirm')->toString() !== $tenant->slug) {
-            throw ValidationException::withMessages(['confirm' => 'اكتبي معرّف النادي ('.$tenant->slug.') للتأكيد.']);
+            throw ValidationException::withMessages(['confirm' => 'اكتب معرّف النادي ('.$tenant->slug.') للتأكيد.']);
         }
 
         // Safety net: snapshot the current state before replacing it.

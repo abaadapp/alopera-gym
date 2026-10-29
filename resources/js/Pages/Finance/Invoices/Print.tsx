@@ -125,7 +125,7 @@ export default function InvoicePrint({ invoice, club }: Props) {
                             )}
                             <PrintRow label="المدفوع" value={money(invoice.paid_total, currency)} />
                             {invoice.status !== 'void' && <PrintRow label="المتبقي" value={money(invoice.balance, currency)} strong />}
-                            {Number(invoice.refund_due) > 0 && <PrintRow label="مستحق للعميلة" value={money(invoice.refund_due, currency)} />}
+                            {Number(invoice.refund_due) > 0 && <PrintRow label="مستحق للعميل" value={money(invoice.refund_due, currency)} />}
                         </dl>
                     </section>
 

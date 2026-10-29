@@ -40,7 +40,7 @@ class RoleController extends Controller
     public function update(Request $request, Role $role): RedirectResponse
     {
         if ($role->is_locked) {
-            return back()->with('error', 'دور المالكة لا يمكن تعديله.');
+            return back()->with('error', 'دور المالك لا يمكن تعديله.');
         }
         $data = $this->validated($request);
         $role->update([
@@ -58,7 +58,7 @@ class RoleController extends Controller
             return back()->with('error', 'لا يمكن حذف الأدوار الافتراضية.');
         }
         if ($role->users()->exists()) {
-            return back()->with('error', 'الدور مسند لمستخدمات. انقليهن لدور آخر أولًا.');
+            return back()->with('error', 'الدور مسند لمستخدمين. انقلهم إلى دور آخر أولًا.');
         }
         $role->delete();
 

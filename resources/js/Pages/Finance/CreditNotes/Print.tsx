@@ -81,7 +81,7 @@ export default function CreditNotePrint({ note, club }: Props) {
                             <PrintRow label="قيمة هذا الإشعار" value={`- ${money(note.amount, currency)}`} strong />
                             <PrintRow label="إجمالي الإشعارات على الفاتورة" value={`- ${money(note.invoice.credited_total, currency)}`} />
                             <PrintRow label="صافي الفاتورة" value={money(note.invoice.net_total, currency)} strong />
-                            <PrintRow label="المردود للعميلة بهذا الإشعار" value={money(note.refunded_total, currency)} />
+                            <PrintRow label="المردود للعميل بهذا الإشعار" value={money(note.refunded_total, currency)} />
                         </dl>
                     </section>
 
@@ -104,7 +104,7 @@ export default function CreditNotePrint({ note, club }: Props) {
                     )}
 
                     <footer className="mt-10 border-t border-line pt-4 text-xs text-muted">
-                        يُعدّل هذا الإشعار صافي الفاتورة {note.invoice.number} دون تغيير الفاتورة الأصلية.{note.creator && ` أصدرته: ${note.creator}.`}
+                        يُعدّل هذا الإشعار صافي الفاتورة {note.invoice.number} دون تغيير الفاتورة الأصلية.{note.creator && ` أصدره: ${note.creator}.`}
                     </footer>
                 </article>
             </div>

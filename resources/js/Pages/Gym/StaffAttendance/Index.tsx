@@ -26,21 +26,21 @@ export default function StaffAttendanceIndex({ rows, summary, staff, filters }: 
         <ClubLayout title="الحضور والانصراف">
             <PageHeader
                 title="الحضور والانصراف"
-                subtitle="حضور الموظفين من أجهزة البصمة والتسجيل اليدوي — منفصل عن دخول المشتركات"
+                subtitle="حضور الموظفين من أجهزة البصمة والتسجيل اليدوي — منفصل عن دخول الأعضاء"
                 actions={<Button icon={<LogIn className="size-4" />} onClick={() => router.post(route('club.staff-attendance.punch'), {}, { preserveScroll: true })}>تسجيل حضوري/انصرافي</Button>}
             />
 
             <div className="mb-4 grid gap-4 sm:grid-cols-3">
                 <StatCard label="سجلات الفترة" value={number(rows.total)} icon={<UserRoundCheck className="size-5" />} />
                 <StatCard label="ساعات العمل في الفترة" value={number(totalHours, 1)} icon={<Clock className="size-5" />} tone="blue" />
-                <StatCard label="لم تُسجّل انصرافها" value={number(open)} icon={<Fingerprint className="size-5" />} tone="amber" />
+                <StatCard label="لم يُسجّل انصرافه" value={number(open)} icon={<Fingerprint className="size-5" />} tone="amber" />
             </div>
 
             <Card className="mb-4">
                 <div className="grid gap-3 sm:grid-cols-4 sm:items-end">
                     <Field label="من"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
                     <Field label="إلى"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
-                    <Field label="الموظفة">
+                    <Field label="الموظف">
                         <Select value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="الكل">
                             {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </Select>
@@ -51,10 +51,10 @@ export default function StaffAttendanceIndex({ rows, summary, staff, filters }: 
 
             {summary.length > 0 && (
                 <Card padded={false} className="mb-4">
-                    <div className="p-5 pb-2"><h3 className="text-[15px] font-semibold">ملخص الفترة لكل موظفة</h3></div>
+                    <div className="p-5 pb-2"><h3 className="text-[15px] font-semibold">ملخص الفترة لكل موظف</h3></div>
                     <div className="overflow-x-auto">
                         <table className="table-base">
-                            <thead><tr><th>الموظفة</th><th>أيام الحضور</th><th>ساعات العمل</th><th>السجلات</th><th>بلا انصراف</th></tr></thead>
+                            <thead><tr><th>الموظف</th><th>أيام الحضور</th><th>ساعات العمل</th><th>السجلات</th><th>بلا انصراف</th></tr></thead>
                             <tbody>
                                 {summary.map((s, i) => (
                                     <tr key={i}>
@@ -78,7 +78,7 @@ export default function StaffAttendanceIndex({ rows, summary, staff, filters }: 
                     <div className="overflow-x-auto">
                         <table className="table-base">
                             <thead>
-                                <tr><th>الموظفة</th><th>التاريخ</th><th>الحضور</th><th>الانصراف</th><th>الساعات</th><th>الطريقة</th></tr>
+                                <tr><th>الموظف</th><th>التاريخ</th><th>الحضور</th><th>الانصراف</th><th>الساعات</th><th>الطريقة</th></tr>
                             </thead>
                             <tbody>
                                 {rows.data.map((r) => (
@@ -86,7 +86,7 @@ export default function StaffAttendanceIndex({ rows, summary, staff, filters }: 
                                         <td className="font-medium">{r.user ?? '—'}</td>
                                         <td>{date(r.date)}</td>
                                         <td className="num">{r.in}</td>
-                                        <td>{r.out ? <span className="num">{r.out}</span> : <Badge tone="amber">لم تنصرف</Badge>}</td>
+                                        <td>{r.out ? <span className="num">{r.out}</span> : <Badge tone="amber">لم ينصرف</Badge>}</td>
                                         <td className="num">{r.hours ?? '—'}</td>
                                         <td>
                                             {METHODS[r.method] ?? r.method}

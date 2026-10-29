@@ -20,7 +20,7 @@ interface Log {
     created_at: string;
 }
 
-const ACTORS: Record<string, string> = { user: 'موظفة', member: 'مشتركة', system: 'النظام', gateway: 'بوابة الدفع', device: 'جهاز' };
+const ACTORS: Record<string, string> = { user: 'موظف', member: 'عضو', system: 'النظام', gateway: 'بوابة الدفع', device: 'جهاز' };
 
 const QUICK = [
     { key: '', label: 'الكل' },

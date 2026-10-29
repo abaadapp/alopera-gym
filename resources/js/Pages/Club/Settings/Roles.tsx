@@ -61,7 +61,7 @@ export default function Roles({ roles, groups }: { roles: Role[]; groups: Group[
                                 {r.is_locked ? 'عرض' : 'تعديل الصلاحيات'}
                             </Button>
                             {!r.is_system && (
-                                <ConfirmAction url={route('club.roles.destroy', r.id)} method="delete" title="حذف الدور" message={r.users_count > 0 ? 'الدور مسند لمستخدمات؛ انقليهن أولًا.' : `حذف دور «${r.name}»؟`} variant="ghost" icon={<Trash2 className="size-3.5" />}>
+                                <ConfirmAction url={route('club.roles.destroy', r.id)} method="delete" title="حذف الدور" message={r.users_count > 0 ? 'الدور مسند لمستخدمين؛ انقلهم أولًا.' : `حذف دور «${r.name}»؟`} variant="ghost" icon={<Trash2 className="size-3.5" />}>
                                     حذف
                                 </ConfirmAction>
                             )}
@@ -102,12 +102,12 @@ function RoleModal({ role, groups, onClose }: { role: Role | null; groups: Group
             title={role ? role.name : 'دور مخصص جديد'}
             footer={locked ? <Button variant="ghost" onClick={onClose}>إغلاق</Button> : <><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}
         >
-            {locked && <p className="mb-4 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-700">دور المالكة يملك كل الصلاحيات ولا يمكن تعديله، حتى لا يُغلق النادي على نفسه.</p>}
+            {locked && <p className="mb-4 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-700">دور المالك يملك كل الصلاحيات ولا يمكن تعديله، حتى لا يُغلق النادي على نفسه.</p>}
             <form onSubmit={submit} className="space-y-4">
                 {!locked && (
                     <div className="grid gap-4 sm:grid-cols-2">
                         <Field label="اسم الدور" error={form.errors.name} required>
-                            <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder="مثال: مشرفة الصالة" />
+                            <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder="مثال: مشرف الصالة" />
                         </Field>
                         <Field label="وصف" error={form.errors.description}>
                             <Textarea rows={1} value={form.data.description} onChange={(e) => form.setData('description', e.target.value)} />

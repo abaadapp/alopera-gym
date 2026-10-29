@@ -103,7 +103,7 @@ export default function Schedule({ site, seo, sessions }: { site: SiteInfo; seo:
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero title="جدول الحصص" subtitle="الأسبوع القادم بحسب المقاعد المتاحة الآن. الحجز متاح للمشتركات من بوابة المشتركة." icon={<CalendarDays className="size-6" />} />
+            <PageHero title="جدول الحصص" subtitle="الأسبوع القادم بحسب المقاعد المتاحة الآن. الحجز متاح للأعضاء من بوابة الأعضاء." icon={<CalendarDays className="size-6" />} />
             <section className="mx-auto max-w-4xl px-4 py-10">
                 {days.length === 0 ? (
                     <p className="py-16 text-center text-muted">لا توجد حصص مجدولة خلال الأيام القادمة.</p>
@@ -120,7 +120,7 @@ export default function Schedule({ site, seo, sessions }: { site: SiteInfo; seo:
                                         s.is_full ? (
                                             <span className="rounded-full border border-line px-4 py-2 text-xs text-muted">مكتملة</span>
                                         ) : (
-                                            <Link href={bookHref} className="rounded-full bg-brand px-4 py-2 text-xs font-medium text-white hover:bg-brand-600">احجزي</Link>
+                                            <Link href={bookHref} className="rounded-full bg-brand px-4 py-2 text-xs font-medium text-white hover:bg-brand-600">احجز</Link>
                                         )
                                     }
                                 />
@@ -128,8 +128,8 @@ export default function Schedule({ site, seo, sessions }: { site: SiteInfo; seo:
                         </div>
                         {!member && (
                             <p className="mt-8 rounded-2xl bg-brand-50 p-4 text-center text-sm text-brand-900">
-                                الحجز متاح للمشتركات. <Link href={route('portal.login')} className="font-medium underline">سجّلي الدخول</Link>
-                                {site.signup_enabled && <> أو <Link href={route('site.join')} className="font-medium underline">اشتركي الآن</Link></>}.
+                                الحجز متاح للأعضاء. <Link href={route('portal.login')} className="font-medium underline">سجّل الدخول</Link>
+                                {site.signup_enabled && <> أو <Link href={route('site.join')} className="font-medium underline">اشترك الآن</Link></>}.
                             </p>
                         )}
                     </>

@@ -23,7 +23,7 @@ final class PlanLimits
     {
         $max = $this->plan()?->max_members;
         if ($max !== null && Member::count() >= $max) {
-            throw new BusinessRuleException('plan.members', "وصلتِ إلى الحد الأقصى للمشتركات في باقتك على المنصة ({$max}). قومي بترقية الباقة.");
+            throw new BusinessRuleException('plan.members', "وصلت إلى الحد الأقصى للأعضاء في باقتك على المنصة ({$max}). قم بترقية الباقة.");
         }
     }
 
@@ -32,7 +32,7 @@ final class PlanLimits
         $tenant = $this->tenants->require();
         $max = $this->plan()?->max_staff;
         if ($max !== null && User::ofTenant($tenant->id)->where('is_active', true)->count() >= $max) {
-            throw new BusinessRuleException('plan.staff', "وصلتِ إلى الحد الأقصى للمستخدمين في باقتك ({$max}).");
+            throw new BusinessRuleException('plan.staff', "وصلت إلى الحد الأقصى للمستخدمين في باقتك ({$max}).");
         }
     }
 
@@ -40,7 +40,7 @@ final class PlanLimits
     {
         $max = $this->plan()?->max_branches;
         if ($max !== null && Branch::count() >= $max) {
-            throw new BusinessRuleException('plan.branches', "وصلتِ إلى الحد الأقصى للفروع في باقتك ({$max}).");
+            throw new BusinessRuleException('plan.branches', "وصلت إلى الحد الأقصى للفروع في باقتك ({$max}).");
         }
     }
 

@@ -47,7 +47,7 @@ class PayrollRunController extends Controller
     {
         $run = $this->payroll->open($request->validate(['month' => ['required', 'date_format:Y-m']])['month']);
 
-        return to_route('club.payroll.index', ['run' => $run->id])->with('success', "فُتحت مسيرة {$run->label()} بـ {$run->items()->count()} موظفة.");
+        return to_route('club.payroll.index', ['run' => $run->id])->with('success', "فُتحت مسيرة {$run->label()} لعدد {$run->items()->count()} من الموظفين.");
     }
 
     public function updateItem(Request $request, PayrollItem $item): RedirectResponse
@@ -69,7 +69,7 @@ class PayrollRunController extends Controller
     {
         $this->payroll->removeItem($item);
 
-        return back()->with('success', "أُزيلت {$item->employee_name} من المسيرة.");
+        return back()->with('success', "أُزيل سطر {$item->employee_name} من المسيرة.");
     }
 
     public function destroy(PayrollRun $run): RedirectResponse
@@ -113,7 +113,7 @@ class PayrollRunController extends Controller
             $i->paid_at ? 'مصروف '.$i->paid_at->toDateString() : 'غير مصروف',
         ]);
 
-        return TableExporter::download("payroll-{$run->period->format('Y-m')}", ['الموظفة', 'المسمى', 'أيام الحضور', 'الأساسي', 'البدلات', 'ساعات إضافية', 'الإضافي', 'الخصومات', 'سبب الخصم', 'الصافي', 'الصرف'], $rows, $format);
+        return TableExporter::download("payroll-{$run->period->format('Y-m')}", ['الموظف', 'المسمى', 'أيام الحضور', 'الأساسي', 'البدلات', 'ساعات إضافية', 'الإضافي', 'الخصومات', 'سبب الخصم', 'الصافي', 'الصرف'], $rows, $format);
     }
 
     /** صرف الرواتب: approved runs with what is still owed, payouts made, and the accounts to pay from. */
@@ -147,12 +147,12 @@ class PayrollRunController extends Controller
             'account_id' => ['required', 'integer'],
             'paid_on' => ['required', 'date', 'before_or_equal:today'],
             'reference' => ['nullable', 'string', 'max:120'],
-        ], [], ['items' => 'الموظفات', 'account_id' => 'حساب الصرف', 'paid_on' => 'تاريخ الصرف']);
+        ], [], ['items' => 'الموظفين', 'account_id' => 'حساب الصرف', 'paid_on' => 'تاريخ الصرف']);
         $account = Account::findOrFail($data['account_id']);
 
         $result = $this->payroll->pay($run, $data['items'], $account, $data['paid_on'], $data['reference'] ?? null);
 
-        return back()->with('success', "صُرفت رواتب {$result['paid']} موظفة ({$result['payout']->number}) من «{$account->name}». تسجيل الصرف هنا لا ينفّذ تحويلًا بنكيًا.");
+        return back()->with('success', "صُرفت الرواتب لعدد {$result['paid']} من الموظفين ({$result['payout']->number}) من «{$account->name}». تسجيل الصرف هنا لا ينفّذ تحويلًا بنكيًا.");
     }
 
     private function allowAny(Request $request, array $permissions): void

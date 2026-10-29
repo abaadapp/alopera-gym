@@ -5,6 +5,7 @@ namespace App\Modules\Website\Http\Controllers;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
+use App\Modules\Inventory\Models\Sale;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Http\RendersSite;
@@ -56,6 +57,8 @@ class PayController extends Controller
             'amount' => $intent->amount,
             'currency' => $intent->currency,
             'invoice' => $intent->invoice?->only('number') + ['token' => $intent->invoice?->public_token],
+            // A website order's payment returns to the order's own page link.
+            'order' => $intent->invoice_id ? Sale::where('invoice_id', $intent->invoice_id)->where('source', Sale::WEBSITE)->value('public_token') : null,
         ], 'نتيجة الدفع');
     }
 

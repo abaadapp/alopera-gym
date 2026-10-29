@@ -29,7 +29,7 @@ export default function PayrollSettings({ settings, accounts }: Props) {
                     <CardHeader title="الرواتب" />
                     <div className="space-y-4">
                         <Field label="ساعات العمل اليومية" error={form.errors.work_hours} hint="تُستخدم لقراءة ساعات الحضور في المسيرة"><Input type="number" step="0.5" min="1" max="16" dir="ltr" value={form.data.work_hours} onChange={(e) => form.setData('work_hours', e.target.value)} /></Field>
-                        <Field label="أجر الساعة الإضافية (ر.ع)" error={form.errors.overtime_rate} hint="مرجع عند إدخال الإضافي في سطور المسيرة؛ اتركيه فارغًا إن اختلف بين الموظفات"><Input type="number" step="0.001" min="0" dir="ltr" value={form.data.overtime_rate} onChange={(e) => form.setData('overtime_rate', e.target.value)} /></Field>
+                        <Field label="أجر الساعة الإضافية (ر.ع)" error={form.errors.overtime_rate} hint="مرجع عند إدخال الإضافي في سطور المسيرة؛ اتركه فارغًا إن اختلف بين الموظفين"><Input type="number" step="0.001" min="0" dir="ltr" value={form.data.overtime_rate} onChange={(e) => form.setData('overtime_rate', e.target.value)} /></Field>
                         <Field label="حساب صرف الرواتب الافتراضي" error={form.errors.payout_account_id} hint="يُقترح عند الصرف؛ الصندوق أو حساب بنكي فقط">
                             <Select value={form.data.payout_account_id} onChange={(e) => form.setData('payout_account_id', e.target.value)} placeholder="بدون">
                                 {accounts.map((a) => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}
@@ -38,7 +38,7 @@ export default function PayrollSettings({ settings, accounts }: Props) {
                     </div>
                 </Card>
                 <Card>
-                    <CardHeader title="حضور الموظفين" subtitle="منفصل عن دخول المشتركات" />
+                    <CardHeader title="حضور الموظفين" subtitle="منفصل عن دخول الأعضاء" />
                     <Field label="مهلة البصمة المكررة (ثانية)" error={form.errors.punch_window_seconds} hint="بصمة ثانية خلال هذه المهلة تُتجاهل، فلا تُسجَّل انصرافًا فور الحضور. 0 لإيقافها.">
                         <Input type="number" min="0" max="900" dir="ltr" value={form.data.punch_window_seconds} onChange={(e) => form.setData('punch_window_seconds', e.target.value)} />
                     </Field>

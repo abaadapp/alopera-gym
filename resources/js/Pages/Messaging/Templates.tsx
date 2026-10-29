@@ -24,7 +24,7 @@ interface Props {
 }
 
 const VARIABLE_LABELS: Record<string, string> = {
-    member_name: 'اسم المشتركة',
+    member_name: 'اسم العضو',
     club_name: 'اسم النادي',
     member_no: 'رقم العضوية',
     invoice_number: 'رقم الفاتورة',
@@ -85,7 +85,7 @@ export default function Templates({ templates }: Props) {
         <ClubLayout title="قوالب واتساب">
             <PageHeader
                 title="قوالب واتساب"
-                subtitle="اربطي كل حدث بالقالب المعتمد في WhatsApp Manager. الردود الآلية وقواعد الإرسال في «الأتمتة»."
+                subtitle="اربط كل حدث بالقالب المعتمد في WhatsApp Manager. الردود الآلية وقواعد الإرسال في «الأتمتة»."
                 actions={<Button icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>قالب تسويقي جديد</Button>}
             />
 
@@ -95,8 +95,8 @@ export default function Templates({ templates }: Props) {
                         <div className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-[#f2f2f0] text-ink"><Bell className="size-5" /></div>
                         <div className="text-sm leading-7 text-ink/80">
                             <p className="font-semibold text-ink">كيف تعمل القوالب؟</p>
-                            يرسل النظام رسائل الخدمة تلقائيًا (ترحيب، فواتير، تأكيد، تذكير، حجوزات) فقط عندما يكون القالب <b>معتمدًا</b> و<b>مفعّلًا</b> هنا. أنشئي القالب في WhatsApp Manager بنفس الاسم واللغة،
-                            وانسخي النص بالمتغيرات <span className="num">{'{{1}}'}</span>، <span className="num">{'{{2}}'}</span>… ثم غيّري حالته إلى «معتمد» بعد موافقة Meta.
+                            يرسل النظام رسائل الخدمة تلقائيًا (ترحيب، فواتير، تأكيد، تذكير، حجوزات) فقط عندما يكون القالب <b>معتمدًا</b> و<b>مفعّلًا</b> هنا. أنشئ القالب في WhatsApp Manager بنفس الاسم واللغة،
+                            وانسخ النص بالمتغيرات <span className="num">{'{{1}}'}</span>، <span className="num">{'{{2}}'}</span>… ثم غيّر حالته إلى «معتمد» بعد موافقة Meta.
                         </div>
                     </div>
                 </Card>
@@ -111,7 +111,7 @@ export default function Templates({ templates }: Props) {
 
             <Card padded={false} className="mb-6">
                 <div className="p-5 pb-0">
-                    <CardHeader title="قوالب الحملات والعروض" subtitle="تُستخدم في الحملات التسويقية وتُرسل فقط لمن وافقت على الرسائل التسويقية" />
+                    <CardHeader title="قوالب الحملات والعروض" subtitle="تُستخدم في الحملات التسويقية وتُرسل فقط لمن وافق على الرسائل التسويقية" />
                 </div>
                 {custom.length === 0 ? (
                     <EmptyState title="لا توجد قوالب تسويقية بعد" action={<Button size="sm" onClick={() => setCreating(true)}>إضافة قالب</Button>} />
@@ -242,7 +242,7 @@ function TemplateModal({ template, onClose }: { template: Template | null; onClo
                         </Select>
                     </Field>
                 </div>
-                <Field label="نص القالب (كما هو معتمد في Meta)" error={form.errors.body} hint="استخدمي {{1}} و{{2}}… بنفس ترتيب المتغيرات أدناه" required>
+                <Field label="نص القالب (كما هو معتمد في Meta)" error={form.errors.body} hint="استخدم {{1}} و{{2}}… بنفس ترتيب المتغيرات أدناه" required>
                     <Textarea rows={4} value={form.data.body} onChange={(e) => form.setData('body', e.target.value)} />
                 </Field>
 

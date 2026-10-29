@@ -83,7 +83,7 @@ export default function Backups({ backups }: { backups: Backup[] }) {
                                 <input type="file" accept=".zip,application/zip" className="hidden" onChange={(e) => form.setData('archive', e.target.files?.[0] ?? null)} />
                             </label>
                         </Field>
-                        <Field label={<>للتأكيد اكتبي معرّف النادي: <b dir="ltr">{tenant?.slug}</b></>} error={form.errors.confirm}>
+                        <Field label={<>للتأكيد اكتب معرّف النادي: <b dir="ltr">{tenant?.slug}</b></>} error={form.errors.confirm}>
                             <Input dir="ltr" value={form.data.confirm} onChange={(e) => form.setData('confirm', e.target.value)} autoComplete="off" />
                         </Field>
                         <Button type="submit" variant="danger" className="w-full" loading={form.processing} disabled={!form.data.archive || form.data.confirm !== tenant?.slug}>

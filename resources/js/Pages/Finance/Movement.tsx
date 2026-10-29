@@ -81,7 +81,7 @@ export default function FinanceMovement({ lines, stats, opening, closing, accoun
                         <Pagination data={lines} />
                     </>
                 ) : (
-                    <EmptyState title="لا حركة في هذه الفترة" description="غيّري الفترة أو الحساب لعرض حركة أخرى." />
+                    <EmptyState title="لا حركة في هذه الفترة" description="غيّر الفترة أو الحساب لعرض حركة أخرى." />
                 )}
             </Card>
         </ClubLayout>

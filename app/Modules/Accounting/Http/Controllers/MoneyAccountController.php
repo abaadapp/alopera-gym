@@ -97,7 +97,7 @@ class MoneyAccountController extends Controller
                 throw new BusinessRuleException('accounting.system_account', 'هذا حساب أساسي يستخدمه النظام ولا يُوقف.', 'is_active');
             }
             if (! Money::isZero($this->reports->balance($account))) {
-                throw new BusinessRuleException('accounting.balance', 'انقلي الرصيد إلى حساب آخر قبل إيقاف هذا الحساب.', 'is_active');
+                throw new BusinessRuleException('accounting.balance', 'انقل الرصيد إلى حساب آخر قبل إيقاف هذا الحساب.', 'is_active');
             }
         }
         // Blank number fields keep what is stored (they are never sent back to the browser in full).

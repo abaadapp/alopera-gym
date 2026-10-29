@@ -82,7 +82,7 @@ final class ReportService
                 'overdue_invoices' => Invoice::overdue()->count(),
                 'pending_transfers' => Payment::where('status', Payment::PENDING)->count(),
                 'checkins_today' => CheckIn::where('result', 'allowed')->where('checked_in_at', '>=', $today)->count(),
-                'low_stock' => PermissionRegistry::moduleEnabled('inventory') ? Product::where('is_active', true)->lowStock()->count() : 0,
+                'low_stock' => PermissionRegistry::moduleEnabled('sales') ? Product::where('is_active', true)->lowStock()->count() : 0,
             ],
             'expiring' => $expiringSoon,
             'today_sessions' => $todaySessions,
@@ -150,7 +150,7 @@ final class ReportService
             'revenue_by_method' => $financial ? $this->revenueBy('method', $from, $to) : [],
             'revenue_by_type' => $financial ? $this->revenueByType($from, $to) : [],
             'expenses_by_category' => $financial ? $this->expensesByCategory($from, $to) : [],
-            'products' => $financial && PermissionRegistry::moduleEnabled('inventory') ? $this->productSales($from, $to) : [],
+            'products' => $financial && PermissionRegistry::moduleEnabled('sales') ? $this->productSales($from, $to) : [],
             'trend' => $financial ? $this->dailyRevenue($from, $to) : [],
         ];
     }
@@ -204,7 +204,7 @@ final class ReportService
                 'collection_rate' => $issued > 0 ? round($collectedOnIssued / $issued * 100, 1) : 0,
                 'refunds' => round((float) Payment::completed()->where('kind', Payment::KIND_REFUND)->whereBetween('paid_at', [$from, $end])->sum('amount'), 3),
                 'credit_notes' => round((float) CreditNote::whereBetween('created_at', [$from, $end])->sum('amount'), 3),
-                'product_sales' => PermissionRegistry::moduleEnabled('inventory')
+                'product_sales' => PermissionRegistry::moduleEnabled('sales')
                     ? round((float) SaleItem::whereHas('sale', fn ($q) => $q->where('status', 'completed')->whereBetween('created_at', [$from, $end]))->sum('line_total'), 3)
                     : 0,
             ];

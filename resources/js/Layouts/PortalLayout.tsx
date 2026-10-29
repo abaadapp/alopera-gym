@@ -21,7 +21,7 @@ export default function PortalLayout({ site, title, children }: { site: SiteInfo
             <div className="mx-auto max-w-5xl px-4 py-8">
                 <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                     <div>
-                        <p className="text-sm text-muted">أهلًا بكِ</p>
+                        <p className="text-sm text-muted">أهلًا بك</p>
                         <h1 className="text-2xl font-semibold">{member?.name}</h1>
                     </div>
                     <button onClick={() => router.post(route('portal.logout'))} className="inline-flex items-center gap-2 rounded-full border border-line px-4 py-2 text-sm hover:bg-brand-50">

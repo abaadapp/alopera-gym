@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
- * A club member (مشتركة). Also the authenticatable model of the `member`
+ * A club member (عضو). Also the authenticatable model of the `member`
  * guard used by the member portal.
  */
 #[UseFactory(MemberFactory::class)]
@@ -36,7 +36,7 @@ class Member extends Authenticatable implements Billable
     public const BLOCKED = 'blocked';
 
     /** Arabic labels for exports (the UI has its own copy in resources/js/lib/labels.ts). */
-    public const STATUS_LABELS = [self::ACTIVE => 'نشطة', self::INACTIVE => 'غير نشطة', self::BLOCKED => 'موقوفة'];
+    public const STATUS_LABELS = [self::ACTIVE => 'نشط', self::INACTIVE => 'غير نشط', self::BLOCKED => 'موقوف'];
 
     protected $table = 'gym_members';
 

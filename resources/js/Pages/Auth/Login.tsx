@@ -21,7 +21,7 @@ export default function Login() {
                     <Input type="password" dir="ltr" autoComplete="current-password" value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} required />
                 </Field>
                 <div className="flex items-center justify-between">
-                    <Checkbox label="تذكّريني" checked={form.data.remember} onChange={(e) => form.setData('remember', e.target.checked)} />
+                    <Checkbox label="تذكّرني" checked={form.data.remember} onChange={(e) => form.setData('remember', e.target.checked)} />
                     <a href={route('password.request')} className="text-sm text-brand hover:underline">نسيت كلمة المرور؟</a>
                 </div>
                 <Button type="submit" className="w-full" loading={form.processing}>دخول</Button>

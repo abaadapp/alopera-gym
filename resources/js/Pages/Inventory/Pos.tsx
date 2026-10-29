@@ -1,10 +1,10 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, router } from '@inertiajs/react';
 import { toast } from 'sonner';
-import { Banknote, CreditCard, Minus, Package, Plus, ReceiptText, ScanBarcode, ShoppingBag, Trash2, UserRound, X } from 'lucide-react';
+import { Banknote, CreditCard, Minus, Package, Plus, Printer, ReceiptText, ScanBarcode, ShoppingBag, Trash2, UserRound, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Card, EmptyState, Field, Input, MemberPicker, PageHeader, type MemberHit } from '@/Components/ui';
-import { useCurrency } from '@/hooks/useShared';
+import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
 
@@ -25,13 +25,15 @@ interface CartLine {
     quantity: number;
 }
 
-/** Front-desk shop (spec 1.6): scan or tap products, take cash or card, done. */
-export default function Pos({ products }: { products: Product[] }) {
+/** The point of sale: scan or tap products, take cash or card, print the receipt. A discount needs its own permission. */
+export default function Pos({ products, can: allowed, lastSale }: { products: Product[]; can: { discount: boolean }; lastSale: number | null }) {
     const currency = useCurrency();
+    const can = useCan();
     const [query, setQuery] = useState('');
     const [category, setCategory] = useState<string>('');
     const [cart, setCart] = useState<CartLine[]>([]);
     const [member, setMember] = useState<MemberHit | null>(null);
+    const [guest, setGuest] = useState('');
     const [discount, setDiscount] = useState('');
     const [method, setMethod] = useState<'cash' | 'card'>('cash');
     const [cardRef, setCardRef] = useState('');
@@ -84,7 +86,7 @@ export default function Pos({ products }: { products: Product[] }) {
     };
 
     const subtotal = cart.reduce((s, l) => s + Number(l.product.price) * l.quantity, 0);
-    const discountValue = Math.min(Number(discount || 0), subtotal);
+    const discountValue = allowed.discount ? Math.min(Number(discount || 0), subtotal) : 0;
     const total = subtotal - discountValue;
 
     const checkout = () => {
@@ -98,6 +100,7 @@ export default function Pos({ products }: { products: Product[] }) {
                 payment_method: method,
                 card_reference: method === 'card' ? cardRef.trim() : null,
                 member_id: member?.id ?? null,
+                customer_name: member ? null : guest.trim() || null,
                 discount: discountValue || 0,
             },
             {
@@ -105,6 +108,7 @@ export default function Pos({ products }: { products: Product[] }) {
                 onSuccess: () => {
                     setCart([]);
                     setMember(null);
+                    setGuest('');
                     setDiscount('');
                     setMethod('cash');
                     setCardRef('');
@@ -124,8 +128,13 @@ export default function Pos({ products }: { products: Product[] }) {
         <ClubLayout title="نقطة البيع">
             <PageHeader
                 title="نقطة البيع"
-                subtitle="بيع المنتجات من الاستقبال"
-                actions={<Button variant="outline" href={route('club.pos.sales')} icon={<ReceiptText className="size-4" />}>عمليات اليوم</Button>}
+                subtitle="بيع المنتجات للأعضاء والزوار نقدًا أو بالبطاقة"
+                actions={
+                    <>
+                        {lastSale && <Button variant="outline" href={route('club.sales.receipt', lastSale)} external icon={<Printer />}>إيصال آخر عملية</Button>}
+                        {can('sales.view') && <Button variant="outline" href={route('club.sales.index')} icon={<ReceiptText />}>عمليات البيع</Button>}
+                    </>
+                }
             />
 
             <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
@@ -137,7 +146,7 @@ export default function Pos({ products }: { products: Product[] }) {
                             className="input h-12 ps-11 text-base"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            placeholder="امسحي الباركود أو ابحثي باسم المنتج ثم Enter"
+                            placeholder="امسح الباركود أو ابحث باسم المنتج ثم Enter"
                             autoFocus
                         />
                     </form>
@@ -157,7 +166,7 @@ export default function Pos({ products }: { products: Product[] }) {
                     )}
                     {visible.length === 0 ? (
                         <Card>
-                            <EmptyState icon={<Package className="size-6" />} title="لا توجد منتجات" description={products.length === 0 ? 'أضيفي منتجات من صفحة المنتجات والمخزون.' : 'جرّبي بحثًا آخر.'} action={products.length === 0 ? <Button size="sm" href={route('club.products.index')}>المنتجات</Button> : undefined} />
+                            <EmptyState icon={<Package className="size-6" />} title="لا توجد منتجات" description={products.length === 0 ? 'أضف منتجات من صفحة المنتجات.' : 'جرّب بحثًا آخر.'} action={products.length === 0 && can('products.manage') ? <Button size="sm" href={route('club.products.index')}>المنتجات</Button> : undefined} />
                         </Card>
                     ) : (
                         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
@@ -192,7 +201,7 @@ export default function Pos({ products }: { products: Product[] }) {
 
                     <div className="max-h-80 overflow-y-auto px-5">
                         {cart.length === 0 ? (
-                            <p className="py-10 text-center text-sm text-muted">اختاري منتجات لإضافتها</p>
+                            <p className="py-10 text-center text-sm text-muted">اختر منتجات لإضافتها</p>
                         ) : (
                             <ul className="divide-y divide-line">
                                 {cart.map((l) => (
@@ -218,19 +227,24 @@ export default function Pos({ products }: { products: Product[] }) {
 
                     <div className="space-y-4 border-t border-line px-5 py-4">
                         <div>
-                            <p className="label">المشتركة (اختياري)</p>
+                            <p className="label">العميل (اختياري)</p>
                             {member ? (
                                 <div className="flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 text-sm">
                                     <span className="flex items-center gap-2"><UserRound className="size-4 text-brand" />{member.full_name}</span>
                                     <button type="button" onClick={() => setMember(null)} aria-label="إزالة"><X className="size-4 text-muted" /></button>
                                 </div>
                             ) : (
-                                <MemberPicker onSelect={setMember} placeholder="ابحثي لربط البيع بمشتركة" />
+                                <div className="space-y-2">
+                                    <MemberPicker onSelect={setMember} placeholder="ابحث لربط البيع بعضو" />
+                                    <Input value={guest} onChange={(e) => setGuest(e.target.value)} placeholder="أو اسم العميل الزائر" maxLength={120} aria-label="اسم العميل الزائر" />
+                                </div>
                             )}
                         </div>
-                        <Field label="خصم" error={errors.discount}>
-                            <Input type="number" min="0" step="0.001" dir="ltr" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0.000" />
-                        </Field>
+                        {allowed.discount && (
+                            <Field label="خصم" error={errors.discount}>
+                                <Input type="number" min="0" step="0.001" dir="ltr" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0.000" />
+                            </Field>
+                        )}
                         <div className="grid grid-cols-2 gap-2">
                             {([['cash', 'نقدًا', Banknote], ['card', 'بطاقة', CreditCard]] as const).map(([key, text, Icon]) => (
                                 <button
@@ -257,7 +271,10 @@ export default function Pos({ products }: { products: Product[] }) {
                         <Button size="lg" className="w-full" disabled={cart.length === 0 || (method === 'card' && cardRef.trim() === '')} loading={busy} onClick={checkout}>
                             إتمام البيع
                         </Button>
-                        <p className="text-center text-xs text-muted">تُصدر فاتورة مدفوعة ويُخصم المخزون تلقائيًا. <Link href={route('club.invoices.index', { type: 'pos' })} className="text-brand">فواتير نقطة البيع</Link></p>
+                        <p className="text-center text-xs text-muted">
+                            تُصدر فاتورة مدفوعة ويُخصم المخزون تلقائيًا.{' '}
+                            {can('invoices.view') && <Link href={route('club.invoices.index', { type: 'pos' })} className="text-brand">فواتير المبيعات</Link>}
+                        </p>
                     </div>
                 </Card>
             </div>

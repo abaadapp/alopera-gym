@@ -70,7 +70,7 @@ class EmployeeController extends Controller
         $employee = Employee::create($data);
         $audit->log('employee.created', $employee, ['name' => $employee->name]);
 
-        return back()->with('success', 'أُضيف ملف الموظفة.');
+        return back()->with('success', 'أُضيف ملف الموظف.');
     }
 
     public function update(Request $request, Employee $employee, AuditLogger $audit): RedirectResponse
@@ -81,14 +81,15 @@ class EmployeeController extends Controller
         $employee->update($data);
         $audit->log('employee.updated', $employee, ['name' => $employee->name], $before, Arr::only($employee->getAttributes(), array_keys($before)));
 
-        return back()->with('success', 'حُفظ ملف الموظفة.');
+        return back()->with('success', 'حُفظ ملف الموظف.');
     }
 
     /** Trainers get a staff file each — linked, not copied twice — so they can be put on the payroll. */
     public function importTrainers(AuditLogger $audit): RedirectResponse
     {
         $count = DB::transaction(function () {
-            $title = JobTitle::firstOrCreate(['name' => 'مدربة']);
+            // Clubs created before the neutral wording keep their existing «مدربة» title instead of getting a second one.
+            $title = JobTitle::firstWhere('name', 'مدرب') ?? JobTitle::firstWhere('name', 'مدربة') ?? JobTitle::create(['name' => 'مدرب']);
             $linkedTrainers = Employee::whereNotNull('trainer_id')->pluck('trainer_id');
             $linkedUsers = Employee::whereNotNull('user_id')->pluck('user_id');
             $made = 0;
@@ -105,7 +106,7 @@ class EmployeeController extends Controller
         });
         $audit->log('employee.trainers_imported', null, ['count' => $count]);
 
-        return back()->with('success', $count ? "أُنشئت ملفات {$count} مدربة." : 'كل المدربات لهن ملفات بالفعل.');
+        return back()->with('success', $count ? "أُنشئت ملفات لعدد {$count} من المدربين." : 'كل المدربين لديهم ملفات بالفعل.');
     }
 
     private function validated(Request $request, ?Employee $employee = null): array
@@ -136,7 +137,7 @@ class EmployeeController extends Controller
             ];
         }
 
-        $data = $request->validate($rules, [], ['user_id' => 'حساب الدخول', 'trainer_id' => 'ملف المدربة', 'basic_salary' => 'الراتب الأساسي']);
+        $data = $request->validate($rules, [], ['user_id' => 'حساب الدخول', 'trainer_id' => 'ملف المدرب', 'basic_salary' => 'الراتب الأساسي']);
         if ($confidential) {
             $data['basic_salary'] = Money::normalize($data['basic_salary']);
             $data['allowances'] = array_values(array_map(fn ($a) => ['name' => $a['name'], 'amount' => Money::normalize($a['amount'])], $data['allowances'] ?? []));

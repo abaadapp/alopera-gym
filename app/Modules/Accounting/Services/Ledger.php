@@ -70,7 +70,7 @@ final class Ledger
         return DB::transaction(function () use ($entry, $description, $source, $date) {
             $original = JournalEntry::whereKey($entry->id)->lockForUpdate()->firstOrFail();
             if ($original->reversed_at !== null || $original->reverses_id !== null && $source === []) {
-                throw new BusinessRuleException('ledger.already_reversed', $original->reversed_at !== null ? 'هذا القيد معكوس مسبقًا.' : 'لا يُعكس القيد العكسي؛ أنشئي قيدًا جديدًا عند الحاجة.');
+                throw new BusinessRuleException('ledger.already_reversed', $original->reversed_at !== null ? 'هذا القيد معكوس مسبقًا.' : 'لا يُعكس القيد العكسي؛ أنشئ قيدًا جديدًا عند الحاجة.');
             }
 
             $mirror = $this->post([
@@ -107,7 +107,7 @@ final class Ledger
 
             $account = $line['account'] instanceof Account ? $line['account'] : Account::find($line['account']);
             if (! $account || $account->is_group || (! $allowClosedAccounts && ! $account->is_active)) {
-                throw new BusinessRuleException('ledger.account', 'الحساب غير صالح للقيد: اختاري حسابًا فرعيًا مفتوحًا.');
+                throw new BusinessRuleException('ledger.account', 'الحساب غير صالح للقيد: اختر حسابًا فرعيًا مفتوحًا.');
             }
 
             $side = Money::isZero($debit) ? 'credit' : 'debit';

@@ -41,7 +41,7 @@ export default function PayrollRuns({ runs, run, months, can }: Props) {
             />
 
             {runs.length === 0 ? (
-                <Card><EmptyState icon={<FileText className="size-6" />} title="لا مسيرات بعد" description="افتحي مسيرة الشهر؛ تُجلب الموظفات على رأس العمل برواتبهن وبدلاتهن من ملفاتهن." action={can.prepare && <Button variant="outline" onClick={() => setOpening(true)}>مسيرة جديدة</Button>} /></Card>
+                <Card><EmptyState icon={<FileText className="size-6" />} title="لا مسيرات بعد" description="افتح مسيرة الشهر؛ يُجلب الموظفون على رأس العمل برواتبهم وبدلاتهم من ملفاتهم." action={can.prepare && <Button variant="outline" onClick={() => setOpening(true)}>مسيرة جديدة</Button>} /></Card>
             ) : (
                 <div className="grid items-start gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
                     <RunList runs={runs} selected={run?.id} routeName="club.payroll.index" m={m} />
@@ -74,13 +74,13 @@ export default function PayrollRuns({ runs, run, months, can }: Props) {
                             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                                 <StatCard label="المستحقات" value={m(run.gross)} hint="أساسي + بدلات + إضافي" tone="blue" />
                                 <StatCard label="الخصومات" value={m(run.deductions)} tone="amber" />
-                                <StatCard label="الصافي" value={m(run.net)} hint={`${run.items.length} موظفة`} tone="green" />
+                                <StatCard label="الصافي" value={m(run.net)} hint={`${run.items.length} موظف`} tone="green" />
                             </div>
 
                             <Card padded={false}>
                                 <div className="overflow-x-auto">
                                     <table className="table-base">
-                                        <thead><tr><th>الموظفة</th><th>الحضور</th><th className="text-end">الأساسي</th><th className="text-end">البدلات</th><th className="text-end">الإضافي</th><th className="text-end">الخصومات</th><th className="text-end">الصافي</th><th>الصرف</th><th /></tr></thead>
+                                        <thead><tr><th>الموظف</th><th>الحضور</th><th className="text-end">الأساسي</th><th className="text-end">البدلات</th><th className="text-end">الإضافي</th><th className="text-end">الخصومات</th><th className="text-end">الصافي</th><th>الصرف</th><th /></tr></thead>
                                         <tbody>
                                             {run.items.map((i) => (
                                                 <tr key={i.id}>
@@ -98,7 +98,7 @@ export default function PayrollRuns({ runs, run, months, can }: Props) {
                                                             {draft && can.prepare && (
                                                                 <>
                                                                     <button type="button" onClick={() => setEditing(i)} className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/[0.045] hover:text-ink" aria-label={`تعديل ${i.name}`}><Pencil className="size-4" /></button>
-                                                                    <ConfirmAction url={route('club.payroll.items.destroy', i.id)} method="delete" title="إزالة من المسيرة" message={`ستُزال ${i.name} من مسيرة هذا الشهر.`} variant="ghost" size="sm" icon={<X className="size-4" />}>{''}</ConfirmAction>
+                                                                    <ConfirmAction url={route('club.payroll.items.destroy', i.id)} method="delete" title="إزالة من المسيرة" message={`سيُزال ${i.name} من مسيرة هذا الشهر.`} variant="ghost" size="sm" icon={<X className="size-4" />}>{''}</ConfirmAction>
                                                                 </>
                                                             )}
                                                         </span>
@@ -130,7 +130,7 @@ export function RunList({ runs, selected, routeName, m }: { runs: (RunSummary & 
                         <Link href={route(routeName, { run: r.id })} preserveScroll className={cn('flex items-center justify-between gap-3 px-4 py-3 transition', selected === r.id ? 'bg-[#f2f2f0]' : 'hover:bg-[#fafafa]')}>
                             <span className="min-w-0">
                                 <span className="block text-sm font-semibold">{r.label}</span>
-                                <span className="block text-xs text-muted num">{r.items_count ?? 0} موظفة · {m(r.unpaid ?? r.net)}{r.unpaid !== undefined && ' متبقٍ'}</span>
+                                <span className="block text-xs text-muted num">{r.items_count ?? 0} موظف · {m(r.unpaid ?? r.net)}{r.unpaid !== undefined && ' متبقٍ'}</span>
                             </span>
                             <Badge tone={runStatus[r.status][1]}>{runStatus[r.status][0]}</Badge>
                         </Link>
@@ -151,7 +151,7 @@ function OpenRun({ months, onClose }: { months: { value: string; label: string }
         <Modal open onClose={onClose} size="sm" title="مسيرة جديدة" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>فتح المسيرة</Button></>}>
             <form onSubmit={submit} className="space-y-4">
                 <Field label="الشهر" error={form.errors.month}><Select value={form.data.month} onChange={(e) => form.setData('month', e.target.value)}>{months.map((mo) => <option key={mo.value} value={mo.value}>{mo.label}</option>)}</Select></Field>
-                <p className="text-[13px] text-muted">تُنسخ الرواتب والبدلات من ملفات الموظفات على رأس العمل، مع أيام الحضور وساعاته في الشهر.</p>
+                <p className="text-[13px] text-muted">تُنسخ الرواتب والبدلات من ملفات الموظفين على رأس العمل، مع أيام الحضور وساعاته في الشهر.</p>
             </form>
         </Modal>
     );
@@ -168,7 +168,7 @@ function EditItem({ item, onClose }: { item: Item; onClose: () => void }) {
     return (
         <Modal open onClose={onClose} title={`سطر ${item.name}`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
             <form onSubmit={submit} className="space-y-4">
-                <p className="text-[13px] text-muted">الأساسي {money(item.basic, currency)}{item.attendance_days !== null && ` · حضرت ${item.attendance_days} يومًا (${number(item.attendance_hours, 1)} ساعة)`}</p>
+                <p className="text-[13px] text-muted">الأساسي {money(item.basic, currency)}{item.attendance_days !== null && ` · حضر ${item.attendance_days} يومًا (${number(item.attendance_hours, 1)} ساعة)`}</p>
                 <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="البدلات" error={form.errors.allowances} hint={item.allowance_lines.map((a) => a.name).join('، ') || undefined}><Input type="number" step="0.001" min="0" dir="ltr" value={form.data.allowances} onChange={(e) => form.setData('allowances', e.target.value)} /></Field>
                     <Field label="ساعات إضافية" error={form.errors.overtime_hours}><Input type="number" step="0.25" min="0" dir="ltr" value={form.data.overtime_hours} onChange={(e) => form.setData('overtime_hours', e.target.value)} /></Field>

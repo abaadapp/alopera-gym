@@ -47,7 +47,7 @@ const statusTabs = [
 export default function InvoicesIndex({ invoices, filters }: { invoices: Paginated<InvoiceRow>; filters: Filters }) {
     const can = useCan();
     const currency = useCurrency();
-    const inventory = useShared().modules.inventory;
+    const inventory = useShared().modules.sales;
 
     const apply = (patch: Partial<Filters>) => {
         const next = { ...filters, ...patch };
@@ -92,7 +92,7 @@ export default function InvoicesIndex({ invoices, filters }: { invoices: Paginat
                 </div>
 
                 {invoices.data.length === 0 ? (
-                    <EmptyState icon={<FileText className="size-6" />} title="لا توجد فواتير" description="غيّري المرشحات أو أصدري فاتورة جديدة." />
+                    <EmptyState icon={<FileText className="size-6" />} title="لا توجد فواتير" description="غيّر المرشحات أو أصدر فاتورة جديدة." />
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="table-base">

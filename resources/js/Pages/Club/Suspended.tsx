@@ -28,8 +28,8 @@ export default function Suspended({ reason, status }: { reason: string | null; s
                         )}
                         <Button variant="outline" icon={<LogOut className="size-4" />} onClick={() => router.post(route('logout'))}>تسجيل الخروج</Button>
                     </div>
-                    {!can('billing.view') && <p className="mt-4 text-xs text-muted">تواصلي مع مالكة النادي لإعادة التفعيل.</p>}
-                    <p className="mt-6 text-xs text-muted">مسجّلة باسم {auth?.user.name}</p>
+                    {!can('billing.view') && <p className="mt-4 text-xs text-muted">تواصل مع مالك النادي لإعادة التفعيل.</p>}
+                    <p className="mt-6 text-xs text-muted">مسجّل باسم {auth?.user.name}</p>
                 </div>
             </div>
         </>

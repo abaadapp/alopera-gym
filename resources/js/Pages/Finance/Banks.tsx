@@ -85,7 +85,7 @@ export default function FinanceBanks({ accounts, totals, kinds, canManage }: Pro
                 <div className="card"><EmptyState icon={<Landmark className="size-6" />} title="لا حسابات بعد" /></div>
             )}
             <p className="mt-3 text-[12px] text-muted">
-                أرقام الحسابات تُحفظ مشفرة وتظهر مختصرة. حساب يحمل رصيدًا لا يُوقف قبل نقل رصيده. لعرض كل حركة حساب افتحي <Link href={route('club.finance.movement')} className="underline">الحركة المالية</Link>.
+                أرقام الحسابات تُحفظ مشفرة وتظهر مختصرة. حساب يحمل رصيدًا لا يُوقف قبل نقل رصيده. لعرض كل حركة حساب افتح <Link href={route('club.finance.movement')} className="underline">الحركة المالية</Link>.
             </p>
 
             {editing && <AccountForm account={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
@@ -120,7 +120,7 @@ function AccountForm({ account, onClose }: { account: Account | null; onClose: (
                     <>
                         <Field label="اسم البنك" error={form.errors.bank_name}><Input value={form.data.bank_name} onChange={(e) => form.setData('bank_name', e.target.value)} /></Field>
                         <div className="grid gap-4 sm:grid-cols-2">
-                            <Field label="رقم الحساب" error={form.errors.account_number} hint={account?.masked ? `المحفوظ: ${account.masked} — اتركيه فارغًا لإبقائه` : undefined}><Input dir="ltr" value={form.data.account_number} onChange={(e) => form.setData('account_number', e.target.value)} /></Field>
+                            <Field label="رقم الحساب" error={form.errors.account_number} hint={account?.masked ? `المحفوظ: ${account.masked} — اتركه فارغًا لإبقائه` : undefined}><Input dir="ltr" value={form.data.account_number} onChange={(e) => form.setData('account_number', e.target.value)} /></Field>
                             <Field label="IBAN" error={form.errors.iban}><Input dir="ltr" value={form.data.iban} onChange={(e) => form.setData('iban', e.target.value)} placeholder="OM…" /></Field>
                         </div>
                     </>
@@ -168,12 +168,12 @@ function TransferForm({ accounts, onClose }: { accounts: Account[]; onClose: () 
                 <p className="text-[13px] text-muted">مثل إيداع نقد الصندوق في البنك، أو وصول تسوية البطاقات وPaymob إلى الحساب البنكي.</p>
                 <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="من حساب" error={form.errors.from_id} required>
-                        <Select value={form.data.from_id} onChange={(e) => form.setData('from_id', e.target.value)} placeholder="اختاري">
+                        <Select value={form.data.from_id} onChange={(e) => form.setData('from_id', e.target.value)} placeholder="اختر">
                             {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                         </Select>
                     </Field>
                     <Field label="إلى حساب" error={form.errors.to_id} required>
-                        <Select value={form.data.to_id} onChange={(e) => form.setData('to_id', e.target.value)} placeholder="اختاري">
+                        <Select value={form.data.to_id} onChange={(e) => form.setData('to_id', e.target.value)} placeholder="اختر">
                             {accounts.filter((a) => String(a.id) !== form.data.from_id).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                         </Select>
                     </Field>

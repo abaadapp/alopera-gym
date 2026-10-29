@@ -16,12 +16,12 @@ final class PermissionRegistry
         'dashboard' => ['label' => 'لوحة التحكم', 'permissions' => [
             'dashboard.view' => 'عرض لوحة التحكم والمؤشرات',
         ]],
-        'members' => ['label' => 'المشتركات', 'permissions' => [
-            'members.view' => 'عرض المشتركات',
-            'members.manage' => 'إضافة وتعديل المشتركات',
-            'members.delete' => 'حذف المشتركات',
-            'members.documents' => 'المستندات والعقود',
-            'members.export' => 'تصدير بيانات المشتركات',
+        'members' => ['label' => 'الأعضاء', 'permissions' => [
+            'members.view' => 'عرض الأعضاء',
+            'members.manage' => 'إضافة وتعديل الأعضاء',
+            'members.delete' => 'حذف الأعضاء',
+            'members.documents' => 'مستندات الأعضاء وعقودهم',
+            'members.export' => 'تصدير بيانات الأعضاء',
         ]],
         'memberships' => ['label' => 'العضويات', 'permissions' => [
             'memberships.view' => 'عرض العضويات',
@@ -34,14 +34,14 @@ final class PermissionRegistry
         'training' => ['label' => 'التدريب والحصص', 'permissions' => [
             'classes.view' => 'عرض الجداول والحصص',
             'classes.manage' => 'إدارة البرامج والجداول والحصص',
-            'trainers.manage' => 'إدارة المدربات ومواعيدهن',
-            'bookings.manage' => 'حجز الحصص للمشتركات وإلغاؤها',
+            'trainers.manage' => 'إدارة فريق التدريب ومواعيدهم',
+            'bookings.manage' => 'حجز الحصص للأعضاء وإلغاؤها',
             'attendance.mark' => 'تسجيل الحضور والغياب في الحصص',
             'pt.manage' => 'إدارة الجلسات الفردية',
             'pt.close_early' => 'إغلاق الجلسات الفردية قبل موعدها',
         ]],
         'access' => ['label' => 'الدخول والحضور', 'permissions' => [
-            'checkin.perform' => 'تسجيل دخول المشتركات',
+            'checkin.perform' => 'تسجيل دخول الأعضاء',
             'checkin.view' => 'عرض سجل الدخول',
             'devices.manage' => 'إدارة أجهزة الدخول',
         ]],
@@ -70,11 +70,24 @@ final class PermissionRegistry
             'payroll.reports' => 'كشوف وتقارير الرواتب',
             'staff_attendance.view' => 'حضور وانصراف الموظفين',
         ]],
-        'inventory' => ['label' => 'المخزون والمبيعات', 'permissions' => [
-            'pos.sell' => 'نقطة البيع',
-            'products.manage' => 'المنتجات والمخزون',
+        'sales' => ['label' => 'المبيعات والمتجر', 'permissions' => [
+            'sales.view' => 'ملخص المبيعات وعملياتها وتقاريرها',
+            'pos.sell' => 'البيع من نقطة البيع',
+            'sales.discount' => 'تطبيق الخصومات عند البيع',
+            'sales.refund' => 'إلغاء عمليات البيع ورد المبالغ',
+            'products.manage' => 'المنتجات والأسعار والمخزون',
+            'orders.manage' => 'طلبات الموقع: المراجعة والتجهيز والتسليم',
+        ]],
+        'inventory' => ['label' => 'الموردون والمشتريات', 'permissions' => [
             'suppliers.manage' => 'الموردون',
             'purchases.manage' => 'المشتريات',
+        ]],
+        'documents' => ['label' => 'مستندات النشاط', 'permissions' => [
+            'documents.view' => 'عرض المستندات (العامة، والسرية المسندة إليه)',
+            'documents.create' => 'إضافة المستندات',
+            'documents.renew' => 'تجديد المستندات',
+            'documents.manage' => 'تعديل المستندات وحذفها، وأنواعها وتنبيهاتها',
+            'documents.confidential' => 'الاطلاع على كل المستندات السرية',
         ]],
         'reports' => ['label' => 'التقارير', 'permissions' => [
             'reports.view' => 'عرض التقارير',
@@ -103,13 +116,13 @@ final class PermissionRegistry
     ];
 
     /**
-     * Permissions only the club owner holds (her role is "*"): never granted through another role, whatever is
+     * Permissions only the club owner holds (the owner role is "*"): never granted through another role, whatever is
      * stored on it or sent by the role editor. The club website is the owner's alone.
      */
     public const OWNER_ONLY = ['website.manage'];
 
     /** Permission groups that belong to an optional module (config gym.modules.<module>). */
-    private const MODULE_GROUPS = ['inventory' => 'inventory'];
+    private const MODULE_GROUPS = ['sales' => 'sales', 'inventory' => 'inventory'];
 
     public static function moduleEnabled(string $module): bool
     {

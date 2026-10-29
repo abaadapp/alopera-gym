@@ -49,7 +49,7 @@ class CampaignController extends Controller
 
         $campaign = Campaign::create($data + ['audience' => $this->audienceInput($request), 'status' => Campaign::DRAFT, 'created_by' => $request->user()->id]);
 
-        return redirect()->route('club.campaigns.show', $campaign)->with('success', 'تم إنشاء الحملة. راجعي الجمهور ثم أطلقيها.');
+        return redirect()->route('club.campaigns.show', $campaign)->with('success', 'تم إنشاء الحملة. راجع الجمهور ثم أطلقها.');
     }
 
     public function show(Campaign $campaign): Response

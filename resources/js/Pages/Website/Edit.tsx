@@ -134,7 +134,7 @@ export default function WebsiteEdit({ settings, media, siteUrl, unread }: Props)
         <ClubLayout title="محتوى الموقع">
             <PageHeader
                 title="محتوى الموقع الإلكتروني"
-                subtitle="النصوص والصور وبيانات التواصل وتحسين الظهور في محركات البحث. الباقات والبرامج والمدربات تُعرض تلقائيًا من النظام."
+                subtitle="النصوص والصور وبيانات التواصل وتحسين الظهور في محركات البحث. الباقات والبرامج وفريق التدريب تُعرض تلقائيًا من النظام."
                 actions={
                     <>
                         <Button variant="outline" href={route('club.website.messages')} icon={<Mail className="size-4" />}>
@@ -151,14 +151,14 @@ export default function WebsiteEdit({ settings, media, siteUrl, unread }: Props)
                     <form onSubmit={submit} className="space-y-6">
                         <Card>
                             <CardHeader title="النشر" />
-                            <Toggle checked={form.data.is_published} onChange={(v) => set('is_published', v)} label="الموقع منشور" hint="عند الإيقاف تبقى بوابة المشتركات تعمل" />
+                            <Toggle checked={form.data.is_published} onChange={(v) => set('is_published', v)} label="الموقع منشور" hint="عند الإيقاف تبقى بوابة الأعضاء تعمل" />
                         </Card>
 
                         <Card>
-                            <CardHeader title="الواجهة الرئيسية" subtitle="أول ما تراه الزائرة" />
+                            <CardHeader title="الواجهة الرئيسية" subtitle="أول ما يراه الزائر" />
                             <div className="grid gap-4">
-                                <Field label="شارة أعلى العنوان" error={errors.hero_badge} hint="اتركيها فارغة لإخفائها">
-                                    <Input value={form.data.hero_badge} onChange={(e) => set('hero_badge', e.target.value)} maxLength={60} placeholder="نادٍ مخصص للنساء" />
+                                <Field label="شارة أعلى العنوان" error={errors.hero_badge} hint="اتركها فارغة لإخفائها">
+                                    <Input value={form.data.hero_badge} onChange={(e) => set('hero_badge', e.target.value)} maxLength={60} placeholder="نادٍ رياضي متكامل" />
                                 </Field>
                                 <Field label="العنوان الرئيسي" error={errors.hero_title}>
                                     <Input value={form.data.hero_title} onChange={(e) => set('hero_title', e.target.value)} maxLength={160} />
@@ -168,9 +168,9 @@ export default function WebsiteEdit({ settings, media, siteUrl, unread }: Props)
                                 </Field>
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <Field label="نص زر الاشتراك" error={errors.hero_cta_label}>
-                                        <Input value={form.data.hero_cta_label} onChange={(e) => set('hero_cta_label', e.target.value)} maxLength={40} placeholder="اشتركي الآن" />
+                                        <Input value={form.data.hero_cta_label} onChange={(e) => set('hero_cta_label', e.target.value)} maxLength={40} placeholder="اشترك الآن" />
                                     </Field>
-                                    <Field label="شريط إعلان أعلى الموقع" error={errors.announcement} hint="اتركيه فارغًا لإخفائه">
+                                    <Field label="شريط إعلان أعلى الموقع" error={errors.announcement} hint="اتركه فارغًا لإخفائه">
                                         <Input value={form.data.announcement} onChange={(e) => set('announcement', e.target.value)} maxLength={200} placeholder="خصم 20% على الباقات السنوية هذا الشهر" />
                                     </Field>
                                 </div>
@@ -194,7 +194,7 @@ export default function WebsiteEdit({ settings, media, siteUrl, unread }: Props)
                         <Card>
                             <CardHeader
                                 title="لماذا نحن"
-                                subtitle="ثلاث بطاقات أسفل الواجهة؛ احذفيها كلها لإخفاء القسم"
+                                subtitle="ثلاث بطاقات أسفل الواجهة؛ احذفها كلها لإخفاء القسم"
                                 actions={form.data.features.length < 3 ? <Button type="button" size="sm" variant="secondary" icon={<Plus className="size-3.5" />} onClick={() => set('features', [...form.data.features, { title: '', text: '' }])}>إضافة</Button> : undefined}
                             />
                             <div className="space-y-3">
@@ -207,7 +207,7 @@ export default function WebsiteEdit({ settings, media, siteUrl, unread }: Props)
                                     </RowEditor>
                                 ))}
                             </div>
-                            {(errors['features.0.title'] || errors['features.1.title'] || errors['features.2.title'] || errors['features.0.text'] || errors['features.1.text'] || errors['features.2.text']) && <p className="mt-2 text-sm text-red-600">أكملي عنوان ووصف كل بطاقة.</p>}
+                            {(errors['features.0.title'] || errors['features.1.title'] || errors['features.2.title'] || errors['features.0.text'] || errors['features.1.text'] || errors['features.2.text']) && <p className="mt-2 text-sm text-red-600">أكمل عنوان ووصف كل بطاقة.</p>}
                         </Card>
 
                         <Card>
@@ -216,12 +216,12 @@ export default function WebsiteEdit({ settings, media, siteUrl, unread }: Props)
                                 subtitle="تظهر في الصفحة الرئيسية (حتى 4)"
                                 actions={form.data.stats.length < 4 ? <Button type="button" size="sm" variant="secondary" icon={<Plus className="size-3.5" />} onClick={() => set('stats', [...form.data.stats, { label: '', value: '' }])}>إضافة</Button> : undefined}
                             />
-                            {form.data.stats.length === 0 && <p className="text-sm text-muted">مثال: «+500 مشتركة»، «12 مدربة»، «30 حصة أسبوعيًا».</p>}
+                            {form.data.stats.length === 0 && <p className="text-sm text-muted">مثال: «+500 عضو»، «12 مدربًا»، «30 حصة أسبوعيًا».</p>}
                             <div className="space-y-2">
                                 {form.data.stats.map((s, i) => (
                                     <RowEditor key={i} onRemove={() => set('stats', form.data.stats.filter((_, j) => j !== i))}>
                                         <Input className="w-28" value={s.value} onChange={(e) => updateRow('stats', i, { value: e.target.value })} placeholder="+500" maxLength={20} />
-                                        <Input value={s.label} onChange={(e) => updateRow('stats', i, { label: e.target.value })} placeholder="مشتركة سعيدة" maxLength={40} />
+                                        <Input value={s.label} onChange={(e) => updateRow('stats', i, { label: e.target.value })} placeholder="عضو سعيد" maxLength={40} />
                                     </RowEditor>
                                 ))}
                             </div>
@@ -262,7 +262,7 @@ export default function WebsiteEdit({ settings, media, siteUrl, unread }: Props)
                                         </RowEditor>
                                     ))}
                                 </div>
-                                {errors['working_hours.0.days'] && <p className="mt-1 text-xs text-red-600">أكملي بيانات أوقات العمل.</p>}
+                                {errors['working_hours.0.days'] && <p className="mt-1 text-xs text-red-600">أكمل بيانات أوقات العمل.</p>}
                             </div>
 
                             <div className="mt-5 grid gap-4 sm:grid-cols-2">

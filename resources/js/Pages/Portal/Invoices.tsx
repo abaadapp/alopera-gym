@@ -76,10 +76,10 @@ export default function Invoices({ site, seo, invoices, onlinePayments, history 
                                     {open && (
                                         onlinePayments ? (
                                             <button onClick={() => pay(inv.id)} disabled={paying === inv.id} className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60">
-                                                {paying === inv.id ? 'جارٍ التحويل…' : <>ادفعي <span className="num">{money(inv.balance, currency)}</span></>}
+                                                {paying === inv.id ? 'جارٍ التحويل…' : <>ادفع <span className="num">{money(inv.balance, currency)}</span></>}
                                             </button>
                                         ) : (
-                                            <span className="text-sm text-muted">المتبقي <span className="num">{money(inv.balance, currency)}</span> — ادفعي في الاستقبال</span>
+                                            <span className="text-sm text-muted">المتبقي <span className="num">{money(inv.balance, currency)}</span> — ادفع في الاستقبال</span>
                                         )
                                     )}
                                 </div>

@@ -64,7 +64,7 @@ class TenantController extends Controller
             $data['billing_cycle'],
         );
 
-        return redirect()->route('platform.tenants.show', $tenant)->with('success', 'تم إنشاء النادي وحساب المالكة.');
+        return redirect()->route('platform.tenants.show', $tenant)->with('success', 'تم إنشاء النادي وحساب المالك.');
     }
 
     public function show(Tenant $tenant, TenantContext $tenants): Response

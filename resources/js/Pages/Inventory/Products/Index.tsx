@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { router, useForm } from '@inertiajs/react';
-import { History, Package, Pencil, Plus, Scale, Trash2 } from 'lucide-react';
+import { Globe, History, Package, Pencil, Plus, Scale, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, Checkbox, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Pagination, SearchInput, Select, Tabs, Textarea, Toggle } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
@@ -20,6 +20,7 @@ interface ProductRow {
     reorder_level: string;
     track_stock: boolean;
     is_active: boolean;
+    show_on_website: boolean;
     product_category_id: number | null;
     category: string | null;
     low: boolean;
@@ -37,28 +38,30 @@ interface Movement {
     at: string;
 }
 
-const movementType: Record<string, string> = { purchase: 'شراء', sale: 'بيع', adjustment: 'تعديل جرد', return: 'مرتجع', void: 'إلغاء بيع' };
+const movementType: Record<string, string> = { purchase: 'شراء', sale: 'بيع', adjustment: 'تعديل جرد', return: 'مرتجع', void: 'إلغاء بيع', order: 'محجوز لطلب من الموقع', release: 'إلغاء طلب من الموقع' };
 
-export default function ProductsIndex({ products, categories, filters }: { products: Paginated<ProductRow>; categories: Option[]; filters: { q?: string; low?: string | boolean } }) {
+export default function ProductsIndex({ products, categories, filters }: { products: Paginated<ProductRow>; categories: Option[]; filters: { q?: string; low?: string | boolean; website?: string | boolean } }) {
     const currency = useCurrency();
     const [editing, setEditing] = useState<ProductRow | 'new' | null>(null);
     const [adjusting, setAdjusting] = useState<ProductRow | null>(null);
     const [history, setHistory] = useState<ProductRow | null>(null);
     const low = filters.low === true || filters.low === '1' || filters.low === 'true';
+    const website = filters.website === true || filters.website === '1' || filters.website === 'true';
+    const view = low ? 'low' : website ? 'website' : '';
 
     return (
-        <ClubLayout title="المنتجات والمخزون">
-            <PageHeader title="المنتجات والمخزون" subtitle={`${products.total} منتج`} actions={<Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>منتج جديد</Button>} />
+        <ClubLayout title="المنتجات">
+            <PageHeader title="المنتجات" subtitle={`${products.total} منتج — الأسعار والمخزون وما يظهر في متجر الموقع`} actions={<Button icon={<Plus />} onClick={() => setEditing('new')}>منتج جديد</Button>} />
 
             <Card padded={false}>
                 <div className="flex flex-wrap items-center justify-between gap-3 p-4">
                     <Tabs
-                        tabs={[{ key: '', label: 'كل المنتجات' }, { key: '1', label: 'وصلت لحد إعادة الطلب' }]}
-                        value={low ? '1' : ''}
-                        onChange={(key) => router.get(route('club.products.index'), { q: filters.q || undefined, low: key || undefined }, { preserveState: true, replace: true })}
+                        tabs={[{ key: '', label: 'كل المنتجات' }, { key: 'website', label: 'ظاهرة في الموقع' }, { key: 'low', label: 'وصلت لحد إعادة الطلب' }]}
+                        value={view}
+                        onChange={(key) => router.get(route('club.products.index'), { q: filters.q || undefined, low: key === 'low' ? 1 : undefined, website: key === 'website' ? 1 : undefined }, { preserveState: true, replace: true })}
                         className="border-0"
                     />
-                    <SearchInput value={filters.q} placeholder="الاسم، SKU، الباركود…" extra={{ low: low ? 1 : undefined }} />
+                    <SearchInput value={filters.q} placeholder="الاسم، SKU، الباركود…" extra={{ low: low ? 1 : undefined, website: website ? 1 : undefined }} />
                 </div>
 
                 {products.data.length === 0 ? (
@@ -98,7 +101,12 @@ export default function ProductsIndex({ products, categories, filters }: { produ
                                                 <span className="text-xs text-muted">غير متتبع</span>
                                             )}
                                         </td>
-                                        <td>{p.is_active ? <Badge tone="green">متاح</Badge> : <Badge>موقوف</Badge>}</td>
+                                        <td>
+                                            <div className="flex flex-wrap gap-1">
+                                                {p.is_active ? <Badge tone="green">متاح</Badge> : <Badge>موقوف</Badge>}
+                                                {p.show_on_website && p.is_active && <Badge tone="blue"><Globe />في الموقع</Badge>}
+                                            </div>
+                                        </td>
                                         <td>
                                             <div className="flex justify-end gap-1">
                                                 {p.track_stock && <Button variant="ghost" size="sm" icon={<Scale className="size-3.5" />} onClick={() => setAdjusting(p)}>جرد</Button>}
@@ -136,6 +144,7 @@ function ProductModal({ product, categories, onClose }: { product: ProductRow | 
         reorder_level: string;
         track_stock: boolean;
         is_active: boolean;
+        show_on_website: boolean;
         product_category_id: string;
         category_name: string;
         opening_stock: string;
@@ -150,6 +159,7 @@ function ProductModal({ product, categories, onClose }: { product: ProductRow | 
         reorder_level: product ? String(Number(product.reorder_level)) : '0',
         track_stock: product?.track_stock ?? true,
         is_active: product?.is_active ?? true,
+        show_on_website: product?.show_on_website ?? false,
         product_category_id: product?.product_category_id ? String(product.product_category_id) : '',
         category_name: '',
         opening_stock: '',
@@ -230,7 +240,8 @@ function ProductModal({ product, categories, onClose }: { product: ProductRow | 
                     </>
                 )}
                 <div className="space-y-2 sm:col-span-2">
-                    <Toggle checked={form.data.track_stock} onChange={(v) => form.setData('track_stock', v)} label="تتبّع المخزون" hint="أوقفيه للخدمات أو المنتجات غير المخزنة" />
+                    <Toggle checked={form.data.track_stock} onChange={(v) => form.setData('track_stock', v)} label="تتبّع المخزون" hint="أوقفه للخدمات أو المنتجات غير المخزنة؛ عند تفعيله لا يُباع أكثر من المتوفر" />
+                    <Toggle checked={form.data.show_on_website} onChange={(v) => form.setData('show_on_website', v)} label="إظهار في الموقع الإلكتروني" hint="يظهر في متجر موقع النادي ويمكن طلبه أونلاين" />
                     <Checkbox label="متاح للبيع" checked={form.data.is_active} onChange={(e) => form.setData('is_active', e.target.checked)} />
                 </div>
             </form>

@@ -25,7 +25,7 @@ class Employee extends Model
 
     protected $attributes = ['status' => 'active', 'basic_salary' => 0, 'payment_method' => 'bank'];
 
-    public const STATUSES = ['active' => 'على رأس العمل', 'on_leave' => 'في إجازة', 'terminated' => 'انتهت خدمتها'];
+    public const STATUSES = ['active' => 'على رأس العمل', 'on_leave' => 'في إجازة', 'terminated' => 'انتهت الخدمة'];
 
     /** Fields only payroll.salaries may read or change. */
     public const CONFIDENTIAL = ['basic_salary', 'allowances', 'payment_method', 'bank_name', 'iban', 'account_number'];

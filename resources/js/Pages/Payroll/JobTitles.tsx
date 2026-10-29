@@ -18,13 +18,13 @@ export default function JobTitles({ titles }: { titles: Title[] }) {
                 {titles.length ? (
                     <div className="overflow-x-auto">
                         <table className="table-base">
-                            <thead><tr><th>المسمى</th><th>الوصف</th><th>الموظفات</th><th>الحالة</th><th /></tr></thead>
+                            <thead><tr><th>المسمى</th><th>الوصف</th><th>الموظفون</th><th>الحالة</th><th /></tr></thead>
                             <tbody>
                                 {titles.map((t) => (
                                     <tr key={t.id}>
                                         <td className="font-medium">{t.name}</td>
                                         <td className="max-w-80 text-muted">{t.description ?? '—'}</td>
-                                        <td className="num">{t.active_count}{t.employees_count > t.active_count && <span className="text-xs text-muted"> (+{t.employees_count - t.active_count} سابقات)</span>}</td>
+                                        <td className="num">{t.active_count}{t.employees_count > t.active_count && <span className="text-xs text-muted"> (+{t.employees_count - t.active_count} سابقون)</span>}</td>
                                         <td><Badge tone={t.is_active ? 'green' : 'gray'}>{t.is_active ? 'مستخدم' : 'موقوف'}</Badge></td>
                                         <td className="text-end">
                                             {manage && (

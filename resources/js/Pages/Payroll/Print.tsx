@@ -55,7 +55,7 @@ export default function PayrollPrint({ mode, run, items, club }: Props) {
                         <table className="mt-5 w-full border-collapse">
                             <thead>
                                 <tr className="border-b border-stone-300 text-stone-500">
-                                    {['#', 'الموظفة', 'المسمى', 'الحضور', 'الأساسي', 'البدلات', 'الإضافي', 'الخصومات', 'الصافي', 'الصرف', 'التوقيع'].map((h) => <th key={h} className="py-2 text-start font-medium">{h}</th>)}
+                                    {['#', 'الموظف', 'المسمى', 'الحضور', 'الأساسي', 'البدلات', 'الإضافي', 'الخصومات', 'الصافي', 'الصرف', 'التوقيع'].map((h) => <th key={h} className="py-2 text-start font-medium">{h}</th>)}
                                 </tr>
                             </thead>
                             <tbody>
@@ -96,7 +96,7 @@ export default function PayrollPrint({ mode, run, items, club }: Props) {
                         <article key={i.id} className="mx-auto max-w-[210mm] bg-white p-10 text-sm shadow-sm print:p-0 print:shadow-none">
                             {header(`قسيمة راتب — ${run.label}`)}
                             <section className="mt-6 grid grid-cols-2 gap-4">
-                                <div><p className="text-xs text-stone-500">الموظفة</p><p className="font-semibold">{i.name}</p>{i.job_title && <p className="text-xs">{i.job_title}</p>}</div>
+                                <div><p className="text-xs text-stone-500">الموظف</p><p className="font-semibold">{i.name}</p>{i.job_title && <p className="text-xs">{i.job_title}</p>}</div>
                                 <div><p className="text-xs text-stone-500">الحضور</p><p>{i.attendance_days !== null ? `${i.attendance_days} يومًا · ${number(i.attendance_hours, 1)} ساعة` : '—'}</p></div>
                                 <div><p className="text-xs text-stone-500">طريقة الصرف</p><p>{i.payment_method === 'cash' ? 'نقدًا' : `تحويل بنكي ${i.bank_name ?? ''}`} <span dir="ltr">{i.iban ?? ''}</span></p></div>
                                 <div><p className="text-xs text-stone-500">الصرف</p><p>{i.paid_at ? `${date(i.payout?.paid_on ?? i.paid_at)} · ${i.payout?.number ?? ''}` : 'لم يُصرف بعد'}</p></div>
@@ -114,7 +114,7 @@ export default function PayrollPrint({ mode, run, items, club }: Props) {
                                 </tbody>
                             </table>
                             <footer className="mt-12 grid grid-cols-2 gap-10 text-center text-stone-500">
-                                <div className="border-t border-stone-300 pt-2">توقيع الموظفة</div>
+                                <div className="border-t border-stone-300 pt-2">توقيع الموظف</div>
                                 <div className="border-t border-stone-300 pt-2">الإدارة</div>
                             </footer>
                         </article>

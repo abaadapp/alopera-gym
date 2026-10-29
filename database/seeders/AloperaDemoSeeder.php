@@ -80,7 +80,7 @@ class AloperaDemoSeeder extends Seeder
 
         $alopera = app(TenantProvisioner::class)->provision(
             ['name' => 'Alopera Gym', 'slug' => 'alopera', 'email' => 'hello@alopera.test', 'phone' => '96824000000', 'city' => 'مسقط', 'primary_color' => '#9d174d', 'secondary_color' => '#f9a8d4'],
-            ['name' => 'مالكة النادي', 'email' => 'owner@alopera.test', 'password' => self::PASSWORD, 'phone' => '96890000001'],
+            ['name' => 'مالك النادي', 'email' => 'owner@alopera.test', 'password' => self::PASSWORD, 'phone' => '96890000001'],
             $plans['pro'],
         );
         $alopera->update(['legal_name' => 'Alopera Ladies Fitness LLC', 'address' => 'الخوير، مسقط', 'status' => Tenant::STATUS_ACTIVE]);
@@ -109,7 +109,7 @@ class AloperaDemoSeeder extends Seeder
     {
         $rows = [
             'starter' => ['name' => 'Starter', 'description' => 'لنادٍ صغير بفرع واحد', 'price_monthly' => 25, 'price_yearly' => 250, 'max_members' => 300, 'max_staff' => 5, 'max_branches' => 1, 'sort' => 1,
-                'features' => ['إدارة العضويات والحجوزات', 'الموقع وبوابة المشتركات', 'التقارير الأساسية']],
+                'features' => ['إدارة العضويات والحجوزات', 'الموقع وبوابة الأعضاء', 'التقارير الأساسية']],
             'pro' => ['name' => 'Pro', 'description' => 'الأكثر طلبًا للأندية النشطة', 'price_monthly' => 45, 'price_yearly' => 450, 'max_members' => 1500, 'max_staff' => 20, 'max_branches' => 3, 'sort' => 2,
                 'features' => ['كل مزايا Starter', 'أتمتة واتساب والحملات', 'الدفع الإلكتروني', 'أجهزة الدخول']],
             'enterprise' => ['name' => 'Enterprise', 'description' => 'سلاسل أندية وفروع متعددة', 'price_monthly' => 95, 'price_yearly' => 950, 'max_members' => null, 'max_staff' => null, 'max_branches' => null, 'sort' => 3,
@@ -129,7 +129,7 @@ class AloperaDemoSeeder extends Seeder
     private function seedAlopera(): void
     {
         $tenant = app(TenantContext::class)->require();
-        $tenant->update(['settings' => array_replace($tenant->settings ?? [], ['vat_rate' => 0, 'invoice_footer' => 'شكرًا لاختيارك Alopera Gym 🌸'])]);
+        $tenant->update(['settings' => array_replace($tenant->settings ?? [], ['vat_rate' => 0, 'invoice_footer' => 'شكرًا لاختيارك Alopera Gym'])]);
 
         $staff = $this->staff($tenant);
         $programs = $this->programs();
@@ -204,10 +204,10 @@ class AloperaDemoSeeder extends Seeder
     private function trainers(array $users): array
     {
         $rows = [
-            ['الكوتش ريم', 'مدربة معتمدة في الزومبا والـHIIT بخبرة 8 سنوات.', ['زومبا', 'HIIT', 'كارديو'], '#db2777', $users[0]->id],
-            ['الكوتش دانة', 'متخصصة في البيلاتس والتأهيل الحركي بعد الولادة.', ['بيلاتس', 'تأهيل', 'إطالة'], '#7c3aed', $users[1]->id],
-            ['الكوتش نوف', 'مدربة يوغا معتمدة RYT-200.', ['يوغا', 'تأمل'], '#0d9488', null],
-            ['الكوتش شهد', 'مدربة قوة وتغذية رياضية، تدريب شخصي.', ['قوة', 'تدريب شخصي', 'تغذية'], '#b45309', null],
+            ['الكوتش ريم', 'شهادة تدريب معتمدة في الزومبا والـHIIT وخبرة 8 سنوات.', ['زومبا', 'HIIT', 'كارديو'], '#db2777', $users[0]->id],
+            ['الكوتش دانة', 'خبرة متخصصة في البيلاتس والتأهيل الحركي.', ['بيلاتس', 'تأهيل', 'إطالة'], '#7c3aed', $users[1]->id],
+            ['الكوتش نوف', 'شهادة يوغا معتمدة RYT-200.', ['يوغا', 'تأمل'], '#0d9488', null],
+            ['الكوتش شهد', 'تدريب القوة والتغذية الرياضية والتدريب الشخصي.', ['قوة', 'تدريب شخصي', 'تغذية'], '#b45309', null],
         ];
 
         $out = [];
@@ -255,7 +255,7 @@ class AloperaDemoSeeder extends Seeder
     /** @param array<string, MembershipPlan> $plans */
     private function coupons(array $plans): void
     {
-        Coupon::create(['code' => 'WELCOME10', 'description' => 'خصم 10% للمشتركات الجدد', 'type' => 'percent', 'value' => 10, 'per_member_limit' => 1]);
+        Coupon::create(['code' => 'WELCOME10', 'description' => 'خصم 10% للأعضاء الجدد', 'type' => 'percent', 'value' => 10, 'per_member_limit' => 1]);
         Coupon::create(['code' => 'SUMMER5', 'description' => 'خصم 5 ريال على الربع سنوية', 'type' => 'fixed', 'value' => 5, 'plan_ids' => [$plans['quarter']->id], 'valid_until' => today()->addMonths(2), 'max_uses' => 100]);
     }
 
@@ -300,18 +300,18 @@ class AloperaDemoSeeder extends Seeder
         TemplateCatalog::seedDefaults(approved: true);
         MessageTemplate::query()->update(['status' => 'approved']);
 
-        AutoReply::create(['keyword' => 'الأسعار', 'reply' => 'أهلًا بكِ 🌸 أسعار باقاتنا هنا: الموقع ← الباقات. يسعدنا خدمتك!']);
+        AutoReply::create(['keyword' => 'الأسعار', 'reply' => 'أهلًا بك! أسعار باقاتنا هنا: الموقع ← الباقات. يسعدنا خدمتك!']);
         AutoReply::create(['keyword' => 'الدوام', 'reply' => 'أوقات العمل: السبت–الخميس 6 صباحًا – 11 مساءً، الجمعة 4 – 10 مساءً.']);
     }
 
     private function website(): void
     {
         SiteSetting::query()->update([
-            'hero_title' => 'قوتكِ تبدأ هنا',
-            'hero_badge' => 'نادٍ مخصص للنساء',
-            'hero_subtitle' => 'نادٍ نسائي متكامل في قلب مسقط — حصص جماعية، تدريب شخصي، ومدربات محترفات في أجواء خاصة وآمنة.',
+            'hero_title' => 'قوتك تبدأ هنا',
+            'hero_badge' => 'نادٍ رياضي في قلب مسقط',
+            'hero_subtitle' => 'كل ما تحتاجه للياقتك في مكان واحد — حصص جماعية، تدريب شخصي، وفريق تدريب محترف في أجواء مريحة وآمنة.',
             'about_title' => 'عن Alopera Gym',
-            'about_body' => "Alopera Gym مساحة صُممت للمرأة: صالة أجهزة حديثة، استوديو للحصص الجماعية، ومدربات معتمدات يرافقنك خطوة بخطوة.\n\nنؤمن أن اللياقة أسلوب حياة، لذلك نوفر باقات مرنة، وحجزًا أونلاين للحصص، ومتابعة شخصية لأهدافك.",
+            'about_body' => "Alopera Gym مساحة صُممت للياقتك: صالة أجهزة حديثة، استوديو للحصص الجماعية، وفريق تدريب معتمد يرافقك خطوة بخطوة.\n\nنؤمن أن اللياقة أسلوب حياة، لذلك نوفر باقات مرنة، وحجزًا أونلاين للحصص، ومتابعة شخصية لأهدافك.",
             'announcement' => 'عرض الافتتاح: خصم 10% بكود WELCOME10 على أول اشتراك',
             'contact_phone' => '96824000000',
             'whatsapp_number' => '96890000000',
@@ -320,11 +320,11 @@ class AloperaDemoSeeder extends Seeder
             'map_url' => 'https://maps.google.com/?q=Al+Khuwair+Muscat',
             'working_hours' => [['days' => 'السبت – الخميس', 'hours' => '6:00 ص – 11:00 م'], ['days' => 'الجمعة', 'hours' => '4:00 م – 10:00 م']],
             'social_links' => ['instagram' => 'https://instagram.com/alopera.gym'],
-            'stats' => [['label' => 'مشتركة سعيدة', 'value' => '+500'], ['label' => 'حصة أسبوعيًا', 'value' => '17'], ['label' => 'مدربة معتمدة', 'value' => '4']],
+            'stats' => [['label' => 'عضو سعيد', 'value' => '+500'], ['label' => 'حصة أسبوعيًا', 'value' => '17'], ['label' => 'مدرب معتمد', 'value' => '4']],
         ]);
 
-        SitePost::create(['type' => 'offer', 'title' => 'عرض الصيف: ربع سنوية بخصم 5 ريال', 'slug' => 'summer-offer', 'excerpt' => 'استخدمي الكود SUMMER5 عند الاشتراك في الباقة الربع سنوية.', 'body' => 'العرض ساري لفترة محدودة على الباقة الربع سنوية فقط.', 'is_published' => true, 'published_at' => now()->subDays(3), 'ends_on' => today()->addMonths(2)]);
-        SitePost::create(['type' => 'news', 'title' => 'إطلاق حصص الكيك بوكس', 'slug' => 'kickboxing-launch', 'excerpt' => 'حصة جديدة كل اثنين مع الكوتش ريم.', 'body' => 'انضمي لحصص الكيك بوكس الجديدة: لياقة، قوة، وثقة.', 'is_published' => true, 'published_at' => now()->subDays(10)]);
+        SitePost::create(['type' => 'offer', 'title' => 'عرض الصيف: ربع سنوية بخصم 5 ريال', 'slug' => 'summer-offer', 'excerpt' => 'استخدم الكود SUMMER5 عند الاشتراك في الباقة الربع سنوية.', 'body' => 'العرض ساري لفترة محدودة على الباقة الربع سنوية فقط.', 'is_published' => true, 'published_at' => now()->subDays(3), 'ends_on' => today()->addMonths(2)]);
+        SitePost::create(['type' => 'news', 'title' => 'إطلاق حصص الكيك بوكس', 'slug' => 'kickboxing-launch', 'excerpt' => 'حصة جديدة كل اثنين مع الكوتش ريم.', 'body' => 'انضم إلى حصص الكيك بوكس الجديدة: لياقة، قوة، وثقة.', 'is_published' => true, 'published_at' => now()->subDays(10)]);
     }
 
     /** @return list<Product> */
@@ -425,7 +425,7 @@ class AloperaDemoSeeder extends Seeder
 
         // CRM notes
         foreach (array_slice($out, 0, 8) as $member) {
-            MemberNote::create(['member_id' => $member->id, 'channel' => 'call', 'direction' => 'outbound', 'body' => 'تم التواصل لتذكيرها بموعد التجديد، أبدت اهتمامًا بالباقة الربع سنوية.', 'user_id' => User::ofTenant($member->tenant_id)->value('id')]);
+            MemberNote::create(['member_id' => $member->id, 'channel' => 'call', 'direction' => 'outbound', 'body' => 'تم التواصل للتذكير بموعد التجديد، وهناك اهتمام بالباقة الربع سنوية.', 'user_id' => User::ofTenant($member->tenant_id)->value('id')]);
         }
 
         return $out;
@@ -529,7 +529,7 @@ class AloperaDemoSeeder extends Seeder
         $cats = ExpenseCategory::pluck('id', 'name');
         for ($m = 2; $m >= 0; $m--) {
             $month = now()->subMonths($m)->startOfMonth();
-            $rows = [['إيجار', 'إيجار المقر', 850], ['رواتب', 'رواتب المدربات والموظفات', 2400], ['كهرباء ومياه', 'فاتورة الكهرباء والمياه', 180 + $m * 15], ['تسويق وإعلانات', 'إعلانات إنستغرام', 120]];
+            $rows = [['إيجار', 'إيجار المقر', 850], ['رواتب', 'رواتب المدربين والموظفين', 2400], ['كهرباء ومياه', 'فاتورة الكهرباء والمياه', 180 + $m * 15], ['تسويق وإعلانات', 'إعلانات إنستغرام', 120]];
             foreach ($rows as $i => [$cat, $desc, $amount]) {
                 $this->travel($month->copy()->addDays(2 + $i), fn () => Expense::create([
                     'expense_category_id' => $cats[$cat] ?? null, 'number' => NumberSequence::next('expense'),
@@ -546,7 +546,7 @@ class AloperaDemoSeeder extends Seeder
             $c = Conversation::create(['phone' => $member->phone, 'member_id' => $member->id, 'contact_name' => $member->full_name, 'unread_count' => $i === 0 ? 1 : 0,
                 'last_message_at' => now()->subHours($i * 5 + 1), 'last_inbound_at' => now()->subHours($i * 5 + 1)]);
             Message::create(['conversation_id' => $c->id, 'member_id' => $member->id, 'direction' => 'inbound', 'type' => 'text', 'to_phone' => $member->phone,
-                'body' => ['هل يوجد حصة زومبا يوم الخميس؟', 'أبغى أجمّد اشتراكي أسبوع', 'شكرًا على التذكير 🌸'][$i], 'status' => Message::RECEIVED, 'created_at' => now()->subHours($i * 5 + 1)]);
+                'body' => ['هل يوجد حصة زومبا يوم الخميس؟', 'أبغى أجمّد اشتراكي أسبوع', 'شكرًا على التذكير'][$i], 'status' => Message::RECEIVED, 'created_at' => now()->subHours($i * 5 + 1)]);
         }
     }
 
@@ -554,7 +554,7 @@ class AloperaDemoSeeder extends Seeder
     {
         $program = Program::create(['name' => 'Functional Training', 'slug' => 'functional', 'color' => '#0f766e']);
         $plan = MembershipPlan::create(['name' => 'Monthly', 'type' => 'combo', 'duration_value' => 1, 'duration_unit' => 'month', 'price' => 20]);
-        $member = app(MemberService::class)->create(['full_name' => 'عضوة نادٍ آخر', 'phone' => '96890000004']);
+        $member = app(MemberService::class)->create(['full_name' => 'عضو نادٍ آخر', 'phone' => '96890000004']);
         $m = app(MembershipService::class)->sell($member, $plan);
         app(PaymentService::class)->record($m->invoice()->first(), $m->total, 'cash');
         unset($program);

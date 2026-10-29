@@ -53,7 +53,7 @@ export default function Automation({ autoReplies, rules }: Props) {
                     <CardHeader title="رسائل الخدمة التلقائية" />
                     <p className="text-sm leading-7 text-ink/80">
                         يرسل النظام رسائل الترحيب والفواتير والتذكيرات والحجوزات تلقائيًا عند حدوثها، بشرط أن يكون قالبها <b>معتمدًا</b> و<b>مفعّلًا</b> في
-                        «القوالب»، وأن تكون المشتركة قد وافقت على استقبال الرسائل.
+                        «القوالب»، وأن يكون العضو قد وافق على استقبال الرسائل.
                     </p>
                     {can('templates.manage') && <Button className="mt-4" variant="outline" size="sm" href={route('club.templates.index')}>إدارة القوالب</Button>}
                 </Card>

@@ -22,14 +22,14 @@ const SUB_STATUS: Record<string, [string, 'blue' | 'green' | 'amber' | 'gray' | 
 
 const INV_STATUS: Record<string, [string, 'amber' | 'green' | 'gray']> = { unpaid: ['غير مدفوعة', 'amber'], paid: ['مدفوعة', 'green'], void: ['ملغاة', 'gray'] };
 
-const USAGE_LABELS = { members: 'المشتركات', staff: 'المستخدمات', branches: 'الفروع' } as const;
+const USAGE_LABELS = { members: 'الأعضاء', staff: 'المستخدمون', branches: 'الفروع' } as const;
 
 export default function Billing({ subscription, usage, invoices, status }: Props) {
     const [tLabel, tTone] = label(tenantStatus, status);
 
     return (
         <ClubLayout title="اشتراك المنصة">
-            <PageHeader back={status !== 'suspended' ? <SettingsBack /> : undefined} title="اشتراك النادي في المنصة" subtitle="منفصل تمامًا عن اشتراكات المشتركات داخل النادي" actions={<Badge tone={tTone}>حالة الحساب: {tLabel}</Badge>} />
+            <PageHeader back={status !== 'suspended' ? <SettingsBack /> : undefined} title="اشتراك النادي في المنصة" subtitle="منفصل تمامًا عن اشتراكات الأعضاء داخل النادي" actions={<Badge tone={tTone}>حالة الحساب: {tLabel}</Badge>} />
 
             <div className="grid gap-6 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
@@ -44,9 +44,9 @@ export default function Billing({ subscription, usage, invoices, status }: Props
                             <Stat label="حتى" value={date(subscription.ends_on)} />
                         </dl>
                     ) : (
-                        <EmptyState title="لا يوجد اشتراك فعّال" description="تواصلي مع إدارة المنصة لتفعيل الاشتراك." />
+                        <EmptyState title="لا يوجد اشتراك فعّال" description="تواصل مع إدارة المنصة لتفعيل الاشتراك." />
                     )}
-                    <p className="mt-5 text-xs text-muted">لتغيير الباقة أو الدورة أو سداد فاتورة، تواصلي مع إدارة المنصة؛ يُسجَّل السداد وتُحدَّث الحالة من لوحة المنصة.</p>
+                    <p className="mt-5 text-xs text-muted">لتغيير الباقة أو الدورة أو سداد فاتورة، تواصل مع إدارة المنصة؛ يُسجَّل السداد وتُحدَّث الحالة من لوحة المنصة.</p>
                 </Card>
 
                 <Card>

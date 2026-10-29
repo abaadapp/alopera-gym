@@ -128,7 +128,7 @@ final class InvoiceService
             $hasPending = Payment::where('invoice_id', $invoice->id)->where('status', Payment::PENDING)->exists();
 
             if (! Money::isZero($invoice->paid_total) || $hasPending) {
-                throw new BusinessRuleException('invoice.has_payments', 'لا يمكن إلغاء فاتورة عليها دفعات. قومي برد المبلغ أولًا.');
+                throw new BusinessRuleException('invoice.has_payments', 'لا يمكن إلغاء فاتورة عليها دفعات. قم برد المبلغ أولًا.');
             }
 
             $invoice->forceFill([

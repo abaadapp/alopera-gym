@@ -87,7 +87,7 @@ final class PtService
                 $this->fail('pt.inactive', 'باقة التدريب الشخصي غير نشطة.');
             }
             if (! $trainerId) {
-                $this->fail('pt.no_trainer', 'اختاري المدربة.');
+                $this->fail('pt.no_trainer', 'اختر المدرب.');
             }
             if ($startsAt->isPast()) {
                 $this->fail('pt.past', 'لا يمكن جدولة جلسة في وقت مضى.');
@@ -131,7 +131,7 @@ final class PtService
         });
 
         if (! $inside) {
-            $this->fail('pt.outside_availability', 'الموعد خارج أوقات توفر المدربة.');
+            $this->fail('pt.outside_availability', 'الموعد خارج أوقات توفر المدرب.');
         }
 
         $ptClash = PtSession::where('trainer_id', $trainerId)->where('status', PtSession::SCHEDULED)
@@ -141,7 +141,7 @@ final class PtService
             ->where('starts_at', '<', $end)->where('ends_at', '>', $start)->exists();
 
         if ($ptClash || $classClash) {
-            $this->fail('pt.trainer_busy', 'المدربة لديها موعد آخر في هذا الوقت.');
+            $this->fail('pt.trainer_busy', 'المدرب لديه موعد آخر في هذا الوقت.');
         }
     }
 
@@ -151,7 +151,7 @@ final class PtService
             ->where('starts_at', '<', $end)->where('ends_at', '>', $start)->exists();
 
         if ($clash) {
-            $this->fail('pt.member_busy', 'لدى المشتركة جلسة أخرى في هذا الوقت.');
+            $this->fail('pt.member_busy', 'لدى العضو جلسة أخرى في هذا الوقت.');
         }
     }
 
@@ -179,7 +179,7 @@ final class PtService
                 $this->fail('pt.too_early', 'لم يبدأ موعد الجلسة بعد. الإغلاق المبكر متاح للإدارة مع ذكر السبب.');
             }
             if ($early && blank($earlyReason)) {
-                $this->fail('pt.early_reason', 'اذكري سبب إغلاق الجلسة قبل موعدها.');
+                $this->fail('pt.early_reason', 'اذكر سبب إغلاق الجلسة قبل موعدها.');
             }
 
             $session->forceFill([

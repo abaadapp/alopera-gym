@@ -27,7 +27,7 @@ final class CampaignService
             throw new BusinessRuleException('campaign.template', 'قالب الحملة غير معتمد بعد من واتساب.');
         }
         if (! $this->whatsapp->enabled()) {
-            throw new BusinessRuleException('campaign.whatsapp', 'فعّلي ربط واتساب أولًا من الإعدادات.');
+            throw new BusinessRuleException('campaign.whatsapp', 'فعّل ربط واتساب أولًا من الإعدادات.');
         }
 
         if ($campaign->scheduled_at && $campaign->scheduled_at->isFuture()) {

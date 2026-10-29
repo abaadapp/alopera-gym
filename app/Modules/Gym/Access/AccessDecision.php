@@ -11,15 +11,15 @@ final class AccessDecision
         'ok' => 'مسموح',
         'duplicate_scan' => 'مسموح — دخول مسجّل قبل قليل، لم يُحتسب مرة أخرى',
         'unknown_credential' => 'رمز/بطاقة/بصمة غير معروفة',
-        'member_blocked' => 'حساب المشتركة موقوف',
-        'member_inactive' => 'حساب المشتركة غير نشط',
+        'member_blocked' => 'حساب العضو موقوف',
+        'member_inactive' => 'حساب العضو غير نشط',
         'no_membership' => 'لا توجد عضوية',
         'membership_expired' => 'العضوية منتهية',
         'membership_frozen' => 'العضوية مجمّدة',
         'membership_not_started' => 'العضوية لم تبدأ بعد',
         'pending_payment' => 'العضوية بانتظار الدفع',
         'dues_outstanding' => 'يوجد مبلغ مستحق متأخر',
-        'device_not_for_members' => 'الجهاز غير مخصص للمشتركات',
+        'device_not_for_members' => 'الجهاز غير مخصص للأعضاء',
     ];
 
     public function __construct(

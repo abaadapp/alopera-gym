@@ -34,10 +34,10 @@ export default function MembersIndex({ members, filters: current }: { members: P
     const can = useCan();
 
     return (
-        <ClubLayout title="المشتركات">
+        <ClubLayout title="الأعضاء">
             <PageHeader
-                title="المشتركات"
-                subtitle={`${members.total} مشتركة`}
+                title="الأعضاء"
+                subtitle={`${members.total} عضو`}
                 actions={
                     <>
                         {can('members.export') && (
@@ -47,7 +47,7 @@ export default function MembersIndex({ members, filters: current }: { members: P
                         )}
                         {can('members.manage') && (
                             <Button href={route('club.members.create')} icon={<UserPlus className="size-4" />}>
-                                مشتركة جديدة
+                                عضو جديد
                             </Button>
                         )}
                     </>
@@ -66,12 +66,12 @@ export default function MembersIndex({ members, filters: current }: { members: P
                 </div>
 
                 {members.data.length === 0 ? (
-                    <EmptyState icon={<Users className="size-6" />} title="لا توجد نتائج" description="جرّبي بحثًا آخر أو أضيفي مشتركة جديدة." />
+                    <EmptyState icon={<Users className="size-6" />} title="لا توجد نتائج" description="جرّب بحثًا آخر أو أضف عضوًا جديدًا." />
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="table-base">
                             <thead>
-                                <tr><th>المشتركة</th><th>الهاتف</th><th>العضوية الحالية</th><th>تنتهي</th><th>آخر دخول</th></tr>
+                                <tr><th>العضو</th><th>الهاتف</th><th>العضوية الحالية</th><th>تنتهي</th><th>آخر دخول</th></tr>
                             </thead>
                             <tbody>
                                 {members.data.map((m) => {

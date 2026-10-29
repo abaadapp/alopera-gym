@@ -21,8 +21,8 @@ export default function Login({ site, seo }: { site: SiteInfo; seo: { title: str
                 <div className="relative mx-auto flex max-w-md flex-col px-4 py-16">
                     <div className="rounded-[2rem] border border-line bg-white p-8 shadow-xl shadow-brand/5">
                         <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand-50 text-brand"><UserRound className="size-7" /></div>
-                        <h1 className="mt-4 text-center font-display text-2xl font-semibold">بوابة المشتركة</h1>
-                        <p className="mt-1 text-center text-sm text-muted">تابعي اشتراكك واحجزي حصصك في {tenant?.name}</p>
+                        <h1 className="mt-4 text-center font-display text-2xl font-semibold">بوابة الأعضاء</h1>
+                        <p className="mt-1 text-center text-sm text-muted">تابع اشتراكك واحجز حصصك في {tenant?.name}</p>
 
                         <form onSubmit={submit} className="mt-8 space-y-4">
                             <Field label="رقم الهاتف أو البريد الإلكتروني" error={form.errors.login}>
@@ -31,15 +31,15 @@ export default function Login({ site, seo }: { site: SiteInfo; seo: { title: str
                             <Field label="كلمة المرور" error={form.errors.password}>
                                 <Input type="password" dir="ltr" value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} autoComplete="current-password" required />
                             </Field>
-                            <Checkbox label="تذكّريني على هذا الجهاز" checked={form.data.remember} onChange={(e) => form.setData('remember', e.target.checked)} />
+                            <Checkbox label="تذكّرني على هذا الجهاز" checked={form.data.remember} onChange={(e) => form.setData('remember', e.target.checked)} />
                             <Button type="submit" size="lg" className="w-full rounded-full" loading={form.processing} icon={<LogIn className="size-4" />}>دخول</Button>
                         </form>
 
                         <div className="mt-6 space-y-2 border-t border-line pt-5 text-center text-sm text-muted">
                             {site.signup_enabled && (
-                                <p>جديدة في النادي؟ <Link href={route('site.join')} className="font-medium text-brand">اشتركي الآن</Link></p>
+                                <p>جديد في النادي؟ <Link href={route('site.join')} className="font-medium text-brand">اشترك الآن</Link></p>
                             )}
-                            <p className="text-xs">مشتركة مسجّلة في الاستقبال ولم تُفعّلي الدخول بعد؟ اطلبي من الاستقبال تفعيل حساب البوابة.</p>
+                            <p className="text-xs">عضو مسجّل في الاستقبال ولم تُفعّل الدخول بعد؟ اطلب من الاستقبال تفعيل حساب البوابة.</p>
                         </div>
                     </div>
                 </div>

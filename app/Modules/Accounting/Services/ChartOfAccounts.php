@@ -21,7 +21,7 @@ final class ChartOfAccounts
         'card_clearing' => ['1103', 'مدفوعات البطاقات قيد التسوية', 'asset', 'debit', 'cash_and_banks', false, 'card'],
         'paymob_clearing' => ['1104', 'مدفوعات Paymob قيد التسوية', 'asset', 'debit', 'cash_and_banks', false, 'gateway'],
         'receivables' => ['12', 'الذمم المدينة', 'asset', 'debit', 'assets', true, null],
-        'receivable' => ['1201', 'ذمم المشتركات', 'asset', 'debit', 'receivables', false, null],
+        'receivable' => ['1201', 'ذمم الأعضاء', 'asset', 'debit', 'receivables', false, null],
         'liabilities' => ['2', 'الخصوم', 'liability', 'credit', null, true, null],
         'salaries_payable' => ['2101', 'الرواتب المستحقة', 'liability', 'credit', 'liabilities', false, null],
         'vat_payable' => ['2102', 'ضريبة القيمة المضافة المستحقة', 'liability', 'credit', 'liabilities', false, null],
@@ -43,7 +43,7 @@ final class ChartOfAccounts
 
     /** Created only when something posts to them (sales from before the point-of-sale module was switched off). */
     private const ON_DEMAND = [
-        'revenue_pos' => ['4104', 'إيرادات نقطة البيع (سابقة)', 'revenue', 'credit', 'revenues', false, null],
+        'revenue_pos' => ['4104', 'إيرادات المبيعات', 'revenue', 'credit', 'revenues', false, null],
     ];
 
     /** Where money lands or leaves by payment method, unless the club chose otherwise (finance settings). */

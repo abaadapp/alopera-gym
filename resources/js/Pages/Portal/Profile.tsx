@@ -46,7 +46,7 @@ export default function Profile({ site, seo, profile }: Props) {
                         <div><dt className="text-xs text-muted">الهاتف</dt><dd className="mt-0.5"><span className="num">{phone(profile.phone)}</span></dd></div>
                         <div><dt className="text-xs text-muted">تاريخ الميلاد</dt><dd className="mt-0.5">{date(profile.date_of_birth)}</dd></div>
                     </dl>
-                    <p className="mt-2 text-xs text-muted">لتغيير الاسم أو رقم الهاتف تواصلي مع الاستقبال.</p>
+                    <p className="mt-2 text-xs text-muted">لتغيير الاسم أو رقم الهاتف تواصل مع الاستقبال.</p>
                     <div className="mt-5 space-y-4">
                         <Field label="البريد الإلكتروني" error={form.errors.email}>
                             <Input type="email" dir="ltr" value={form.data.email} onChange={(e) => form.setData('email', e.target.value)} />

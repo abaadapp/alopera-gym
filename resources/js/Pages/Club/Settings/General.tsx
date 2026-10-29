@@ -136,7 +136,7 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
                     </Card>
 
                     <Card>
-                        <CardHeader title="الهوية البصرية" subtitle="تنعكس على اللوحة والموقع وبوابة المشتركات" />
+                        <CardHeader title="الهوية البصرية" subtitle="تنعكس على اللوحة والموقع وبوابة الأعضاء" />
                         <div className="flex items-center gap-3">
                             <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-2xl border border-dashed border-line bg-canvas">
                                 {logoPreview ? <img src={logoPreview} alt="" className="h-full w-full object-cover" /> : <ImagePlus className="size-5 text-muted" />}
@@ -154,7 +154,7 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
                         <div className="mt-4 overflow-hidden rounded-2xl border border-line">
                             <div className="px-4 py-3 text-sm font-medium text-white" style={{ background: form.data.primary_color }}>{form.data.name || 'اسم النادي'}</div>
                             <div className="flex items-center gap-2 p-4" style={{ background: `color-mix(in oklab, ${form.data.secondary_color} 25%, white)` }}>
-                                <span className="rounded-full px-3 py-1 text-xs text-white" style={{ background: form.data.primary_color }}>اشتركي الآن</span>
+                                <span className="rounded-full px-3 py-1 text-xs text-white" style={{ background: form.data.primary_color }}>اشترك الآن</span>
                                 <span className="rounded-full border px-3 py-1 text-xs" style={{ borderColor: form.data.primary_color, color: form.data.primary_color }}>الباقات</span>
                             </div>
                         </div>
@@ -168,11 +168,11 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
                             <NumberField label="نافذة الحجز (أيام)" hint="أقصى مدة مسبقة للحجز من البوابة" value={form.data.rules.booking_window_days} onChange={(v) => setRule('booking_window_days', v)} error={errors['rules.booking_window_days']} min={1} max={90} />
                             <NumberField label="مهلة إلغاء الحجز (ساعات)" hint="قبل موعد الحصة؛ بعدها لا تُسترد الحصة" value={form.data.rules.booking_cancel_cutoff_hours} onChange={(v) => setRule('booking_cancel_cutoff_hours', v)} error={errors['rules.booking_cancel_cutoff_hours']} min={0} max={72} />
                             <NumberField label="نافذة الحضور عند الدخول (دقائق)" hint="دخول النادي يسجّل حضور حصة تبدأ خلالها" value={form.data.rules.checkin_class_window_minutes} onChange={(v) => setRule('checkin_class_window_minutes', v)} error={errors['rules.checkin_class_window_minutes']} min={0} max={240} />
-                            <NumberField label="تجاهل المسح المكرر (دقائق)" hint="مسح نفس المشتركة خلالها يُسجَّل كمحاولة ولا يُحتسب دخولًا جديدًا (0 = إيقاف)" value={form.data.rules.duplicate_scan_minutes} onChange={(v) => setRule('duplicate_scan_minutes', v)} error={errors['rules.duplicate_scan_minutes']} min={0} max={120} />
+                            <NumberField label="تجاهل المسح المكرر (دقائق)" hint="مسح نفس العضو خلالها يُسجَّل كمحاولة ولا يُحتسب دخولًا جديدًا (0 = إيقاف)" value={form.data.rules.duplicate_scan_minutes} onChange={(v) => setRule('duplicate_scan_minutes', v)} error={errors['rules.duplicate_scan_minutes']} min={0} max={120} />
                             <NumberField label="توليد الحصص مسبقًا (أسابيع)" value={form.data.rules.class_session_weeks_ahead} onChange={(v) => setRule('class_session_weeks_ahead', v)} error={errors['rules.class_session_weeks_ahead']} min={1} max={12} />
                         </div>
                         <div className="mt-4 divide-y divide-line">
-                            <Toggle checked={form.data.rules.auto_mark_no_show} onChange={(v) => setRule('auto_mark_no_show', v)} label="تسجيل الغياب تلقائيًا" hint="بعد انتهاء الحصة لمن لم يُسجَّل حضورها" />
+                            <Toggle checked={form.data.rules.auto_mark_no_show} onChange={(v) => setRule('auto_mark_no_show', v)} label="تسجيل الغياب تلقائيًا" hint="بعد انتهاء الحصة لمن لم يُسجَّل حضوره" />
                             <Toggle checked={form.data.rules.block_access_with_dues} onChange={(v) => setRule('block_access_with_dues', v)} label="منع الدخول عند وجود مستحقات متأخرة" hint="حتى لو كانت العضوية سارية" />
                         </div>
                     </Card>
@@ -195,7 +195,7 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
                     <Card>
                         <CardHeader title="الاشتراك أونلاين" />
                         <div className="divide-y divide-line">
-                            <Toggle checked={form.data.rules.member_signup_enabled} onChange={(v) => setRule('member_signup_enabled', v)} label="السماح بالتسجيل من الموقع" hint="اختيار الباقة وإنشاء حساب المشتركة" />
+                            <Toggle checked={form.data.rules.member_signup_enabled} onChange={(v) => setRule('member_signup_enabled', v)} label="السماح بالتسجيل من الموقع" hint="اختيار الباقة وإنشاء حساب العضو" />
                             <Toggle checked={form.data.rules.allow_pay_at_reception} onChange={(v) => setRule('allow_pay_at_reception', v)} label="السماح بالدفع في الاستقبال" hint="تُفعّل العضوية بعد تسجيل الدفع من الاستقبال" />
                         </div>
                     </Card>

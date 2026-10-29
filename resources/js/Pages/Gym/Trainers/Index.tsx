@@ -133,16 +133,16 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
     };
 
     return (
-        <ClubLayout title="المدربات">
+        <ClubLayout title="فريق التدريب">
             <PageHeader
-                title="المدربات"
-                subtitle="الملفات التعريفية، أوقات التوفر، وربط حساب الدخول لشاشة المدربة"
-                actions={<Button onClick={openCreate} icon={<Plus className="size-4" />}>مدربة جديدة</Button>}
+                title="فريق التدريب"
+                subtitle="الملفات التعريفية، أوقات التوفر، وربط حساب الدخول للوحة المدرب"
+                actions={<Button onClick={openCreate} icon={<Plus className="size-4" />}>مدرب جديد</Button>}
             />
 
             {trainers.length === 0 ? (
                 <Card>
-                    <EmptyState icon={<UserRound className="size-6" />} title="لا توجد مدربات بعد" action={<Button onClick={openCreate}>إضافة مدربة</Button>} />
+                    <EmptyState icon={<UserRound className="size-6" />} title="لا يوجد مدربون بعد" action={<Button onClick={openCreate}>إضافة مدرب</Button>} />
                 </Card>
             ) : (
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -157,8 +157,8 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                                 <div className="min-w-0 flex-1">
                                     <p className="truncate font-semibold">{t.name}</p>
                                     <div className="mt-1 flex flex-wrap gap-1.5">
-                                        {t.is_public ? <Badge tone="green">في الموقع</Badge> : <Badge tone="gray">مخفية</Badge>}
-                                        {!t.is_active && <Badge tone="gray">موقوفة</Badge>}
+                                        {t.is_public ? <Badge tone="green">في الموقع</Badge> : <Badge tone="gray">مخفي</Badge>}
+                                        {!t.is_active && <Badge tone="gray">موقوف</Badge>}
                                         {t.user ? <Badge tone="blue"><Link2 className="size-3.5" />{t.user.name}</Badge> : <Badge tone="amber">بدون حساب دخول</Badge>}
                                     </div>
                                 </div>
@@ -175,7 +175,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                             <div className="mt-3 rounded-xl bg-canvas p-3">
                                 <p className="mb-1.5 text-xs font-medium text-muted">أوقات التوفر</p>
                                 {t.availability.length === 0 ? (
-                                    <p className="text-xs text-muted">لم تُحدَّد — لا يمكن جدولة جلسات فردية لها.</p>
+                                    <p className="text-xs text-muted">لم تُحدَّد — لا يمكن جدولة جلسات فردية له.</p>
                                 ) : (
                                     <ul className="space-y-0.5 text-xs">
                                         {[...t.availability].sort((a, b) => WEEK_ORDER.indexOf(a.weekday) - WEEK_ORDER.indexOf(b.weekday) || a.starts_at.localeCompare(b.starts_at)).map((s, i) => (
@@ -187,7 +187,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                             <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-3">
                                 <Button size="sm" variant="outline" icon={<Pencil className="size-3.5" />} onClick={() => openEdit(t)}>تعديل</Button>
                                 <Button size="sm" variant="secondary" icon={<CalendarClock className="size-3.5" />} onClick={() => openAvailability(t)}>أوقات التوفر</Button>
-                                <ConfirmAction url={route('club.trainers.destroy', t.id)} method="delete" title="حذف المدربة" message="ستُخفى من الموقع والقوائم. الحصص السابقة لا تتأثر." variant="ghost" icon={<Trash2 className="size-3.5" />} confirmLabel="حذف">
+                                <ConfirmAction url={route('club.trainers.destroy', t.id)} method="delete" title="حذف المدرب" message="سيُخفى من الموقع والقوائم. الحصص السابقة لا تتأثر." variant="ghost" icon={<Trash2 className="size-3.5" />} confirmLabel="حذف">
                                     حذف
                                 </ConfirmAction>
                             </div>
@@ -199,7 +199,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
             <Modal
                 open={open}
                 onClose={() => setOpen(false)}
-                title={editing ? `تعديل: ${editing.name}` : 'مدربة جديدة'}
+                title={editing ? `تعديل: ${editing.name}` : 'مدرب جديد'}
                 size="lg"
                 footer={
                     <>
@@ -218,7 +218,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                     <Field label="البريد" error={form.errors.email}>
                         <Input dir="ltr" type="email" value={form.data.email} onChange={(e) => form.setData('email', e.target.value)} />
                     </Field>
-                    <Field label="حساب الدخول (شاشة المدربة)" error={form.errors.user_id} hint="اربطيها بمستخدمة بدور «المدربة» لترى حصصها وتسجّل الحضور">
+                    <Field label="حساب الدخول (لوحة المدرب)" error={form.errors.user_id} hint="اربطه بمستخدم بدور «المدرب» ليرى حصصه ويسجّل الحضور">
                         <Select value={form.data.user_id ?? ''} onChange={(e) => form.setData('user_id', e.target.value || null)} placeholder="— بدون —">
                             {users.filter((u) => !linkedUserIds.has(u.id)).map((u) => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
                         </Select>
@@ -244,7 +244,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                             </div>
                         )}
                     </Field>
-                    <Field label="نبذة" error={form.errors.bio} className="sm:col-span-2" hint="تظهر في صفحة المدربات على الموقع">
+                    <Field label="نبذة" error={form.errors.bio} className="sm:col-span-2" hint="تظهر في صفحة فريق التدريب على الموقع">
                         <Textarea value={form.data.bio} onChange={(e) => form.setData('bio', e.target.value)} rows={3} />
                     </Field>
                     <Field label="اللون" error={form.errors.color}>
@@ -256,7 +256,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                     <Field label="الصورة" error={form.errors.photo} className="sm:col-span-2">
                         <label className="flex cursor-pointer items-center gap-4 rounded-xl border border-dashed border-line p-3 hover:border-brand-300">
                             {preview ? <img src={preview} alt="" className="size-16 rounded-xl object-cover" /> : <span className="grid size-16 place-items-center rounded-xl bg-brand-50 text-brand"><ImagePlus className="size-6" /></span>}
-                            <span className="text-sm text-muted">اختاري صورة</span>
+                            <span className="text-sm text-muted">اختر صورة</span>
                             <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                                 const file = e.target.files?.[0] ?? null;
                                 form.setData('photo', file);
@@ -265,8 +265,8 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                         </label>
                     </Field>
                     <div className="space-y-2 sm:col-span-2">
-                        <Toggle checked={form.data.is_public} onChange={(v) => form.setData('is_public', v)} label="تظهر في الموقع" />
-                        <Toggle checked={form.data.is_active} onChange={(v) => form.setData('is_active', v)} label="نشطة" />
+                        <Toggle checked={form.data.is_public} onChange={(v) => form.setData('is_public', v)} label="يظهر في الموقع" />
+                        <Toggle checked={form.data.is_active} onChange={(v) => form.setData('is_active', v)} label="نشط" />
                     </div>
                 </form>
             </Modal>
@@ -285,7 +285,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
             >
                 <p className="mb-3 text-sm text-muted">تُستخدم لجدولة الجلسات الفردية (PT): لا يُقبل موعد خارج هذه الأوقات.</p>
                 <div className="space-y-2">
-                    {slotsForm.data.slots.length === 0 && <p className="rounded-xl bg-canvas p-4 text-center text-sm text-muted">لا توجد أوقات. أضيفي فترة.</p>}
+                    {slotsForm.data.slots.length === 0 && <p className="rounded-xl bg-canvas p-4 text-center text-sm text-muted">لا توجد أوقات. أضف فترة.</p>}
                     {slotsForm.data.slots.map((s, i) => (
                         <div key={i} className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-2 rounded-xl border border-line p-2 sm:grid-cols-[1fr_8rem_8rem_auto]">
                             <Select value={s.weekday} onChange={(e) => updateSlot(i, { weekday: Number(e.target.value) })}>

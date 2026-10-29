@@ -96,7 +96,7 @@ export default function TenantShow({ tenant, owner, usage, subscriptions, invoic
                         {tenant.status === 'suspended' ? (
                             <ConfirmAction url={route('platform.tenants.reactivate', tenant.id)} title="إعادة تفعيل النادي" message="ستعود لوحة النادي وموقعه للعمل فورًا." tone="primary" variant="success" size="md" icon={<PlayCircle className="size-4" />}>إعادة التفعيل</ConfirmAction>
                         ) : (
-                            <ConfirmAction url={route('platform.tenants.suspend', tenant.id)} title="إيقاف النادي" message="تتوقف لوحة النادي وموقعه وبوابة المشتركات وأجهزة الدخول. لا تُحذف أي بيانات." reason="سبب الإيقاف (يظهر للنادي)" confirmLabel="إيقاف" size="md">إيقاف</ConfirmAction>
+                            <ConfirmAction url={route('platform.tenants.suspend', tenant.id)} title="إيقاف النادي" message="تتوقف لوحة النادي وموقعه وبوابة الأعضاء وأجهزة الدخول. لا تُحذف أي بيانات." reason="سبب الإيقاف (يظهر للنادي)" confirmLabel="إيقاف" size="md">إيقاف</ConfirmAction>
                         )}
                     </>
                 }
@@ -114,7 +114,7 @@ export default function TenantShow({ tenant, owner, usage, subscriptions, invoic
                         <Field label="الاسم القانوني" error={profile.errors.legal_name}>
                             <Input value={profile.data.legal_name} onChange={(e) => profile.setData('legal_name', e.target.value)} />
                         </Field>
-                        <Field label="نطاق مخصص للموقع" error={profile.errors.domain} hint="مثال: alopera.om — وجّهي سجل DNS إلى خادم المنصة وفعّلي SSL" className="sm:col-span-2">
+                        <Field label="نطاق مخصص للموقع" error={profile.errors.domain} hint="مثال: alopera.om — وجّه سجل DNS إلى خادم المنصة وفعّل SSL" className="sm:col-span-2">
                             <Input dir="ltr" value={profile.data.domain} onChange={(e) => profile.setData('domain', e.target.value.trim().toLowerCase())} placeholder="club-domain.com" />
                         </Field>
                         <Field label="البريد" error={profile.errors.email}>
@@ -139,20 +139,20 @@ export default function TenantShow({ tenant, owner, usage, subscriptions, invoic
                     <Card>
                         <CardHeader title={<span className="flex items-center gap-2"><Users className="size-4" /> الاستخدام</span>} />
                         <dl className="grid grid-cols-3 gap-3">
-                            <Stat label="مشتركات" value={<span className="num text-lg">{number(usage.members)}</span>} />
+                            <Stat label="أعضاء" value={<span className="num text-lg">{number(usage.members)}</span>} />
                             <Stat label="عضويات نشطة" value={<span className="num text-lg">{number(usage.active_memberships)}</span>} />
-                            <Stat label="مستخدمات" value={<span className="num text-lg">{number(usage.staff)}</span>} />
+                            <Stat label="مستخدمون" value={<span className="num text-lg">{number(usage.staff)}</span>} />
                         </dl>
                     </Card>
                     <Card>
-                        <CardHeader title="المالكة" />
+                        <CardHeader title="المالك" />
                         {owner ? (
                             <div className="text-sm">
                                 <p className="font-medium">{owner.name}</p>
                                 <p className="text-xs text-muted" dir="ltr">{owner.email}</p>
                             </div>
                         ) : (
-                            <p className="text-sm text-muted">لا يوجد حساب مالكة نشط.</p>
+                            <p className="text-sm text-muted">لا يوجد حساب مالك نشط.</p>
                         )}
                         <p className="mt-3 text-xs text-muted">أُنشئ في {date(tenant.created_at)}</p>
                     </Card>

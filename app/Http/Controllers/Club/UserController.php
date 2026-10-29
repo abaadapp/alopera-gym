@@ -53,7 +53,7 @@ class UserController extends Controller
 
         $audit->log('user.created', $user, ['role_id' => $user->role_id]);
 
-        return back()->with('success', 'تمت إضافة المستخدمة.');
+        return back()->with('success', 'تمت إضافة المستخدم.');
     }
 
     public function update(Request $request, User $user, AuditLogger $audit): RedirectResponse
@@ -65,7 +65,7 @@ class UserController extends Controller
         $ownerRole = Role::where('key', SystemRoles::OWNER)->value('id');
         $losingOwner = $user->role_id === $ownerRole && ((int) $data['role_id'] !== $ownerRole || ! ($data['is_active'] ?? true));
         if ($losingOwner && User::ofTenant($user->tenant_id)->where('role_id', $ownerRole)->where('is_active', true)->count() <= 1) {
-            return back()->with('error', 'يجب أن تبقى مالكة واحدة نشطة على الأقل.');
+            return back()->with('error', 'يجب أن يبقى مالك واحد نشط على الأقل.');
         }
 
         $old = $user->only('role_id', 'is_active', 'email');
@@ -81,7 +81,7 @@ class UserController extends Controller
 
         $audit->log('user.updated', $user, old: $old, new: $user->only('role_id', 'is_active', 'email'));
 
-        return back()->with('success', 'تم حفظ المستخدمة.');
+        return back()->with('success', 'تم حفظ المستخدم.');
     }
 
     public function destroy(Request $request, User $user, AuditLogger $audit): RedirectResponse
@@ -91,13 +91,13 @@ class UserController extends Controller
             return back()->with('error', 'لا يمكنك إيقاف حسابك.');
         }
         if ($user->isOwner() && User::ofTenant($user->tenant_id)->where('role_id', $user->role_id)->where('is_active', true)->count() <= 1) {
-            return back()->with('error', 'يجب أن تبقى مالكة واحدة نشطة على الأقل.');
+            return back()->with('error', 'يجب أن يبقى مالك واحد نشط على الأقل.');
         }
 
         $user->forceFill(['is_active' => false])->save();
         $audit->log('user.deactivated', $user);
 
-        return back()->with('success', 'تم إيقاف حساب المستخدمة.');
+        return back()->with('success', 'تم إيقاف حساب المستخدم.');
     }
 
     private function ensureOwnClub(User $user): void

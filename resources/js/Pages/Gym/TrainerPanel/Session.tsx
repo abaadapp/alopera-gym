@@ -44,8 +44,8 @@ export default function TrainerSession({ session, bookings }: { session: Session
                 <p className="mt-1 text-white/85">{dayName(session.date)} · {time(session.time)} – {time(session.end_time)}{session.room ? ` · ${session.room}` : ''}</p>
                 <div className="mt-4 flex flex-wrap gap-2 text-sm">
                     <span className="rounded-full bg-white/20 px-3 py-1"><Users className="me-1 inline size-4" /><span className="num">{session.booked}/{session.capacity}</span></span>
-                    <span className="rounded-full bg-white/20 px-3 py-1">حضرت <span className="num">{attended}</span></span>
-                    <span className="rounded-full bg-white/20 px-3 py-1">غابت <span className="num">{absent}</span></span>
+                    <span className="rounded-full bg-white/20 px-3 py-1">حضر <span className="num">{attended}</span></span>
+                    <span className="rounded-full bg-white/20 px-3 py-1">غاب <span className="num">{absent}</span></span>
                 </div>
             </div>
 
@@ -67,8 +67,8 @@ export default function TrainerSession({ session, bookings }: { session: Session
                                         {b.member?.phone && <> · <a href={`tel:+${b.member.phone}`} className="num"><Phone className="me-0.5 inline size-3.5" />{fmtPhone(b.member.phone)}</a></>}
                                     </p>
                                 </div>
-                                {b.status === 'attended' && <Badge tone="green">حضرت</Badge>}
-                                {b.status === 'no_show' && <Badge tone="red">غابت</Badge>}
+                                {b.status === 'attended' && <Badge tone="green">حضر</Badge>}
+                                {b.status === 'no_show' && <Badge tone="red">غاب</Badge>}
                             </div>
                             {canMark && (
                                 <div className="mt-3 grid grid-cols-2 gap-2">
@@ -78,7 +78,7 @@ export default function TrainerSession({ session, bookings }: { session: Session
                                         onClick={() => mark(b, 'attended')}
                                         className={cn('flex h-12 items-center justify-center gap-2 rounded-xl text-base font-medium transition disabled:opacity-60', b.status === 'attended' ? 'bg-emerald-600 text-white' : 'border border-emerald-300 text-emerald-700 hover:bg-emerald-50')}
                                     >
-                                        <Check className="size-5" /> حضرت
+                                        <Check className="size-5" /> حضر
                                     </button>
                                     <button
                                         type="button"
@@ -86,7 +86,7 @@ export default function TrainerSession({ session, bookings }: { session: Session
                                         onClick={() => mark(b, 'no_show')}
                                         className={cn('flex h-12 items-center justify-center gap-2 rounded-xl text-base font-medium transition disabled:opacity-60', b.status === 'no_show' ? 'bg-red-600 text-white' : 'border border-red-200 text-red-700 hover:bg-red-50')}
                                     >
-                                        <X className="size-5" /> غابت
+                                        <X className="size-5" /> غاب
                                     </button>
                                 </div>
                             )}

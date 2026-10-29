@@ -115,17 +115,17 @@ export default function Dashboard({ site, seo, profile, current, next, upcoming,
                         <div className="rounded-[2rem] border border-dashed border-brand-200 bg-white p-8 text-center">
                             <Dumbbell className="mx-auto size-10 text-brand-300" />
                             <p className="mt-3 font-display text-lg font-semibold">لا توجد عضوية نشطة</p>
-                            <p className="mt-1 text-sm text-muted">{next?.status === 'pending' ? 'لديكِ اشتراك بانتظار الدفع.' : 'اختاري باقة وابدئي الآن.'}</p>
+                            <p className="mt-1 text-sm text-muted">{next?.status === 'pending' ? 'لديك اشتراك بانتظار الدفع.' : 'اختر باقة وابدأ الآن.'}</p>
                             <Link href={route('portal.renew')} className="mt-5 inline-flex items-center gap-2 rounded-full bg-brand px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-600">
-                                <RefreshCw className="size-4" /> اشتركي / جددي
+                                <RefreshCw className="size-4" /> اشترك / جدد
                             </Link>
                         </div>
                     )}
 
                     {expiringSoon && (
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                            <p className="flex items-center gap-2 text-sm text-amber-800"><CalendarClock className="size-5 shrink-0" /><span>عضويتك تنتهي بعد <span className="num font-semibold">{dayCount(current?.days_left)}</span>. جددي الآن دون أن تفقدي أي يوم.</span></p>
-                            <Link href={route('portal.renew')} className="rounded-full bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600">جددي الآن</Link>
+                            <p className="flex items-center gap-2 text-sm text-amber-800"><CalendarClock className="size-5 shrink-0" /><span>عضويتك تنتهي بعد <span className="num font-semibold">{dayCount(current?.days_left)}</span>. جدد الآن دون أن تفقد أي يوم.</span></p>
+                            <Link href={route('portal.renew')} className="rounded-full bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600">جدد الآن</Link>
                         </div>
                     )}
 
@@ -152,10 +152,10 @@ export default function Dashboard({ site, seo, profile, current, next, upcoming,
                                         </div>
                                         {onlinePayments ? (
                                             <button onClick={() => pay(inv.id)} disabled={paying === inv.id} className="rounded-full bg-brand px-4 py-2 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-60">
-                                                {paying === inv.id ? 'جارٍ التحويل…' : 'ادفعي الآن'}
+                                                {paying === inv.id ? 'جارٍ التحويل…' : 'ادفع الآن'}
                                             </button>
                                         ) : (
-                                            <span className="text-xs text-muted">ادفعي في الاستقبال</span>
+                                            <span className="text-xs text-muted">ادفع في الاستقبال</span>
                                         )}
                                     </li>
                                 ))}
@@ -166,7 +166,7 @@ export default function Dashboard({ site, seo, profile, current, next, upcoming,
                     <section className="rounded-2xl border border-line bg-white p-5">
                         <div className="flex items-center justify-between">
                             <h2 className="flex items-center gap-2 font-display text-lg font-semibold"><CalendarCheck className="size-5 text-brand" /> حصصي القادمة</h2>
-                            <Link href={route('portal.classes')} className="text-sm text-brand">احجزي حصة</Link>
+                            <Link href={route('portal.classes')} className="text-sm text-brand">احجز حصة</Link>
                         </div>
                         {upcoming.length === 0 ? (
                             <p className="py-6 text-center text-sm text-muted">لا توجد حجوزات قادمة.</p>
@@ -194,10 +194,10 @@ export default function Dashboard({ site, seo, profile, current, next, upcoming,
                                 <div className="mx-auto mt-4 w-fit rounded-2xl border border-line bg-white p-4">
                                     <QRCode value={profile.qr_token} size={176} level="M" fgColor="#2a1f2d" title="رمز الدخول إلى النادي" />
                                 </div>
-                                <p className="mt-3 text-xs text-muted">اعرضي الرمز على قارئ الدخول أو في الاستقبال. يُسمح بالدخول تلقائيًا ما دامت عضويتك سارية.</p>
+                                <p className="mt-3 text-xs text-muted">اعرض الرمز على قارئ الدخول أو في الاستقبال. يُسمح بالدخول تلقائيًا ما دامت عضويتك سارية.</p>
                             </>
                         ) : (
-                            <p className="mt-4 text-sm text-muted">رمز الدخول غير متاح حاليًا. تواصلي مع الاستقبال.</p>
+                            <p className="mt-4 text-sm text-muted">رمز الدخول غير متاح حاليًا. تواصل مع الاستقبال.</p>
                         )}
                     </div>
 

@@ -62,7 +62,7 @@ final class MembershipService
         $plan ??= $latestAny?->plan;
 
         if (! $plan) {
-            throw new BusinessRuleException('membership.no_plan', 'اختاري الباقة للتجديد.', 'membership_plan_id');
+            throw new BusinessRuleException('membership.no_plan', 'اختر الباقة للتجديد.', 'membership_plan_id');
         }
 
         $today = CarbonImmutable::today();
@@ -88,7 +88,7 @@ final class MembershipService
         }
 
         if ($plan->id === $current->membership_plan_id) {
-            throw new BusinessRuleException('membership.upgrade_same', 'اختاري باقة مختلفة للترقية.', 'membership_plan_id');
+            throw new BusinessRuleException('membership.upgrade_same', 'اختر باقة مختلفة للترقية.', 'membership_plan_id');
         }
 
         $credit = $this->unusedValue($current);
@@ -121,7 +121,7 @@ final class MembershipService
         }
 
         if ($member->status === Member::BLOCKED) {
-            throw new BusinessRuleException('member.blocked', 'حساب المشتركة موقوف.');
+            throw new BusinessRuleException('member.blocked', 'حساب العضو موقوف.');
         }
 
         return DB::transaction(function () use ($member, $plan, $kind, $options) {

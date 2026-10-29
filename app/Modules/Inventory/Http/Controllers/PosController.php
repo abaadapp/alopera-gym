@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Http\Controllers;
 
+use App\Core\Support\BusinessRuleException;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Gym\Models\Member;
@@ -13,7 +14,7 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/** Simple front-desk point of sale. */
+/** The point of sale: whoever holds pos.sell sells; discounts need sales.discount, voiding needs sales.refund. */
 class PosController extends Controller
 {
     public function __construct(private readonly PosService $pos) {}
@@ -23,6 +24,8 @@ class PosController extends Controller
         return Inertia::render('Inventory/Pos', [
             'products' => Product::with('category:id,name')->where('is_active', true)->orderBy('name')->get()
                 ->map(fn (Product $p) => $p->only('id', 'name', 'price', 'stock_quantity', 'track_stock', 'barcode', 'sku') + ['category' => $p->category?->name, 'image_url' => $p->imageUrl()]),
+            'can' => ['discount' => request()->user()->can('sales.discount')],
+            'lastSale' => session('sale_id'),
         ]);
     }
 
@@ -36,32 +39,27 @@ class PosController extends Controller
             'member_id' => ['nullable', TenantRule::exists('gym_members')],
             'discount' => ['nullable', 'numeric', 'min:0'],
             'card_reference' => ['nullable', 'string', 'max:120', 'required_if:payment_method,card'],
-        ], ['card_reference.required_if' => 'أدخلي رقم العملية من جهاز الشبكة.']);
+            'customer_name' => ['nullable', 'string', 'max:120'],
+        ], ['card_reference.required_if' => 'أدخل رقم العملية من جهاز الشبكة.']);
 
-        $sale = $this->pos->checkout($data['items'], $data['payment_method'], isset($data['member_id']) ? Member::find($data['member_id']) : null, $data['discount'] ?? 0, $request->user()->branch_id, $data['card_reference'] ?? null);
+        if ((float) ($data['discount'] ?? 0) > 0 && ! $request->user()->can('sales.discount')) {
+            throw new BusinessRuleException('pos.discount_permission', 'الخصم يحتاج صلاحية «تطبيق الخصومات عند البيع».', 'discount');
+        }
 
-        return back()->with('success', 'تمت عملية البيع '.$sale->number.' بمبلغ '.$sale->total);
-    }
+        $sale = $this->pos->checkout($data['items'], $data['payment_method'], isset($data['member_id']) ? Member::find($data['member_id']) : null, $data['discount'] ?? 0, $request->user()->branch_id, $data['card_reference'] ?? null, $data['customer_name'] ?? null);
 
-    public function sales(Request $request): Response
-    {
-        return Inertia::render('Inventory/Sales', [
-            'sales' => Sale::with(['cashier:id,name', 'items'])->latest('id')
-                ->when($request->date('date'), fn ($q, $d) => $q->whereDate('created_at', $d))
-                ->paginate(30)->withQueryString()
-                ->through(fn (Sale $s) => $s->only('id', 'number', 'status', 'total', 'discount', 'payment_method', 'invoice_id') + [
-                    'cashier' => $s->cashier?->name, 'at' => $s->created_at->format('Y-m-d H:i'),
-                    'items' => $s->items->map(fn ($i) => $i->only('name', 'quantity', 'line_total')),
-                ]),
-            'filters' => $request->only('date'),
-        ]);
+        return back()->with('success', 'تمت عملية البيع '.$sale->number.' بمبلغ '.$sale->total)->with('sale_id', $sale->id);
     }
 
     public function void(Request $request, Sale $sale): RedirectResponse
     {
-        $data = $request->validate(['reason' => ['required', 'string', 'max:255']]);
-        $this->pos->void($sale, $data['reason']);
+        SalesController::ensureBranch($request->user(), $sale);
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:255'],
+            'refund_method' => ['nullable', 'in:cash,card,bank_transfer,other'],
+        ]);
+        $this->pos->void($sale, $data['reason'], $data['refund_method'] ?? null);
 
-        return back()->with('success', 'تم إلغاء عملية البيع وإرجاع المخزون ورد المبلغ.');
+        return back()->with('success', 'أُلغيت عملية البيع '.$sale->number.' وعاد المخزون وسُجّل رد المبلغ.');
     }
 }

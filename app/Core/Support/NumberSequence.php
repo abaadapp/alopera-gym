@@ -19,6 +19,7 @@ final class NumberSequence
         'receipt' => ['prefix' => 'RC-', 'pad' => 6, 'yearly' => true],
         'credit_note' => ['prefix' => 'CN-', 'pad' => 6, 'yearly' => true],
         'sale' => ['prefix' => 'POS-', 'pad' => 6, 'yearly' => true],
+        'web_order' => ['prefix' => 'WEB-', 'pad' => 6, 'yearly' => true],
         'purchase_order' => ['prefix' => 'PO-', 'pad' => 5, 'yearly' => true],
         'expense' => ['prefix' => 'EX-', 'pad' => 5, 'yearly' => true],
         'journal' => ['prefix' => 'JV-', 'pad' => 6, 'yearly' => true],

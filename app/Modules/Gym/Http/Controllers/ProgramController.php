@@ -51,7 +51,7 @@ class ProgramController extends Controller
     public function destroy(Program $program): RedirectResponse
     {
         if ($program->schedules()->where('is_active', true)->exists()) {
-            return back()->with('error', 'البرنامج مستخدم في الجدول الأسبوعي. أوقفي حصصه أولًا.');
+            return back()->with('error', 'البرنامج مستخدم في الجدول الأسبوعي. أوقف حصصه أولًا.');
         }
         $program->update(['is_active' => false]);
         $program->delete();

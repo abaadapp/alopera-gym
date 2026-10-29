@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Accounting\AccountingServiceProvider;
+use App\Modules\Documents\DocumentsServiceProvider;
 use App\Modules\Finance\FinanceServiceProvider;
 use App\Modules\Gym\GymServiceProvider;
 use App\Modules\Inventory\InventoryServiceProvider;
@@ -19,5 +20,6 @@ return [
     MessagingServiceProvider::class,
     PaymentsServiceProvider::class,
     PayrollServiceProvider::class,
+    DocumentsServiceProvider::class,
     WebsiteServiceProvider::class,
 ];

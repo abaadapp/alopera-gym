@@ -32,8 +32,9 @@ final class PosService
     /**
      * @param  list<array{product_id: int, quantity: float|int}>  $items
      * @param  string|null  $cardReference  transaction number printed by the bank card terminal
+     * @param  string|null  $customerName  a walk-in buyer's name, when no member is chosen
      */
-    public function checkout(array $items, string $method, ?Member $member = null, string|float $discount = 0, ?int $branchId = null, ?string $cardReference = null): Sale
+    public function checkout(array $items, string $method, ?Member $member = null, string|float $discount = 0, ?int $branchId = null, ?string $cardReference = null, ?string $customerName = null): Sale
     {
         if (! in_array($method, ['cash', 'card'], true)) {
             throw new BusinessRuleException('pos.method', 'طريقة الدفع في نقطة البيع: نقدًا أو بطاقة.', 'payment_method');
@@ -42,7 +43,7 @@ final class PosService
             throw new BusinessRuleException('pos.empty', 'السلة فارغة.', 'items');
         }
 
-        return DB::transaction(function () use ($items, $method, $member, $discount, $branchId, $cardReference) {
+        return DB::transaction(function () use ($items, $method, $member, $discount, $branchId, $cardReference, $customerName) {
             $products = Product::whereIn('id', array_column($items, 'product_id'))->where('is_active', true)->get()->keyBy('id');
             $lines = [];
             $subtotal = '0';
@@ -66,8 +67,11 @@ final class PosService
                 'branch_id' => $branchId,
                 'customer_type' => $member?->getMorphClass(),
                 'customer_id' => $member?->id,
+                'customer_name' => $member ? null : ($customerName ?: null),
                 'number' => NumberSequence::next('sale'),
-                'status' => 'completed',
+                'source' => Sale::POS,
+                'status' => Sale::COMPLETED,
+                'fulfillment' => 'delivered',
                 'subtotal' => $subtotal,
                 'discount' => Money::normalize($discount),
                 'tax' => '0',
@@ -97,7 +101,7 @@ final class PosService
                 ];
             }
 
-            $invoice = $this->invoices->issue($member, $invoiceLines, ['type' => 'pos', 'branch_id' => $branchId], 'عميل نقدي');
+            $invoice = $this->invoices->issue($member, $invoiceLines, ['type' => 'pos', 'branch_id' => $branchId], $customerName ?: 'عميل نقدي');
             if ($invoice->isOpen()) {
                 $reference = $method === 'card' && $cardReference ? $cardReference : $sale->number;
                 $this->payments->record($invoice, $invoice->balance(), $method === 'card' ? 'card' : 'cash', ['reference' => $reference, 'branch_id' => $branchId]);
@@ -109,13 +113,17 @@ final class PosService
         });
     }
 
-    /** Void a sale: stock goes back, the payment is refunded. */
-    public function void(Sale $sale, string $reason): Sale
+    /**
+     * Void a completed sale (from the point of sale, or a website order already handed over): stock goes back,
+     * the payment is refunded — by the same means unless another is chosen (a Paymob payment is refunded outside
+     * the system, so it is recorded as "other" by default).
+     */
+    public function void(Sale $sale, string $reason, ?string $refundMethod = null): Sale
     {
-        return DB::transaction(function () use ($sale, $reason) {
+        return DB::transaction(function () use ($sale, $reason, $refundMethod) {
             $sale = Sale::with('items.product')->whereKey($sale->id)->lockForUpdate()->firstOrFail();
-            if ($sale->status !== 'completed') {
-                throw new BusinessRuleException('pos.voided', 'العملية ملغاة بالفعل.');
+            if ($sale->status !== Sale::COMPLETED) {
+                throw new BusinessRuleException('pos.voided', 'لا يمكن إلغاء هذه العملية: ملغاة بالفعل أو لم تكتمل.');
             }
 
             foreach ($sale->items as $item) {
@@ -127,11 +135,14 @@ final class PosService
             $invoice = $sale->invoice_id ? Invoice::find($sale->invoice_id) : null;
             if ($invoice && ! Money::isZero($invoice->netTotal())) {
                 $payment = Payment::where('invoice_id', $invoice->id)->where('kind', Payment::KIND_PAYMENT)->where('status', Payment::COMPLETED)->first();
+                $method = $refundMethod ?? match ($payment?->method) {
+                    'card' => 'card', 'cash', null => 'cash', 'bank_transfer' => 'bank_transfer', default => 'other',
+                };
                 $this->credits->issue($invoice, $invoice->netTotal(), 'إلغاء عملية بيع '.$sale->number.': '.$reason,
-                    ['method' => $payment?->method === 'card' ? 'card' : 'cash', 'reference' => $payment?->reference]);
+                    ['method' => $method, 'reference' => $payment?->reference]);
             }
 
-            $sale->forceFill(['status' => 'voided', 'voided_at' => now()])->save();
+            $sale->forceFill(['status' => Sale::VOIDED, 'voided_at' => now(), 'cancel_reason' => $reason])->save();
 
             return $sale;
         });

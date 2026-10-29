@@ -200,7 +200,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                                 )}
                                 <Row label="المدفوع" value={money(invoice.paid_total, currency)} />
                                 {invoice.status !== 'void' && <Row label="المتبقي" value={money(invoice.balance, currency)} strong tone={Number(invoice.balance) > 0 ? 'text-red-600' : 'text-emerald-600'} />}
-                                {Number(invoice.refund_due) > 0 && <Row label="مستحق ردّه للعميلة" value={money(invoice.refund_due, currency)} tone="text-amber-700" />}
+                                {Number(invoice.refund_due) > 0 && <Row label="مستحق ردّه للعميل" value={money(invoice.refund_due, currency)} tone="text-amber-700" />}
                             </dl>
                         </div>
                         {(invoice.notes || club.footer) && (
@@ -250,7 +250,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                                                 )}
                                                 {p.status === 'pending' && can('payments.confirm') && (
                                                     <>
-                                                        <ConfirmAction url={route('club.payments.confirm', p.id)} title="تأكيد التحويل" message="تأكدي من وصول المبلغ في كشف الحساب. سيُطبَّق على الفاتورة وتُفعَّل العضوية إن اكتمل السداد." confirmLabel="تأكيد الاستلام" tone="primary" variant="success" icon={<Check className="size-3.5" />}>
+                                                        <ConfirmAction url={route('club.payments.confirm', p.id)} title="تأكيد التحويل" message="تأكد من وصول المبلغ في كشف الحساب. سيُطبَّق على الفاتورة وتُفعَّل العضوية إن اكتمل السداد." confirmLabel="تأكيد الاستلام" tone="primary" variant="success" icon={<Check className="size-3.5" />}>
                                                             تأكيد
                                                         </ConfirmAction>
                                                         <ConfirmAction url={route('club.payments.reject', p.id)} title="رفض التحويل" reason="سبب الرفض" confirmLabel="رفض" icon={<X className="size-3.5" />}>
@@ -281,7 +281,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                                                 <span className="ms-2 inline-block num text-amber-700">- {money(n.amount, currency)}</span>
                                             </p>
                                             <p className="text-xs text-muted">{n.issued_at}{n.creator && <> · {n.creator}</>} · {n.reason}</p>
-                                            {Number(n.refunded_total) > 0 && <p className="mt-0.5 text-xs text-emerald-700">رُدّ للعميلة: <span className="num">{money(n.refunded_total, currency)}</span></p>}
+                                            {Number(n.refunded_total) > 0 && <p className="mt-0.5 text-xs text-emerald-700">رُدّ للعميل: <span className="num">{money(n.refunded_total, currency)}</span></p>}
                                         </div>
                                         <div className="flex flex-wrap gap-1.5">
                                             <Button variant="ghost" size="sm" href={route('club.credit-notes.print', n.id)} external icon={<Printer className="size-3.5" />}>طباعة</Button>
@@ -316,17 +316,17 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                                             <Button type="button" variant="outline" onClick={() => copy(invoice.pay_link!)} icon={<Copy className="size-4" />} aria-label="نسخ" />
                                         </div>
                                     ) : (
-                                        <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">الدفع الإلكتروني غير مفعّل. فعّلي Paymob من الإعدادات ← الربط.</p>
+                                        <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">الدفع الإلكتروني غير مفعّل. فعّل Paymob من الإعدادات ← الربط.</p>
                                     )}
                                 </div>
                             )}
                             <div className="flex flex-wrap gap-2">
-                                <Button variant="outline" size="sm" href={invoice.public_link} external icon={<ExternalLink className="size-3.5" />}>عرض نسخة المشتركة</Button>
+                                <Button variant="outline" size="sm" href={invoice.public_link} external icon={<ExternalLink className="size-3.5" />}>عرض نسخة العضو</Button>
                                 <Button variant="ghost" size="sm" onClick={() => copy(invoice.public_link)} icon={<Copy className="size-3.5" />}>نسخ الرابط</Button>
                             </div>
                             {can('whatsapp.send') && invoice.billable_type === 'member' && isOpen && (
                                 whatsappEnabled ? (
-                                    <ConfirmAction url={route('club.invoices.send', invoice.id)} title="إرسال عبر واتساب" message="ستُرسل الفاتورة ورابط الدفع للمشتركة بقالب «إرسال الفاتورة» المعتمد." confirmLabel="إرسال" tone="primary" variant="secondary" size="md" icon={<MessageCircle className="size-4" />}>
+                                    <ConfirmAction url={route('club.invoices.send', invoice.id)} title="إرسال عبر واتساب" message="ستُرسل الفاتورة ورابط الدفع للعضو بقالب «إرسال الفاتورة» المعتمد." confirmLabel="إرسال" tone="primary" variant="secondary" size="md" icon={<MessageCircle className="size-4" />}>
                                         إرسال عبر واتساب
                                     </ConfirmAction>
                                 ) : (
@@ -531,7 +531,7 @@ function CreditNoteModal({ open, onClose, invoice, currency, canRefund }: { open
                     <div className="space-y-3 rounded-xl border border-line p-3">
                         <label className="flex items-center gap-2 text-sm">
                             <input type="checkbox" className="size-4 accent-[var(--brand)]" checked={form.data.refund_now} onChange={(e) => form.setData('refund_now', e.target.checked)} />
-                            رد المبلغ للعميلة الآن
+                            رد المبلغ للعميل الآن
                             {owed > 0 && <span className="text-muted">(<span className="num">{money(owed, currency)}</span>)</span>}
                         </label>
                         {form.data.refund_now && (
@@ -549,7 +549,7 @@ function CreditNoteModal({ open, onClose, invoice, currency, canRefund }: { open
                         {!form.data.refund_now && <p className="text-xs text-muted">يمكن رد المبلغ لاحقًا من قائمة الإشعارات الدائنة.</p>}
                     </div>
                 )}
-                <p className="text-xs text-muted">الإشعار لا يلغي العضوية تلقائيًا. ألغي العضوية من ملف المشتركة إذا لزم.</p>
+                <p className="text-xs text-muted">الإشعار لا يلغي العضوية تلقائيًا. ألغِ العضوية من ملف العضو إذا لزم.</p>
             </form>
         </Modal>
     );

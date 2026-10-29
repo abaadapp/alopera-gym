@@ -1,10 +1,10 @@
 import { Link } from '@inertiajs/react';
-import { BellRing, Building2, ChevronLeft, Clock, Database, Landmark, Plug, ScrollText, SlidersHorizontal, UserCog, type LucideIcon } from 'lucide-react';
+import { BellRing, Building2, ChevronLeft, Clock, Database, FileClock, Landmark, Plug, ScrollText, ShoppingBag, SlidersHorizontal, UserCog, type LucideIcon } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { PageHeader } from '@/Components/ui';
-import { useCan } from '@/hooks/useShared';
+import { useCan, useShared } from '@/hooks/useShared';
 
-type Entry = { title: string; description: string; route: string; permission: string | string[]; icon: LucideIcon };
+type Entry = { title: string; description: string; route: string; permission: string | string[]; icon: LucideIcon; module?: 'sales' };
 
 /** Every settings screen, grouped. A card shows only when the user may open it (the server checks again). */
 const SECTIONS: { title: string; items: Entry[] }[] = [
@@ -19,7 +19,7 @@ const SECTIONS: { title: string; items: Entry[] }[] = [
     {
         title: 'الربط والإشعارات',
         items: [
-            { title: 'الربط مع واتساب وPaymob', description: 'واتساب للأعمال وبوابة الدفع الإلكتروني للمشتركات', route: 'club.integrations.index', permission: 'integrations.manage', icon: Plug },
+            { title: 'الربط مع واتساب وPaymob', description: 'واتساب للأعمال وبوابة الدفع الإلكتروني للأعضاء', route: 'club.integrations.index', permission: 'integrations.manage', icon: Plug },
             { title: 'الإشعارات', description: 'تذكيرات انتهاء العضوية والمتابعة وإشعارات الحصص', route: 'club.settings.notifications', permission: 'settings.manage', icon: BellRing },
         ],
     },
@@ -28,6 +28,13 @@ const SECTIONS: { title: string; items: Entry[] }[] = [
         items: [
             { title: 'الإعدادات المالية', description: 'الحساب الذي تذهب إليه كل طريقة دفع: الصندوق والبنك والبطاقات وPaymob', route: 'club.settings.finance', permission: 'accounting.manage', icon: Landmark },
             { title: 'إعدادات الرواتب والحضور', description: 'ساعات العمل والساعة الإضافية وحساب صرف الرواتب ومهلة البصمة المكررة', route: 'club.settings.payroll', permission: 'settings.manage', icon: Clock },
+        ],
+    },
+    {
+        title: 'المبيعات والمستندات',
+        items: [
+            { title: 'إعدادات المبيعات والمتجر', description: 'متجر الموقع، والدفع عند الاستلام أو عبر Paymob، ومهلة الدفع الإلكتروني', route: 'club.settings.sales', permission: 'settings.manage', icon: ShoppingBag, module: 'sales' },
+            { title: 'تنبيهات المستندات', description: 'متى يُنبَّه قبل انتهاء المستندات، وإرسال التنبيه عبر واتساب', route: 'club.settings.documents', permission: 'documents.manage', icon: FileClock },
         ],
     },
     {
@@ -41,12 +48,13 @@ const SECTIONS: { title: string; items: Entry[] }[] = [
 
 export default function SettingsIndex() {
     const can = useCan();
+    const { modules } = useShared();
     const allowed = (p: string | string[]) => (Array.isArray(p) ? p.some(can) : can(p));
-    const sections = SECTIONS.map((s) => ({ ...s, items: s.items.filter((e) => allowed(e.permission)) })).filter((s) => s.items.length > 0);
+    const sections = SECTIONS.map((s) => ({ ...s, items: s.items.filter((e) => allowed(e.permission) && (!e.module || modules[e.module])) })).filter((s) => s.items.length > 0);
 
     return (
         <ClubLayout title="الإعدادات">
-            <PageHeader title="الإعدادات" subtitle="هوية النادي والفريق والربط والبيانات — اختاري القسم الذي تريدين تعديله" />
+            <PageHeader title="الإعدادات" subtitle="هوية النادي والفريق والربط والبيانات — اختر القسم الذي تريد تعديله" />
 
             <div className="space-y-8">
                 {sections.map((section) => (

@@ -46,7 +46,7 @@ export default function PaymentsIndex({ payments, pendingCount, filters }: { pay
 
             {pendingCount > 0 && filters.status !== 'pending' && (
                 <button onClick={() => apply({ status: 'pending' })} className="mb-4 w-full rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-start text-sm text-amber-800">
-                    <span className="font-semibold num">{pendingCount}</span> تحويل بنكي بانتظار التأكيد — اضغطي للمراجعة
+                    <span className="font-semibold num">{pendingCount}</span> تحويل بنكي بانتظار التأكيد — اضغط للمراجعة
                 </button>
             )}
 
@@ -87,7 +87,7 @@ export default function PaymentsIndex({ payments, pendingCount, filters }: { pay
                                     <th>الطريقة</th>
                                     <th>المبلغ</th>
                                     <th>الحالة</th>
-                                    <th>استلمت</th>
+                                    <th>استلم</th>
                                     <th />
                                 </tr>
                             </thead>
@@ -116,7 +116,7 @@ export default function PaymentsIndex({ payments, pendingCount, filters }: { pay
                                                     {p.status === 'completed' && <Button variant="ghost" size="sm" href={route('club.payments.receipt', p.id)} external icon={<Receipt className="size-3.5" />} aria-label="الإيصال" />}
                                                     {p.status === 'pending' && can('payments.confirm') && (
                                                         <>
-                                                            <ConfirmAction url={route('club.payments.confirm', p.id)} title="تأكيد التحويل" message="تأكدي من وصول المبلغ في كشف الحساب قبل التأكيد." confirmLabel="تأكيد" tone="primary" variant="success" icon={<Check className="size-3.5" />}>تأكيد</ConfirmAction>
+                                                            <ConfirmAction url={route('club.payments.confirm', p.id)} title="تأكيد التحويل" message="تأكد من وصول المبلغ في كشف الحساب قبل التأكيد." confirmLabel="تأكيد" tone="primary" variant="success" icon={<Check className="size-3.5" />}>تأكيد</ConfirmAction>
                                                             <ConfirmAction url={route('club.payments.reject', p.id)} title="رفض التحويل" reason="سبب الرفض" confirmLabel="رفض" icon={<X className="size-3.5" />}>رفض</ConfirmAction>
                                                         </>
                                                     )}

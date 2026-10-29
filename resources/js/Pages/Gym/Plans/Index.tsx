@@ -47,7 +47,7 @@ export default function PlansIndex({ plans, programs, types }: { plans: Plan[]; 
             />
 
             {plans.length === 0 ? (
-                <Card><EmptyState icon={<Layers className="size-6" />} title="لا توجد باقات" description="أضيفي أول باقة لبدء بيع العضويات." action={<Button onClick={() => setCreating(true)}>إضافة باقة</Button>} /></Card>
+                <Card><EmptyState icon={<Layers className="size-6" />} title="لا توجد باقات" description="أضف أول باقة لبدء بيع العضويات." action={<Button onClick={() => setCreating(true)}>إضافة باقة</Button>} /></Card>
             ) : (
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {plans.map((p) => (
@@ -174,7 +174,7 @@ function PlanModal({ open, plan, programs, types, onClose }: { open: boolean; pl
                             <Input type="number" step="0.001" min={0} value={form.data.signup_fee} onChange={(e) => form.setData('signup_fee', e.target.value)} />
                         </Field>
                     </div>
-                    <Field label="عدد الحصص الجماعية" error={err.sessions_limit} hint="اتركيه فارغًا لحصص غير محدودة خلال المدة">
+                    <Field label="عدد الحصص الجماعية" error={err.sessions_limit} hint="اتركه فارغًا لحصص غير محدودة خلال المدة">
                         <Input type="number" min={1} value={form.data.sessions_limit} onChange={(e) => form.setData('sessions_limit', e.target.value)} />
                     </Field>
                     <Field label="الوصف" error={err.description}>

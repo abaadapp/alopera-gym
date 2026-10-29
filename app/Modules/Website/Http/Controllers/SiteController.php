@@ -38,7 +38,7 @@ class SiteController extends Controller
                 'title' => $site->hero_title ?: $tenant->name,
                 'subtitle' => $site->hero_subtitle,
                 'image_url' => SiteSetting::url($site->hero_image_path),
-                'cta' => $site->hero_cta_label ?: 'اشتركي الآن',
+                'cta' => $site->hero_cta_label ?: 'اشترك الآن',
                 'badge' => $site->hero_badge,
             ],
             'features' => $site->features ?? self::defaultFeatures($online->available()),
@@ -70,11 +70,11 @@ class SiteController extends Controller
     public static function defaultFeatures(bool $onlinePayments): array
     {
         return [
-            ['title' => 'احجزي حصتك أونلاين', 'text' => 'شاهدي المقاعد المتاحة واحجزي من جوالك في ثوانٍ.'],
+            ['title' => 'احجز حصتك أونلاين', 'text' => 'شاهد المقاعد المتاحة واحجز من جوالك في ثوانٍ.'],
             $onlinePayments
-                ? ['title' => 'دفع إلكتروني آمن', 'text' => 'اشتركي وجددي وادفعي فواتيرك أونلاين بكل سهولة.']
-                : ['title' => 'اشتراك سهل', 'text' => 'اختاري باقتك وسجّلي بياناتك أونلاين، وأكملي الدفع في الاستقبال.'],
-            ['title' => 'خصوصية تامة', 'text' => 'بيئة نسائية خاصة ومدربات محترفات.'],
+                ? ['title' => 'دفع إلكتروني آمن', 'text' => 'اشترك وجدد وادفع فواتيرك أونلاين بكل سهولة.']
+                : ['title' => 'اشتراك سهل', 'text' => 'اختر باقتك وسجّل بياناتك أونلاين، وأكمل الدفع في الاستقبال.'],
+            ['title' => 'مدربون محترفون', 'text' => 'بيئة مريحة ومتابعة من مدربين معتمدين.'],
         ];
     }
 
@@ -85,7 +85,7 @@ class SiteController extends Controller
         return $this->page('Site/Plans', [
             'plans' => $plans->map(fn ($p) => GymPresenter::plan($p) + ['programs' => $p->programs->pluck('name')]),
             'ptPackages' => PtPackage::where('is_active', true)->where('is_public', true)->orderBy('price')->get(['id', 'name', 'description', 'sessions_count', 'session_minutes', 'price', 'validity_days']),
-        ], 'الباقات والأسعار', 'اختاري الباقة المناسبة لكِ: اشتراكات شهرية وسنوية وباقات حصص وتدريب شخصي.', null, [
+        ], 'الباقات والأسعار', 'اختر الباقة المناسبة لك: اشتراكات شهرية وسنوية وباقات حصص وتدريب شخصي.', null, [
             '@context' => 'https://schema.org',
             '@type' => 'ItemList',
             'itemListElement' => $plans->values()->map(fn ($p, $i) => [
@@ -106,7 +106,7 @@ class SiteController extends Controller
     {
         return $this->page('Site/Trainers', [
             'trainers' => Trainer::public()->orderBy('sort')->get()->map(fn ($t) => $this->trainer($t)),
-        ], 'المدربات', 'تعرّفي على فريق المدربات المعتمدات.');
+        ], 'فريق التدريب', 'تعرّف على فريق المدربين المعتمدين.');
     }
 
     public function schedule(Request $request): Response
@@ -120,7 +120,7 @@ class SiteController extends Controller
                 ->between($start, $start->addDays(7))->orderBy('starts_at')->get()
                 ->map(fn ($s) => GymPresenter::session($s)),
             'from' => $start->toDateString(),
-        ], 'جدول الحصص', 'جدول الحصص الأسبوعي والمقاعد المتاحة — احجزي من بوابة المشتركة.');
+        ], 'جدول الحصص', 'جدول الحصص الأسبوعي والمقاعد المتاحة — احجز من بوابة الأعضاء.');
     }
 
     public function news(): Response
@@ -141,7 +141,7 @@ class SiteController extends Controller
 
     public function contact(): Response
     {
-        return $this->page('Site/Contact', [], 'تواصلي معنا', 'العنوان وأوقات العمل وطرق التواصل مع النادي.');
+        return $this->page('Site/Contact', [], 'تواصل معنا', 'العنوان وأوقات العمل وطرق التواصل مع النادي.');
     }
 
     public function sendContact(Request $request): RedirectResponse

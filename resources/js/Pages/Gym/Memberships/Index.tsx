@@ -76,7 +76,7 @@ export default function MembershipsIndex({ memberships, counts, plans, filters }
                     <div className="overflow-x-auto">
                         <table className="table-base">
                             <thead>
-                                <tr><th>المشتركة</th><th>الباقة</th><th>النوع</th><th>الفترة</th><th>المتبقي</th><th>الحصص</th><th>الإجمالي</th><th>الحالة</th><th /></tr>
+                                <tr><th>العضو</th><th>الباقة</th><th>النوع</th><th>الفترة</th><th>المتبقي</th><th>الحصص</th><th>الإجمالي</th><th>الحالة</th><th /></tr>
                             </thead>
                             <tbody>
                                 {memberships.data.map((m) => {

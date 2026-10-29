@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { CalendarClock, CalendarX, CreditCard, LogIn, Snowflake, UserPlus, Users, Wallet } from 'lucide-react';
+import { CalendarClock, CalendarX, CreditCard, FileClock, LogIn, Snowflake, UserPlus, Users, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, BarTrend, Card, CardHeader, EmptyState, PageHeader, StatCard } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
@@ -10,9 +10,11 @@ interface Props {
     expiring: { id: number; member_id: number; member: string; phone: string; plan: string; ends_on: string; days_left: number }[];
     today_sessions: { id: number; program: string; color: string; trainer: string | null; time: string; booked: number; capacity: number }[];
     revenue_trend: { date: string; amount: number }[];
+    /** Business document alerts (null without documents.view). */
+    documents: { expiring: number; expired: number; alerts: { id: number; name: string; expiry_date: string; days_left: number | null }[] } | null;
 }
 
-export default function Dashboard({ kpis, expiring, today_sessions, revenue_trend }: Props) {
+export default function Dashboard({ kpis, expiring, today_sessions, revenue_trend, documents }: Props) {
     const currency = useCurrency();
     const financial = kpis.revenue_month !== null;
 
@@ -28,8 +30,30 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
                 {financial && <StatCard label="إيرادات الشهر" value={money(kpis.revenue_month, currency)} tone="green" icon={<Wallet className="size-5" />} hint={`اليوم: ${money(kpis.revenue_today, currency)}`} />}
                 {financial && <StatCard label="المستحقات" value={money(kpis.outstanding, currency)} tone="red" icon={<CreditCard className="size-5" />} hint={`${number(kpis.overdue_invoices)} فاتورة متأخرة`} href={route('club.dues')} />}
                 <StatCard label="دخول اليوم" value={number(kpis.checkins_today)} tone="blue" icon={<LogIn className="size-5" />} />
-                <StatCard label="جديدات هذا الشهر" value={number(kpis.new_members_month)} icon={<UserPlus className="size-5" />} hint={`تجديدات: ${number(kpis.renewals_month)} · إلغاءات: ${number(kpis.cancellations_month)}`} />
+                <StatCard label="أعضاء جدد هذا الشهر" value={number(kpis.new_members_month)} icon={<UserPlus className="size-5" />} hint={`تجديدات: ${number(kpis.renewals_month)} · إلغاءات: ${number(kpis.cancellations_month)}`} />
             </div>
+
+            {documents && (documents.alerts.length > 0 || documents.expired > 0) && (
+                <Card className="mt-4">
+                    <CardHeader
+                        title={<span className="flex items-center gap-2"><FileClock className="size-4" /> تنبيهات المستندات</span>}
+                        subtitle={`${number(documents.expiring)} قريب الانتهاء · ${number(documents.expired)} منتهٍ`}
+                        actions={<Link href={route('club.business-documents.index', { view: documents.expired ? 'expired' : 'expiring' })} className="text-[13px] text-muted hover:text-ink">قسم المستندات</Link>}
+                        className="mb-2"
+                    />
+                    <ul className="divide-y divide-line">
+                        {documents.alerts.map((a) => (
+                            <li key={a.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                                <span className="truncate font-medium">{a.name}</span>
+                                <span className="flex shrink-0 items-center gap-2">
+                                    <span className="text-xs text-muted num">{date(a.expiry_date)}</span>
+                                    {a.days_left !== null && a.days_left < 0 ? <Badge tone="red">منتهٍ</Badge> : <Badge tone="amber">{a.days_left === 0 ? 'ينتهي اليوم' : `بعد ${dayCount(a.days_left ?? 0)}`}</Badge>}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </Card>
+            )}
 
             {(Number(kpis.pending_transfers) > 0 || Number(kpis.low_stock) > 0) && (
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -80,7 +104,7 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
 
             <Card className="mt-6" padded={false}>
                 <div className="p-5 pb-0">
-                    <CardHeader title="عضويات قريبة من الانتهاء" subtitle="تواصلي معهن للتجديد" />
+                    <CardHeader title="عضويات قريبة من الانتهاء" subtitle="تواصل معهم للتجديد" />
                 </div>
                 {expiring.length === 0 ? (
                     <EmptyState title="لا توجد عضويات تنتهي خلال أسبوع" />
@@ -88,7 +112,7 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
                     <div className="overflow-x-auto">
                         <table className="table-base">
                             <thead>
-                                <tr><th>المشتركة</th><th>الباقة</th><th>تنتهي في</th><th>المتبقي</th></tr>
+                                <tr><th>العضو</th><th>الباقة</th><th>تنتهي في</th><th>المتبقي</th></tr>
                             </thead>
                             <tbody>
                                 {expiring.map((m) => (

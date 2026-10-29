@@ -36,7 +36,7 @@ export default function TenantCreate({ plans }: { plans: Plan[] }) {
             <PageHeader
                 back={<Link href={route('platform.tenants.index')} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-ink"><ArrowRight className="size-4" /> الأندية</Link>}
                 title="إنشاء نادٍ جديد"
-                subtitle="يُنشأ النادي جاهزًا: فرع رئيسي، الأدوار الافتراضية، حساب المالكة، الموقع، وقوالب واتساب، مع فترة تجريبية"
+                subtitle="يُنشأ النادي جاهزًا: فرع رئيسي، الأدوار الافتراضية، حساب المالك، الموقع، وقوالب واتساب، مع فترة تجريبية"
             />
             <form onSubmit={submit} className="grid gap-6 lg:grid-cols-2">
                 <Card>
@@ -61,7 +61,7 @@ export default function TenantCreate({ plans }: { plans: Plan[] }) {
                 </Card>
                 <div className="space-y-6">
                     <Card>
-                        <CardHeader title="حساب المالكة" subtitle="تدخل به إلى لوحة النادي" />
+                        <CardHeader title="حساب المالك" subtitle="يدخل به إلى لوحة النادي" />
                         <div className="grid gap-4">
                             <Field label="الاسم" error={form.errors.owner_name} required>
                                 <Input value={form.data.owner_name} onChange={(e) => form.setData('owner_name', e.target.value)} />
@@ -69,7 +69,7 @@ export default function TenantCreate({ plans }: { plans: Plan[] }) {
                             <Field label="البريد الإلكتروني" error={form.errors.owner_email} required>
                                 <Input type="email" dir="ltr" value={form.data.owner_email} onChange={(e) => form.setData('owner_email', e.target.value)} />
                             </Field>
-                            <Field label="كلمة المرور المؤقتة" error={form.errors.owner_password} required hint="شاركيها مع المالكة بشكل آمن واطلبي تغييرها">
+                            <Field label="كلمة المرور المؤقتة" error={form.errors.owner_password} required hint="شاركها مع المالك بشكل آمن واطلب تغييرها">
                                 <Input type="password" dir="ltr" autoComplete="new-password" value={form.data.owner_password} onChange={(e) => form.setData('owner_password', e.target.value)} />
                             </Field>
                         </div>
@@ -78,7 +78,7 @@ export default function TenantCreate({ plans }: { plans: Plan[] }) {
                         <CardHeader title="اشتراك المنصة" subtitle="يبدأ بفترة تجريبية حسب الباقة" />
                         <div className="grid gap-4 sm:grid-cols-2">
                             <Field label="الباقة" error={form.errors.platform_plan_id} required>
-                                <Select value={form.data.platform_plan_id} onChange={(e) => form.setData('platform_plan_id', e.target.value)} placeholder="اختاري">
+                                <Select value={form.data.platform_plan_id} onChange={(e) => form.setData('platform_plan_id', e.target.value)} placeholder="اختر">
                                     {plans.map((p) => <option key={p.id} value={p.id}>{p.name} — {money(p.price_monthly, 'OMR')}/شهر</option>)}
                                 </Select>
                             </Field>

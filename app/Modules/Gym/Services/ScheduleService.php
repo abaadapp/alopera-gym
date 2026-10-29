@@ -39,7 +39,7 @@ final class ScheduleService
             });
 
         if ($clash) {
-            throw new BusinessRuleException('schedule.trainer_clash', 'المدربة لديها حصة أخرى في نفس الوقت.', 'trainer_id');
+            throw new BusinessRuleException('schedule.trainer_clash', 'المدرب لديه حصة أخرى في نفس الوقت.', 'trainer_id');
         }
     }
 

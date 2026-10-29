@@ -42,7 +42,7 @@ export default function Integrations({ integrations, endpoints, paymob_ready, wh
                 <Info className="mt-1 size-4 shrink-0" />
                 <p>
                     التكامل الفعلي يتطلب حساب <b>Meta Business</b> باسم النادي مع رقم واتساب أعمال وقوالب معتمدة، وحساب <b>Paymob</b> (عُمان) بمفاتيح التاجر.
-                    بعد إدخال المفاتيح جرّبي في وضع «اختبار» قبل التحويل إلى «حقيقي». لا تُعتبر المدفوعات ناجحة إلا بعد وصول إشعار Paymob الموقّع إلى الخادم.
+                    بعد إدخال المفاتيح جرّب في وضع «اختبار» قبل التحويل إلى «حقيقي». لا تُعتبر المدفوعات ناجحة إلا بعد وصول إشعار Paymob الموقّع إلى الخادم.
                 </p>
             </div>
 
@@ -63,7 +63,7 @@ export default function Integrations({ integrations, endpoints, paymob_ready, wh
                         )
                     }
                     extra={(form) => (
-                        <Field label="رقم العرض (اختياري)" hint="الرقم الظاهر للمشتركات، للعرض فقط">
+                        <Field label="رقم العرض (اختياري)" hint="الرقم الظاهر للأعضاء، للعرض فقط">
                             <Input dir="ltr" value={form.display_phone} onChange={(e) => form.set('display_phone', e.target.value)} placeholder="+968 9123 4567" />
                         </Field>
                     )}
@@ -162,7 +162,7 @@ function ProviderCard({
                                 autoComplete="off"
                                 value={form.data.credentials[f.key] ?? ''}
                                 onChange={(e) => form.setData('credentials', { ...form.data.credentials, [f.key]: e.target.value })}
-                                placeholder={saved ? '•••••••• (اتركيه فارغًا للإبقاء على القيمة المحفوظة)' : ''}
+                                placeholder={saved ? '•••••••• (اتركه فارغًا للإبقاء على القيمة المحفوظة)' : ''}
                             />
                         </Field>
                     );

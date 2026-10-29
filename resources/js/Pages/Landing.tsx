@@ -27,14 +27,14 @@ interface Props {
 }
 
 const features = [
-    { icon: Users, title: 'المشتركات والعضويات', text: 'ملف شامل لكل مشتركة، باقات وخصومات، تجميد وتجديد وترقية، وتفعيل تلقائي بعد الدفع.' },
+    { icon: Users, title: 'الأعضاء والعضويات', text: 'ملف شامل لكل عضو، باقات وخصومات، تجميد وتجديد وترقية، وتفعيل تلقائي بعد الدفع.' },
     { icon: CalendarCheck, title: 'الحصص والحجوزات', text: 'جدول أسبوعي بسعة لكل حصة، حجز من البوابة أو الاستقبال، وتسجيل الحضور والغياب.' },
     { icon: CreditCard, title: 'المدفوعات والمالية', text: 'فواتير وإيصالات، نقدي وتحويل وبطاقة، دفع إلكتروني عبر Paymob، مصروفات ومستحقات.' },
     { icon: MessageCircle, title: 'أتمتة واتساب', text: 'ترحيب وتأكيد وتذكير قبل الانتهاء وروابط دفع، مع حملات مستهدفة وصندوق محادثات.' },
-    { icon: Globe, title: 'موقع وبوابة لكل نادٍ', text: 'موقع متجاوب بهوية ناديك، تسجيل ودفع أونلاين، وبوابة للمشتركة لحجز الحصص.' },
-    { icon: Fingerprint, title: 'أجهزة الدخول', text: 'قارئات QR والبطاقات والبصمة، دخول حسب حالة العضوية، وحضور الموظفات.' },
+    { icon: Globe, title: 'موقع وبوابة لكل نادٍ', text: 'موقع متجاوب بهوية ناديك، تسجيل ودفع أونلاين، وبوابة للأعضاء لحجز الحصص.' },
+    { icon: Fingerprint, title: 'أجهزة الدخول', text: 'قارئات QR والبطاقات والبصمة، دخول حسب حالة العضوية، وحضور الموظفين.' },
     { icon: BarChart3, title: 'تقارير ومؤشرات', text: 'الإيرادات والتحصيل والتجديدات وأداء الحصص، ومقارنة بين الفترات وتصدير Excel.' },
-    { icon: ShieldCheck, title: 'صلاحيات وأمان', text: 'أدوار للمالكة والإدارة والاستقبال والمالية والمدربات، وسجل لكل العمليات الحساسة.' },
+    { icon: ShieldCheck, title: 'صلاحيات وأمان', text: 'أدوار للمالك والإدارة والاستقبال والمالية والمدربين، وسجل لكل العمليات الحساسة.' },
 ];
 
 /** Platform marketing page (SaaS) — not a club website. */
@@ -67,17 +67,17 @@ export default function Landing({ plans, clubs, seo, appName, contactEmail }: Pr
                     <div className="pointer-events-none absolute -top-40 end-[-10rem] size-[32rem] rounded-full bg-brand-soft/30 blur-3xl" />
                     <div className="relative mx-auto max-w-4xl px-4 py-20 text-center sm:py-28">
                         <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-brand-700 shadow-sm">
-                            <Sparkles className="size-3.5" /> مصممة للأندية الرياضية النسائية
+                            <Sparkles className="size-3.5" /> مصممة للأندية والمراكز الرياضية
                         </span>
-                        <h1 className="mt-6 font-display text-4xl leading-[1.25] font-semibold text-ink sm:text-6xl">كل ما يحتاجه ناديكِ<br className="hidden sm:block" /> في منصة واحدة</h1>
+                        <h1 className="mt-6 font-display text-4xl leading-[1.25] font-semibold text-ink sm:text-6xl">كل ما يحتاجه ناديك<br className="hidden sm:block" /> في منصة واحدة</h1>
                         <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-muted">
-                            العضويات، الحصص، الحجوزات، المدفوعات الإلكترونية، أتمتة واتساب، موقع وبوابة للمشتركات — بالعربية، وبهوية ناديك.
+                            العضويات، الحصص، الحجوزات، المدفوعات الإلكترونية، أتمتة واتساب، موقع وبوابة للأعضاء — بالعربية، وبهوية ناديك.
                         </p>
                         <div className="mt-9 flex flex-wrap justify-center gap-3">
                             <a href="#pricing" className="inline-flex items-center gap-2 rounded-full bg-brand px-7 py-3.5 font-medium text-white shadow-lg shadow-brand/30 hover:bg-brand-600">
-                                ابدئي تجربتك <ArrowLeft className="size-4" />
+                                ابدأ تجربتك <ArrowLeft className="size-4" />
                             </a>
-                            <a href="#features" className="rounded-full border border-brand-200 bg-white px-7 py-3.5 font-medium text-brand-700 hover:bg-brand-50">اكتشفي المزايا</a>
+                            <a href="#features" className="rounded-full border border-brand-200 bg-white px-7 py-3.5 font-medium text-brand-700 hover:bg-brand-50">اكتشف المزايا</a>
                         </div>
                     </div>
                 </section>
@@ -85,7 +85,7 @@ export default function Landing({ plans, clubs, seo, appName, contactEmail }: Pr
                 <section id="features" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-16">
                     <div className="mx-auto mb-12 max-w-2xl text-center">
                         <h2 className="font-display text-3xl font-semibold sm:text-4xl">من الاستقبال إلى التقارير</h2>
-                        <p className="mt-3 text-muted">واجهات خاصة للمالكة والإدارة والاستقبال والمالية والمدربات، وبوابة للمشتركة.</p>
+                        <p className="mt-3 text-muted">واجهات خاصة للمالك والإدارة والاستقبال والمالية والمدربين، وبوابة للأعضاء.</p>
                     </div>
                     <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                         {features.map(({ icon: Icon, title, text }) => (
@@ -121,13 +121,13 @@ export default function Landing({ plans, clubs, seo, appName, contactEmail }: Pr
                                                 <span className="text-sm text-muted">{currencyLabel(plan.currency)} / {yearly ? 'سنة' : 'شهر'}</span>
                                             </div>
                                             <ul className="mt-6 flex-1 space-y-2.5 text-sm">
-                                                <li className="flex gap-2"><Check className="size-4 shrink-0 text-brand" />{plan.max_members ? <>حتى <span className="num">{number(plan.max_members)}</span> مشتركة</> : 'عدد غير محدود من المشتركات'}</li>
+                                                <li className="flex gap-2"><Check className="size-4 shrink-0 text-brand" />{plan.max_members ? <>حتى <span className="num">{number(plan.max_members)}</span> عضو</> : 'عدد غير محدود من الأعضاء'}</li>
                                                 <li className="flex gap-2"><Check className="size-4 shrink-0 text-brand" />{plan.max_branches ? <><span className="num">{plan.max_branches}</span> {plan.max_branches === 1 ? 'فرع' : 'فروع'}</> : 'فروع غير محدودة'}</li>
                                                 {(plan.features ?? []).map((f) => <li key={f} className="flex gap-2"><Check className="size-4 shrink-0 text-brand" />{f}</li>)}
                                             </ul>
                                             {contactEmail && (
                                                 <a href={`mailto:${contactEmail}?subject=${encodeURIComponent(`طلب اشتراك في باقة ${plan.name}`)}`} className={cn('mt-7 block rounded-full py-3 text-center text-sm font-medium', featured ? 'bg-brand text-white hover:bg-brand-600' : 'border border-brand-200 text-brand-700 hover:bg-brand-50')}>
-                                                    تواصلي معنا للاشتراك
+                                                    تواصل معنا للاشتراك
                                                 </a>
                                             )}
                                         </div>

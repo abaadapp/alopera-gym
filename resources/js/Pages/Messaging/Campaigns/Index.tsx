@@ -72,18 +72,18 @@ export default function CampaignsIndex({ campaigns, templates, segments, plans, 
         <ClubLayout title="الحملات التسويقية">
             <PageHeader
                 title="الحملات التسويقية"
-                subtitle="أرسلي عروضًا ورسائل لفئات محددة — للمشتركات الموافقات على التسويق فقط"
+                subtitle="أرسل عروضًا ورسائل لفئات محددة — للأعضاء الموافقين على التسويق فقط"
                 actions={<Button icon={<Plus className="size-4" />} onClick={() => setOpen(true)}>حملة جديدة</Button>}
             />
 
             <Card padded={false}>
                 {campaigns.data.length === 0 ? (
-                    <EmptyState icon={<Megaphone className="size-6" />} title="لا توجد حملات بعد" description="مثال: عرض تجديد للمشتركات اللاتي انتهت عضويتهن خلال آخر 30 يومًا." action={<Button onClick={() => setOpen(true)}>إنشاء حملة</Button>} />
+                    <EmptyState icon={<Megaphone className="size-6" />} title="لا توجد حملات بعد" description="مثال: عرض تجديد للأعضاء الذين انتهت عضويتهم خلال آخر 30 يومًا." action={<Button onClick={() => setOpen(true)}>إنشاء حملة</Button>} />
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="table-base">
                             <thead>
-                                <tr><th>الحملة</th><th>الجمهور</th><th>القالب</th><th>الحالة</th><th>المستلمات</th><th>التسليم</th><th>القراءة</th></tr>
+                                <tr><th>الحملة</th><th>الجمهور</th><th>القالب</th><th>الحالة</th><th>المستلمون</th><th>التسليم</th><th>القراءة</th></tr>
                             </thead>
                             <tbody>
                                 {campaigns.data.map((c) => {
@@ -176,7 +176,7 @@ function CampaignModal({ onClose, templates, segments, plans, programs }: Omit<P
                 </Field>
 
                 <Field label="القالب" error={errors.message_template_id} required>
-                    <Select value={form.data.message_template_id} onChange={(e) => form.setData('message_template_id', e.target.value)} placeholder="اختاري قالبًا">
+                    <Select value={form.data.message_template_id} onChange={(e) => form.setData('message_template_id', e.target.value)} placeholder="اختر قالبًا">
                         {templates.map((t) => (
                             <option key={t.id} value={t.id}>{t.name}{t.status !== 'approved' ? ' (غير معتمد)' : ''}</option>
                         ))}
@@ -214,7 +214,7 @@ function CampaignModal({ onClose, templates, segments, plans, programs }: Omit<P
                 )}
                 {programs.length > 0 && (
                     <div>
-                        <p className="label">حسب السلوك: حجزت هذه البرامج خلال 90 يومًا (اختياري)</p>
+                        <p className="label">حسب السلوك: حجز هذه البرامج خلال 90 يومًا (اختياري)</p>
                         <div className="flex flex-wrap gap-1.5">
                             {programs.map((p) => (
                                 <Chip key={p.id} active={form.data.program_ids.includes(p.id)} onClick={() => toggle('program_ids', p.id)}>{p.name}</Chip>
@@ -223,15 +223,15 @@ function CampaignModal({ onClose, templates, segments, plans, programs }: Omit<P
                     </div>
                 )}
 
-                <Field label="جدولة الإرسال (اختياري)" error={errors.scheduled_at} hint="اتركيه فارغًا لإطلاق الحملة يدويًا من صفحتها">
+                <Field label="جدولة الإرسال (اختياري)" error={errors.scheduled_at} hint="اتركه فارغًا لإطلاق الحملة يدويًا من صفحتها">
                     <Input type="datetime-local" value={form.data.scheduled_at} onChange={(e) => form.setData('scheduled_at', e.target.value)} />
                 </Field>
 
                 <div className="flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
                     <Users className="size-5 text-brand" />
                     <p className="text-sm">
-                        الجمهور المتوقع: <b className="num">{counting && count === null ? '…' : number(count ?? 0)}</b> مشتركة
-                        <span className="block text-xs text-muted">يشمل فقط من وافقت على الرسائل التسويقية ولم تُلغِ الاشتراك.</span>
+                        الجمهور المتوقع: <b className="num">{counting && count === null ? '…' : number(count ?? 0)}</b> عضو
+                        <span className="block text-xs text-muted">يشمل فقط من وافق على الرسائل التسويقية ولم يُلغِ الاشتراك.</span>
                     </p>
                 </div>
             </form>

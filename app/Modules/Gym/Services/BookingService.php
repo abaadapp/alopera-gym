@@ -47,13 +47,13 @@ final class BookingService
                 $this->fail('session.window', "الحجز متاح قبل {$window} يومًا فقط من موعد الحصة.");
             }
             if ($member->status !== Member::ACTIVE) {
-                $this->fail('member.inactive', 'حساب المشتركة غير نشط.');
+                $this->fail('member.inactive', 'حساب العضو غير نشط.');
             }
 
             $membership = $this->usableMembership($member, $session);
 
             if (Booking::where('class_session_id', $session->id)->where('member_id', $member->id)->where('status', '!=', Booking::CANCELLED)->exists()) {
-                $this->fail('booking.duplicate', 'المشتركة محجوزة في هذه الحصة بالفعل.');
+                $this->fail('booking.duplicate', 'العضو محجوز في هذه الحصة بالفعل.');
             }
             if ($session->booked_count >= $session->capacity) {
                 $this->fail('session.full', 'اكتملت مقاعد هذه الحصة.');
@@ -66,7 +66,7 @@ final class BookingService
                     ->where('ends_at', '>', $session->starts_at))
                 ->exists();
             if ($overlap) {
-                $this->fail('booking.overlap', 'لدى المشتركة حجز آخر في نفس الوقت.');
+                $this->fail('booking.overlap', 'لدى العضو حجز آخر في نفس الوقت.');
             }
 
             $consumes = $membership->sessions_total !== null;
@@ -118,7 +118,7 @@ final class BookingService
         }
         $active = $candidates->first(fn ($m) => in_array($m->status, [Membership::ACTIVE, Membership::SCHEDULED], true));
         if ($active && ! $this->programAllowed($active, $session)) {
-            $this->fail('membership.program', 'باقة المشتركة لا تشمل هذا البرنامج.');
+            $this->fail('membership.program', 'باقة العضو لا تشمل هذا البرنامج.');
         }
         if ($active && ! $active->hasSessionsLeft()) {
             $this->fail('membership.no_sessions', 'تم استهلاك جميع حصص الباقة.');
@@ -152,7 +152,7 @@ final class BookingService
 
             $cutoff = $session->starts_at->subHours((int) $tenant->setting('booking_cancel_cutoff_hours', 3));
             if (! $byStaff && now()->gte($cutoff)) {
-                $this->fail('booking.cutoff', 'انتهى وقت إلغاء الحجز. تواصلي مع الاستقبال.');
+                $this->fail('booking.cutoff', 'انتهى وقت إلغاء الحجز. تواصل مع الاستقبال.');
             }
 
             $this->release($booking, $session, $reason);

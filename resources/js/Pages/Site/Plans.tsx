@@ -157,15 +157,15 @@ export default function Plans({ site, seo, plans, ptPackages }: { site: SiteInfo
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero title="الباقات والأسعار" subtitle="اختاري الباقة التي تناسب أهدافك وجدولك. الأسعار محدّثة مباشرة من النادي." icon={<Sparkles className="size-6" />} />
+            <PageHero title="الباقات والأسعار" subtitle="اختر الباقة التي تناسب أهدافك وجدولك. الأسعار محدّثة مباشرة من النادي." icon={<Sparkles className="size-6" />} />
 
             <section className="mx-auto max-w-6xl px-4 py-12">
                 {plans.length === 0 ? (
-                    <p className="py-16 text-center text-muted">ستُعلن الباقات قريبًا. تواصلي معنا لمعرفة التفاصيل.</p>
+                    <p className="py-16 text-center text-muted">ستُعلن الباقات قريبًا. تواصل معنا لمعرفة التفاصيل.</p>
                 ) : (
                     <div className="grid gap-6 pt-3 sm:grid-cols-2 lg:grid-cols-3">
                         {plans.map((plan) => (
-                            <PlanCard key={plan.id} plan={plan} currency={currency} cta={site.signup_enabled ? { label: 'اشتركي في هذه الباقة', href: route('site.join', { plan: plan.id }) } : undefined} />
+                            <PlanCard key={plan.id} plan={plan} currency={currency} cta={site.signup_enabled ? { label: 'اشترك في هذه الباقة', href: route('site.join', { plan: plan.id }) } : undefined} />
                         ))}
                     </div>
                 )}
@@ -173,7 +173,7 @@ export default function Plans({ site, seo, plans, ptPackages }: { site: SiteInfo
 
             {ptPackages.length > 0 && (
                 <section className="mx-auto max-w-6xl px-4 py-12">
-                    <SectionTitle eyebrow="تدريب شخصي" title="جلسات فردية مع مدربتك" subtitle="برنامج مصمم لكِ وحدك، بمتابعة مباشرة وخطة واضحة." />
+                    <SectionTitle eyebrow="تدريب شخصي" title="جلسات فردية مع مدربك" subtitle="برنامج مصمم لك وحدك، بمتابعة مباشرة وخطة واضحة." />
                     <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                         {ptPackages.map((p) => (
                             <div key={p.id} className="rounded-3xl border border-line bg-white p-6 shadow-sm">
@@ -192,7 +192,7 @@ export default function Plans({ site, seo, plans, ptPackages }: { site: SiteInfo
                                 </div>
                                 {p.description && <p className="mt-4 text-sm leading-7 text-muted">{p.description}</p>}
                                 <Link href={route('site.contact')} className="mt-5 block rounded-full border border-brand-200 py-2.5 text-center text-sm font-medium text-brand-700 hover:bg-brand-50">
-                                    احجزي استشارة
+                                    احجز استشارة
                                 </Link>
                             </div>
                         ))}

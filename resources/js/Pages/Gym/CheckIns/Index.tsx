@@ -46,7 +46,7 @@ export default function CheckInsIndex({ checkins, filters }: { checkins: Paginat
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="table-base">
-                            <thead><tr><th>الوقت</th><th>المشتركة</th><th>الطريقة</th><th>الجهاز / الموظفة</th><th>النتيجة</th></tr></thead>
+                            <thead><tr><th>الوقت</th><th>العضو</th><th>الطريقة</th><th>الجهاز / الموظف</th><th>النتيجة</th></tr></thead>
                             <tbody>
                                 {checkins.data.map((c) => (
                                     <tr key={c.id}>
@@ -58,7 +58,7 @@ export default function CheckInsIndex({ checkins, filters }: { checkins: Paginat
                                                     <span className="block text-xs font-normal text-muted num">{c.member.member_no}</span>
                                                 </Link>
                                             ) : (
-                                                <span className="text-muted">غير معروفة{c.credential_hint && <span className="ms-1 num">({c.credential_hint})</span>}</span>
+                                                <span className="text-muted">غير معروف{c.credential_hint && <span className="ms-1 num">({c.credential_hint})</span>}</span>
                                             )}
                                         </td>
                                         <td className="text-sm">{METHODS[c.method] ?? c.method}{c.direction === 'out' && <span className="ms-1 text-xs text-muted">(خروج)</span>}</td>

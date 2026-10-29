@@ -61,7 +61,7 @@ export default function InvoiceCreate() {
             <form onSubmit={submit} className="grid gap-6 lg:grid-cols-3">
                 <div className="space-y-6 lg:col-span-2">
                     <Card>
-                        <CardHeader title="العميل" subtitle="اختاري مشتركة أو اكتبي اسم عميل نقدي" />
+                        <CardHeader title="العميل" subtitle="اختر عضوًا أو اكتب اسم عميل نقدي" />
                         {form.data.member_id ? (
                             <div className="flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
                                 <span className="flex items-center gap-2 text-sm font-medium"><UserRound className="size-4 text-brand" /> {form.data.member_label}</span>
@@ -71,7 +71,7 @@ export default function InvoiceCreate() {
                             </div>
                         ) : (
                             <div className="grid gap-4 sm:grid-cols-2">
-                                <Field label="مشتركة" error={form.errors.member_id}>
+                                <Field label="عضو" error={form.errors.member_id}>
                                     <MemberPicker onSelect={pickMember} />
                                 </Field>
                                 <Field label="أو اسم العميل" error={form.errors.customer_name}>
@@ -124,7 +124,7 @@ export default function InvoiceCreate() {
                     <Card>
                         <CardHeader title="التفاصيل" />
                         <div className="space-y-4">
-                            <Field label="تاريخ الاستحقاق" error={form.errors.due_date} hint="اتركيه فارغًا لاستخدام إعداد النادي">
+                            <Field label="تاريخ الاستحقاق" error={form.errors.due_date} hint="اتركه فارغًا لاستخدام إعداد النادي">
                                 <Input type="date" value={form.data.due_date} onChange={(e) => form.setData('due_date', e.target.value)} />
                             </Field>
                             <Field label="ملاحظات" error={form.errors.notes}>

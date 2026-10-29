@@ -5,6 +5,7 @@ namespace App\Modules\Messaging\Services;
 use App\Core\Support\Phone;
 use App\Core\Tenancy\TenantContext;
 use App\Models\TenantIntegration;
+use App\Models\User;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Messaging\Gateways\GatewayResult;
 use App\Modules\Messaging\Gateways\WhatsAppGateway;
@@ -101,6 +102,55 @@ final class WhatsAppService
         return $message;
     }
 
+    /**
+     * Queue a template message to a staff member (an internal alert such as a document about to expire). Only
+     * an approved template is sent; a staff member without a phone is skipped. Returns null when WhatsApp is
+     * off for the club or the alert was already sent (dedupe key).
+     *
+     * @param  array<string, string>  $values
+     */
+    public function queueStaffTemplate(User $user, string $key, array $values, ?Model $related, string $dedupeKey): ?Message
+    {
+        if (! $this->enabled() || Message::where('dedupe_key', $dedupeKey)->exists()) {
+            return null;
+        }
+
+        $template = MessageTemplate::where('key', $key)->first();
+        $phone = Phone::normalize($user->phone);
+        $skip = match (true) {
+            ! $template => 'template_missing',
+            ! $template->isUsable() => 'template_not_approved',
+            $phone === '' => 'no_phone',
+            default => null,
+        };
+        $params = $template ? array_map(fn ($name) => (string) ($values[$name] ?? ''), $template->variables ?? []) : [];
+
+        try {
+            $message = DB::transaction(fn () => Message::create([
+                'direction' => 'outbound',
+                'type' => 'template',
+                'to_phone' => $phone ?: null,
+                'template_key' => $key,
+                'template_name' => $template?->name,
+                'template_params' => $params,
+                'body' => $template?->render($params),
+                'status' => $skip ? Message::SKIPPED : Message::QUEUED,
+                'error_code' => $skip,
+                'dedupe_key' => $dedupeKey,
+                'related_type' => $related?->getMorphClass(),
+                'related_id' => $related?->getKey(),
+            ]));
+        } catch (UniqueConstraintViolationException) {
+            return null;
+        }
+
+        if (! $skip) {
+            SendWhatsAppMessage::dispatch($message->id, $message->tenant_id)->afterCommit();
+        }
+
+        return $message;
+    }
+
     /** Free-text reply from the inbox; only allowed inside the 24h customer-service window. */
     public function reply(Conversation $conversation, string $body): Message
     {
@@ -113,7 +163,7 @@ final class WhatsAppService
             'body' => $body,
             'status' => $conversation->serviceWindowOpen() ? Message::QUEUED : Message::FAILED,
             'error_code' => $conversation->serviceWindowOpen() ? null : 'window_closed',
-            'error_message' => $conversation->serviceWindowOpen() ? null : 'انتهت نافذة الـ24 ساعة؛ استخدمي قالبًا معتمدًا.',
+            'error_message' => $conversation->serviceWindowOpen() ? null : 'انتهت نافذة الـ24 ساعة؛ استخدم قالبًا معتمدًا.',
             'sent_by' => Auth::guard('web')->id(),
         ]);
 

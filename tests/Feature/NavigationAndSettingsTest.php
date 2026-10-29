@@ -15,39 +15,50 @@ class NavigationAndSettingsTest extends TestCase
 {
     use BuildsClubs, RefreshDatabase;
 
-    public function test_sales_and_inventory_are_switched_off_but_their_data_stays(): void
+    public function test_sales_are_on_while_suppliers_and_purchases_stay_off(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
         $this->asTenant($club, fn () => Product::create(['name' => 'Water', 'price' => 0.2]));
 
-        $this->actingAs($owner)->get(route('club.pos.index'))->assertNotFound();
-        $this->actingAs($owner)->get(route('club.products.index'))->assertNotFound();
-        $this->actingAs($owner)->get(route('club.reports.export', ['report' => 'sales']))->assertNotFound();
-        $this->assertNotContains('pos.sell', $owner->fresh()->permissions());
+        // Sales (products, point of sale, website orders) have their own switch, on by default.
+        $this->actingAs($owner)->get(route('club.pos.index'))->assertOk();
+        $this->actingAs($owner)->get(route('club.products.index'))->assertOk();
+        $this->assertContains('pos.sell', $owner->fresh()->permissions());
+        // Suppliers and purchases stay off, and their permissions are not granted.
+        $this->actingAs($owner)->get(route('club.purchases.index'))->assertNotFound();
+        $this->actingAs($owner)->get(route('club.suppliers.index'))->assertNotFound();
+        $this->assertNotContains('purchases.manage', $owner->fresh()->permissions());
         $this->actingAs($owner)->get(route('club.roles.index'))
-            ->assertInertia(fn ($page) => $page->where('groups', fn ($groups) => collect($groups)->pluck('key')->doesntContain('inventory')));
-        $this->actingAs($owner)->get(route('club.dashboard'))->assertInertia(fn ($page) => $page->where('modules.inventory', false));
+            ->assertInertia(fn ($page) => $page->where('groups', fn ($groups) => collect($groups)->pluck('key')->contains('sales') && collect($groups)->pluck('key')->doesntContain('inventory')));
+        $this->actingAs($owner)->get(route('club.dashboard'))->assertInertia(fn ($page) => $page->where('modules.sales', true)->where('modules.inventory', false));
+
+        // Switching sales off hides their screens and the sales report; the data stays.
+        config(['gym.modules.sales' => false]);
+        $this->actingAs($owner->fresh())->get(route('club.pos.index'))->assertNotFound();
+        $this->actingAs($owner->fresh())->get(route('club.products.index'))->assertNotFound();
+        $this->actingAs($owner->fresh())->get(route('club.reports.export', ['report' => 'sales']))->assertNotFound();
+        $this->assertNotContains('pos.sell', $owner->fresh()->permissions());
         $this->assertSame(1, $this->asTenant($club, fn () => Product::count()));
 
         config(['gym.modules.inventory' => true]);
-        $this->actingAs($owner->fresh())->get(route('club.pos.index'))->assertOk();
+        $this->actingAs($owner->fresh())->get(route('club.purchases.index'))->assertOk();
     }
 
     public function test_editing_a_role_keeps_the_permissions_of_a_switched_off_module(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
-        $role = $this->asTenant($club, fn () => Role::create(['key' => 'custom_shop', 'name' => 'Shop', 'permissions' => ['members.view', 'pos.sell'], 'is_system' => false]));
+        $role = $this->asTenant($club, fn () => Role::create(['key' => 'custom_shop', 'name' => 'Shop', 'permissions' => ['members.view', 'purchases.manage'], 'is_system' => false]));
 
         $this->actingAs($owner)->put(route('club.roles.update', $role->id), ['name' => 'Shop', 'permissions' => ['members.view', 'classes.view']])->assertSessionHasNoErrors();
 
         $role->refresh();
-        $this->assertEqualsCanonicalizing(['members.view', 'classes.view', 'pos.sell'], $role->permissions);
-        $this->assertNotContains('pos.sell', $role->expandedPermissions());
+        $this->assertEqualsCanonicalizing(['members.view', 'classes.view', 'purchases.manage'], $role->permissions);
+        $this->assertNotContains('purchases.manage', $role->expandedPermissions());
         config(['gym.modules.inventory' => true]);
-        $this->assertContains('pos.sell', $role->expandedPermissions());
-        $this->assertContains('pos.sell', PermissionRegistry::all());
+        $this->assertContains('purchases.manage', $role->expandedPermissions());
+        $this->assertContains('purchases.manage', PermissionRegistry::all());
     }
 
     public function test_notification_rules_have_their_own_screen_and_club_settings_leave_them_alone(): void
