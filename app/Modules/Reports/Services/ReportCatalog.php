@@ -13,9 +13,11 @@ use App\Modules\Reports\Reports\Report;
  * and its own file (ReportController::export). The sections keep their working screens (invoices, the point of sale,
  * payroll runs, the check-in log, documents); their reports live here only.
  *
- * Opening a report takes reports.view and the permission of the section its figures come from (PERMISSIONS);
- * exporting it takes those and reports.export as well. A report of a switched-off module, the branch comparison of a
- * club with one branch, and the branch comparison for a user tied to a branch are not offered.
+ * Opening a report takes only its own permissions (PERMISSIONS): the report permission or the permission of the
+ * section its figures come from, so a user is given one report without the others. The reports page opens for whoever
+ * may open at least one report. Exporting a report takes its permissions and reports.export as well. A report of a
+ * switched-off module, the branch comparison of a club with one branch, and the branch comparison for a user tied to a
+ * branch are not offered.
  *
  * `mode`: a «period» report covers dates and is compared with an earlier period; a «snapshot» report is the state
  * today (what is owed, what expires soon). `preset`: the period a report opens with.
@@ -34,24 +36,24 @@ final class ReportCatalog
         'branches' => 'تقارير أداء الفروع',
     ];
 
-    /** What each report needs beside reports.view: the permission of the section its figures come from. */
+    /** What opening each report takes (all of them): nothing broader than its own figures. */
     public const PERMISSIONS = [
         'finance' => ['reports.financial'],
         'statements' => ['accounting.view'],
         'movement' => ['accounting.view'],
         'dues' => ['dues.view'],
         'sales' => ['sales.view'],
-        'members' => [],
+        'members' => ['reports.view'],
         'expiring' => ['memberships.view'],
-        'classes' => [],
-        'trainers' => [],
+        'classes' => ['reports.view'],
+        'trainers' => ['reports.view'],
         'checkins' => ['checkin.view'],
         'staff-attendance' => ['staff_attendance.view'],
         'payroll' => ['payroll.reports'],
         'payouts' => ['payroll.reports'],
         'documents' => ['documents.view'],
         'renewals' => ['documents.view'],
-        'branches' => [],
+        'branches' => ['reports.view'],
     ];
 
     /** @return list<array{key: string, category: string, title: string, desc: string, icon: string, class: class-string<Report>, mode: string, preset: string, compare: bool, branch: bool, module?: string}> */
@@ -148,6 +150,12 @@ final class ReportCatalog
         return $this->allows($user, $key) && $user->can('reports.export');
     }
 
+    /** May this user open at least one report? (the reports page and its menu entry) */
+    public function any(User $user): bool
+    {
+        return collect(self::all())->contains(fn (array $r) => $this->allowsEntry($user, $r));
+    }
+
     public function report(string $key): Report
     {
         return app($this->find($key)['class']);
@@ -164,7 +172,7 @@ final class ReportCatalog
         if (isset($r['module']) && ! PermissionRegistry::moduleEnabled($r['module'])) {
             return false;
         }
-        if (! collect(['reports.view', ...self::PERMISSIONS[$r['key']]])->every(fn (string $p) => $user->can($p))) {
+        if (! collect(self::PERMISSIONS[$r['key']])->every(fn (string $p) => $user->can($p))) {
             return false;
         }
 

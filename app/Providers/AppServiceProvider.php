@@ -22,6 +22,7 @@ use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\PurchaseOrder;
 use App\Modules\Inventory\Models\Sale;
+use App\Modules\Reports\Services\ReportCatalog;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
@@ -111,6 +112,9 @@ class AppServiceProvider extends ServiceProvider
 
             return null;
         });
+
+        // The reports page: for whoever may open at least one report (each report checks its own permissions).
+        Gate::define('reports.any', fn (User $user) => app(ReportCatalog::class)->any($user));
     }
 
     private function registerRateLimiters(): void

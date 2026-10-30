@@ -29,7 +29,8 @@ class PayrollRunController extends Controller
     public function index(Request $request): Response
     {
         $this->allowAny($request, self::ANY);
-        $runs = PayrollRun::withCount(['items', 'items as paid_count' => fn ($q) => $q->whereNotNull('paid_at')])->orderByDesc('period')->get();
+        // The approver is read for the selected run (detail()): loaded with the list, not one by one.
+        $runs = PayrollRun::with('approver:id,name')->withCount(['items', 'items as paid_count' => fn ($q) => $q->whereNotNull('paid_at')])->orderByDesc('period')->get();
         $selected = $runs->firstWhere('id', $request->integer('run')) ?? $runs->first();
         $used = $runs->map(fn ($r) => $r->period->format('Y-m'));
 
@@ -120,7 +121,7 @@ class PayrollRunController extends Controller
     public function payouts(Request $request, FinanceReports $reports): Response
     {
         $this->allowAny($request, ['payroll.pay', 'payroll.reports']);
-        $runs = PayrollRun::whereIn('status', [PayrollRun::APPROVED, PayrollRun::PAID])
+        $runs = PayrollRun::with('approver:id,name')->whereIn('status', [PayrollRun::APPROVED, PayrollRun::PAID])
             ->withCount(['items', 'items as paid_count' => fn ($q) => $q->whereNotNull('paid_at')])
             ->withSum(['items as unpaid' => fn ($q) => $q->whereNull('paid_at')], 'net')
             ->orderByDesc('period')->get();

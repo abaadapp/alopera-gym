@@ -34,7 +34,7 @@ export default function SalesSummary({ period, stats, bySource, topProducts, rec
             <PeriodFilter routeName="club.sales.summary" from={period.from} to={period.to} />
 
             <div className="mb-6 grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                <StatCard label="إجمالي المبيعات" value={m(stats.total)} icon={<TrendingUp />} tone="brand" href={can('reports.view') ? route('club.reports.show', { report: 'sales', ...period }) : undefined} />
+                <StatCard label="إجمالي المبيعات" value={m(stats.total)} icon={<TrendingUp />} tone="brand" href={route('club.reports.show', { report: 'sales', ...period })} />
                 <StatCard label="عدد العمليات" value={number(stats.count)} icon={<ReceiptText />} tone="gray" />
                 <StatCard label="متوسط العملية" value={m(stats.average)} icon={<Wallet />} tone="gray" />
             </div>
@@ -49,7 +49,7 @@ export default function SalesSummary({ period, stats, bySource, topProducts, rec
                     )}
                 </Card>
                 <Card>
-                    <CardHeader title="الأكثر مبيعًا" actions={can('reports.view') && <Link href={route('club.reports.show', { report: 'sales', ...period })} className="text-[13px] text-muted hover:text-ink">تقرير المبيعات</Link>} />
+                    <CardHeader title="الأكثر مبيعًا" actions={<Link href={route('club.reports.show', { report: 'sales', ...period })} className="text-[13px] text-muted hover:text-ink">تقرير المبيعات</Link>} />
                     {topProducts.length ? (
                         <HBars data={topProducts.map((p) => ({ label: `${p.name} × ${number(p.quantity)}`, value: Number(p.total) }))} format={(v) => money(v, currency)} />
                     ) : (

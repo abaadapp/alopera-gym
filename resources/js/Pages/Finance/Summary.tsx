@@ -3,7 +3,7 @@ import { ArrowLeftRight, Banknote, CreditCard, Landmark, Scale, TrendingDown, Tr
 import ClubLayout from '@/Layouts/ClubLayout';
 import PeriodFilter from '@/Components/PeriodFilter';
 import { Badge, Card, CardHeader, EmptyState, PageHeader, StatCard } from '@/Components/ui';
-import { useCan, useCurrency } from '@/hooks/useShared';
+import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, money } from '@/lib/format';
 
@@ -22,8 +22,6 @@ interface Props {
 export const kindIcon = { cash: Banknote, bank: Landmark, card: CreditCard, gateway: ArrowLeftRight } as Record<string, typeof Wallet>;
 
 export default function FinanceSummary({ summary, accounts, overdue, unpaidSalaries, recent, filters }: Props) {
-    // The statements and the money movement are on the reports page, for those who may open reports.
-    const reports = useCan()('reports.view');
     const currency = useCurrency();
     const m = (v: string) => money(v, currency);
     const negative = Number(summary.net) < 0;
@@ -44,7 +42,7 @@ export default function FinanceSummary({ summary, accounts, overdue, unpaidSalar
             <div className="mb-6 grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="الإيرادات" value={m(summary.revenue)} icon={<TrendingUp className="size-5" />} tone="green" />
                 <StatCard label="المصروفات" value={m(summary.expenses)} hint={`منها الرواتب ${m(summary.salaries)}`} icon={<TrendingDown className="size-5" />} tone="red" />
-                <StatCard label="صافي النتيجة" value={<span className={cn(negative && 'text-red-700')}>{m(summary.net)}</span>} icon={<Scale className="size-5" />} tone={negative ? 'red' : 'brand'} href={reports ? route('club.reports.show', { report: 'statements', ...filters }) : undefined} />
+                <StatCard label="صافي النتيجة" value={<span className={cn(negative && 'text-red-700')}>{m(summary.net)}</span>} icon={<Scale className="size-5" />} tone={negative ? 'red' : 'brand'} href={route('club.reports.show', { report: 'statements', ...filters })} />
                 <StatCard label="رواتب معتمدة لم تُصرف" value={m(unpaidSalaries)} hint={Number(summary.vat_payable) ? `ضريبة مستحقة ${m(summary.vat_payable)}` : undefined} icon={<Wallet className="size-5" />} tone={Number(unpaidSalaries) ? 'amber' : 'gray'} href={route('club.payroll.payouts')} />
             </div>
 
@@ -54,21 +52,16 @@ export default function FinanceSummary({ summary, accounts, overdue, unpaidSalar
                     <ul className="divide-y divide-line">
                         {accounts.map((a) => {
                             const Icon = kindIcon[a.kind] ?? Wallet;
-                            const row = (
-                                <>
-                                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#f2f2f0] text-[#4b4b4b]"><Icon className="size-4" /></span>
-                                    <span className="min-w-0 flex-1">
-                                        <span className="block truncate text-sm font-medium">{a.name}</span>
-                                        {a.masked && <span className="block text-xs text-muted" dir="ltr">{a.masked}</span>}
-                                    </span>
-                                    <span className={cn('text-sm font-semibold num', Number(a.balance) < 0 && 'text-red-700')}>{m(a.balance)}</span>
-                                </>
-                            );
                             return (
                                 <li key={a.id}>
-                                    {reports
-                                        ? <Link href={route('club.reports.show', { report: 'movement', account_id: a.id })} className="-mx-2 flex items-center gap-3 rounded-[10px] px-2 py-3 transition-colors hover:bg-[#fafafa]">{row}</Link>
-                                        : <div className="-mx-2 flex items-center gap-3 px-2 py-3">{row}</div>}
+                                    <Link href={route('club.reports.show', { report: 'movement', account_id: a.id })} className="-mx-2 flex items-center gap-3 rounded-[10px] px-2 py-3 transition-colors hover:bg-[#fafafa]">
+                                        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#f2f2f0] text-[#4b4b4b]"><Icon className="size-4" /></span>
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block truncate text-sm font-medium">{a.name}</span>
+                                            {a.masked && <span className="block text-xs text-muted" dir="ltr">{a.masked}</span>}
+                                        </span>
+                                        <span className={cn('text-sm font-semibold num', Number(a.balance) < 0 && 'text-red-700')}>{m(a.balance)}</span>
+                                    </Link>
                                 </li>
                             );
                         })}

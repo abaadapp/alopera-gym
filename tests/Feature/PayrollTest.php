@@ -244,6 +244,13 @@ class PayrollTest extends TestCase
         }
         $this->actingAs($owner)->post(route('club.payroll.approve', $run));
         $this->actingAs($owner)->get(route('club.payroll.payouts', ['run' => $run->id]))->assertOk()->assertInertia(fn ($page) => $page->where('run.unpaid', '450.000')->where('waiting', '450.000'));
+
+        // A second approved month: the lists of several runs open too (their approvers are loaded with them).
+        $earlier = $this->openRun($club, now()->subMonthNoOverflow()->format('Y-m'));
+        $this->actingAs($owner)->post(route('club.payroll.approve', $earlier));
+        foreach ([route('club.payroll.index'), route('club.payroll.index', ['run' => $earlier->id]), route('club.payroll.payouts'), route('club.payroll.payouts', ['run' => $earlier->id])] as $url) {
+            $this->actingAs($owner)->get($url)->assertOk()->assertInertia(fn ($page) => $page->where('run.approver', $owner->name));
+        }
     }
 
     public function test_one_clubs_payroll_is_invisible_to_another(): void

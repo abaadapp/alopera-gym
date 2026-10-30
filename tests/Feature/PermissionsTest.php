@@ -49,7 +49,10 @@ class PermissionsTest extends TestCase
             'reception sees members' => ['reception', 'club.members.index', 200],
             'reception sells at the point of sale' => ['reception', 'club.pos.index', 200],
             'reception cannot see expenses' => ['reception', 'club.expenses.index', 403],
-            'reception cannot see reports' => ['reception', 'club.reports.index', 403],
+            'reception opens the reports of what it works with' => ['reception', 'club.reports.index', 200],
+            'reception cannot open the money report' => ['reception', 'club.reports.show', 403, 'finance'],
+            'reception cannot open the payroll report' => ['reception', 'club.reports.show', 403, 'payroll'],
+            'trainers have no reports' => ['trainer', 'club.reports.index', 403],
             'reception cannot see dues' => ['reception', 'club.dues', 403],
             'reception cannot open settings' => ['reception', 'club.settings.edit', 403],
             'reception cannot open the settings hub' => ['reception', 'club.settings.index', 403],
@@ -80,12 +83,12 @@ class PermissionsTest extends TestCase
     }
 
     #[DataProvider('matrix')]
-    public function test_role_matrix(string $role, string $route, int $status): void
+    public function test_role_matrix(string $role, string $route, int $status, ?string $param = null): void
     {
         $club = $this->club();
         $user = $role === 'owner' ? $this->owner($club) : $this->staff($club, $role);
 
-        $this->actingAs($user)->get(route($route))->assertStatus($status);
+        $this->actingAs($user)->get(route($route, $param ?? []))->assertStatus($status);
     }
 
     public function test_signed_in_users_opening_a_login_page_go_to_their_own_home(): void

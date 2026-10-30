@@ -164,37 +164,73 @@ class ReportsCatalogTest extends TestCase
         $this->assertStringContainsString("'=HYPERLINK", $members);
     }
 
-    public function test_opening_a_report_and_exporting_it_are_separate_permissions(): void
+    public function test_each_report_opens_with_its_own_permission_alone(): void
+    {
+        $club = $this->club();
+        $keys = fn (array $permissions) => array_column($this->catalog($this->roleWith($club, $permissions)), 'key');
+
+        // One permission gives its own reports, and the reports page to reach them: nothing broader is needed.
+        $this->assertEqualsCanonicalizing(['payroll', 'payouts'], $keys(['payroll.reports']));
+        $this->assertEqualsCanonicalizing(['finance'], $keys(['reports.financial']));
+        $this->assertEqualsCanonicalizing(['statements', 'movement'], $keys(['accounting.view']));
+        $this->assertEqualsCanonicalizing(['dues'], $keys(['dues.view']));
+        $this->assertEqualsCanonicalizing(['sales'], $keys(['sales.view']));
+        $this->assertEqualsCanonicalizing(['expiring'], $keys(['memberships.view']));
+        $this->assertEqualsCanonicalizing(['checkins'], $keys(['checkin.view']));
+        $this->assertEqualsCanonicalizing(['staff-attendance'], $keys(['staff_attendance.view']));
+        $this->assertEqualsCanonicalizing(['documents', 'renewals'], $keys(['documents.view']));
+        $this->assertEqualsCanonicalizing(['members', 'classes', 'trainers'], $keys(['reports.view']), 'one branch: no branch comparison');
+
+        // ...and each opens by its address with that permission alone, the others refused.
+        $payroll = $this->roleWith($club, ['payroll.reports']);
+        $this->actingAs($payroll)->get(route('club.reports.show', 'payroll'))->assertOk();
+        $this->actingAs($payroll)->get(route('club.reports.show', 'payouts'))->assertOk();
+        foreach (['finance', 'statements', 'members', 'dues'] as $key) {
+            $this->actingAs($payroll)->get(route('club.reports.show', $key))->assertForbidden();
+        }
+
+        // No report permission at all: no reports page.
+        $this->actingAs($this->roleWith($club, ['members.view', 'classes.view']))->get(route('club.reports.index'))->assertForbidden();
+        $this->actingAs($this->staff($club, 'trainer'))->get(route('club.reports.index'))->assertForbidden();
+    }
+
+    public function test_money_and_salaries_are_for_those_allowed_and_exporting_is_a_permission_of_its_own(): void
     {
         $club = $this->club();
 
-        // reports.view alone: the general reports, without money, and no files.
+        // Opening without exporting: the page says so and the file is refused.
         $viewer = $this->roleWith($club, ['reports.view']);
         $cards = $this->catalog($viewer);
-        $this->assertEqualsCanonicalizing(['members', 'classes', 'trainers'], array_column($cards, 'key'));
         $this->assertNull($cards[0]['export'], 'no export without reports.export');
-        $this->actingAs($viewer)->get(route('club.reports.show', 'finance'))->assertForbidden();
-        $this->actingAs($viewer)->get(route('club.reports.show', 'payroll'))->assertForbidden();
         $this->actingAs($viewer)->get(route('club.reports.show', 'members'))->assertOk()->assertInertia(fn ($page) => $page->where('canExport', false));
         $this->actingAs($viewer)->get(route('club.reports.export', ['report' => 'members', 'format' => 'csv']))->assertForbidden();
         $this->actingAs($viewer)->get(route('club.reports.show', 'branches'))->assertNotFound();
 
-        // Exporting is not opening: reports.export without the report's own permission is refused.
-        $exporter = $this->roleWith($club, ['reports.view', 'reports.export']);
-        $this->actingAs($exporter)->get(route('club.reports.export', ['report' => 'members', 'format' => 'csv']))->assertOk();
-        $this->actingAs($exporter)->get(route('club.reports.export', ['report' => 'payroll', 'format' => 'csv']))->assertForbidden();
-        $this->actingAs($exporter)->get(route('club.reports.export', ['report' => 'statements', 'format' => 'csv']))->assertForbidden();
+        // Exporting without opening: reports.export alone gives no file of a report the user may not open.
+        $this->withoutMiddleware(ThrottleRequests::class);
+        $exporter = $this->roleWith($club, ['reports.export']);
+        foreach (ReportCatalog::keys() as $key) {
+            $this->actingAs($exporter)->get(route('club.reports.export', ['report' => $key, 'format' => 'csv']))->assertStatus($key === 'branches' ? 404 : 403);
+        }
+        $this->actingAs($this->roleWith($club, ['reports.view', 'reports.export']))->get(route('club.reports.export', ['report' => 'members', 'format' => 'csv']))->assertOk();
 
-        // Salaries: payroll.reports opens them, and the file also needs reports.export.
-        $payroll = $this->roleWith($club, ['reports.view', 'payroll.reports']);
+        // Money: the money reports, and the amounts inside the others, only with their permissions.
+        foreach (['finance', 'statements', 'movement', 'dues', 'payroll', 'payouts'] as $key) {
+            $this->actingAs($viewer)->get(route('club.reports.show', $key))->assertForbidden();
+        }
+        $this->actingAs($viewer)->get(route('club.reports.show', 'members'))->assertInertia(fn ($page) => $page->where('data.report.plans', [])->where('canFinancial', false));
+        $this->assertStringNotContainsString('الإجمالي (ر.ع)', $this->actingAs($this->roleWith($club, ['reports.view', 'reports.export']))->get(route('club.reports.export', ['report' => 'members', 'format' => 'csv']))->streamedContent());
+
+        // Salaries: payroll.reports opens them; the file also needs reports.export.
+        $payroll = $this->roleWith($club, ['payroll.reports']);
         $this->actingAs($payroll)->get(route('club.reports.show', 'payroll'))->assertOk();
         $this->actingAs($payroll)->get(route('club.reports.export', ['report' => 'payroll', 'format' => 'csv']))->assertForbidden();
+        $this->actingAs($this->roleWith($club, ['payroll.reports', 'reports.export']))->get(route('club.reports.export', ['report' => 'payroll', 'format' => 'csv']))->assertOk();
 
-        // A section's permission without reports.view opens no report; reception and trainers have none.
-        $accountant = $this->roleWith($club, ['accounting.view']);
-        $this->actingAs($accountant)->get(route('club.reports.show', 'statements'))->assertForbidden();
-        $this->actingAs($this->staff($club, 'reception'))->get(route('club.reports.index'))->assertForbidden();
-        $this->actingAs($this->staff($club, 'trainer'))->get(route('club.reports.index'))->assertForbidden();
+        // Reception: the reports of what it works with (entries, memberships ending), no money, no salaries, no files.
+        $reception = array_column($this->catalog($this->staff($club, 'reception')), 'key');
+        $this->assertEqualsCanonicalizing(['checkins', 'expiring'], $reception);
+        $this->assertNull($this->catalog($this->staff($club, 'reception'))[0]['export']);
 
         // The finance role: money, books, sales and payroll, not documents or attendance.
         $finance = array_column($this->catalog($this->staff($club, 'finance')), 'key');

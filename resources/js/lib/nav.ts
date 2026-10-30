@@ -15,6 +15,9 @@ export type NavSection = { label: string; icon: LucideIcon; tabs: NavTab[]; matc
 /** A run of sections between two thin separators; the `footer` group sits at the bottom of the menu. */
 export type NavGroup = { sections: NavSection[]; footer?: boolean };
 
+/** Each report's own permission (ReportCatalog::PERMISSIONS): holding any one of them shows the reports page. */
+const REPORT_PERMISSIONS = ['reports.view', 'reports.financial', 'accounting.view', 'dues.view', 'sales.view', 'memberships.view', 'checkin.view', 'staff_attendance.view', 'payroll.reports', 'documents.view'];
+
 /** Settings screens live behind the settings hub; none of them appears in the main menu. */
 const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'billing.view', 'accounting.manage', 'documents.manage'];
 
@@ -130,7 +133,8 @@ export const NAV: NavGroup[] = [
                 icon: BarChart3,
                 // The one place for reports: every report in categories; each card opens its page (club.reports.show) or
                 // exports it. The sections keep their working screens and have no report tabs of their own.
-                tabs: [{ label: 'التقارير', route: 'club.reports.index', permission: 'reports.view', match: 'club.reports.*' }],
+                // Any one report's permission opens the page (App\Modules\Reports\Services\ReportCatalog::PERMISSIONS).
+                tabs: [{ label: 'التقارير', route: 'club.reports.index', permission: REPORT_PERMISSIONS, match: 'club.reports.*' }],
             },
             {
                 label: 'الموقع الإلكتروني',

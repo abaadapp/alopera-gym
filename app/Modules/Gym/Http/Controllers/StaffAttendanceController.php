@@ -32,22 +32,19 @@ class StaffAttendanceController extends Controller
                 'hours' => $a->clock_out_at ? round($a->clock_in_at->diffInMinutes($a->clock_out_at) / 60, 2) : null,
             ]);
 
-        // Per person over the whole period (not just this page): days present, hours worked, punches left open.
-        $summary = BranchContext::scope(StaffAttendance::with('user:id,name'))
+        // Over the whole period (not just this page): hours worked and punches left open. Each person's days and hours
+        // are the staff attendance report (the reports page).
+        $period = BranchContext::scope(StaffAttendance::query())
             ->whereBetween('clock_in_at', [$from->startOfDay(), $to->endOfDay()])
             ->when($request->integer('user_id'), fn ($q, $id) => $q->where('user_id', $id))
-            ->get()->groupBy('user_id')
-            ->map(fn ($records) => [
-                'user' => $records->first()->user?->name,
-                'days' => $records->map(fn ($a) => $a->clock_in_at->toDateString())->unique()->count(),
-                'hours' => round($records->sum(fn ($a) => $a->clock_out_at ? $a->clock_in_at->diffInMinutes($a->clock_out_at) : 0) / 60, 2),
-                'open' => $records->whereNull('clock_out_at')->count(),
-                'records' => $records->count(),
-            ])->sortByDesc('hours')->values();
+            ->get(['clock_in_at', 'clock_out_at']);
 
         return Inertia::render('Gym/StaffAttendance/Index', [
             'rows' => $rows,
-            'summary' => $summary,
+            'stats' => [
+                'hours' => round($period->sum(fn ($a) => $a->clock_out_at ? $a->clock_in_at->diffInMinutes($a->clock_out_at) : 0) / 60, 2),
+                'open' => $period->whereNull('clock_out_at')->count(),
+            ],
             'staff' => User::ofTenant($tenants->require()->id)->orderBy('name')->get(['id', 'name']),
             'filters' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'user_id' => $request->integer('user_id') ?: null],
         ]);
