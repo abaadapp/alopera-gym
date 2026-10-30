@@ -58,6 +58,13 @@ export function dayCount(value: number | null | undefined): string {
 }
 
 /** For searching: Arabic-Indic digits as digits, the interchangeable letters folded and Latin in lower case, so «احمد» finds «أحمد». */
+/** «إضافة واحدة»، «إضافتان»، «3 إضافات»، «11 إضافة». */
+export function addonCount(value: number): string {
+    if (value === 1) return 'إضافة واحدة';
+    if (value === 2) return 'إضافتان';
+    return `${number(value)} ${value >= 3 && value <= 10 ? 'إضافات' : 'إضافة'}`;
+}
+
 export function fold(text: string): string {
     return text
         .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))

@@ -1,332 +1,173 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { router, useForm } from '@inertiajs/react';
-import { Globe, History, Package, Pencil, Plus, Scale, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Link, router } from '@inertiajs/react';
+import { History, Package, Pencil, Plus, Puzzle, Scale, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, Checkbox, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Pagination, SearchInput, Select, Tabs, Textarea, Toggle } from '@/Components/ui';
+import { Button, Card, EmptyState, PageHeader, Pagination, Select, Switch } from '@/Components/ui';
+import { DropdownItem, DropdownSeparator } from '@/Components/ui/Dropdown';
+import { ConfirmDelete, FilterMenu, ProductThumb, RowMenu, StatusTabs, StockBadge, Toolbar, ToolbarSearch, ViewToggle, useView, visit, type FilterDef } from '@/Components/Products/parts';
+import { AdjustModal, MovementsModal } from '@/Components/Products/Stock';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
-import { money, number } from '@/lib/format';
+import { addonCount, money, number } from '@/lib/format';
 import type { Option, Paginated } from '@/types';
 
-interface ProductRow {
+export interface ProductRow {
     id: number;
     name: string;
     sku: string | null;
     barcode: string | null;
-    description: string | null;
     price: string;
     cost: string;
     stock_quantity: string;
-    reorder_level: string;
     track_stock: boolean;
     is_active: boolean;
     show_on_website: boolean;
     product_category_id: number | null;
     category: string | null;
-    low: boolean;
     image_url: string | null;
+    photos_count: number;
+    low: boolean;
+    out: boolean;
+    margin: number | null;
+    addons: number;
 }
 
-interface Movement {
-    id: number;
-    type: string;
-    quantity: string;
-    unit_cost: string;
-    balance_after: string;
-    note: string | null;
-    user: string | null;
-    at: string;
-}
+type Filters = { q: string; category: string; status: string; stock: string; website: string; sort: string };
 
-const movementType: Record<string, string> = { purchase: 'شراء', sale: 'بيع', adjustment: 'تعديل جرد', return: 'مرتجع', void: 'إلغاء بيع', order: 'محجوز لطلب من الموقع', release: 'إلغاء طلب من الموقع' };
+const SORTS = [['name', 'الاسم'], ['newest', 'الأحدث'], ['price', 'الأعلى سعرًا'], ['stock', 'الأقل مخزونًا']] as const;
 
-export default function ProductsIndex({ products, categories, filters }: { products: Paginated<ProductRow>; categories: Option[]; filters: { q?: string; low?: string | boolean; website?: string | boolean } }) {
+/**
+ * The products tab: every product of the club as a table or as cards, searched and filtered, with its price, cost,
+ * margin, stock and the two switches (available for sale, shown in the website shop). Adding and editing open the
+ * product's own page.
+ */
+export default function ProductsIndex({ products, counts, categories, filters }: { products: Paginated<ProductRow>; counts: { all: number; active: number; inactive: number }; categories: Option[]; filters: Filters }) {
     const currency = useCurrency();
-    const [editing, setEditing] = useState<ProductRow | 'new' | null>(null);
+    const [view, setView] = useView('products');
     const [adjusting, setAdjusting] = useState<ProductRow | null>(null);
     const [history, setHistory] = useState<ProductRow | null>(null);
-    const low = filters.low === true || filters.low === '1' || filters.low === 'true';
-    const website = filters.website === true || filters.website === '1' || filters.website === 'true';
-    const view = low ? 'low' : website ? 'website' : '';
+    const [deleting, setDeleting] = useState<ProductRow | null>(null);
+    const go = (change: Partial<Filters>) => visit('club.products.index', filters, change);
+    const toggle = (p: ProductRow, field: 'is_active' | 'show_on_website', value: boolean) => router.patch(route('club.products.toggle', p.id), { field, value }, { preserveScroll: true, preserveState: true });
+
+    const filterDefs: FilterDef[] = [
+        { key: 'category', label: 'التصنيف', options: [...categories.map((c) => ({ value: String(c.id), label: c.name })), { value: 'none', label: 'بدون تصنيف' }] },
+        { key: 'stock', label: 'المخزون', options: [{ value: 'low', label: 'وصل لحد إعادة الطلب' }, { value: 'out', label: 'نفد' }, { value: 'untracked', label: 'غير متتبع' }] },
+        { key: 'website', label: 'متجر الموقع', options: [{ value: '1', label: 'ظاهر في المتجر' }, { value: '0', label: 'غير ظاهر' }] },
+    ];
+    const filtered = Boolean(filters.q || filters.category || filters.stock || filters.website || filters.status);
+
+    const actions = (p: ProductRow) => (
+        <RowMenu label={`إجراءات ${p.name}`}>
+            {(close) => (
+                <>
+                    <DropdownItem href={route('club.products.edit', p.id)}><Pencil /> تعديل</DropdownItem>
+                    {p.track_stock && <DropdownItem onClick={() => { close(); setAdjusting(p); }}><Scale /> جرد المخزون</DropdownItem>}
+                    <DropdownItem onClick={() => { close(); setHistory(p); }}><History /> حركة المخزون</DropdownItem>
+                    <DropdownItem onClick={() => { close(); toggle(p, 'is_active', !p.is_active); }}>{p.is_active ? 'إيقاف البيع' : 'تفعيل البيع'}</DropdownItem>
+                    <DropdownSeparator />
+                    <DropdownItem destructive onClick={() => { close(); setDeleting(p); }}><Trash2 /> حذف</DropdownItem>
+                </>
+            )}
+        </RowMenu>
+    );
 
     return (
         <ClubLayout title="المنتجات">
-            <PageHeader title="المنتجات" subtitle={`${products.total} منتج — الأسعار والمخزون وما يظهر في متجر الموقع`} actions={<Button icon={<Plus />} onClick={() => setEditing('new')}>منتج جديد</Button>} />
+            <PageHeader title="المنتجات" subtitle="منتجات النادي بأسعارها ومخزونها، وما يظهر منها في نقطة البيع ومتجر الموقع" actions={<Button icon={<Plus />} href={route('club.products.create')}>إضافة منتج</Button>} />
 
-            <Card padded={false}>
-                <div className="flex flex-wrap items-center justify-between gap-3 p-4">
-                    <Tabs
-                        tabs={[{ key: '', label: 'كل المنتجات' }, { key: 'website', label: 'ظاهرة في الموقع' }, { key: 'low', label: 'وصلت لحد إعادة الطلب' }]}
-                        value={view}
-                        onChange={(key) => router.get(route('club.products.index'), { q: filters.q || undefined, low: key === 'low' ? 1 : undefined, website: key === 'website' ? 1 : undefined }, { preserveState: true, replace: true })}
-                        className="border-0"
-                    />
-                    <SearchInput value={filters.q} placeholder="الاسم، SKU، الباركود…" extra={{ low: low ? 1 : undefined, website: website ? 1 : undefined }} />
-                </div>
+            <p className="mb-3 text-[12px] text-[#9ca3af]"><span className="num">{number(products.total)}</span> منتج{filtered ? ' مطابق' : ''}</p>
+
+            <Card padded={false} className="overflow-hidden">
+                <Toolbar>
+                    <ToolbarSearch value={filters.q} placeholder="ابحث بالاسم أو SKU أو الباركود" onSearch={(q) => go({ q })} />
+                    <StatusTabs value={filters.status} counts={counts} labels={['متاح', 'موقوف']} onChange={(status) => go({ status })} />
+                    <FilterMenu filters={filterDefs} values={filters} onChange={(key, value) => go({ [key]: value })} />
+                    <div className="ms-auto flex items-center gap-1">
+                        <Select className="h-9 w-36 py-1.5 text-[13px]" value={filters.sort} onChange={(e) => go({ sort: e.target.value === 'name' ? '' : e.target.value })} aria-label="الترتيب">
+                            {SORTS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                        </Select>
+                        <ViewToggle value={view} onChange={setView} />
+                    </div>
+                </Toolbar>
 
                 {products.data.length === 0 ? (
-                    <EmptyState icon={<Package className="size-6" />} title="لا توجد منتجات" action={<Button size="sm" onClick={() => setEditing('new')}>إضافة منتج</Button>} />
-                ) : (
+                    <EmptyState
+                        icon={<Package className="size-6" />}
+                        title={filtered ? 'لا توجد منتجات مطابقة' : 'لا توجد منتجات بعد — أضف أول منتج'}
+                        description={filtered ? 'غيّر البحث أو أزل بعض الفلاتر.' : 'المنتجات التي تضيفها هنا تظهر في نقطة البيع، وما تختاره منها يظهر في متجر الموقع.'}
+                        action={!filtered ? <Button size="sm" href={route('club.products.create')} icon={<Plus />}>إضافة منتج</Button> : undefined}
+                    />
+                ) : view === 'table' ? (
                     <div className="overflow-x-auto">
                         <table className="table-base">
                             <thead>
-                                <tr><th>المنتج</th><th>التصنيف</th><th>السعر</th><th>التكلفة</th><th>المخزون</th><th>الحالة</th><th /></tr>
+                                <tr><th>المنتج</th><th>التصنيف</th><th>السعر</th><th>التكلفة</th><th>الهامش</th><th>المخزون</th><th>متجر الموقع</th><th>متاح للبيع</th><th className="w-12"><span className="sr-only">إجراءات</span></th></tr>
                             </thead>
                             <tbody>
                                 {products.data.map((p) => (
-                                    <tr key={p.id}>
+                                    <tr key={p.id} className={cn(!p.is_active && 'text-[#9ca3af]')}>
                                         <td>
-                                            <div className="flex items-center gap-3">
-                                                {p.image_url ? (
-                                                    <img src={p.image_url} alt="" loading="lazy" className="size-10 shrink-0 rounded-lg object-cover" />
-                                                ) : (
-                                                    <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-canvas text-muted"><Package className="size-4" /></span>
-                                                )}
-                                                <div className="min-w-0">
-                                                    <p className="font-medium">{p.name}</p>
-                                                    <p className="text-xs text-muted num">{[p.sku, p.barcode].filter(Boolean).join(' · ') || '—'}</p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td>{p.category ?? '—'}</td>
-                                        <td className="num">{money(p.price, currency)}</td>
-                                        <td className="text-muted num">{money(p.cost, currency)}</td>
-                                        <td>
-                                            {p.track_stock ? (
-                                                <span className={cn('font-medium num', p.low && 'text-red-600')}>
-                                                    {number(p.stock_quantity, 3)}
-                                                    {p.low && <Badge tone="red" className="ms-2">منخفض</Badge>}
+                                            <Link href={route('club.products.edit', p.id)} className="flex items-center gap-3">
+                                                <ProductThumb url={p.image_url} className={cn(!p.is_active && 'opacity-60')} />
+                                                <span className="min-w-0">
+                                                    <span className={cn('block max-w-56 truncate font-medium', p.is_active ? 'text-ink' : 'text-[#6b7280]')}>{p.name}</span>
+                                                    <span className="flex items-center gap-2 text-[11px] text-[#9ca3af]">
+                                                        <span className="num">{[p.sku, p.barcode].filter(Boolean).join(' · ') || '—'}</span>
+                                                        {p.addons > 0 && <span className="inline-flex items-center gap-1"><Puzzle className="size-3" />{addonCount(p.addons)}</span>}
+                                                    </span>
                                                 </span>
-                                            ) : (
-                                                <span className="text-xs text-muted">غير متتبع</span>
-                                            )}
+                                            </Link>
                                         </td>
+                                        <td className="text-[13px]">{p.category ?? <span className="text-[#9ca3af]">—</span>}</td>
+                                        <td className="font-medium num">{money(p.price, currency)}</td>
+                                        <td className="text-[#6b7280] num">{money(p.cost, currency)}</td>
+                                        <td className={cn('num text-[13px]', p.margin === null ? 'text-[#9ca3af]' : p.margin < 0 ? 'text-[#b91c1c]' : p.margin < 10 ? 'text-[#d97706]' : 'text-[#4b4b4b]')}>{p.margin === null ? '—' : `${number(p.margin, 1)}٪`}</td>
                                         <td>
-                                            <div className="flex flex-wrap gap-1">
-                                                {p.is_active ? <Badge tone="green">متاح</Badge> : <Badge>موقوف</Badge>}
-                                                {p.show_on_website && p.is_active && <Badge tone="blue"><Globe />في الموقع</Badge>}
+                                            <div className="flex items-center gap-2">
+                                                {p.track_stock && <span className={cn('font-medium num', (p.low || p.out) && 'text-[#b91c1c]')}>{number(p.stock_quantity, Number(p.stock_quantity) % 1 ? 3 : 0)}</span>}
+                                                <StockBadge track={p.track_stock} out={p.out} low={p.low} />
                                             </div>
                                         </td>
-                                        <td>
-                                            <div className="flex justify-end gap-1">
-                                                {p.track_stock && <Button variant="ghost" size="sm" icon={<Scale className="size-3.5" />} onClick={() => setAdjusting(p)}>جرد</Button>}
-                                                <Button variant="ghost" size="sm" icon={<History className="size-3.5" />} onClick={() => setHistory(p)} aria-label="حركة المخزون" />
-                                                <Button variant="ghost" size="sm" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(p)} aria-label="تعديل" />
-                                                <ConfirmAction url={route('club.products.destroy', p.id)} method="delete" title="حذف المنتج" message={`حذف «${p.name}»؟ تبقى حركاته السابقة في التقارير.`} confirmLabel="حذف" variant="ghost" icon={<Trash2 className="size-3.5 text-red-600" />}>
-                                                    <span className="sr-only">حذف</span>
-                                                </ConfirmAction>
-                                            </div>
-                                        </td>
+                                        <td><Switch size="sm" checked={p.show_on_website} onChange={(v) => toggle(p, 'show_on_website', v)} label={`إظهار ${p.name} في متجر الموقع`} disabled={!p.is_active} /></td>
+                                        <td><Switch size="sm" checked={p.is_active} onChange={(v) => toggle(p, 'is_active', v)} label={`${p.name} متاح للبيع`} /></td>
+                                        <td className="text-end">{actions(p)}</td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
+                ) : (
+                    <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        {products.data.map((p) => (
+                            <div key={p.id} className={cn('card flex h-full flex-col overflow-hidden', !p.is_active && 'opacity-70')}>
+                                <div className="relative aspect-[4/3] overflow-hidden bg-[#f7f7f5]">
+                                    {p.image_url ? <img src={p.image_url} alt="" loading="lazy" className="size-full object-cover" /> : <span className="grid size-full place-items-center text-[#c4c4c4]"><Package className="size-10" /></span>}
+                                    <span className="absolute top-2.5 start-2.5"><StockBadge track={p.track_stock} out={p.out} low={p.low} /></span>
+                                    <span className="absolute top-2 end-2 rounded-[10px] bg-white/90 backdrop-blur">{actions(p)}</span>
+                                </div>
+                                <div className="flex flex-1 flex-col p-3.5">
+                                    <Link href={route('club.products.edit', p.id)} className="line-clamp-2 text-[14px] font-semibold text-ink hover:underline">{p.name}</Link>
+                                    <p className="mt-0.5 text-[12px] text-[#9ca3af]">{p.category ?? 'بدون تصنيف'}{p.addons > 0 && ` · ${addonCount(p.addons)}`}</p>
+                                    <div className="mt-auto flex items-end justify-between gap-2 pt-3">
+                                        <span className="text-[15px] font-bold text-ink num">{money(p.price, currency)}</span>
+                                        {p.track_stock && <span className={cn('text-[12px] num', p.low || p.out ? 'text-[#b91c1c]' : 'text-[#6b7280]')}>الكمية {number(p.stock_quantity, Number(p.stock_quantity) % 1 ? 3 : 0)}</span>}
+                                    </div>
+                                    <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3 text-[12px] text-[#6b7280]">
+                                        <span className="flex items-center gap-2"><Switch size="sm" checked={p.is_active} onChange={(v) => toggle(p, 'is_active', v)} label={`${p.name} متاح للبيع`} /> متاح</span>
+                                        <span className="flex items-center gap-2"><Switch size="sm" checked={p.show_on_website} onChange={(v) => toggle(p, 'show_on_website', v)} label={`إظهار ${p.name} في متجر الموقع`} disabled={!p.is_active} /> في المتجر</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 )}
                 <Pagination data={products} />
             </Card>
 
-            {editing && <ProductModal product={editing === 'new' ? null : editing} categories={categories} onClose={() => setEditing(null)} />}
             {adjusting && <AdjustModal product={adjusting} onClose={() => setAdjusting(null)} />}
-            <MovementsDrawer product={history} onClose={() => setHistory(null)} currency={currency} />
+            <MovementsModal product={history} onClose={() => setHistory(null)} currency={currency} />
+            <ConfirmDelete target={deleting} url={deleting && route('club.products.destroy', deleting.id)} title={`حذف «${deleting?.name}»`} message="يختفي من نقطة البيع ومتجر الموقع، وتبقى مبيعاته وفواتيره وحركات مخزونه في السجلات والتقارير." onClose={() => setDeleting(null)} />
         </ClubLayout>
-    );
-}
-
-function ProductModal({ product, categories, onClose }: { product: ProductRow | null; categories: Option[]; onClose: () => void }) {
-    const [newCategory, setNewCategory] = useState(false);
-    const form = useForm<{
-        name: string;
-        sku: string;
-        barcode: string;
-        description: string;
-        price: string;
-        reorder_level: string;
-        track_stock: boolean;
-        is_active: boolean;
-        show_on_website: boolean;
-        product_category_id: string;
-        category_name: string;
-        opening_stock: string;
-        opening_cost: string;
-        image: File | null;
-    }>({
-        name: product?.name ?? '',
-        sku: product?.sku ?? '',
-        barcode: product?.barcode ?? '',
-        description: product?.description ?? '',
-        price: product?.price ?? '',
-        reorder_level: product ? String(Number(product.reorder_level)) : '0',
-        track_stock: product?.track_stock ?? true,
-        is_active: product?.is_active ?? true,
-        show_on_website: product?.show_on_website ?? false,
-        product_category_id: product?.product_category_id ? String(product.product_category_id) : '',
-        category_name: '',
-        opening_stock: '',
-        opening_cost: '',
-        image: null,
-    });
-
-    const submit = (e: FormEvent) => {
-        e.preventDefault();
-        const options = { forceFormData: true, preserveScroll: true, onSuccess: onClose };
-        if (product) {
-            form.transform((d) => ({ ...d, opening_stock: '', opening_cost: '', _method: 'put' }));
-            form.post(route('club.products.update', product.id), options);
-        } else {
-            form.post(route('club.products.store'), options);
-        }
-    };
-
-    return (
-        <Modal
-            open
-            onClose={onClose}
-            size="lg"
-            title={product ? `تعديل ${product.name}` : 'منتج جديد'}
-            footer={
-                <>
-                    <Button variant="ghost" onClick={onClose}>تراجع</Button>
-                    <Button type="submit" form="product-form" loading={form.processing}>حفظ</Button>
-                </>
-            }
-        >
-            <form id="product-form" onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-                <Field label="اسم المنتج" error={form.errors.name} required className="sm:col-span-2">
-                    <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} required />
-                </Field>
-                <Field label="سعر البيع" error={form.errors.price} required>
-                    <Input type="number" step="0.001" min="0" dir="ltr" value={form.data.price} onChange={(e) => form.setData('price', e.target.value)} required />
-                </Field>
-                <Field label="التصنيف" error={form.errors.product_category_id || form.errors.category_name}>
-                    {newCategory ? (
-                        <div className="flex gap-2">
-                            <Input value={form.data.category_name} onChange={(e) => form.setData('category_name', e.target.value)} placeholder="اسم التصنيف الجديد" />
-                            <Button type="button" variant="ghost" size="sm" onClick={() => { setNewCategory(false); form.setData('category_name', ''); }}>إلغاء</Button>
-                        </div>
-                    ) : (
-                        <div className="flex gap-2">
-                            <Select value={form.data.product_category_id} onChange={(e) => form.setData('product_category_id', e.target.value)} placeholder="بدون تصنيف">
-                                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </Select>
-                            <Button type="button" variant="outline" onClick={() => setNewCategory(true)} icon={<Plus className="size-4" />} aria-label="تصنيف جديد" />
-                        </div>
-                    )}
-                </Field>
-                <Field label="SKU" error={form.errors.sku}>
-                    <Input dir="ltr" value={form.data.sku} onChange={(e) => form.setData('sku', e.target.value)} />
-                </Field>
-                <Field label="الباركود" error={form.errors.barcode}>
-                    <Input dir="ltr" value={form.data.barcode} onChange={(e) => form.setData('barcode', e.target.value)} />
-                </Field>
-                <Field label="حد إعادة الطلب" error={form.errors.reorder_level} hint="تنبيه عندما يصل المخزون لهذا الحد">
-                    <Input type="number" step="1" min="0" dir="ltr" value={form.data.reorder_level} onChange={(e) => form.setData('reorder_level', e.target.value)} />
-                </Field>
-                <Field label="صورة" error={form.errors.image}>
-                    {product?.image_url && <img src={product.image_url} alt="" className="mb-2 size-16 rounded-lg object-cover" />}
-                    <Input type="file" accept="image/*" onChange={(e) => form.setData('image', e.target.files?.[0] ?? null)} />
-                </Field>
-                <Field label="الوصف" error={form.errors.description} className="sm:col-span-2">
-                    <Textarea rows={2} value={form.data.description} onChange={(e) => form.setData('description', e.target.value)} />
-                </Field>
-                {!product && form.data.track_stock && (
-                    <>
-                        <Field label="الرصيد الافتتاحي" error={form.errors.opening_stock}>
-                            <Input type="number" step="1" min="0" dir="ltr" value={form.data.opening_stock} onChange={(e) => form.setData('opening_stock', e.target.value)} />
-                        </Field>
-                        <Field label="تكلفة الوحدة الافتتاحية" error={form.errors.opening_cost}>
-                            <Input type="number" step="0.001" min="0" dir="ltr" value={form.data.opening_cost} onChange={(e) => form.setData('opening_cost', e.target.value)} />
-                        </Field>
-                    </>
-                )}
-                <div className="space-y-2 sm:col-span-2">
-                    <Toggle checked={form.data.track_stock} onChange={(v) => form.setData('track_stock', v)} label="تتبّع المخزون" hint="أوقفه للخدمات أو المنتجات غير المخزنة؛ عند تفعيله لا يُباع أكثر من المتوفر" />
-                    <Toggle checked={form.data.show_on_website} onChange={(v) => form.setData('show_on_website', v)} label="إظهار في الموقع الإلكتروني" hint="يظهر في متجر موقع النادي ويمكن طلبه أونلاين" />
-                    <Checkbox label="متاح للبيع" checked={form.data.is_active} onChange={(e) => form.setData('is_active', e.target.checked)} />
-                </div>
-            </form>
-        </Modal>
-    );
-}
-
-function AdjustModal({ product, onClose }: { product: ProductRow; onClose: () => void }) {
-    const form = useForm({ counted: String(Number(product.stock_quantity)), reason: '' });
-
-    const submit = (e: FormEvent) => {
-        e.preventDefault();
-        form.post(route('club.products.adjust', product.id), { preserveScroll: true, onSuccess: onClose });
-    };
-
-    const diff = Number(form.data.counted || 0) - Number(product.stock_quantity);
-
-    return (
-        <Modal
-            open
-            onClose={onClose}
-            size="sm"
-            title={`جرد: ${product.name}`}
-            footer={
-                <>
-                    <Button variant="ghost" onClick={onClose}>تراجع</Button>
-                    <Button type="submit" form="adjust-form" loading={form.processing}>حفظ الجرد</Button>
-                </>
-            }
-        >
-            <form id="adjust-form" onSubmit={submit} className="space-y-4">
-                <p className="text-sm text-muted">الرصيد في النظام: <span className="font-medium text-ink num">{number(product.stock_quantity, 3)}</span></p>
-                <Field label="الكمية الفعلية على الرف" error={form.errors.counted} required>
-                    <Input type="number" step="any" min="0" dir="ltr" value={form.data.counted} onChange={(e) => form.setData('counted', e.target.value)} required />
-                </Field>
-                {diff !== 0 && <p className={cn('text-sm num', diff > 0 ? 'text-emerald-600' : 'text-red-600')}>الفرق: {diff > 0 ? '+' : ''}{number(diff, 3)}</p>}
-                <Field label="السبب" error={form.errors.reason} required>
-                    <Input value={form.data.reason} onChange={(e) => form.setData('reason', e.target.value)} placeholder="جرد شهري، تالف، هدية…" required />
-                </Field>
-            </form>
-        </Modal>
-    );
-}
-
-function MovementsDrawer({ product, onClose, currency }: { product: ProductRow | null; onClose: () => void; currency: string }) {
-    const [rows, setRows] = useState<Movement[] | null>(null);
-
-    useEffect(() => {
-        if (!product) return;
-        setRows(null);
-        const controller = new AbortController();
-        fetch(route('club.products.movements', product.id), { headers: { Accept: 'application/json' }, credentials: 'same-origin', signal: controller.signal })
-            .then((r) => (r.ok ? r.json() : []))
-            .then((data: Movement[]) => setRows(data))
-            .catch(() => undefined);
-        return () => controller.abort();
-    }, [product]);
-
-    return (
-        <Modal open={product !== null} onClose={onClose} size="lg" title={`حركة المخزون: ${product?.name ?? ''}`}>
-            {rows === null ? (
-                <p className="py-6 text-center text-sm text-muted">جارٍ التحميل…</p>
-            ) : rows.length === 0 ? (
-                <EmptyState title="لا توجد حركات بعد" />
-            ) : (
-                <div className="-mx-5 overflow-x-auto">
-                    <table className="table-base">
-                        <thead>
-                            <tr><th>التاريخ</th><th>النوع</th><th>الكمية</th><th>التكلفة</th><th>الرصيد</th><th>ملاحظة</th></tr>
-                        </thead>
-                        <tbody>
-                            {rows.map((m) => (
-                                <tr key={m.id}>
-                                    <td className="whitespace-nowrap text-xs text-muted">{m.at}<br />{m.user}</td>
-                                    <td>{movementType[m.type] ?? m.type}</td>
-                                    <td className={cn('font-medium num', Number(m.quantity) >= 0 ? 'text-emerald-600' : 'text-red-600')}>{Number(m.quantity) > 0 ? '+' : ''}{number(m.quantity, 3)}</td>
-                                    <td className="text-xs num">{money(m.unit_cost, currency)}</td>
-                                    <td className="num">{number(m.balance_after, 3)}</td>
-                                    <td className="text-xs text-muted">{m.note ?? '—'}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-        </Modal>
     );
 }

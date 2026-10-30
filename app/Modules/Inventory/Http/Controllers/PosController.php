@@ -10,6 +10,7 @@ use App\Modules\Gym\Models\Member;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Inventory\Services\PosService;
+use App\Modules\Inventory\Services\ProductAddons;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -20,11 +21,15 @@ class PosController extends Controller
 {
     public function __construct(private readonly PosService $pos, private readonly BranchContext $branches) {}
 
-    public function index(): Response
+    public function index(ProductAddons $addons): Response
     {
+        $products = Product::with('category:id,name,sort_order')->where('is_active', true)->orderBy('name')->get();
+        $offered = $addons->map($products, 'pos');
+
         return Inertia::render('Inventory/Pos', [
-            'products' => Product::with('category:id,name')->where('is_active', true)->orderBy('name')->get()
-                ->map(fn (Product $p) => $p->only('id', 'name', 'price', 'stock_quantity', 'track_stock', 'barcode', 'sku') + ['category' => $p->category?->name, 'image_url' => $p->imageUrl()]),
+            // Prices are shown here; the sale is priced again on the server from the database.
+            'products' => $products->map(fn (Product $p) => $p->only('id', 'name', 'price', 'stock_quantity', 'track_stock', 'barcode', 'sku') + ['category' => $p->category?->name, 'image_url' => $p->imageUrl(), 'addons' => $offered[$p->id]]),
+            'categories' => $products->pluck('category')->filter()->unique('id')->sortBy([['sort_order', 'asc'], ['name', 'asc']])->pluck('name')->values(),
             'can' => ['discount' => request()->user()->can('sales.discount')],
             'lastSale' => session('sale_id'),
         ]);
@@ -36,6 +41,9 @@ class PosController extends Controller
             'items' => ['required', 'array', 'min:1', 'max:100'],
             'items.*.product_id' => ['required', TenantRule::exists('products')],
             'items.*.quantity' => ['required', 'numeric', 'min:0.001', 'max:10000'],
+            'items.*.addons' => ['nullable', 'array', 'max:30'],
+            'items.*.addons.*.addon_id' => ['required', 'integer', TenantRule::exists('product_addons')],
+            'items.*.addons.*.quantity' => ['required', 'integer', 'min:1', 'max:20'],
             'payment_method' => ['required', 'in:cash,card'],
             'member_id' => ['nullable', TenantRule::exists('gym_members')],
             'discount' => ['nullable', 'numeric', 'min:0'],

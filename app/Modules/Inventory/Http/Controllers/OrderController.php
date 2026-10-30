@@ -4,6 +4,7 @@ namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Inventory\Models\Sale;
+use App\Modules\Inventory\Models\SaleItem;
 use App\Modules\Inventory\Services\OrderService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,7 +23,7 @@ class OrderController extends Controller
         $tab = in_array($request->query('tab'), ['open', 'completed', 'cancelled', 'all'], true) ? $request->query('tab') : 'open';
         $base = fn () => SalesController::scopedFor($request->user())->where('source', Sale::WEBSITE);
 
-        $orders = $base()->with(['items', 'customer', 'cashier:id,name', 'deliveredBy:id,name', 'invoice:id,number,status,paid_total,total'])
+        $orders = $base()->with(['items.addons', 'customer', 'cashier:id,name', 'deliveredBy:id,name', 'invoice:id,number,status,paid_total,total'])
             ->when($tab === 'open', fn ($q) => $q->where('status', Sale::PENDING))
             ->when($tab === 'completed', fn ($q) => $q->whereIn('status', [Sale::COMPLETED, Sale::VOIDED]))
             ->when($tab === 'cancelled', fn ($q) => $q->where('status', Sale::CANCELLED))
@@ -39,7 +40,7 @@ class OrderController extends Controller
                 'delivered_by' => $s->deliveredBy?->name,
                 'cancel_reason' => $s->cancel_reason,
                 'invoice_number' => $s->invoice?->number,
-                'items' => $s->items->map(fn ($i) => $i->only('name', 'quantity', 'unit_price', 'line_total')),
+                'items' => $s->items->map(fn (SaleItem $i) => $i->summary()),
             ]);
 
         return Inertia::render('Sales/Orders', [

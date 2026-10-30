@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link } from '@inertiajs/react';
-import { Check, Package, Plus, ShoppingBag } from 'lucide-react';
+import { Check, Package, Plus, ShoppingBag, SlidersHorizontal } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
+import type { AddonOption, ChosenAddon } from '@/lib/addons';
 import { useCart } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { money } from '@/lib/format';
@@ -15,6 +16,7 @@ export interface ShopProduct {
     image_url: string | null;
     in_stock: boolean;
     max: number;
+    addons: AddonOption[];
 }
 
 export function ProductImage({ product, className }: { product: ShopProduct; className?: string }) {
@@ -25,19 +27,30 @@ export function ProductImage({ product, className }: { product: ShopProduct; cla
     );
 }
 
-export function AddToCart({ product, qty = 1, className }: { product: ShopProduct; qty?: number; className?: string }) {
+/**
+ * Add to the cart. On a list, a product that has add-ons leads to its page to choose them; on the product page the
+ * chosen add-ons go with it (`addons`).
+ */
+export function AddToCart({ product, qty = 1, addons, className }: { product: ShopProduct; qty?: number; addons?: ChosenAddon[]; className?: string }) {
     const cart = useCart();
-    const inCart = cart.lines.find((l) => l.id === product.id)?.qty ?? 0;
+    const inCart = cart.quantityOf(product.id);
     const full = inCart >= product.max;
 
     if (!product.in_stock) {
         return <span className={cn('inline-flex h-10 items-center justify-center rounded-full bg-stone-100 px-4 text-sm text-muted', className)}>نفدت الكمية</span>;
     }
+    if (addons === undefined && product.addons.length > 0) {
+        return (
+            <Link href={route('site.shop.product', product.id)} className={cn('inline-flex h-10 items-center justify-center gap-2 rounded-full bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-600', className)}>
+                <SlidersHorizontal className="size-4" /> اختر الإضافات{inCart > 0 && ` (${inCart} في السلة)`}
+            </Link>
+        );
+    }
     return (
         <button
             type="button"
             disabled={full}
-            onClick={() => cart.add(product.id, qty, product.max)}
+            onClick={() => cart.add(product.id, qty, product.max, addons ?? [])}
             className={cn('inline-flex h-10 items-center justify-center gap-2 rounded-full bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-600 disabled:opacity-60', className)}
         >
             {inCart > 0 ? <Check className="size-4" /> : <Plus className="size-4" />}
@@ -79,6 +92,7 @@ export default function Shop({ site, seo, products, categories, currency }: { si
                                 <div className="flex flex-1 flex-col p-5">
                                     <Link href={route('site.shop.product', p.id)} className="font-display text-lg font-semibold text-ink hover:text-brand">{p.name}</Link>
                                     <p className="mt-1 text-lg font-semibold text-brand num">{money(p.price, currency)}</p>
+                                    {p.addons.length > 0 && <p className="mt-1 text-xs text-muted">مع إضافات اختيارية: {p.addons.slice(0, 3).map((a) => a.name).join('، ')}{p.addons.length > 3 && '…'}</p>}
                                     <div className="mt-auto pt-4"><AddToCart product={p} className="w-full" /></div>
                                 </div>
                             </article>

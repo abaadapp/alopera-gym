@@ -75,7 +75,7 @@ final class PermissionRegistry
             'pos.sell' => 'البيع من نقطة البيع',
             'sales.discount' => 'تطبيق الخصومات عند البيع',
             'sales.refund' => 'إلغاء عمليات البيع ورد المبالغ',
-            'products.manage' => 'المنتجات والأسعار والمخزون',
+            'products.manage' => 'المنتجات والتصنيفات والإضافات والأسعار والمخزون',
             'orders.manage' => 'طلبات الموقع: المراجعة والتجهيز والتسليم',
         ]],
         'inventory' => ['label' => 'الموردون والمشتريات', 'permissions' => [

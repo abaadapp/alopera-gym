@@ -21,7 +21,8 @@ final class StockService
     public function move(Product $product, float $quantity, string $type, ?Model $reference = null, ?string $note = null, ?float $unitCost = null, bool $allowNegative = false): StockMovement
     {
         return DB::transaction(function () use ($product, $quantity, $type, $reference, $note, $unitCost, $allowNegative) {
-            $product = Product::whereKey($product->id)->lockForUpdate()->firstOrFail();
+            // A product deleted since still takes its stock back when an old sale is voided.
+            $product = Product::withTrashed()->whereKey($product->id)->lockForUpdate()->firstOrFail();
             $current = (float) $product->stock_quantity;
             $balance = round($current + $quantity, 3);
 

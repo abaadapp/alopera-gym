@@ -3,6 +3,7 @@ import { Link, useForm } from '@inertiajs/react';
 import { CreditCard, Lock, Minus, Plus, ShoppingBag, Store, Trash2 } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
 import { Button, Field, Input, Select, Textarea } from '@/Components/ui';
+import { describe, lineTotal, payload, unitPrice } from '@/lib/addons';
 import { useCart } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { money } from '@/lib/format';
@@ -29,18 +30,21 @@ const METHOD = {
 export default function ShopCart({ site, seo, products, methods, branches, pickupNote, windowMinutes, prefill, currency }: Props) {
     const cart = useCart();
     const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+    // Add-ons no longer offered drop out of a line (describe); the server prices what is sent again.
     const lines = cart.lines.flatMap((l) => {
         const product = byId.get(l.id);
-        return product && product.in_stock ? [{ product, qty: Math.min(l.qty, product.max) }] : [];
+        if (!product || !product.in_stock) return [];
+        const addons = describe(l.addons, product.addons);
+        return [{ key: l.key, product, qty: Math.min(l.qty, product.max), addons, chosen: addons.map((a) => ({ id: a.id, qty: a.qty })) }];
     });
-    const total = lines.reduce((t, l) => t + Math.round(Number(l.product.price) * 1000) * l.qty, 0) / 1000;
+    const total = lines.reduce((t, l) => t + Math.round(lineTotal(l.product.price, l.qty, l.chosen, l.product.addons) * 1000), 0) / 1000;
 
     // Products no longer offered (or sold out) leave the cart quietly.
     useEffect(() => {
         cart.lines.forEach((l) => {
             const product = byId.get(l.id);
-            if (!product || !product.in_stock) cart.setQty(l.id, 0);
-            else if (l.qty > product.max) cart.setQty(l.id, product.max, product.max);
+            if (!product || !product.in_stock) cart.setQty(l.key, 0);
+            else if (cart.quantityOf(l.id) > product.max) cart.setQty(l.key, l.qty, product.max);
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [byId]);
@@ -53,12 +57,12 @@ export default function ShopCart({ site, seo, products, methods, branches, picku
         payment_method: methods[0] ?? '',
         branch_id: branches.length > 1 ? '' : String(branches[0]?.id ?? ''),
         website: '',
-        items: [] as { product_id: number; quantity: number }[],
+        items: [] as { product_id: number; quantity: number; addons: { addon_id: number; quantity: number }[] }[],
     });
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        form.transform((data) => ({ ...data, items: lines.map((l) => ({ product_id: l.product.id, quantity: l.qty })), branch_id: data.branch_id || null }));
+        form.transform((data) => ({ ...data, items: lines.map((l) => ({ product_id: l.product.id, quantity: l.qty, addons: payload(l.chosen) })), branch_id: data.branch_id || null }));
         try {
             sessionStorage.setItem('shop:placing', '1');
         } catch {
@@ -80,19 +84,20 @@ export default function ShopCart({ site, seo, products, methods, branches, picku
                 ) : (
                     <div className="grid gap-8 lg:grid-cols-[1fr_400px]">
                         <ul className="divide-y divide-line rounded-3xl border border-line bg-white px-5">
-                            {lines.map(({ product, qty }) => (
-                                <li key={product.id} className="flex items-center gap-4 py-4">
+                            {lines.map(({ key, product, qty, addons, chosen }) => (
+                                <li key={key} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-4 sm:flex-nowrap">
                                     <div className="size-16 shrink-0 overflow-hidden rounded-2xl border border-line"><ProductImage product={product} /></div>
                                     <div className="min-w-0 flex-1">
                                         <Link href={route('site.shop.product', product.id)} className="block truncate font-medium hover:text-brand">{product.name}</Link>
-                                        <p className="text-sm text-muted num">{money(product.price, currency)}</p>
+                                        {addons.map((a) => <p key={a.id} className="truncate text-xs text-muted">+ {a.name}{a.qty > 1 && <span className="num"> ×{a.qty}</span>} <span className="num">({money(Number(a.price) * a.qty, currency)})</span></p>)}
+                                        <p className="text-sm text-muted num">{money(unitPrice(product.price, chosen, product.addons), currency)}{addons.length > 0 && ' للقطعة مع الإضافات'}</p>
                                     </div>
                                     <div className="flex items-center rounded-full border border-line">
-                                        <button type="button" onClick={() => cart.setQty(product.id, qty - 1, product.max)} className="grid size-9 place-items-center" aria-label="إنقاص">{qty === 1 ? <Trash2 className="size-4 text-red-600" /> : <Minus className="size-4" />}</button>
+                                        <button type="button" onClick={() => cart.setQty(key, qty - 1, product.max)} className="grid size-9 place-items-center" aria-label={`إنقاص ${product.name}`}>{qty === 1 ? <Trash2 className="size-4 text-red-600" /> : <Minus className="size-4" />}</button>
                                         <span className="w-8 text-center text-sm font-medium num">{qty}</span>
-                                        <button type="button" disabled={qty >= product.max} onClick={() => cart.setQty(product.id, qty + 1, product.max)} className="grid size-9 place-items-center disabled:opacity-40" aria-label="زيادة"><Plus className="size-4" /></button>
+                                        <button type="button" disabled={cart.quantityOf(product.id) >= product.max} onClick={() => cart.setQty(key, qty + 1, product.max)} className="grid size-9 place-items-center disabled:opacity-40" aria-label={`زيادة ${product.name}`}><Plus className="size-4" /></button>
                                     </div>
-                                    <p className="w-24 text-end font-semibold num">{money(Math.round(Number(product.price) * 1000) * qty / 1000, currency)}</p>
+                                    <p className="w-24 text-end font-semibold num">{money(lineTotal(product.price, qty, chosen, product.addons), currency)}</p>
                                 </li>
                             ))}
                             <li className="flex items-center justify-between py-4 text-lg font-semibold"><span>الإجمالي</span><span className="num">{money(total, currency)}</span></li>

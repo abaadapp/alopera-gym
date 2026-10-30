@@ -23,14 +23,14 @@ use Illuminate\Support\Facades\DB;
 final class PosService
 {
     public function __construct(
-        private readonly StockService $stock,
+        private readonly SaleLines $lines,
         private readonly InvoiceService $invoices,
         private readonly PaymentService $payments,
         private readonly CreditNoteService $credits,
     ) {}
 
     /**
-     * @param  list<array{product_id: int, quantity: float|int}>  $items
+     * @param  list<array{product_id: int, quantity: float|int, addons?: list<array{addon_id: int, quantity: int}>}>  $items
      * @param  string|null  $cardReference  transaction number printed by the bank card terminal
      * @param  string|null  $customerName  a walk-in buyer's name, when no member is chosen
      */
@@ -45,19 +45,7 @@ final class PosService
 
         return DB::transaction(function () use ($items, $method, $member, $discount, $branchId, $cardReference, $customerName) {
             $products = Product::whereIn('id', array_column($items, 'product_id'))->where('is_active', true)->get()->keyBy('id');
-            $lines = [];
-            $subtotal = '0';
-
-            foreach ($items as $item) {
-                $product = $products->get($item['product_id']);
-                $qty = (float) $item['quantity'];
-                if (! $product || $qty <= 0) {
-                    throw new BusinessRuleException('pos.item', 'منتج غير متاح في السلة.', 'items');
-                }
-                $lineTotal = Money::mul($product->price, $qty);
-                $subtotal = Money::add($subtotal, $lineTotal);
-                $lines[] = compact('product', 'qty', 'lineTotal');
-            }
+            ['lines' => $lines, 'subtotal' => $subtotal] = $this->lines->price($products, $items, 'pos');
 
             if (Money::toMinor($discount) < 0 || Money::cmp($discount, $subtotal) > 0) {
                 throw new BusinessRuleException('pos.discount', 'الخصم أكبر من قيمة السلة.', 'discount');
@@ -80,26 +68,7 @@ final class PosService
                 'cashier_id' => Auth::guard('web')->id(),
             ]);
 
-            $invoiceLines = [];
-            foreach ($lines as $i => $line) {
-                $sale->items()->create([
-                    'product_id' => $line['product']->id,
-                    'name' => $line['product']->name,
-                    'quantity' => $line['qty'],
-                    'unit_price' => $line['product']->price,
-                    'unit_cost' => $line['product']->cost,
-                    'line_total' => $line['lineTotal'],
-                ]);
-                $this->stock->move($line['product'], -$line['qty'], 'sale', $sale);
-                $invoiceLines[] = [
-                    'description' => $line['product']->name,
-                    'quantity' => $line['qty'],
-                    'unit_price' => $line['product']->price,
-                    // the basket discount sits on the first line so totals match the sale
-                    'discount' => $i === 0 ? $discount : 0,
-                    'itemable' => $line['product'],
-                ];
-            }
+            $invoiceLines = $this->spreadDiscount($this->lines->record($sale, $lines, 'sale'), $discount);
 
             $invoice = $this->invoices->issue($member, $invoiceLines, ['type' => 'pos', 'branch_id' => $branchId], $customerName ?: 'عميل نقدي');
             if ($invoice->isOpen()) {
@@ -121,14 +90,12 @@ final class PosService
     public function void(Sale $sale, string $reason, ?string $refundMethod = null): Sale
     {
         return DB::transaction(function () use ($sale, $reason, $refundMethod) {
-            $sale = Sale::with('items.product')->whereKey($sale->id)->lockForUpdate()->firstOrFail();
+            $sale = Sale::whereKey($sale->id)->lockForUpdate()->firstOrFail();
             if ($sale->status !== Sale::COMPLETED) {
                 throw new BusinessRuleException('pos.voided', 'لا يمكن إلغاء هذه العملية: ملغاة بالفعل أو لم تكتمل.');
             }
 
-            foreach ($sale->items as $item) {
-                $this->stock->move($item->product, (float) $item->quantity, 'void', $sale, $reason);
-            }
+            $this->lines->restock($sale, 'void', $reason);
 
             // A full credit note keeps the original invoice, cancels what it is worth and pays the money
             // back the way it came; the sale leaves no open receivable behind.
@@ -146,5 +113,24 @@ final class PosService
 
             return $sale;
         });
+    }
+
+    /**
+     * The basket discount on the invoice: taken off the lines in order, each line at most down to zero, so the
+     * invoice total matches the sale whatever the first line is worth.
+     *
+     * @param  list<array<string, mixed>>  $lines
+     * @return list<array<string, mixed>>
+     */
+    private function spreadDiscount(array $lines, string|float $discount): array
+    {
+        $left = Money::toMinor($discount);
+        foreach ($lines as &$line) {
+            $take = min($left, Money::toMinor(Money::mul($line['unit_price'], (float) $line['quantity'])));
+            $line['discount'] = Money::fromMinor($take);
+            $left -= $take;
+        }
+
+        return $lines;
     }
 }

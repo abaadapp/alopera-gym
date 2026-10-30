@@ -7,6 +7,7 @@ export interface Sales {
     comparison: Record<string, Metric>;
     days: { day: string; count: number; total: string }[];
     products: { name: string; quantity: number; total: string }[];
+    addons: { name: string; quantity: number; total: string }[];
     methods: Line[];
     sources: Line[];
     staff: { name: string; count: number; total: string }[];
@@ -44,9 +45,14 @@ export function SalesBody({ data }: { data: Sales }) {
                 {table('حسب المصدر', data.sources, 'المصدر')}
                 {table('حسب الموظف', data.staff.map((s) => ({ label: s.name, count: s.count, total: s.total })), 'الموظف')}
             </div>
-            <TableCard className="mt-4" title="المنتجات" subtitle={data.products.length >= 50 ? 'أعلى 50 منتجًا؛ الملف المصدَّر يحتويها كلها' : undefined} empty="لا مبيعات في هذه الفترة" head={['المنتج', 'الكمية', <span key="t" className="block text-end">المبلغ</span>]}>
+            <TableCard className="mt-4" title="المنتجات" subtitle={data.products.length >= 50 ? 'أعلى 50 منتجًا (المبلغ مع إضافاتها)؛ الملف المصدَّر يحتويها كلها' : 'المبلغ مع إضافاتها'} empty="لا مبيعات في هذه الفترة" head={['المنتج', 'الكمية', <span key="t" className="block text-end">المبلغ</span>]}>
                 {data.products.map((p) => <tr key={p.name}><td className="font-medium">{p.name}</td><td className="num">{number(p.quantity, 3)}</td><td className="text-end num font-medium">{f.money(p.total)}</td></tr>)}
             </TableCard>
+            {data.addons.length > 0 && (
+                <TableCard className="mt-4" title="الإضافات" subtitle="ما بيع مع المنتجات (داخل مبالغها أعلاه)" empty="لا إضافات" head={['الإضافة', 'الكمية', <span key="t" className="block text-end">المبلغ</span>]}>
+                    {data.addons.map((a) => <tr key={a.name}><td className="font-medium">{a.name}</td><td className="num">{number(a.quantity, 3)}</td><td className="text-end num font-medium">{f.money(a.total)}</td></tr>)}
+                </TableCard>
+            )}
         </>
     );
 }

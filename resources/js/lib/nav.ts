@@ -1,6 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
-import { BarChart3, Blocks, Briefcase, DoorOpen, Dumbbell, FolderOpen, Globe, LayoutGrid, MessageCircle, ScanLine, Settings, ShoppingBag, Ticket, Users, Wallet } from 'lucide-react';
+import { BarChart3, Blocks, Briefcase, DoorOpen, Dumbbell, FolderOpen, Globe, LayoutGrid, MessageCircle, Package, ScanLine, Settings, ShoppingBag, Ticket, Users, Wallet } from 'lucide-react';
 import { useCan, useShared } from '@/hooks/useShared';
 
 /**
@@ -65,13 +65,24 @@ export const NAV: NavGroup[] = [
     {
         sections: [
             {
+                label: 'المنتجات',
+                icon: Package,
+                // The one place products are created and changed, with their categories and add-ons. The point of sale,
+                // the website shop, orders, invoices and reports use them but do not manage them.
+                tabs: [
+                    { label: 'المنتجات', route: 'club.products.index', permission: 'products.manage', match: 'club.products.*' },
+                    { label: 'التصنيفات', route: 'club.product-categories.index', permission: 'products.manage', match: 'club.product-categories.*' },
+                    { label: 'الإضافات', route: 'club.product-addons.index', permission: 'products.manage', match: 'club.product-addons.*' },
+                ],
+            },
+            {
                 label: 'المبيعات',
                 icon: ShoppingBag,
+                // Selling and its records only: products are managed in their own section, reports on the reports page.
                 tabs: [
                     { label: 'ملخص المبيعات', route: 'club.sales.summary', permission: 'sales.view' },
                     { label: 'نقطة البيع', route: 'club.pos.index', permission: 'pos.sell' },
                     { label: 'عمليات البيع', route: 'club.sales.index', permission: 'sales.view' },
-                    { label: 'المنتجات', route: 'club.products.index', permission: 'products.manage' },
                     { label: 'طلبات الموقع الإلكتروني', route: 'club.sales.orders.index', permission: 'orders.manage' },
                 ],
             },

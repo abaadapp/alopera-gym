@@ -20,6 +20,7 @@ use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\PtSession;
 use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Inventory\Models\Product;
+use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Models\PurchaseOrder;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Reports\Services\ReportCatalog;
@@ -74,6 +75,7 @@ class AppServiceProvider extends ServiceProvider
             'payment' => Payment::class,
             'credit_note' => CreditNote::class,
             'product' => Product::class,
+            'product_addon' => ProductAddon::class,
             'sale' => Sale::class,
             'purchase_order' => PurchaseOrder::class,
             'business_document' => BusinessDocument::class,

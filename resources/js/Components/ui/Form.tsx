@@ -56,22 +56,32 @@ export function Checkbox({ label, className, ...props }: InputHTMLAttributes<HTM
     );
 }
 
+/** A bare on/off switch (a table row's, a card's); Toggle below is the same switch with its label. */
+export function Switch({ checked, onChange, label, disabled, size = 'md' }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean; size?: 'sm' | 'md' }) {
+    return (
+        <button
+            type="button"
+            role="switch"
+            aria-checked={checked}
+            aria-label={label}
+            title={label}
+            disabled={disabled}
+            onClick={() => onChange(!checked)}
+            className={cn('relative inline-flex shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-50', size === 'sm' ? 'h-5 w-9' : 'mt-0.5 h-6 w-11', checked ? 'bg-brand' : 'bg-line')}
+        >
+            <span className={cn('absolute top-0.5 rounded-full bg-white shadow transition-all', size === 'sm' ? 'size-4' : 'size-5', checked ? (size === 'sm' ? 'start-[18px]' : 'start-[22px]') : 'start-0.5')} />
+        </button>
+    );
+}
+
 export function Toggle({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode; hint?: ReactNode }) {
     return (
-        <label className="flex cursor-pointer items-start justify-between gap-4 py-1">
-            <span>
+        <div className="flex items-start justify-between gap-4 py-1">
+            <span className="cursor-pointer" onClick={() => onChange(!checked)}>
                 <span className="block text-sm font-medium text-ink">{label}</span>
                 {hint && <span className="block text-xs text-muted">{hint}</span>}
             </span>
-            <button
-                type="button"
-                role="switch"
-                aria-checked={checked}
-                onClick={() => onChange(!checked)}
-                className={cn('relative mt-0.5 inline-flex h-6 w-11 shrink-0 rounded-full transition', checked ? 'bg-brand' : 'bg-line')}
-            >
-                <span className={cn('absolute top-0.5 size-5 rounded-full bg-white shadow transition-all', checked ? 'start-[22px]' : 'start-0.5')} />
-            </button>
-        </label>
+            <Switch checked={checked} onChange={onChange} label={typeof label === 'string' ? label : ''} />
+        </div>
     );
 }

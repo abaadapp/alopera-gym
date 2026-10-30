@@ -5,7 +5,7 @@ import { money, number } from '@/lib/format';
 import type { SaleRow } from '@/Pages/Inventory/Sales';
 
 interface Props {
-    sale: SaleRow & { subtotal: string; discount: string; tax: string; invoice: string | null; phone: string | null; items: { name: string; quantity: string; unit_price: string; line_total: string }[] };
+    sale: Omit<SaleRow, 'items'> & { subtotal: string; discount: string; tax: string; invoice: string | null; phone: string | null; items: { name: string; quantity: string; unit_price: string; line_total: string; addons: { name: string; quantity: string; unit_price: string; line_total: string }[] }[] };
     club: { name: string; phone: string | null; logo: string | null; currency: string };
 }
 
@@ -46,7 +46,14 @@ export default function SaleReceipt({ sale, club }: Props) {
                         <thead><tr className="text-stone-500"><th className="py-2 text-start font-medium">الصنف</th><th className="py-2 text-center font-medium">الكمية</th><th className="py-2 text-end font-medium">المبلغ</th></tr></thead>
                         <tbody>
                             {sale.items.map((i, idx) => (
-                                <tr key={idx}><td className="py-1">{i.name}</td><td className="py-1 text-center num">{number(i.quantity)}</td><td className="py-1 text-end num">{m(i.line_total)}</td></tr>
+                                <tr key={idx} className="align-top">
+                                    <td className="py-1">
+                                        {i.name}
+                                        {i.addons.map((a, j) => <span key={j} className="block ps-3 text-[11px] text-stone-500">+ {a.name}{Number(a.quantity) > 1 && <span className="num"> ×{number(a.quantity)}</span>} <span className="num">{m(a.unit_price)}</span></span>)}
+                                    </td>
+                                    <td className="py-1 text-center num">{number(i.quantity)}</td>
+                                    <td className="py-1 text-end num">{m(i.line_total)}</td>
+                                </tr>
                             ))}
                         </tbody>
                     </table>

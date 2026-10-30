@@ -32,7 +32,7 @@ final class OrderService
     public const REFUND_METHODS = ['cash', 'card', 'bank_transfer', 'other'];
 
     public function __construct(
-        private readonly StockService $stock,
+        private readonly SaleLines $lines,
         private readonly InvoiceService $invoices,
         private readonly PaymentService $payments,
         private readonly CreditNoteService $credits,
@@ -41,7 +41,7 @@ final class OrderService
     ) {}
 
     /**
-     * @param  list<array{product_id: int, quantity: int}>  $items
+     * @param  list<array{product_id: int, quantity: int, addons?: list<array{addon_id: int, quantity: int}>}>  $items
      * @param  array{name: string, phone: string, email?: string|null, notes?: string|null}  $customer
      * @param  string  $method  paymob|pickup
      */
@@ -57,19 +57,7 @@ final class OrderService
 
         return DB::transaction(function () use ($items, $customer, $method, $member, $branchId, $window) {
             $products = Product::onWebsite()->whereIn('id', array_column($items, 'product_id'))->get()->keyBy('id');
-            $lines = [];
-            $subtotal = '0';
-
-            foreach ($items as $item) {
-                $product = $products->get($item['product_id']);
-                $qty = (int) $item['quantity'];
-                if (! $product || $qty < 1) {
-                    throw new BusinessRuleException('order.item', 'أحد المنتجات في السلة لم يعد متاحًا. حدّث السلة وحاول مرة أخرى.', 'items');
-                }
-                $lineTotal = Money::mul($product->price, $qty);
-                $subtotal = Money::add($subtotal, $lineTotal);
-                $lines[] = compact('product', 'qty', 'lineTotal');
-            }
+            ['lines' => $lines, 'subtotal' => $subtotal] = $this->lines->price($products, $items, 'website');
 
             $sale = Sale::create([
                 'branch_id' => $branchId,
@@ -92,20 +80,8 @@ final class OrderService
                 'reserved_until' => $method === 'paymob' ? now()->addMinutes($window) : null,
             ]);
 
-            $invoiceLines = [];
-            foreach ($lines as $line) {
-                $sale->items()->create([
-                    'product_id' => $line['product']->id,
-                    'name' => $line['product']->name,
-                    'quantity' => $line['qty'],
-                    'unit_price' => $line['product']->price,
-                    'unit_cost' => $line['product']->cost,
-                    'line_total' => $line['lineTotal'],
-                ]);
-                // Held for this order (no overselling); handed back if it is cancelled or never paid.
-                $this->stock->move($line['product'], -$line['qty'], 'order', $sale);
-                $invoiceLines[] = ['description' => $line['product']->name, 'quantity' => $line['qty'], 'unit_price' => $line['product']->price, 'itemable' => $line['product']];
-            }
+            // Held for this order (no overselling); handed back if it is cancelled or never paid.
+            $invoiceLines = $this->lines->record($sale, $lines, 'order');
 
             $invoice = $this->invoices->issue($member, $invoiceLines, ['type' => 'pos', 'branch_id' => $branchId, 'notes' => 'طلب من الموقع '.$sale->number], $sale->customer_name);
             if (! $member) {
@@ -216,9 +192,7 @@ final class OrderService
                 'reserved_until' => null,
             ])->save();
 
-            foreach ($sale->items()->with('product')->get() as $item) {
-                $this->stock->move($item->product, (float) $item->quantity, 'release', $sale, $reason);
-            }
+            $this->lines->restock($sale, 'release', $reason);
 
             if ($invoice && $invoice->status !== Invoice::VOID) {
                 if ($paid) {

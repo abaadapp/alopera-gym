@@ -2,12 +2,14 @@
 
 use App\Modules\Inventory\Http\Controllers\OrderController;
 use App\Modules\Inventory\Http\Controllers\PosController;
+use App\Modules\Inventory\Http\Controllers\ProductAddonController;
+use App\Modules\Inventory\Http\Controllers\ProductCategoryController;
 use App\Modules\Inventory\Http\Controllers\ProductController;
 use App\Modules\Inventory\Http\Controllers\SalesController;
 use App\Modules\Inventory\Http\Controllers\SalesSettingsController;
 use Illuminate\Support\Facades\Route;
 
-// Sales: products, the point of sale, sales from both sources, website orders, reports (GYM_SALES_MODULE).
+// Sales: the point of sale, sales from both sources and website orders (GYM_SALES_MODULE).
 Route::middleware('can:sales.view')->group(function () {
     Route::get('/sales', [SalesController::class, 'summary'])->name('sales.summary');
     Route::get('/sales/list', [SalesController::class, 'index'])->name('sales.index');
@@ -29,10 +31,35 @@ Route::middleware('can:orders.manage')->prefix('sales/orders')->name('sales.orde
     Route::post('/{sale}/cancel', [OrderController::class, 'cancel'])->whereNumber('sale')->middleware('throttle:20,1')->name('cancel');
 });
 
+// Products: the section of its own and the only place products, their categories and add-ons are managed. Selling
+// them (pos.sell, the website shop) needs none of this.
 Route::middleware('can:products.manage')->group(function () {
-    Route::post('/products/{product}/adjust', [ProductController::class, 'adjust'])->name('products.adjust');
-    Route::get('/products/{product}/movements', [ProductController::class, 'movements'])->name('products.movements');
-    Route::resource('products', ProductController::class)->except(['show', 'create', 'edit']);
+    Route::get('/products/categories', [ProductCategoryController::class, 'index'])->name('product-categories.index');
+    Route::post('/products/categories', [ProductCategoryController::class, 'store'])->name('product-categories.store');
+    Route::post('/products/categories/reorder', [ProductCategoryController::class, 'reorder'])->name('product-categories.reorder');
+    Route::put('/products/categories/{category}', [ProductCategoryController::class, 'update'])->whereNumber('category')->name('product-categories.update');
+    Route::delete('/products/categories/{category}', [ProductCategoryController::class, 'destroy'])->whereNumber('category')->name('product-categories.destroy');
+
+    Route::get('/products/addons', [ProductAddonController::class, 'index'])->name('product-addons.index');
+    Route::post('/products/addons', [ProductAddonController::class, 'store'])->name('product-addons.store');
+    Route::put('/products/addons/{addon}', [ProductAddonController::class, 'update'])->whereNumber('addon')->name('product-addons.update');
+    Route::patch('/products/addons/{addon}/toggle', [ProductAddonController::class, 'toggle'])->whereNumber('addon')->name('product-addons.toggle');
+    Route::delete('/products/addons/{addon}', [ProductAddonController::class, 'destroy'])->whereNumber('addon')->name('product-addons.destroy');
+
+    Route::get('/products', [ProductController::class, 'index'])->name('products.index');
+    Route::get('/products/create', [ProductController::class, 'create'])->name('products.create');
+    Route::post('/products', [ProductController::class, 'store'])->name('products.store');
+    Route::get('/products/{product}/edit', [ProductController::class, 'edit'])->whereNumber('product')->name('products.edit');
+    Route::put('/products/{product}', [ProductController::class, 'update'])->whereNumber('product')->name('products.update');
+    Route::delete('/products/{product}', [ProductController::class, 'destroy'])->whereNumber('product')->name('products.destroy');
+    Route::patch('/products/{product}/toggle', [ProductController::class, 'toggle'])->whereNumber('product')->name('products.toggle');
+    Route::post('/products/{product}/photos/{index}', [ProductController::class, 'photo'])->whereNumber(['product', 'index'])->name('products.photo');
+    Route::post('/products/{product}/adjust', [ProductController::class, 'adjust'])->whereNumber('product')->name('products.adjust');
+    Route::get('/products/{product}/movements', [ProductController::class, 'movements'])->whereNumber('product')->name('products.movements');
+
+    // Addresses a product page may have been reached by before the section was split out of sales.
+    Route::get('/sales/products', fn () => redirect()->route('club.products.index', request()->query(), 301));
+    Route::get('/products/{product}', fn (int $product) => redirect()->route('club.products.edit', $product))->whereNumber('product');
 });
 
 Route::get('/settings/sales', [SalesSettingsController::class, 'edit'])->middleware('can:settings.manage')->name('settings.sales');

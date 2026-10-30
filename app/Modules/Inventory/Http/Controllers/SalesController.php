@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\Sale;
+use App\Modules\Inventory\Models\SaleItem;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -59,14 +60,14 @@ class SalesController extends Controller
 
     public function index(Request $request): Response
     {
-        $sales = $this->scoped($request)->with(['cashier:id,name', 'deliveredBy:id,name', 'items', 'customer'])
+        $sales = $this->scoped($request)->with(['cashier:id,name', 'deliveredBy:id,name', 'items.addons', 'customer'])
             ->when($request->string('q')->trim()->toString(), fn ($q, $t) => $q->where(fn ($w) => $w->where('number', 'ilike', "%{$t}%")->orWhere('customer_name', 'ilike', "%{$t}%")->orWhere('customer_phone', 'ilike', "%{$t}%")))
             ->when(in_array($request->query('source'), [Sale::POS, Sale::WEBSITE], true), fn ($q) => $q->where('source', $request->query('source')))
             ->when(array_key_exists((string) $request->query('status'), self::STATUS_LABELS), fn ($q) => $q->where('status', $request->query('status')))
             ->when($request->date('from'), fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
             ->when($request->date('to'), fn ($q, $d) => $q->whereDate('created_at', '<=', $d))
             ->latest('id')->paginate(30)->withQueryString()
-            ->through(fn (Sale $s) => $this->row($s) + ['items' => $s->items->map(fn ($i) => $i->only('name', 'quantity', 'unit_price', 'line_total'))]);
+            ->through(fn (Sale $s) => $this->row($s) + ['items' => $s->items->map(fn (SaleItem $i) => $i->summary())]);
 
         return Inertia::render('Inventory/Sales', [
             'sales' => $sales,
@@ -92,14 +93,14 @@ class SalesController extends Controller
     {
         abort_unless($request->user()->canAny(['pos.sell', 'sales.view', 'orders.manage']), 403);
         $this->ensureBranch($request->user(), $sale);
-        $sale->load(['items', 'cashier:id,name', 'customer', 'invoice:id,number,tax_rate,tax_total,paid_total']);
+        $sale->load(['items.addons', 'cashier:id,name', 'customer', 'invoice:id,number,tax_rate,tax_total,paid_total']);
         $tenant = $tenants->require();
 
         return Inertia::render('Sales/Receipt', [
             'sale' => $this->row($sale) + [
                 'subtotal' => $sale->subtotal, 'discount' => $sale->discount, 'tax' => $sale->tax,
                 'invoice' => $sale->invoice?->number, 'phone' => $sale->customer_phone,
-                'items' => $sale->items->map(fn ($i) => $i->only('name', 'quantity', 'unit_price', 'line_total')),
+                'items' => $sale->items->map(fn (SaleItem $i) => $i->summary()),
             ],
             'club' => ['name' => $tenant->name, 'phone' => $tenant->phone, 'logo' => $tenant->logoUrl(), 'currency' => $tenant->currency],
         ]);

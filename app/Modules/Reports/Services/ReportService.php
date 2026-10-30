@@ -444,7 +444,7 @@ final class ReportService
     private function productSales(CarbonImmutable $from, CarbonImmutable $to, ?int $branch = null): array
     {
         return SaleItem::whereHas('sale', fn ($q) => $this->in($q->where('status', 'completed')->whereBetween('created_at', [$from, $to->endOfDay()]), $branch))
-            ->selectRaw('product_id, name, sum(quantity) as qty, sum(line_total) as revenue, sum(quantity * unit_cost) as cost')
+            ->selectRaw('product_id, name, sum(quantity) as qty, sum(line_total) as revenue, sum(quantity * unit_cost + addons_cost) as cost')
             ->groupBy('product_id', 'name')->orderByDesc('revenue')->limit(20)->get()
             ->map(fn ($r) => [
                 'product' => $r->name,

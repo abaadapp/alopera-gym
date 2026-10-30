@@ -15,7 +15,9 @@ use App\Modules\Gym\Models\Member;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\ProductCategory;
 use App\Modules\Inventory\Models\Sale;
+use App\Modules\Inventory\Models\SaleItem;
 use App\Modules\Inventory\Services\OrderService;
+use App\Modules\Inventory\Services\ProductAddons;
 use App\Modules\Inventory\Services\ShopSettings;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Http\RendersSite;
@@ -39,16 +41,18 @@ class ShopController extends Controller
         private readonly ShopSettings $shop,
         private readonly OrderService $orders,
         private readonly OnlinePaymentService $online,
+        private readonly ProductAddons $addons,
     ) {}
 
     public function index(Request $request): Response
     {
         $this->ensureShop();
         $products = Product::onWebsite()->with('category:id,name')->orderBy('name')->get();
+        $addons = $this->addons->map($products, 'website', true);
 
         return $this->page('Site/Shop', [
-            'products' => $products->map(fn (Product $p) => $this->product($p)),
-            'categories' => ProductCategory::whereIn('id', $products->pluck('product_category_id')->filter()->unique())->orderBy('name')->pluck('name'),
+            'products' => $products->map(fn (Product $p) => $this->product($p, $addons[$p->id])),
+            'categories' => ProductCategory::whereIn('id', $products->pluck('product_category_id')->filter()->unique())->ordered()->pluck('name'),
             'currency' => $this->tenants->require()->currency,
         ], 'المتجر', 'منتجات النادي وأسعارها، اطلبها أونلاين واستلمها من النادي.');
     }
@@ -59,7 +63,8 @@ class ShopController extends Controller
         abort_unless($product->is_active && $product->show_on_website, 404);
 
         return $this->page('Site/ShopProduct', [
-            'product' => $this->product($product->load('category:id,name')) + ['description' => $product->description],
+            'product' => $this->product($product->load('category:id,name'), $this->addons->map([$product], 'website', true)[$product->id])
+                + ['description' => $product->description, 'photos' => $product->imageUrls()],
             'currency' => $this->tenants->require()->currency,
         ], $product->name, $product->description ? mb_substr($product->description, 0, 160) : null, $product->imageUrl());
     }
@@ -70,8 +75,11 @@ class ShopController extends Controller
         $tenant = $this->tenants->require();
         $member = Auth::guard('member')->user();
 
+        $products = Product::onWebsite()->orderBy('name')->get();
+        $addons = $this->addons->map($products, 'website', true);
+
         return $this->page('Site/ShopCart', [
-            'products' => Product::onWebsite()->orderBy('name')->get()->map(fn (Product $p) => $this->product($p)),
+            'products' => $products->map(fn (Product $p) => $this->product($p, $addons[$p->id])),
             'methods' => $this->shop->paymentMethods($tenant),
             'branches' => Branch::where('is_active', true)->orderByDesc('is_main')->orderBy('name')->get(['id', 'name']),
             'pickupNote' => ShopSettings::of($tenant)['pickup_note'],
@@ -94,6 +102,9 @@ class ShopController extends Controller
             'items' => ['required', 'array', 'min:1', 'max:30'],
             'items.*.product_id' => ['required', 'integer', TenantRule::exists('products')],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:50'],
+            'items.*.addons' => ['nullable', 'array', 'max:20'],
+            'items.*.addons.*.addon_id' => ['required', 'integer', TenantRule::exists('product_addons')],
+            'items.*.addons.*.quantity' => ['required', 'integer', 'min:1', 'max:20'],
             'name' => ['required', 'string', 'min:2', 'max:120'],
             'phone' => ['required', 'string', 'min:7', 'max:32'],
             'email' => ['nullable', 'email', 'max:160'],
@@ -107,7 +118,7 @@ class ShopController extends Controller
         $branchId = $data['branch_id'] ?? Branch::where('is_active', true)->orderByDesc('is_main')->value('id');
 
         $sale = $this->orders->place(
-            collect($data['items'])->groupBy('product_id')->map(fn ($rows, $id) => ['product_id' => (int) $id, 'quantity' => (int) $rows->sum('quantity')])->values()->all(),
+            self::lines($data['items']),
             ['name' => $data['name'], 'phone' => Phone::normalize($data['phone']), 'email' => $data['email'] ?? null, 'notes' => $data['notes'] ?? null],
             $data['payment_method'],
             $member instanceof Member ? $member : null,
@@ -125,7 +136,7 @@ class ShopController extends Controller
     public function order(string $token): Response
     {
         $sale = $this->find($token);
-        $sale->load(['items', 'invoice:id,status,total,paid_total,public_token']);
+        $sale->load(['items.addons', 'invoice:id,status,total,paid_total,public_token']);
         $tenant = $this->tenants->require();
 
         return $this->page('Site/ShopOrder', [
@@ -143,7 +154,7 @@ class ShopController extends Controller
                 'name' => $sale->customer_name,
                 'reserved_until' => $sale->reserved_until?->format('Y-m-d H:i'),
                 'can_pay' => $this->canPay($sale),
-                'items' => $sale->items->map(fn ($i) => $i->only('name', 'quantity', 'unit_price', 'line_total')),
+                'items' => $sale->items->map(fn (SaleItem $i) => $i->summary()),
             ],
             'pickupNote' => ShopSettings::of($tenant)['pickup_note'],
             'currency' => $tenant->currency,
@@ -192,8 +203,31 @@ class ShopController extends Controller
         abort_unless(PermissionRegistry::moduleEnabled('sales') && ShopSettings::of($this->tenants->require())['shop_enabled'], 404);
     }
 
-    /** @return array<string, mixed> */
-    private function product(Product $p): array
+    /**
+     * The basket as lines: the same product with the same add-ons is one line (quantities added up); with other
+     * add-ons it is a line of its own. Prices are not taken from the browser.
+     *
+     * @param  list<array{product_id: int|string, quantity: int|string, addons?: list<array{addon_id: int|string, quantity: int|string}>}>  $items
+     * @return list<array{product_id: int, quantity: int, addons: list<array{addon_id: int, quantity: int}>}>
+     */
+    public static function lines(array $items): array
+    {
+        $lines = [];
+        foreach ($items as $item) {
+            $addons = collect($item['addons'] ?? [])->map(fn ($a) => ['addon_id' => (int) $a['addon_id'], 'quantity' => (int) $a['quantity']])->sortBy('addon_id')->values()->all();
+            $key = (int) $item['product_id'].'|'.collect($addons)->map(fn ($a) => $a['addon_id'].'x'.$a['quantity'])->join(',');
+            $lines[$key] ??= ['product_id' => (int) $item['product_id'], 'quantity' => 0, 'addons' => $addons];
+            $lines[$key]['quantity'] += (int) $item['quantity'];
+        }
+
+        return array_values($lines);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $addons  the product's add-ons on the website (ProductAddons::map)
+     * @return array<string, mixed>
+     */
+    private function product(Product $p, array $addons = []): array
     {
         $available = $p->available();
 
@@ -206,6 +240,7 @@ class ShopController extends Controller
             'in_stock' => $available === null || $available >= 1,
             // Only the limit a customer needs, not the club's stock figure.
             'max' => $available === null ? 50 : (int) min(50, floor($available)),
+            'addons' => array_map(fn ($a) => array_diff_key($a, ['available' => true]), $addons),
         ];
     }
 }

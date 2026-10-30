@@ -19,7 +19,7 @@ interface Order {
     name: string;
     reserved_until: string | null;
     can_pay: boolean;
-    items: { name: string; quantity: string; unit_price: string; line_total: string }[];
+    items: { name: string; quantity: string; unit_price: string; line_total: string; addons: { name: string; quantity: string; unit_price: string; line_total: string }[] }[];
 }
 
 const STEPS = [
@@ -75,7 +75,14 @@ export default function ShopOrder({ site, seo, order, pickupNote, currency }: { 
                         <thead><tr className="border-b border-line text-muted"><th className="py-2 text-start font-medium">المنتج</th><th className="py-2 text-center font-medium">الكمية</th><th className="py-2 text-end font-medium">المبلغ</th></tr></thead>
                         <tbody>
                             {order.items.map((i, idx) => (
-                                <tr key={idx} className="border-b border-line/60"><td className="py-2.5"><Package className="me-2 inline size-4 text-muted" />{i.name}</td><td className="py-2.5 text-center num">{number(i.quantity)}</td><td className="py-2.5 text-end num">{money(i.line_total, currency)}</td></tr>
+                                <tr key={idx} className="border-b border-line/60">
+                                    <td className="py-2.5">
+                                        <Package className="me-2 inline size-4 text-muted" />{i.name}
+                                        {i.addons.map((a, j) => <span key={j} className="block ps-6 text-xs text-muted">+ {a.name}{Number(a.quantity) > 1 && <span className="num"> ×{number(a.quantity)}</span>} <span className="num">({money(a.unit_price, currency)})</span></span>)}
+                                    </td>
+                                    <td className="py-2.5 text-center num">{number(i.quantity)}</td>
+                                    <td className="py-2.5 text-end num">{money(i.line_total, currency)}</td>
+                                </tr>
                             ))}
                         </tbody>
                         <tfoot>

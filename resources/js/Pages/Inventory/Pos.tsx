@@ -1,10 +1,12 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link, router } from '@inertiajs/react';
 import { toast } from 'sonner';
 import { Banknote, CreditCard, Minus, Package, Plus, Printer, ReceiptText, ScanBarcode, ShoppingBag, Trash2, UserRound, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, cardHover, ChoiceCard, EmptyState, Field, Input, MemberPicker, PageHeader, type MemberHit } from '@/Components/ui';
+import { Button, Card, cardHover, ChoiceCard, EmptyState, Field, Input, MemberPicker, Modal, PageHeader, type MemberHit } from '@/Components/ui';
+import { Stepper } from '@/Components/Products/parts';
 import { useCan, useCurrency } from '@/hooks/useShared';
+import { describe, lineKey, lineTotal, payload, unitPrice, type AddonOption, type ChosenAddon } from '@/lib/addons';
 import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
 
@@ -18,15 +20,22 @@ interface Product {
     sku: string | null;
     category: string | null;
     image_url: string | null;
+    addons: AddonOption[];
 }
 
+/** A line of the basket: one product with one set of add-ons (the same product with other add-ons is another line). */
 interface CartLine {
+    key: string;
     product: Product;
     quantity: number;
+    addons: ChosenAddon[];
 }
 
-/** The point of sale: scan or tap products, take cash or card, print the receipt. A discount needs its own permission. */
-export default function Pos({ products, can: allowed, lastSale }: { products: Product[]; can: { discount: boolean }; lastSale: number | null }) {
+/**
+ * The point of sale: scan or tap products, choose their add-ons, take cash or card, print the receipt. A discount
+ * needs its own permission. Totals here are for the cashier; the server prices the sale again from the database.
+ */
+export default function Pos({ products, categories, can: allowed, lastSale }: { products: Product[]; categories: string[]; can: { discount: boolean }; lastSale: number | null }) {
     const currency = useCurrency();
     const can = useCan();
     const [query, setQuery] = useState('');
@@ -39,9 +48,8 @@ export default function Pos({ products, can: allowed, lastSale }: { products: Pr
     const [cardRef, setCardRef] = useState('');
     const [busy, setBusy] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [picking, setPicking] = useState<Product | null>(null);
     const scanRef = useRef<HTMLInputElement>(null);
-
-    const categories = useMemo(() => Array.from(new Set(products.map((p) => p.category).filter(Boolean))) as string[], [products]);
 
     const visible = products.filter((p) => {
         const q = query.trim().toLowerCase();
@@ -49,22 +57,28 @@ export default function Pos({ products, can: allowed, lastSale }: { products: Pr
         return matches && (!category || p.category === category);
     });
 
-    const inCart = (id: number) => cart.find((l) => l.product.id === id)?.quantity ?? 0;
+    const inCart = (id: number) => cart.filter((l) => l.product.id === id).reduce((n, l) => n + l.quantity, 0);
     const available = (p: Product) => (p.track_stock ? Number(p.stock_quantity) : Infinity);
 
-    const add = (p: Product) => {
-        if (inCart(p.id) + 1 > available(p)) {
+    /** Put a product (with its chosen add-ons) in the basket; a product that has add-ons opens their choice first. */
+    const add = (p: Product, quantity = 1, addons: ChosenAddon[] = [], choose = true) => {
+        if (choose && p.addons.length > 0) {
+            setPicking(p);
+            return;
+        }
+        if (inCart(p.id) + quantity > available(p)) {
             toast.error(`الكمية المتوفرة من «${p.name}» غير كافية`);
             return;
         }
-        setCart((c) => (c.some((l) => l.product.id === p.id) ? c.map((l) => (l.product.id === p.id ? { ...l, quantity: l.quantity + 1 } : l)) : [...c, { product: p, quantity: 1 }]));
+        const key = lineKey(p.id, addons);
+        setCart((c) => (c.some((l) => l.key === key) ? c.map((l) => (l.key === key ? { ...l, quantity: l.quantity + quantity } : l)) : [...c, { key, product: p, quantity, addons }]));
     };
 
-    const setQty = (id: number, qty: number) => {
+    const setQty = (key: string, qty: number) => {
         setCart((c) => c.flatMap((l) => {
-            if (l.product.id !== id) return [l];
+            if (l.key !== key) return [l];
             if (qty <= 0) return [];
-            if (qty > available(l.product)) {
+            if (inCart(l.product.id) - l.quantity + qty > available(l.product)) {
                 toast.error('الكمية أكبر من المتوفر');
                 return [l];
             }
@@ -85,7 +99,7 @@ export default function Pos({ products, can: allowed, lastSale }: { products: Pr
         }
     };
 
-    const subtotal = cart.reduce((s, l) => s + Number(l.product.price) * l.quantity, 0);
+    const subtotal = Math.round(cart.reduce((s, l) => s + lineTotal(l.product.price, l.quantity, l.addons, l.product.addons) * 1000, 0)) / 1000;
     const discountValue = allowed.discount ? Math.min(Number(discount || 0), subtotal) : 0;
     const total = subtotal - discountValue;
 
@@ -96,7 +110,7 @@ export default function Pos({ products, can: allowed, lastSale }: { products: Pr
         router.post(
             route('club.pos.checkout'),
             {
-                items: cart.map((l) => ({ product_id: l.product.id, quantity: l.quantity })),
+                items: cart.map((l) => ({ product_id: l.product.id, quantity: l.quantity, addons: payload(l.addons) })),
                 payment_method: method,
                 card_reference: method === 'card' ? cardRef.trim() : null,
                 member_id: member?.id ?? null,
@@ -166,7 +180,7 @@ export default function Pos({ products, can: allowed, lastSale }: { products: Pr
                     )}
                     {visible.length === 0 ? (
                         <Card>
-                            <EmptyState icon={<Package className="size-6" />} title="لا توجد منتجات" description={products.length === 0 ? 'أضف منتجات من صفحة المنتجات.' : 'جرّب بحثًا آخر.'} action={products.length === 0 && can('products.manage') ? <Button size="sm" href={route('club.products.index')}>المنتجات</Button> : undefined} />
+                            <EmptyState icon={<Package className="size-6" />} title="لا توجد منتجات" description={products.length === 0 ? 'أضف منتجات من قسم المنتجات.' : 'جرّب بحثًا آخر.'} action={products.length === 0 && can('products.manage') ? <Button size="sm" href={route('club.products.index')}>المنتجات</Button> : undefined} />
                         </Card>
                     ) : (
                         <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
@@ -182,6 +196,7 @@ export default function Pos({ products, can: allowed, lastSale }: { products: Pr
                                     >
                                         {p.image_url && <img src={p.image_url} alt="" loading="lazy" className="mb-2 h-16 w-full rounded-lg object-cover" />}
                                         <span className="line-clamp-2 text-sm font-medium">{p.name}</span>
+                                        {p.addons.length > 0 && <span className="mt-1 text-[11px] text-[#6b7280]">+ إضافات</span>}
                                         <span className="mt-2 flex w-full items-end justify-between gap-2">
                                             <span className="font-semibold text-[#111] num">{money(p.price, currency)}</span>
                                             {p.track_stock && <span className={cn('text-xs num', out ? 'text-red-600' : 'text-muted')}>{out ? 'نفد' : number(Number(p.stock_quantity) - inCart(p.id))}</span>}
@@ -205,17 +220,20 @@ export default function Pos({ products, can: allowed, lastSale }: { products: Pr
                         ) : (
                             <ul className="divide-y divide-line">
                                 {cart.map((l) => (
-                                    <li key={l.product.id} className="flex items-center gap-3 py-3">
+                                    <li key={l.key} className="flex items-center gap-3 py-3">
                                         <div className="min-w-0 flex-1">
                                             <p className="truncate text-sm font-medium">{l.product.name}</p>
-                                            <p className="text-xs text-muted num">{money(Number(l.product.price) * l.quantity, currency)}</p>
+                                            {describe(l.addons, l.product.addons).map((a) => (
+                                                <p key={a.id} className="truncate text-[11px] text-[#6b7280]">+ {a.name}{a.qty > 1 && <span className="num"> ×{a.qty}</span>} <span className="num">({money(Number(a.price) * a.qty, currency)})</span></p>
+                                            ))}
+                                            <p className="text-xs text-muted num">{money(lineTotal(l.product.price, l.quantity, l.addons, l.product.addons), currency)}</p>
                                         </div>
                                         <div className="flex items-center gap-1">
-                                            <button type="button" onClick={() => setQty(l.product.id, l.quantity - 1)} className="grid size-8 place-items-center rounded-lg border border-line hover:bg-brand-50" aria-label="إنقاص">
+                                            <button type="button" onClick={() => setQty(l.key, l.quantity - 1)} className="grid size-8 place-items-center rounded-lg border border-line hover:bg-brand-50" aria-label={`إنقاص ${l.product.name}`}>
                                                 {l.quantity === 1 ? <Trash2 className="size-3.5 text-red-600" /> : <Minus className="size-3.5" />}
                                             </button>
                                             <span className="w-8 text-center text-sm font-medium num">{l.quantity}</span>
-                                            <button type="button" onClick={() => setQty(l.product.id, l.quantity + 1)} className="grid size-8 place-items-center rounded-lg border border-line hover:bg-brand-50" aria-label="زيادة">
+                                            <button type="button" onClick={() => setQty(l.key, l.quantity + 1)} className="grid size-8 place-items-center rounded-lg border border-line hover:bg-brand-50" aria-label={`زيادة ${l.product.name}`}>
                                                 <Plus className="size-3.5" />
                                             </button>
                                         </div>
@@ -273,6 +291,70 @@ export default function Pos({ products, can: allowed, lastSale }: { products: Pr
                     </div>
                 </Card>
             </div>
+
+            {picking && (
+                <ItemOptions
+                    product={picking}
+                    room={available(picking) - inCart(picking.id)}
+                    currency={currency}
+                    onClose={() => setPicking(null)}
+                    onAdd={(quantity, addons) => {
+                        add(picking, quantity, addons, false);
+                        setPicking(null);
+                        scanRef.current?.focus();
+                    }}
+                />
+            )}
         </ClubLayout>
+    );
+}
+
+/** The add-ons of a product being sold: how many of each per piece, the quantity, and the line's total as it changes. */
+function ItemOptions({ product, room, currency, onClose, onAdd }: { product: Product; room: number; currency: string; onClose: () => void; onAdd: (quantity: number, addons: ChosenAddon[]) => void }) {
+    const [quantity, setQuantity] = useState(1);
+    const [chosen, setChosen] = useState<Record<number, number>>({});
+    const addons: ChosenAddon[] = Object.entries(chosen).filter(([, qty]) => qty > 0).map(([id, qty]) => ({ id: Number(id), qty }));
+    const total = lineTotal(product.price, quantity, addons, product.addons);
+
+    return (
+        <Modal
+            open
+            onClose={onClose}
+            title={product.name}
+            footer={
+                <div className="flex w-full items-center justify-between gap-3">
+                    <div>
+                        <p className="text-[12px] text-muted">الإجمالي</p>
+                        <p className="text-lg font-bold num">{money(total, currency)}</p>
+                    </div>
+                    <Button size="lg" disabled={room < quantity} onClick={() => onAdd(quantity, addons)} icon={<Plus />}>إضافة للسلة</Button>
+                </div>
+            }
+        >
+            <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm text-muted">السعر <span className="font-semibold text-ink num">{money(product.price, currency)}</span>{addons.length > 0 && <> · مع الإضافات <span className="font-semibold text-ink num">{money(unitPrice(product.price, addons, product.addons), currency)}</span></>}</p>
+                    <Stepper value={quantity} onChange={setQuantity} min={1} max={Math.max(1, Math.min(room, 999))} label="الكمية" />
+                </div>
+                <div>
+                    <p className="mb-2 text-[13px] font-semibold text-[#4b4b4b]">إضافات اختيارية <span className="font-normal text-muted">(لكل قطعة)</span></p>
+                    <ul className="space-y-2">
+                        {product.addons.map((a) => {
+                            const qty = chosen[a.id] ?? 0;
+                            return (
+                                <li key={a.id} className={cn('flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2', qty > 0 ? 'border-[#111]/30 bg-[#fafafa]' : 'border-line', a.available === false && 'opacity-50')}>
+                                    <div className="min-w-0">
+                                        <p className="truncate text-sm font-medium">{a.name}</p>
+                                        <p className="text-xs text-muted"><span className="font-semibold text-[#4b4b4b] num">+{money(a.price, currency)}</span>{a.available === false && <span className="text-red-600"> · نفدت</span>}{a.max > 1 && <> · حتى <span className="num">{a.max}</span> لكل قطعة</>}</p>
+                                    </div>
+                                    <Stepper size="sm" value={qty} onChange={(v) => setChosen((c) => ({ ...c, [a.id]: v }))} min={0} max={a.available === false ? 0 : a.max} label={a.name} />
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
+                {room < quantity && <p className="text-xs text-red-600">الكمية المتوفرة غير كافية.</p>}
+            </div>
+        </Modal>
     );
 }

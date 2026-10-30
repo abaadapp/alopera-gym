@@ -23,7 +23,7 @@ export interface SaleRow {
     source_label: string;
     status_label: string;
     method_label: string;
-    items?: { name: string; quantity: string; unit_price?: string; line_total: string }[];
+    items?: { name: string; quantity: string; unit_price?: string; line_total: string; addons?: { name: string; quantity: string }[] }[];
 }
 
 type Filters = { q?: string; source?: string; status?: string; from?: string; to?: string };
@@ -85,7 +85,7 @@ export default function Sales({ sales, filters, labels, can: allowed }: { sales:
                                         <td><SourceBadge source={s.source} label={s.source_label} /></td>
                                         <td className="text-sm">{s.buyer}</td>
                                         <td className="max-w-xs">
-                                            <p className="truncate text-sm">{(s.items ?? []).map((i) => `${i.name} × ${number(i.quantity)}`).join('، ')}</p>
+                                            <p className="truncate text-sm">{(s.items ?? []).map((i) => `${i.name} × ${number(i.quantity)}${i.addons?.length ? ` (+ ${i.addons.map((a) => a.name).join('، ')})` : ''}`).join('، ')}</p>
                                         </td>
                                         <td className="text-sm whitespace-nowrap">{s.method_label}{!s.paid && s.status === 'pending' && <p className="text-xs text-amber-700">غير مدفوع</p>}</td>
                                         <td className="num font-medium">

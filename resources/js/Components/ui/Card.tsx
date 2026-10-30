@@ -36,7 +36,7 @@ export function CardHeader({ title, subtitle, actions, className }: { title: Rea
 }
 
 /* Pages that always show the whole club, whatever branch the top bar is on (the books, payroll, reports…). */
-const CLUB_WIDE = ['club.finance.*', 'club.reports.*', 'club.payroll.*', 'club.schedule.*', 'club.trainers.*', 'club.pt.*', 'club.pt-packages.*', 'club.products.*'];
+const CLUB_WIDE = ['club.finance.*', 'club.reports.*', 'club.payroll.*', 'club.schedule.*', 'club.trainers.*', 'club.pt.*', 'club.pt-packages.*', 'club.products.*', 'club.product-categories.*', 'club.product-addons.*'];
 
 function BranchNote() {
     const { auth } = useShared();

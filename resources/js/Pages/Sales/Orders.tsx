@@ -73,7 +73,7 @@ export default function Orders({ orders, tab, counts, filters, can }: { orders: 
                                         </td>
                                         <td className="max-w-xs">
                                             <ul className="space-y-0.5 text-sm">
-                                                {(o.items ?? []).map((i, idx) => <li key={idx} className="truncate">{i.name} <span className="text-muted num">× {number(i.quantity)}</span></li>)}
+                                                {(o.items ?? []).map((i, idx) => <li key={idx} className="truncate">{i.name} <span className="text-muted num">× {number(i.quantity)}</span>{i.addons?.length ? <span className="block text-xs text-muted">+ {i.addons.map((a) => a.name).join('، ')}</span> : null}</li>)}
                                             </ul>
                                         </td>
                                         <td className="num font-medium">{money(o.total, currency)}</td>

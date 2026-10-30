@@ -7,6 +7,7 @@ use App\Core\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
@@ -30,12 +31,19 @@ class Product extends Model
             'track_stock' => 'boolean',
             'is_active' => 'boolean',
             'show_on_website' => 'boolean',
+            'images' => 'array',
         ];
     }
 
     public function category(): BelongsTo
     {
         return $this->belongsTo(ProductCategory::class, 'product_category_id');
+    }
+
+    /** Add-ons chosen for this product by name (an add-on offered on every product or on categories is not listed). */
+    public function addons(): BelongsToMany
+    {
+        return $this->belongsToMany(ProductAddon::class, 'product_addon_product');
     }
 
     public function movements(): HasMany
@@ -68,5 +76,11 @@ class Product extends Model
     public function imageUrl(): ?string
     {
         return $this->image_path ? Storage::disk('public')->url($this->image_path) : null;
+    }
+
+    /** Every photo, the main one first. */
+    public function imageUrls(): array
+    {
+        return array_map(fn (string $path) => Storage::disk('public')->url($path), array_values(array_filter([$this->image_path, ...($this->images ?? [])])));
     }
 }

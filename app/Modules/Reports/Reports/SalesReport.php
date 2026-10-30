@@ -13,7 +13,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * تقرير المبيعات: completed sales (paid and handed over) from the point of sale and the website, day by day, by
- * product, payment method, source and member of staff, with voided and cancelled ones counted apart.
+ * product (with its add-ons), add-on, payment method, source and member of staff, with voided and cancelled ones
+ * counted apart.
  */
 final class SalesReport extends Report
 {
@@ -30,6 +31,7 @@ final class SalesReport extends Report
             'comparison' => $comparison,
             'days' => $this->days($f),
             'products' => $this->products($f, 50),
+            'addons' => $this->addons($f),
             'methods' => $this->grouped($f, 'payment_method', SalesController::METHOD_LABELS),
             'sources' => $this->grouped($f, 'source', SalesController::SOURCE_LABELS),
             'staff' => $this->staff($f),
@@ -47,7 +49,8 @@ final class SalesReport extends Report
             'sheets' => [
                 S::summary($comparison, self::FIGURES),
                 new S('المبيعات اليومية', [['التاريخ', S::TEXT], ...$line], array_map(fn ($d) => [$d['day'], $d['count'], $d['total']], $this->days($f))),
-                new S('حسب المنتج', [['المنتج', S::TEXT], ['الكمية', S::NUMBER], ['المبلغ', S::MONEY]], array_map(fn ($p) => [$p['name'], $p['quantity'], $p['total']], $this->products($f, 500))),
+                new S('حسب المنتج', [['المنتج', S::TEXT], ['الكمية', S::NUMBER], ['المبلغ مع الإضافات', S::MONEY]], array_map(fn ($p) => [$p['name'], $p['quantity'], $p['total']], $this->products($f, 500))),
+                new S('الإضافات', [['الإضافة', S::TEXT], ['الكمية', S::NUMBER], ['المبلغ', S::MONEY]], array_map(fn ($a) => [$a['name'], $a['quantity'], $a['total']], $this->addons($f))),
                 new S('حسب طريقة الدفع', [['طريقة الدفع', S::TEXT], ...$line], array_map(fn ($r) => [$r['label'], $r['count'], $r['total']], $this->grouped($f, 'payment_method', SalesController::METHOD_LABELS))),
                 new S('حسب المصدر', [['المصدر', S::TEXT], ...$line], array_map(fn ($r) => [$r['label'], $r['count'], $r['total']], $this->grouped($f, 'source', SalesController::SOURCE_LABELS))),
                 new S('حسب الموظف', [['الموظف', S::TEXT], ...$line], array_map(fn ($r) => [$r['name'], $r['count'], $r['total']], $this->staff($f))),
@@ -96,6 +99,16 @@ final class SalesReport extends Report
         return DB::table('sale_items')->whereIn('sale_id', $this->done($f)->select('sales.id'))
             ->select('name', DB::raw('sum(quantity) as qty'), DB::raw('sum(line_total) as total'))
             ->groupBy('name')->orderByDesc('total')->limit($limit)->get()
+            ->map(fn ($r) => ['name' => $r->name, 'quantity' => (float) $r->qty, 'total' => $this->money($r->total)])->all();
+    }
+
+    /** The add-ons sold with those lines (already inside each line's amount), by name as sold. */
+    private function addons(ReportFilters $f): array
+    {
+        return DB::table('sale_item_addons as a')->join('sale_items as i', 'i.id', '=', 'a.sale_item_id')
+            ->whereIn('i.sale_id', $this->done($f)->select('sales.id'))
+            ->select('a.name', DB::raw('sum(a.quantity * i.quantity) as qty'), DB::raw('sum(a.line_total) as total'))
+            ->groupBy('a.name')->orderByDesc('total')->get()
             ->map(fn ($r) => ['name' => $r->name, 'quantity' => (float) $r->qty, 'total' => $this->money($r->total)])->all();
     }
 

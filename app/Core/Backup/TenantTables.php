@@ -13,6 +13,7 @@ final class TenantTables
         'roles', 'branches', 'users', 'number_sequences', 'tenant_integrations',
         'site_settings', 'site_posts', 'site_media', 'contact_messages',
         'expense_categories', 'product_categories', 'suppliers', 'products',
+        'product_addons', 'product_addon_product', 'product_addon_category',
         'gym_programs', 'gym_membership_plans', 'gym_plan_program', 'gym_coupons',
         'gym_trainers', 'gym_trainer_availabilities',
         'gym_members',
@@ -22,7 +23,7 @@ final class TenantTables
         'gym_class_schedules', 'gym_class_sessions', 'gym_bookings',
         'gym_pt_packages', 'gym_pt_subscriptions', 'gym_pt_sessions',
         'gym_access_devices', 'gym_access_credentials', 'gym_check_ins', 'gym_staff_attendances',
-        'expenses', 'purchase_orders', 'purchase_order_items', 'sales', 'sale_items', 'stock_movements',
+        'expenses', 'purchase_orders', 'purchase_order_items', 'sales', 'sale_items', 'sale_item_addons', 'stock_movements',
         'message_templates', 'conversations', 'campaigns', 'messages', 'auto_replies',
         'payment_intents',
         'gym_accounts', 'gym_journal_entries', 'gym_journal_lines',
@@ -42,6 +43,8 @@ final class TenantTables
     /** Child tables without their own tenant_id: [table => [fk column, parent table]]. */
     public const PIVOTS = [
         'gym_plan_program' => ['membership_plan_id', 'gym_membership_plans'],
+        'product_addon_product' => ['product_addon_id', 'product_addons'],
+        'product_addon_category' => ['product_addon_id', 'product_addons'],
     ];
 
     /** Tables whose rows reference earlier rows of the same table (that column): inserted in id order, the column cleared before deleting. */

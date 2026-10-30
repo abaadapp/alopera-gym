@@ -12,6 +12,7 @@ use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Inventory\Http\Controllers\SalesController;
 use App\Modules\Inventory\Models\Product;
+use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Payroll\Models\Employee;
 use Illuminate\Http\JsonResponse;
@@ -56,8 +57,12 @@ class SearchController extends Controller
                 ->map(fn (Product $p) => [
                     'label' => $p->name,
                     'hint' => trim(Money::normalize($p->price).($p->track_stock ? ' · المخزون '.(float) $p->stock_quantity : '').($p->sku ? ' · '.$p->sku : ''), ' ·'),
-                    'url' => route('club.products.index', ['q' => $p->name]),
+                    'url' => route('club.products.edit', $p),
                 ])];
+            $groups[] = ['key' => 'addons', 'label' => 'إضافات المنتجات', 'items' => ProductAddon::query()
+                ->whereRaw(self::folded('name').' ilike ?', [$like])
+                ->orderBy('name')->limit(self::LIMIT)->get(['id', 'name', 'price'])
+                ->map(fn (ProductAddon $a) => ['label' => $a->name, 'hint' => '+'.Money::normalize($a->price), 'url' => route('club.product-addons.index', ['q' => $a->name])])];
         }
 
         $seesSales = PermissionRegistry::moduleEnabled('sales') && $user->can('sales.view');
