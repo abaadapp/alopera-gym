@@ -5,108 +5,152 @@ namespace App\Modules\Reports\Services;
 use App\Core\Auth\PermissionRegistry;
 use App\Models\Branch;
 use App\Models\User;
+use App\Modules\Reports\Reports;
+use App\Modules\Reports\Reports\Report;
 
 /**
- * The reports page: one door to every report the club already has, in gym categories. Each card opens a page —
- * the period reports here (ReportController::show) and the reports that live in their own section (the books,
- * dues, payroll, the check-in log, documents). A user is given only the reports they may open, and a report of a
- * switched-off module or of a club with a single branch is not offered.
+ * The reports page: every report of the club, in gym categories, each with its own page (ReportController::show)
+ * and its own file (ReportController::export). The sections keep their working screens (invoices, the point of sale,
+ * payroll runs, the check-in log, documents); their reports live here only.
+ *
+ * Opening a report takes reports.view and the permission of the section its figures come from (PERMISSIONS);
+ * exporting it takes those and reports.export as well. A report of a switched-off module, the branch comparison of a
+ * club with one branch, and the branch comparison for a user tied to a branch are not offered.
+ *
+ * `mode`: a «period» report covers dates and is compared with an earlier period; a «snapshot» report is the state
+ * today (what is owed, what expires soon). `preset`: the period a report opens with.
  */
 final class ReportCatalog
 {
     public const CATEGORIES = [
         'finance' => 'التقارير المالية',
-        'members' => 'الأعضاء والعضويات',
-        'classes' => 'الحصص والحجوزات',
-        'training' => 'التدريب والمدربون',
-        'sales' => 'المبيعات والمنتجات',
-        'payroll' => 'الموظفون والرواتب',
-        'attendance' => 'الحضور والدخول',
-        'documents' => 'المستندات',
-        'branches' => 'أداء الفروع',
+        'sales' => 'تقارير المبيعات والمنتجات',
+        'members' => 'تقارير الأعضاء والعضويات',
+        'classes' => 'تقارير الحصص والحجوزات',
+        'training' => 'تقارير التدريب والمدربين',
+        'attendance' => 'تقارير الحضور والدخول',
+        'payroll' => 'تقارير الموظفين والرواتب',
+        'documents' => 'تقارير المستندات والتجديدات',
+        'branches' => 'تقارير أداء الفروع',
     ];
 
-    /** The period reports drawn on this module's own page, with who may open them. */
-    public const DETAIL = [
-        'finance' => 'reports.financial',
-        'members' => 'reports.view',
-        'classes' => 'reports.view',
-        'trainers' => 'reports.view',
-        'branches' => 'reports.view',
+    /** What each report needs beside reports.view: the permission of the section its figures come from. */
+    public const PERMISSIONS = [
+        'finance' => ['reports.financial'],
+        'statements' => ['accounting.view'],
+        'movement' => ['accounting.view'],
+        'dues' => ['dues.view'],
+        'sales' => ['sales.view'],
+        'members' => [],
+        'expiring' => ['memberships.view'],
+        'classes' => [],
+        'trainers' => [],
+        'checkins' => ['checkin.view'],
+        'staff-attendance' => ['staff_attendance.view'],
+        'payroll' => ['payroll.reports'],
+        'payouts' => ['payroll.reports'],
+        'documents' => ['documents.view'],
+        'renewals' => ['documents.view'],
+        'branches' => [],
     ];
 
-    /**
-     * key, category, title, description, icon (a name the page maps to an icon), route, its parameters, the
-     * permissions (any one is enough) and, when it matters, the module.
-     *
-     * @return list<array{key: string, category: string, title: string, desc: string, icon: string, route: string, params?: array<string, string>, can: list<string>, module?: string}>
-     */
+    /** @return list<array{key: string, category: string, title: string, desc: string, icon: string, class: class-string<Report>, mode: string, preset: string, compare: bool, branch: bool, module?: string}> */
     private static function all(): array
     {
-        $detail = fn (string $key) => ['route' => 'club.reports.show', 'params' => ['report' => $key], 'can' => [self::DETAIL[$key]]];
+        $period = ['mode' => 'period', 'preset' => 'month', 'compare' => true, 'branch' => true];
+        $snapshot = ['mode' => 'snapshot', 'preset' => 'month', 'compare' => false, 'branch' => true];
 
         return [
-            ['key' => 'finance', 'category' => 'finance', 'title' => 'الإيرادات والمصروفات', 'icon' => 'wallet',
-                'desc' => 'صافي التحصيل والمصروفات والربح التشغيلي ونسبة التحصيل، يومًا بيوم وحسب طريقة الدفع ونوع الإيراد، مقارنة بفترة سابقة.'] + $detail('finance'),
-            ['key' => 'statements', 'category' => 'finance', 'title' => 'قائمة الدخل وميزان المراجعة', 'icon' => 'landmark', 'route' => 'club.finance.statements', 'can' => ['accounting.view'],
-                'desc' => 'الإيرادات والمصروفات من دفتر القيود لفترة تختارها، وأرصدة الحسابات حتى تاريخها.'],
-            ['key' => 'movement', 'category' => 'finance', 'title' => 'الحركة المالية', 'icon' => 'arrow-left-right', 'route' => 'club.finance.movement', 'can' => ['accounting.view'],
-                'desc' => 'كل مبلغ دخل إلى الصندوق والبنوك وحسابات التسوية أو خرج منها، بالحساب والفترة.'],
-            ['key' => 'dues', 'category' => 'finance', 'title' => 'المستحقات والمتأخرات', 'icon' => 'hand-coins', 'route' => 'club.dues', 'can' => ['dues.view'],
-                'desc' => 'الفواتير غير المسددة موزعة على مدة التأخير، ومن عليه المتبقي.'],
+            ['key' => 'finance', 'category' => 'finance', 'title' => 'الإيرادات والمصروفات', 'icon' => 'wallet', 'class' => Reports\FinanceReport::class,
+                'desc' => 'صافي التحصيل والمصروفات والربح التشغيلي ونسبة التحصيل، يومًا بيوم وحسب طريقة الدفع ونوع الإيراد، مقارنة بفترة سابقة.'] + $period,
+            ['key' => 'statements', 'category' => 'finance', 'title' => 'قائمة الدخل وميزان المراجعة', 'icon' => 'landmark', 'class' => Reports\StatementsReport::class,
+                'desc' => 'الإيرادات والمصروفات من دفتر القيود لفترة تختارها بجانب فترة المقارنة، وأرصدة الحسابات حتى تاريخها.'] + $period,
+            ['key' => 'movement', 'category' => 'finance', 'title' => 'الحركة المالية', 'icon' => 'arrow-left-right', 'class' => Reports\MovementReport::class,
+                'desc' => 'كل مبلغ دخل إلى الصندوق والبنوك وحسابات التسوية أو خرج منها، بالحساب والاتجاه والفترة، مع رصيد الحساب.'] + $period,
+            ['key' => 'dues', 'category' => 'finance', 'title' => 'المستحقات والمتأخرات', 'icon' => 'hand-coins', 'class' => Reports\DuesReport::class,
+                'desc' => 'المتبقي على الفواتير المفتوحة اليوم موزعًا على مدة التأخير، وأعلى المدينين، وحسب نوع الفاتورة.'] + $snapshot,
 
-            ['key' => 'members', 'category' => 'members', 'title' => 'العضويات والأعضاء', 'icon' => 'ticket',
-                'desc' => 'الاشتراكات الجديدة والتجديدات والترقيات والإلغاءات والتجميد، والأعضاء الجدد ومرات الدخول، والباقات المباعة.'] + $detail('members'),
-            ['key' => 'expiring', 'category' => 'members', 'title' => 'العضويات قريبة الانتهاء', 'icon' => 'hourglass', 'route' => 'club.memberships.index', 'params' => ['filter' => 'expiring'], 'can' => ['memberships.view'],
-                'desc' => 'العضويات التي تنتهي خلال سبعة أيام، لمتابعة تجديدها قبل أن تنتهي.'],
+            ['key' => 'sales', 'category' => 'sales', 'title' => 'تقرير المبيعات', 'icon' => 'shopping-bag', 'class' => Reports\SalesReport::class, 'module' => 'sales',
+                'desc' => 'إجمالي المبيعات وعدد العمليات والملغى والمسترد، يوميًا وحسب المنتج وطريقة الدفع والمصدر والموظف.'] + $period,
 
-            ['key' => 'classes', 'category' => 'classes', 'title' => 'الحصص والحضور', 'icon' => 'calendar-days',
-                'desc' => 'الحصص والحجوزات ونسبتا الحضور والإشغال، والبرامج الأكثر طلبًا، مقارنة بفترة سابقة.'] + $detail('classes'),
+            ['key' => 'members', 'category' => 'members', 'title' => 'العضويات والأعضاء', 'icon' => 'ticket', 'class' => Reports\MembersReport::class,
+                'desc' => 'الاشتراكات الجديدة والتجديدات والترقيات والإلغاءات والتجميد، والأعضاء الجدد ومرات الدخول، والباقات المباعة.'] + $period,
+            ['key' => 'expiring', 'category' => 'members', 'title' => 'العضويات قريبة الانتهاء', 'icon' => 'hourglass', 'class' => Reports\ExpiringReport::class,
+                'desc' => 'العضويات السارية التي تنتهي خلال الأيام القادمة، ومن جُدّدت عضويته مسبقًا ومن لم تُجدَّد.'] + $snapshot,
 
-            ['key' => 'trainers', 'category' => 'training', 'title' => 'أداء المدربين', 'icon' => 'dumbbell',
-                'desc' => 'حصص كل مدرب وحجوزاتها وحضورها، وجلسات التدريب الشخصي التي أنجزها في الفترة.'] + $detail('trainers'),
+            ['key' => 'classes', 'category' => 'classes', 'title' => 'الحصص والحضور', 'icon' => 'calendar-days', 'class' => Reports\ClassesReport::class,
+                'desc' => 'الحصص والحجوزات ونسبتا الحضور والإشغال، والبرامج الأكثر طلبًا، مقارنة بفترة سابقة.'] + $period,
 
-            ['key' => 'sales', 'category' => 'sales', 'title' => 'تقارير المبيعات', 'icon' => 'shopping-bag', 'route' => 'club.sales.reports', 'can' => ['sales.view'], 'module' => 'sales',
-                'desc' => 'إجمالي المبيعات وعدد العمليات والملغى والمسترد، والمبيعات اليومية وحسب المنتج.'],
+            ['key' => 'trainers', 'category' => 'training', 'title' => 'أداء المدربين', 'icon' => 'dumbbell', 'class' => Reports\TrainersReport::class,
+                'desc' => 'حصص كل مدرب وحجوزاتها وحضورها، وجلسات التدريب الشخصي التي أنجزها في الفترة.'] + $period,
 
-            ['key' => 'payroll', 'category' => 'payroll', 'title' => 'مسيرات الرواتب', 'icon' => 'briefcase', 'route' => 'club.payroll.index', 'can' => ['payroll.prepare', 'payroll.approve', 'payroll.pay', 'payroll.reports'],
-                'desc' => 'مسيرة كل شهر بموظفيها ورواتبها، وحالتها من التجهيز إلى الاعتماد والصرف.'],
-            ['key' => 'payouts', 'category' => 'payroll', 'title' => 'صرف الرواتب', 'icon' => 'banknote', 'route' => 'club.payroll.payouts', 'can' => ['payroll.pay', 'payroll.reports'],
-                'desc' => 'ما ينتظر الصرف في المسيرات المعتمدة، وسجل دفعات الصرف ومن أي حساب.'],
+            ['key' => 'checkins', 'category' => 'attendance', 'title' => 'دخول الأعضاء', 'icon' => 'door-open', 'class' => Reports\CheckinsReport::class,
+                'desc' => 'مرات الدخول المسموحة والمرفوضة وأسباب الرفض، والأعضاء الذين حضروا، حسب اليوم والساعة وطريقة الدخول.'] + $period,
+            ['key' => 'staff-attendance', 'category' => 'attendance', 'title' => 'حضور الموظفين', 'icon' => 'clock', 'class' => Reports\StaffAttendanceReport::class,
+                'desc' => 'أيام الحضور وساعات العمل لكل موظف من البصمة والتسجيل اليدوي، ومن لم يسجّل انصرافه.'] + $period,
 
-            ['key' => 'checkins', 'category' => 'attendance', 'title' => 'سجل دخول الأعضاء', 'icon' => 'door-open', 'route' => 'club.checkins.index', 'can' => ['checkin.view'],
-                'desc' => 'كل قرار دخول من الاستقبال أو QR أو أجهزة البوابة، مسموحًا أو مرفوضًا مع السبب.'],
-            ['key' => 'staff-attendance', 'category' => 'attendance', 'title' => 'حضور الموظفين', 'icon' => 'clock', 'route' => 'club.staff-attendance.index', 'can' => ['staff_attendance.view'],
-                'desc' => 'أيام الحضور وساعات العمل لكل موظف من البصمة والتسجيل اليدوي، ومن لم يسجّل انصرافه.'],
+            ['key' => 'payroll', 'category' => 'payroll', 'title' => 'مسيرات الرواتب', 'icon' => 'briefcase', 'class' => Reports\PayrollReport::class,
+                'desc' => 'مسيرات أشهر الفترة: الاستحقاقات والخصومات والصافي والمصروف والمتبقي، وكشف رواتب كل مسيرة.'] + ['preset' => 'year'] + $period,
+            ['key' => 'payouts', 'category' => 'payroll', 'title' => 'صرف الرواتب', 'icon' => 'banknote', 'class' => Reports\PayoutsReport::class,
+                'desc' => 'دفعات صرف الرواتب في الفترة ومن أي حساب، ومن صُرف له، وما ينتظر الصرف في المسيرات المعتمدة.'] + ['preset' => 'year'] + $period,
 
-            ['key' => 'documents', 'category' => 'documents', 'title' => 'المستندات قريبة الانتهاء', 'icon' => 'file-clock', 'route' => 'club.business-documents.index', 'params' => ['view' => 'expiring'], 'can' => ['documents.view'],
-                'desc' => 'السجلات والتراخيص والعقود التي يقترب انتهاؤها، ومن المسؤول عن تجديدها.'],
-            ['key' => 'renewals', 'category' => 'documents', 'title' => 'سجل تجديد المستندات', 'icon' => 'history', 'route' => 'club.business-documents.renewals', 'can' => ['documents.view'],
-                'desc' => 'كل تجديد: من نفّذه ومتى، والانتهاء قبله وبعده، والنسخة السابقة.'],
+            ['key' => 'documents', 'category' => 'documents', 'title' => 'المستندات وصلاحيتها', 'icon' => 'file-clock', 'class' => Reports\DocumentsReport::class,
+                'desc' => 'السجلات والتراخيص والعقود السارية: ما يقترب انتهاؤه وما انتهى، حسب النوع، ومن المسؤول عن تجديدها.'] + $snapshot,
+            ['key' => 'renewals', 'category' => 'documents', 'title' => 'سجل تجديد المستندات', 'icon' => 'history', 'class' => Reports\RenewalsReport::class,
+                'desc' => 'كل تجديد في الفترة: من نفّذه ومتى، والانتهاء والرقم المرجعي قبله وبعده، حسب نوع المستند.'] + $period,
 
-            ['key' => 'branches', 'category' => 'branches', 'title' => 'مقارنة الفروع', 'icon' => 'building-2',
-                'desc' => 'الأعضاء الجدد والعضويات النشطة ومرات الدخول والحصص والتحصيل لكل فرع، مقارنة بفترة سابقة.'] + $detail('branches'),
+            ['key' => 'branches', 'category' => 'branches', 'title' => 'مقارنة الفروع', 'icon' => 'building-2', 'class' => Reports\BranchesReport::class,
+                'desc' => 'الأعضاء الجدد والعضويات النشطة ومرات الدخول والحصص والتحصيل لكل فرع، مقارنة بفترة سابقة.'] + ['branch' => false] + $period,
         ];
     }
 
-    /** @return list<array{key: string, category: string, title: string, desc: string, icon: string, href: string}> */
+    /** @return list<string> */
+    public static function keys(): array
+    {
+        return array_column(self::all(), 'key');
+    }
+
+    /** @return array{key: string, category: string, title: string, desc: string, icon: string, class: class-string<Report>, mode: string, preset: string, compare: bool, branch: bool, module?: string}|null */
+    public function find(string $key): ?array
+    {
+        return collect(self::all())->firstWhere('key', $key);
+    }
+
+    /**
+     * The cards this user is offered: each opens its page, and exports (with its opening period) when allowed.
+     *
+     * @return list<array{key: string, category: string, title: string, desc: string, icon: string, href: string, export: string|null, scope: string}>
+     */
     public function for(User $user): array
     {
-        $branches = null;
+        $exports = $user->can('reports.export');
 
         return array_values(array_map(
-            fn (array $r) => ['key' => $r['key'], 'category' => $r['category'], 'title' => $r['title'], 'desc' => $r['desc'], 'icon' => $r['icon'], 'href' => route($r['route'], $r['params'] ?? [])],
-            array_filter(self::all(), function (array $r) use ($user, &$branches) {
-                if (isset($r['module']) && ! PermissionRegistry::moduleEnabled($r['module'])) {
-                    return false;
-                }
-                if ($r['key'] === 'branches' && ! ($branches ??= $this->multiBranch())) {
-                    return false;
-                }
-
-                return collect($r['can'])->contains(fn (string $p) => $user->can($p));
-            }),
+            fn (array $r) => [
+                'key' => $r['key'], 'category' => $r['category'], 'title' => $r['title'], 'desc' => $r['desc'], 'icon' => $r['icon'],
+                'href' => route('club.reports.show', $r['key']),
+                'export' => $exports ? route('club.reports.export', $r['key']) : null,
+                'scope' => $r['mode'] === 'snapshot' ? 'الوضع الحالي' : ($r['preset'] === 'year' ? 'هذه السنة' : 'هذا الشهر'),
+            ],
+            array_filter(self::all(), fn (array $r) => $this->allowsEntry($user, $r)),
         ));
+    }
+
+    public function allows(User $user, string $key): bool
+    {
+        $entry = $this->find($key);
+
+        return $entry !== null && $this->allowsEntry($user, $entry);
+    }
+
+    public function canExport(User $user, string $key): bool
+    {
+        return $this->allows($user, $key) && $user->can('reports.export');
+    }
+
+    public function report(string $key): Report
+    {
+        return app($this->find($key)['class']);
     }
 
     /** The branch comparison is offered to a club with more than one branch. */
@@ -115,14 +159,16 @@ final class ReportCatalog
         return Branch::count() > 1;
     }
 
-    /** May this user open the period report $key here? */
-    public function allows(User $user, string $key): bool
+    private function allowsEntry(User $user, array $r): bool
     {
-        return isset(self::DETAIL[$key]) && $user->can(self::DETAIL[$key]) && ($key !== 'branches' || $this->multiBranch());
-    }
+        if (isset($r['module']) && ! PermissionRegistry::moduleEnabled($r['module'])) {
+            return false;
+        }
+        if (! collect(['reports.view', ...self::PERMISSIONS[$r['key']]])->every(fn (string $p) => $user->can($p))) {
+            return false;
+        }
 
-    public function title(string $key): string
-    {
-        return collect(self::all())->firstWhere('key', $key)['title'] ?? 'التقارير';
+        // The branches side by side: for those who see every branch, in a club that has more than one.
+        return $r['key'] !== 'branches' || ($user->branch_id === null && $this->multiBranch());
     }
 }

@@ -287,10 +287,12 @@ class SalesTest extends TestCase
             $this->actingAs($owner)->post(route('club.pos.checkout'), ['items' => [['product_id' => $bar->id, 'quantity' => $qty]], 'payment_method' => 'cash']);
             $this->order($club, $bar, $qty);
         }
-        foreach (['club.sales.summary', 'club.sales.index', 'club.sales.reports', 'club.pos.index', 'club.products.index', 'club.sales.orders.index', 'club.settings.sales'] as $name) {
-            $this->actingAs($owner)->get(route($name))->assertOk();
+        foreach (['club.sales.summary', 'club.sales.index', 'club.pos.index', 'club.products.index', 'club.sales.orders.index', 'club.settings.sales', 'club.reports.show' => 'sales'] as $name => $param) {
+            $this->actingAs($owner)->get(is_int($name) ? route($param) : route($name, $param))->assertOk();
         }
-        $this->actingAs($owner)->get(route('club.sales.reports.export'))->assertOk();
+        // The sales report lives on the reports page; its file has the sales of both sources.
+        $csv = $this->actingAs($owner)->get(route('club.reports.export', ['report' => 'sales', 'format' => 'csv']))->assertOk()->streamedContent();
+        $this->assertStringContainsString('الموقع الإلكتروني', $csv);
         $sale = $this->asTenant($club, fn () => Sale::firstOrFail());
         $this->actingAs($owner)->get(route('club.sales.receipt', $sale))->assertOk();
     }

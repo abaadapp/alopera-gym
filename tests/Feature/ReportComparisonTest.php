@@ -20,7 +20,7 @@ class ReportComparisonTest extends TestCase
             ->get(route('club.reports.show', ['report' => 'members', 'from' => '2026-10-01', 'to' => '2026-10-28'] + $query))
             ->assertOk()
             ->assertInertia(function (AssertableInertia $page) use (&$range) {
-                $range = [$page->toArray()['props']['filters']['compare'], $page->toArray()['props']['report']['range']['previous_from'], $page->toArray()['props']['report']['range']['previous_to']];
+                $range = [$page->toArray()['props']['filters']['compare'], $page->toArray()['props']['data']['report']['range']['previous_from'], $page->toArray()['props']['data']['report']['range']['previous_to']];
             });
 
         return $range;

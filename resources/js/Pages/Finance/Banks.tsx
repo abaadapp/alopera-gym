@@ -3,7 +3,7 @@ import { Link, useForm } from '@inertiajs/react';
 import { ArrowLeftRight, Banknote, CreditCard, Landmark, Pencil, Plus, Scale, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Select, StatCard, SummaryCard, Toggle } from '@/Components/ui';
-import { useCurrency } from '@/hooks/useShared';
+import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, money } from '@/lib/format';
 import { kindIcon } from './Summary';
@@ -20,6 +20,8 @@ interface Props {
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function FinanceBanks({ accounts, totals, kinds, canManage }: Props) {
+    // An account's movement is a report (the reports page), for those who may open reports.
+    const reports = useCan()('reports.view');
     const currency = useCurrency();
     const m = (v: string) => money(v, currency);
     const [editing, setEditing] = useState<Account | 'new' | null>(null);
@@ -60,7 +62,7 @@ export default function FinanceBanks({ accounts, totals, kinds, canManage }: Pro
                                 hint={(a.bank_name || a.masked) ? <>{a.bank_name} <span dir="ltr" className="font-mono">{a.masked}</span></> : undefined}
                                 action={
                                     <div className="flex w-full flex-wrap gap-2 border-t border-line pt-3">
-                                        <Button size="sm" variant="ghost" href={route('club.finance.movement', { account_id: a.id })} icon={<Scale className="size-3.5" />}>الحركة</Button>
+                                        {reports && <Button size="sm" variant="ghost" href={route('club.reports.show', { report: 'movement', account_id: a.id })} icon={<Scale className="size-3.5" />}>الحركة</Button>}
                                         {canManage && (
                                             <>
                                                 <Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(a)}>تعديل</Button>
@@ -84,7 +86,7 @@ export default function FinanceBanks({ accounts, totals, kinds, canManage }: Pro
                 <div className="card"><EmptyState icon={<Landmark className="size-6" />} title="لا حسابات بعد" /></div>
             )}
             <p className="mt-3 text-[12px] text-muted">
-                أرقام الحسابات تُحفظ مشفرة وتظهر مختصرة. حساب يحمل رصيدًا لا يُوقف قبل نقل رصيده. لعرض كل حركة حساب افتح <Link href={route('club.finance.movement')} className="underline">الحركة المالية</Link>.
+                أرقام الحسابات تُحفظ مشفرة وتظهر مختصرة. حساب يحمل رصيدًا لا يُوقف قبل نقل رصيده.{reports && <> لعرض كل حركة حساب افتح <Link href={route('club.reports.show', 'movement')} className="underline">تقرير الحركة المالية</Link>.</>}
             </p>
 
             {editing && <AccountForm account={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}

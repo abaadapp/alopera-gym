@@ -51,11 +51,13 @@ class ExportsAuditSecurityTest extends TestCase
         $club = $this->club();
         $this->activeMembership($club, $this->member($club));
 
-        $this->actingAs($this->owner($club))->get(route('club.reports.export', ['report' => 'revenue', 'format' => 'xlsx']))
+        $this->actingAs($this->owner($club))->get(route('club.reports.export', ['report' => 'finance', 'format' => 'xlsx']))
             ->assertOk()->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
         $manager = $this->staff($club, 'manager');
-        $this->actingAs($manager)->get(route('club.reports.export', ['report' => 'memberships']))->assertOk();
+        $this->actingAs($manager)->get(route('club.reports.export', ['report' => 'members']))->assertOk();
+        // Money needs reports.financial: a role that may export but not see money cannot export the money report.
+        $this->actingAs($this->staff($club, 'reception'))->get(route('club.reports.export', ['report' => 'finance']))->assertForbidden();
     }
 
     public function test_sensitive_operations_are_audited_with_actor_and_are_immutable(): void
@@ -131,8 +133,8 @@ class ExportsAuditSecurityTest extends TestCase
 
         $this->actingAs($this->owner($club))->get(route('club.reports.show', ['report' => 'members', 'from' => today()->subDays(29)->toDateString(), 'to' => today()->toDateString()]))
             ->assertInertia(fn ($page) => $page->component('Reports/Show')
-                ->where('report.comparison.new_memberships.current', 2)
-                ->where('report.comparison.new_memberships.previous', 1)
-                ->where('report.comparison.new_memberships.change', 100));
+                ->where('data.report.comparison.new_memberships.current', 2)
+                ->where('data.report.comparison.new_memberships.previous', 1)
+                ->where('data.report.comparison.new_memberships.change', 100));
     }
 }

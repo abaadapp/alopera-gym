@@ -1,47 +1,37 @@
 import { useState, type ReactNode } from 'react';
-import { Link, router } from '@inertiajs/react';
-import { ArrowRight, ArrowUpCircle, BarChart3, CalendarCheck, CalendarDays, CalendarRange, CalendarX, Download, Dumbbell, FileMinus, LogIn, Percent, RefreshCw, Scale, ShoppingBag, Snowflake, Ticket, TrendingDown, Undo2, UserCheck, UserPlus, UserRound, Wallet, XCircle, type LucideIcon } from 'lucide-react';
+import { Link, router, usePage } from '@inertiajs/react';
+import { ArrowRight, Building2, CalendarRange, Info } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { BarTrend, Badge, Button, Card, CardHeader, Delta, EmptyState, HBars, Input, PageHeader, StatCard, StatGrid } from '@/Components/ui';
-import { useCan, useCurrency, useShared } from '@/hooks/useShared';
+import ExportMenu from '@/Components/Reports/ExportMenu';
+import { DuesBody, FinanceBody, MovementBody, StatementsBody, type Dues, type Movement, type PeriodReport, type Statements } from '@/Components/Reports/Finance';
+import { CheckinsBody, ClassesBody, ExpiringBody, MembersBody, StaffBody, TrainersBody, type Checkins, type Expiring, type StaffAttendance, type Trainers } from '@/Components/Reports/People';
+import { PayoutsBody, PayrollBody, type Payouts, type Payroll } from '@/Components/Reports/Payroll';
+import { DocumentsBody, RenewalsBody, type Documents, type Renewals } from '@/Components/Reports/Documents';
+import { BranchesBody, SalesBody, type Branches, type Sales } from '@/Components/Reports/Sales';
+import { Button, Card, Checkbox, Input, Notice, PageHeader, Select } from '@/Components/ui';
 import { cn } from '@/lib/cn';
-import { date, money, number } from '@/lib/format';
-import { invoiceType, paymentMethod } from '@/lib/labels';
+import { date } from '@/lib/format';
 
-type Metric = { current: number | string; previous: number | string; change: number | null };
-type ReportKey = 'finance' | 'members' | 'classes' | 'trainers' | 'branches';
-
-interface Report {
-    range: { from: string; to: string; previous_from: string; previous_to: string };
-    comparison: Record<string, Metric>;
-    plans: { plan: string; sold: number; renewals: number; revenue: number | null }[];
-    programs: { program: string; color: string | null; sessions: number; bookings: number; attended: number; no_show: number; attendance_rate: number; avg_per_session: number }[];
-    revenue_by_method: { key: string; amount: number }[];
-    revenue_by_type: { key: string; amount: number }[];
-    expenses_by_category: { key: string; amount: number }[];
-    products: { product: string; quantity: number; revenue: number; profit: number }[];
-    trend: { date: string; amount: number }[];
-}
-
-interface TrainerRow { id: number; trainer: string; sessions: number; bookings: number; attended: number; no_show: number; attendance_rate: number; pt_completed: number }
-interface BranchRow { id: number; name: string; is_main: boolean; is_active: boolean; active_members: number; comparison: Record<string, Metric> }
+type Data = Record<string, unknown> & { empty: boolean };
 
 interface Props {
     /** Which report (not `key`: React keeps that name for itself). */
-    kind: ReportKey;
+    kind: string;
     title: string;
-    report: Report;
-    trainers: { rows: TrainerRow[]; comparison: Record<string, Metric> } | null;
-    branches: BranchRow[] | null;
-    filters: { from: string; to: string; preset: string; compare: string; compare_from: string; compare_to: string };
+    /** «period»: dates and a comparison; «snapshot»: how things stand today. */
+    mode: 'period' | 'snapshot';
+    compare: boolean;
+    filters: { from: string; to: string; preset: string; compare: string; compare_from: string; compare_to: string; previous_from: string; previous_to: string; branch: number | null };
+    branchFilter: { choices: { id: number; name: string }[]; name: string } | null;
     canFinancial: boolean;
     canExport: boolean;
+    data: Data;
 }
 
 const presets = [
     { key: 'today', label: 'اليوم' },
     { key: 'week', label: 'هذا الأسبوع' },
-    { key: '', label: 'هذا الشهر' },
+    { key: 'month', label: 'هذا الشهر' },
     { key: 'last_month', label: 'الشهر الماضي' },
     { key: 'quarter', label: 'هذا الربع' },
     { key: 'year', label: 'هذه السنة' },
@@ -54,368 +44,193 @@ const compareModes = [
     { key: 'custom', label: 'فترة مخصصة' },
 ];
 
-/** Each figure's icon and colour, as on every stat tile. */
-const KPI_ICONS: Record<string, [LucideIcon, 'brand' | 'green' | 'amber' | 'red' | 'gray' | 'blue' | 'violet']> = {
-    revenue: [Wallet, 'green'], expenses: [TrendingDown, 'red'], net: [Scale, 'brand'], collection_rate: [Percent, 'blue'], refunds: [Undo2, 'amber'],
-    credit_notes: [FileMinus, 'gray'], product_sales: [ShoppingBag, 'violet'],
-    new_memberships: [Ticket, 'brand'], renewals: [RefreshCw, 'green'], upgrades: [ArrowUpCircle, 'blue'], new_members: [UserPlus, 'violet'],
-    cancellations: [XCircle, 'red'], freezes: [Snowflake, 'blue'], expirations: [CalendarX, 'gray'], checkins: [LogIn, 'blue'],
-    sessions: [CalendarDays, 'brand'], bookings: [CalendarCheck, 'blue'], attendance_rate: [UserCheck, 'green'], occupancy_rate: [Percent, 'amber'],
-    trainers: [Dumbbell, 'brand'], pt_completed: [UserRound, 'violet'],
-};
-
-/** Metrics where a lower number is the good direction. */
-const lowerIsBetter = new Set(['cancellations', 'freezes', 'expirations', 'expenses', 'refunds', 'credit_notes']);
+function Chip({ on, onClick, children, small }: { on: boolean; onClick: () => void; children: ReactNode; small?: boolean }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            aria-pressed={on}
+            className={cn('rounded-full font-medium transition-colors', small ? 'h-8 px-3 text-[12px]' : 'h-9 px-4 text-[13px]', on ? 'bg-[#111] text-white' : 'border border-line bg-white text-[#6b7280] hover:border-[#d4d4d4] hover:text-[#111]')}
+        >
+            {children}
+        </button>
+    );
+}
 
 /**
- * One report of the reports page: its period and comparison, its figures against the earlier period, its charts and
- * tables, and its exports. The period and the comparison are in the address, so a report can be shared as a link.
+ * One report of the reports page: its filters — the period and the comparison (or, for a report of today's state,
+ * its own choices), the branch, the report's own filters — then its figures, charts and tables, and its export
+ * for exactly what is on screen. Everything is in the address, so a report can be shared as a link.
  */
-export default function ReportShow(props: Props) {
-    const { kind: key, title, report, filters, canFinancial, canExport } = props;
-    const currency = useCurrency();
-    const can = useCan();
-    const sales = useShared().modules.sales;
+export default function ReportShow({ kind, title, mode, compare, filters, branchFilter, canFinancial, canExport, data }: Props) {
+    const { url } = usePage();
+    const query = Object.fromEntries(new URLSearchParams(url.split('?')[1] ?? '')) as Record<string, string>;
     const [from, setFrom] = useState(filters.from);
     const [to, setTo] = useState(filters.to);
     const [compareFrom, setCompareFrom] = useState(filters.compare_from);
     const [compareTo, setCompareTo] = useState(filters.compare_to);
     const [customCompare, setCustomCompare] = useState(filters.compare === 'custom');
-    const m = (k: string) => report.comparison[k] ?? { current: 0, previous: 0, change: null };
 
-    // Changing the period keeps the comparison choice, and changing the comparison keeps the period.
-    const compareParams = (): Record<string, string> =>
-        filters.compare === 'custom' ? { compare: 'custom', compare_from: filters.compare_from, compare_to: filters.compare_to }
-            : filters.compare !== 'previous' ? { compare: filters.compare } : {};
-    const periodParams = (): Record<string, string> => (filters.preset ? { preset: filters.preset } : { from: filters.from, to: filters.to });
-    const go = (params: Record<string, string>, keep: 'compare' | 'period' = 'compare') =>
-        router.get(route('club.reports.show', { report: key }), { ...(keep === 'compare' ? compareParams() : periodParams()), ...params }, { preserveState: true, preserveScroll: true });
-    const activePreset = filters.preset || (isThisMonth(filters.from, filters.to) ? '' : 'custom');
+    // A filter changed: the others kept, back to the first page of any list.
+    const go = (patch: Record<string, string | null>) => {
+        const next: Record<string, string> = { ...query };
+        delete next.page;
+        Object.entries(patch).forEach(([k, v]) => (v === null || v === '' ? delete next[k] : (next[k] = v)));
+        router.get(route('club.reports.show', kind), next, { preserveState: true, preserveScroll: true });
+    };
+    const exportParams = Object.fromEntries(Object.entries(query).filter(([k]) => k !== 'page'));
+    const option = (k: string) => (data.options as Record<string, unknown> | undefined)?.[k];
 
-    const exportLink = (name: string, format: 'csv' | 'xlsx') => route('club.reports.export', { report: name, from: filters.from, to: filters.to, format, ...compareParams() });
-    const exports: [string, string][] = !canExport ? [] : {
-        finance: [['revenue', 'الإيرادات'], ['expenses', 'المصروفات'], ...(sales ? [['sales', 'المبيعات'] as [string, string]] : [])],
-        members: [['memberships', 'العضويات'], ...(can('members.export') ? [['members', 'الأعضاء'] as [string, string]] : [])],
-        classes: [['classes', 'الحصص']],
-        trainers: [['trainers', 'المدربون']],
-        branches: [['branches', 'الفروع']],
-    }[key] as [string, string][];
-
-    const fmtMoney = (v: number | string) => money(v, currency);
-    const fmtPct = (v: number | string) => `${number(v, 1)}%`;
-    const fmtNum = (v: number | string) => number(v);
+    const subtitle = mode === 'snapshot'
+        ? `الوضع اليوم، ${date(new Date().toISOString().slice(0, 10))}`
+        : kind === 'statements' && (data as unknown as Statements).view === 'trial'
+            ? `الأرصدة حتى ${date(filters.to)}`
+            : `من ${date(filters.from)} إلى ${date(filters.to)}${compare ? ` · مقارنة بـ ${date(filters.previous_from)} – ${date(filters.previous_to)}` : ''}`;
 
     return (
         <ClubLayout title={title}>
             <PageHeader
                 back={<Link href={route('club.reports.index')} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-ink"><ArrowRight className="size-4" /> التقارير</Link>}
                 title={title}
-                subtitle={<>من {date(report.range.from)} إلى {date(report.range.to)} · مقارنة بـ {date(report.range.previous_from)} – {date(report.range.previous_to)}</>}
-                actions={exports.length > 0 && <Exports exports={exports} link={exportLink} />}
+                subtitle={<>{subtitle}{branchFilter && <> · {branchFilter.name}</>}</>}
+                actions={<ExportMenu href={canExport ? route('club.reports.export', kind) : null} params={exportParams} title={title} size="md" />}
             />
 
             <Card className="mb-6">
-                <div className="flex flex-wrap items-end justify-between gap-4">
-                    <div className="flex flex-wrap gap-2" role="group" aria-label="الفترة">
-                        {presets.map((p) => (
-                            <button
-                                key={p.key || 'month'}
-                                type="button"
-                                onClick={() => go(p.key ? { preset: p.key } : {})}
-                                aria-pressed={activePreset === p.key}
-                                className={cn('h-9 rounded-full px-4 text-[13px] font-medium transition-colors', activePreset === p.key ? 'bg-[#111] text-white' : 'border border-line bg-white text-[#6b7280] hover:border-[#d4d4d4] hover:text-[#111]')}
-                            >
-                                {p.label}
-                            </button>
-                        ))}
-                    </div>
-                    <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); go({ from, to }); }}>
-                        <CalendarRange className="size-4 text-muted" />
-                        <Input type="date" className="w-40" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="من" />
-                        <span className="text-muted">—</span>
-                        <Input type="date" className="w-40" value={to} onChange={(e) => setTo(e.target.value)} aria-label="إلى" />
-                        <Button type="submit" variant="secondary">عرض</Button>
-                    </form>
-                </div>
-                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
-                    <span className="text-[13px] text-muted">قارن مع:</span>
-                    {compareModes.map((mode) => {
-                        const on = customCompare ? mode.key === 'custom' : filters.compare === mode.key;
-                        return (
-                            <button
-                                key={mode.key}
-                                type="button"
-                                aria-pressed={on}
-                                onClick={() => (mode.key === 'custom' ? setCustomCompare(true) : (setCustomCompare(false), go(mode.key === 'previous' ? {} : { compare: mode.key }, 'period')))}
-                                className={cn('h-8 rounded-full px-3 text-[12px] font-medium transition-colors', on ? 'bg-[#111] text-white' : 'border border-line bg-white text-[#6b7280] hover:border-[#d4d4d4] hover:text-[#111]')}
-                            >
-                                {mode.label}
-                            </button>
-                        );
-                    })}
-                    {customCompare && (
-                        <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); go({ compare: 'custom', compare_from: compareFrom, compare_to: compareTo }, 'period'); }}>
-                            <Input type="date" className="w-40" value={compareFrom} onChange={(e) => setCompareFrom(e.target.value)} aria-label="مقارنة من" />
+                {mode === 'period' && (
+                    <div className="flex flex-wrap items-end justify-between gap-4">
+                        <div className="flex flex-wrap gap-2" role="group" aria-label="الفترة">
+                            {presets.map((p) => <Chip key={p.key} on={filters.preset === p.key} onClick={() => go({ preset: p.key, from: null, to: null })}>{p.label}</Chip>)}
+                        </div>
+                        <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); go({ preset: null, from, to }); }}>
+                            <CalendarRange className="size-4 text-muted" />
+                            <Input type="date" className="w-40" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="من" />
                             <span className="text-muted">—</span>
-                            <Input type="date" className="w-40" value={compareTo} onChange={(e) => setCompareTo(e.target.value)} aria-label="مقارنة إلى" />
-                            <Button type="submit" variant="secondary" size="sm">قارن</Button>
+                            <Input type="date" className="w-40" value={to} onChange={(e) => setTo(e.target.value)} aria-label="إلى" />
+                            <Button type="submit" variant="secondary">عرض</Button>
                         </form>
-                    )}
-                </div>
-            </Card>
+                    </div>
+                )}
 
-            {key === 'finance' && canFinancial && (
-                <>
-                    <StatGrid>
-                        <Kpi label="صافي التحصيل" metric={m('revenue')} format={fmtMoney} metricKey="revenue" />
-                        <Kpi label="المصروفات" metric={m('expenses')} format={fmtMoney} metricKey="expenses" />
-                        <Kpi label="صافي الربح التشغيلي" metric={m('net')} format={fmtMoney} metricKey="net" />
-                        <Kpi label="نسبة التحصيل" metric={m('collection_rate')} format={fmtPct} metricKey="collection_rate" hint={`من فواتير بقيمة ${fmtMoney(m('invoiced').current)}`} />
-                        <Kpi label="المردودات" metric={m('refunds')} format={fmtMoney} metricKey="refunds" />
-                        <Kpi label="الإشعارات الدائنة" metric={m('credit_notes')} format={fmtMoney} metricKey="credit_notes" />
-                        {sales && <Kpi label="مبيعات المنتجات" metric={m('product_sales')} format={fmtMoney} metricKey="product_sales" />}
-                    </StatGrid>
-                    <div className="mt-4 grid gap-4 lg:grid-cols-3">
-                        <Card className="lg:col-span-2">
-                            <CardHeader title="التحصيل اليومي" />
-                            {report.trend.length > 0 ? <BarTrend data={report.trend.map((d) => ({ label: d.date.slice(5), value: d.amount }))} valueLabel={fmtMoney} /> : <EmptyState title="لا بيانات" />}
-                        </Card>
-                        <Card>
-                            <CardHeader title="حسب طريقة الدفع" />
-                            {report.revenue_by_method.length ? <HBars data={report.revenue_by_method.map((r) => ({ label: paymentMethod[r.key] ?? r.key, value: r.amount }))} format={fmtMoney} /> : <EmptyState title="لا دفعات" />}
-                        </Card>
-                        <Card>
-                            <CardHeader title="حسب نوع الإيراد" />
-                            {report.revenue_by_type.length ? <HBars data={report.revenue_by_type.map((r) => ({ label: invoiceType[r.key] ?? r.key, value: r.amount }))} format={fmtMoney} /> : <EmptyState title="لا دفعات" />}
-                        </Card>
-                        <Card className={cn(!sales && 'lg:col-span-2')}>
-                            <CardHeader title="المصروفات حسب التصنيف" />
-                            {report.expenses_by_category.length ? <HBars data={report.expenses_by_category.map((r) => ({ label: r.key, value: r.amount, color: '#dc2626' }))} format={fmtMoney} /> : <EmptyState title="لا مصروفات" />}
-                        </Card>
-                        {sales && (
-                            <TableCard title="المنتجات الأكثر مبيعًا" empty="لا مبيعات" head={['المنتج', 'الكمية', 'الإيراد', 'الربح']}>
-                                {report.products.map((p) => (
-                                    <tr key={p.product}>
-                                        <td className="font-medium">{p.product}</td>
-                                        <td className="num">{number(p.quantity, 3)}</td>
-                                        <td className="num">{fmtMoney(p.revenue)}</td>
-                                        <td className={cn('num', p.profit < 0 && 'text-red-600')}>{fmtMoney(p.profit)}</td>
-                                    </tr>
-                                ))}
-                            </TableCard>
+                <ReportFilters kind={kind} data={data} option={option} go={go} branch={branchFilter && (
+                    branchFilter.choices.length > 0 ? (
+                        <label className="flex items-center gap-2 text-[13px] text-muted">
+                            <Building2 className="size-4" />
+                            <span className="sr-only">الفرع</span>
+                            <Select className="h-9 w-48 py-1 text-[13px]" value={filters.branch ?? 'all'} onChange={(e) => go({ branch: e.target.value })} aria-label="الفرع">
+                                <option value="all">كل الفروع</option>
+                                {branchFilter.choices.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                            </Select>
+                        </label>
+                    ) : (
+                        <span className="flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[13px] text-muted"><Building2 className="size-4" /> {branchFilter.name}</span>
+                    )
+                )} first={mode === 'snapshot'} />
+
+                {mode === 'period' && compare && (
+                    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
+                        <span className="text-[13px] text-muted">قارن مع:</span>
+                        {compareModes.map((m) => (
+                            <Chip key={m.key} small on={customCompare ? m.key === 'custom' : filters.compare === m.key}
+                                onClick={() => (m.key === 'custom' ? setCustomCompare(true) : (setCustomCompare(false), go({ compare: m.key === 'previous' ? null : m.key, compare_from: null, compare_to: null })))}>
+                                {m.label}
+                            </Chip>
+                        ))}
+                        {customCompare && (
+                            <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); go({ compare: 'custom', compare_from: compareFrom, compare_to: compareTo }); }}>
+                                <Input type="date" className="w-40" value={compareFrom} onChange={(e) => setCompareFrom(e.target.value)} aria-label="مقارنة من" />
+                                <span className="text-muted">—</span>
+                                <Input type="date" className="w-40" value={compareTo} onChange={(e) => setCompareTo(e.target.value)} aria-label="مقارنة إلى" />
+                                <Button type="submit" variant="secondary" size="sm">قارن</Button>
+                            </form>
                         )}
                     </div>
-                </>
+                )}
+            </Card>
+
+            {data.empty && (
+                <Notice tone="gray" icon={<Info />} className="mb-4">
+                    لا توجد بيانات لهذه الفترة والفلاتر. {canExport && 'التصدير يعطي ملفًا صحيحًا برؤوس الأعمدة فقط.'}
+                </Notice>
             )}
 
-            {key === 'members' && (
-                <>
-                    <StatGrid>
-                        <Kpi label="اشتراكات جديدة" metric={m('new_memberships')} format={fmtNum} metricKey="new_memberships" />
-                        <Kpi label="تجديدات" metric={m('renewals')} format={fmtNum} metricKey="renewals" />
-                        <Kpi label="تغيير/ترقية باقة" metric={m('upgrades')} format={fmtNum} metricKey="upgrades" />
-                        <Kpi label="أعضاء جدد" metric={m('new_members')} format={fmtNum} metricKey="new_members" />
-                        <Kpi label="إلغاءات" metric={m('cancellations')} format={fmtNum} metricKey="cancellations" />
-                        <Kpi label="تجميدات" metric={m('freezes')} format={fmtNum} metricKey="freezes" />
-                        <Kpi label="عضويات انتهت" metric={m('expirations')} format={fmtNum} metricKey="expirations" />
-                        <Kpi label="مرات الدخول" metric={m('checkins')} format={fmtNum} metricKey="checkins" />
-                    </StatGrid>
-                    <div className="mt-4 grid gap-4 lg:grid-cols-3">
-                        <TableCard className="lg:col-span-2" title="الباقات المباعة" subtitle="العضويات المفعّلة خلال الفترة" empty="لم تُفعّل عضويات في هذه الفترة" head={['الباقة', 'المباع', 'منها تجديد', ...(canFinancial ? ['القيمة'] : [])]}>
-                            {report.plans.map((p) => (
-                                <tr key={p.plan}>
-                                    <td className="font-medium">{p.plan}</td>
-                                    <td className="num">{number(p.sold)}</td>
-                                    <td className="num">{number(p.renewals)}</td>
-                                    {canFinancial && <td className="num">{p.revenue !== null ? fmtMoney(p.revenue) : '—'}</td>}
-                                </tr>
-                            ))}
-                        </TableCard>
-                        <Card>
-                            <CardHeader title="الباقات حسب المباع" />
-                            {report.plans.length ? <HBars data={report.plans.map((p) => ({ label: p.plan, value: p.sold }))} /> : <EmptyState title="لا بيانات" />}
-                        </Card>
-                    </div>
-                </>
-            )}
-
-            {key === 'classes' && (
-                <>
-                    <StatGrid>
-                        <Kpi label="الحصص" metric={m('sessions')} format={fmtNum} metricKey="sessions" />
-                        <Kpi label="الحجوزات" metric={m('bookings')} format={fmtNum} metricKey="bookings" />
-                        <Kpi label="نسبة الحضور" metric={m('attendance_rate')} format={fmtPct} metricKey="attendance_rate" hint="الحاضرون من الحضور + الغياب" />
-                        <Kpi label="نسبة الإشغال" metric={m('occupancy_rate')} format={fmtPct} metricKey="occupancy_rate" hint="الحجوزات من السعة المتاحة" />
-                    </StatGrid>
-                    <div className="mt-4 grid gap-4 lg:grid-cols-3">
-                        <TableCard className="lg:col-span-2" title="البرامج الأكثر طلبًا" empty="لا حصص في هذه الفترة" head={['البرنامج', 'الحصص', 'الحجوزات', 'متوسط/حصة', 'حضر', 'غاب', 'نسبة الحضور']}>
-                            {report.programs.map((p, i) => (
-                                <tr key={p.program}>
-                                    <td>
-                                        <span className="flex items-center gap-2 font-medium">
-                                            <span className="num text-xs text-muted">{i + 1}</span>
-                                            <span className="size-2.5 rounded-full" style={{ background: p.color ?? '#9ca3af' }} />
-                                            {p.program}
-                                        </span>
-                                    </td>
-                                    <td className="num">{p.sessions}</td>
-                                    <td className="num font-medium">{p.bookings}</td>
-                                    <td className="num">{number(p.avg_per_session, 1)}</td>
-                                    <td className="num text-emerald-700">{p.attended}</td>
-                                    <td className="num text-red-600">{p.no_show}</td>
-                                    <td><Rate value={p.attendance_rate} /></td>
-                                </tr>
-                            ))}
-                        </TableCard>
-                        <Card>
-                            <CardHeader title="الحجوزات حسب البرنامج" />
-                            {report.programs.length ? <HBars data={report.programs.map((p) => ({ label: p.program, value: p.bookings, color: p.color ?? undefined }))} /> : <EmptyState title="لا بيانات" />}
-                        </Card>
-                    </div>
-                </>
-            )}
-
-            {key === 'trainers' && props.trainers && (
-                <>
-                    <StatGrid>
-                        <Kpi label="مدربون لهم نشاط" metric={props.trainers.comparison.trainers} format={fmtNum} metricKey="trainers" />
-                        <Kpi label="الحصص" metric={props.trainers.comparison.sessions} format={fmtNum} metricKey="sessions" />
-                        <Kpi label="نسبة الحضور" metric={props.trainers.comparison.attendance_rate} format={fmtPct} metricKey="attendance_rate" hint={`الحجوزات: ${number(props.trainers.comparison.bookings.current)}`} />
-                        <Kpi label="جلسات تدريب شخصي منجزة" metric={props.trainers.comparison.pt_completed} format={fmtNum} metricKey="pt_completed" />
-                    </StatGrid>
-                    <div className="mt-4 grid gap-4 lg:grid-cols-3">
-                        <TableCard className="lg:col-span-2" title="المدربون" subtitle="الحصص الجماعية والتدريب الشخصي في الفترة" empty="لا نشاط للمدربين في هذه الفترة" head={['المدرب', 'الحصص', 'الحجوزات', 'حضر', 'غاب', 'نسبة الحضور', 'تدريب شخصي']}>
-                            {props.trainers.rows.map((t) => (
-                                <tr key={t.id}>
-                                    <td className="font-medium">{t.trainer}</td>
-                                    <td className="num">{t.sessions}</td>
-                                    <td className="num font-medium">{t.bookings}</td>
-                                    <td className="num text-emerald-700">{t.attended}</td>
-                                    <td className="num text-red-600">{t.no_show}</td>
-                                    <td><Rate value={t.attendance_rate} /></td>
-                                    <td className="num">{t.pt_completed}</td>
-                                </tr>
-                            ))}
-                        </TableCard>
-                        <Card>
-                            <CardHeader title="الحجوزات حسب المدرب" />
-                            {props.trainers.rows.some((t) => t.bookings > 0) ? <HBars data={props.trainers.rows.filter((t) => t.bookings > 0).map((t) => ({ label: t.trainer, value: t.bookings }))} /> : <EmptyState title="لا حجوزات" />}
-                        </Card>
-                    </div>
-                </>
-            )}
-
-            {key === 'branches' && props.branches && <Branches rows={props.branches} canFinancial={canFinancial} fmtMoney={fmtMoney} />}
+            <Body kind={kind} data={data} canFinancial={canFinancial} to={filters.to} />
         </ClubLayout>
     );
 }
 
-/** Each branch side by side: its figures, each with its change against the earlier period. */
-function Branches({ rows, canFinancial, fmtMoney }: { rows: BranchRow[]; canFinancial: boolean; fmtMoney: (v: number | string) => string }) {
-    const metrics: { key: string; label: string; money?: boolean }[] = [
-        { key: 'new_members', label: 'أعضاء جدد' },
-        { key: 'memberships_sold', label: 'عضويات مفعّلة' },
-        { key: 'checkins', label: 'مرات الدخول' },
-        { key: 'sessions', label: 'الحصص' },
-        ...(canFinancial ? [{ key: 'revenue', label: 'صافي التحصيل', money: true }, { key: 'expenses', label: 'المصروفات', money: true }] : []),
-    ];
-    const chartKey = canFinancial ? 'revenue' : 'checkins';
-    const fmt = (metric: { money?: boolean }, v: number | string) => (metric.money ? fmtMoney(v) : number(v));
+/** The report's own filters, with the branch, in one row of the filter card. */
+function ReportFilters({ kind, data, option, go, branch, first }: { kind: string; data: Data; option: (k: string) => unknown; go: (p: Record<string, string | null>) => void; branch: ReactNode; first: boolean }) {
+    let own: ReactNode = null;
+    if (kind === 'statements') {
+        const view = (data as unknown as Statements).view;
+        own = (['income', 'trial'] as const).map((v) => <Chip key={v} small on={view === v} onClick={() => go({ view: v === 'income' ? null : v })}>{v === 'income' ? 'قائمة الدخل' : 'ميزان المراجعة'}</Chip>);
+    } else if (kind === 'movement') {
+        const d = data as unknown as Movement;
+        own = (
+            <>
+                <Select className="h-9 w-56 py-1 text-[13px]" value={d.options.account_id ?? ''} onChange={(e) => go({ account_id: e.target.value || null })} aria-label="الحساب">
+                    <option value="">كل الحسابات</option>
+                    {d.accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </Select>
+                {[['', 'الكل'], ['in', 'داخل'], ['out', 'خارج']].map(([k, t]) => <Chip key={k} small on={(d.options.direction ?? '') === k} onClick={() => go({ direction: k || null })}>{t}</Chip>)}
+            </>
+        );
+    } else if (kind === 'dues') {
+        own = <Checkbox label="المتأخرة فقط" checked={Boolean(option('overdue'))} onChange={(e) => go({ overdue: e.target.checked ? '1' : null })} />;
+    } else if (kind === 'expiring') {
+        own = (
+            <>
+                <span className="text-[13px] text-muted">تنتهي خلال:</span>
+                {['7', '14', '30', '60'].map((d) => <Chip key={d} small on={String(option('days')) === d} onClick={() => go({ days: d === '7' ? null : d })}>{d} يومًا</Chip>)}
+            </>
+        );
+    } else if (kind === 'checkins') {
+        own = [['', 'كل النتائج'], ['allowed', 'مسموح'], ['denied', 'مرفوض'], ['duplicate', 'مكرر']].map(([k, t]) => <Chip key={k} small on={(option('result') ?? '') === k} onClick={() => go({ result: k || null })}>{t}</Chip>);
+    } else if (kind === 'staff-attendance') {
+        const d = data as unknown as StaffAttendance;
+        own = (
+            <Select className="h-9 w-56 py-1 text-[13px]" value={d.options.user_id ?? ''} onChange={(e) => go({ user_id: e.target.value || null })} aria-label="الموظف">
+                <option value="">كل الموظفين</option>
+                {d.staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </Select>
+        );
+    } else if (kind === 'documents') {
+        const d = data as unknown as Documents;
+        own = (
+            <>
+                {[['', 'كل السارية'], ['expiring', 'قريبة الانتهاء'], ['expired', 'منتهية'], ['none', 'بلا تاريخ انتهاء']].map(([k, t]) => <Chip key={k} small on={(d.options.state ?? '') === k} onClick={() => go({ state: k || null })}>{t}</Chip>)}
+                <Select className="h-9 w-48 py-1 text-[13px]" value={d.options.type ?? ''} onChange={(e) => go({ type: e.target.value || null })} aria-label="نوع المستند">
+                    <option value="">كل الأنواع</option>
+                    {d.types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </Select>
+            </>
+        );
+    }
 
-    return (
-        <div className="grid gap-4 lg:grid-cols-3">
-            <TableCard className="lg:col-span-2" title="الفروع" subtitle="السجلات التي بلا فرع تُحسب على الفرع الرئيسي" empty="لا فروع" head={['الفرع', 'العضويات النشطة الآن', ...metrics.map((x) => x.label)]}>
-                {rows.map((b) => (
-                    <tr key={b.id}>
-                        <td className="font-medium">
-                            <span className="flex flex-wrap items-center gap-1.5">
-                                {b.name}
-                                {b.is_main && <Badge>الرئيسي</Badge>}
-                                {!b.is_active && <Badge tone="amber">موقوف</Badge>}
-                            </span>
-                        </td>
-                        <td className="num">{number(b.active_members)}</td>
-                        {metrics.map((x) => {
-                            const metric = b.comparison[x.key];
-                            return (
-                                <td key={x.key}>
-                                    <span className="num block">{fmt(x, metric.current)}</span>
-                                    {metric.change !== null && <Delta change={metric.change} inverted={lowerIsBetter.has(x.key)} />}
-                                </td>
-                            );
-                        })}
-                    </tr>
-                ))}
-            </TableCard>
-            <Card>
-                <CardHeader title={canFinancial ? 'صافي التحصيل حسب الفرع' : 'مرات الدخول حسب الفرع'} />
-                {rows.some((b) => Number(b.comparison[chartKey].current) > 0)
-                    ? <HBars data={rows.map((b) => ({ label: b.name, value: Number(b.comparison[chartKey].current) }))} format={canFinancial ? fmtMoney : undefined} />
-                    : <EmptyState title="لا بيانات" />}
-            </Card>
-        </div>
-    );
+    if (!own && !branch) return null;
+    return <div className={cn('flex flex-wrap items-center gap-2', !first && 'mt-4 border-t border-line pt-4')}>{branch}{branch && own && <span className="mx-1 hidden h-5 w-px bg-line sm:block" />}{own}</div>;
 }
 
-function TableCard({ title, subtitle, head, empty, className, children }: { title: string; subtitle?: string; head: string[]; empty: string; className?: string; children: ReactNode[] }) {
-    return (
-        <Card padded={false} className={className}>
-            <div className="p-5 pb-2"><CardHeader title={title} subtitle={subtitle} className="mb-0" /></div>
-            {children.length ? (
-                <div className="overflow-x-auto">
-                    <table className="table-base">
-                        <thead><tr>{head.map((h) => <th key={h}>{h}</th>)}</tr></thead>
-                        <tbody>{children}</tbody>
-                    </table>
-                </div>
-            ) : (
-                <EmptyState title={empty} />
-            )}
-        </Card>
-    );
-}
-
-function Rate({ value }: { value: number }) {
-    return (
-        <div className="flex items-center gap-2">
-            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[#f2f2f0]"><div className="h-full rounded-full bg-[#111]" style={{ width: `${Math.min(100, value)}%` }} /></div>
-            <span className="num text-xs">{number(value, 1)}%</span>
-        </div>
-    );
-}
-
-function Exports({ exports, link }: { exports: [string, string][]; link: (r: string, f: 'csv' | 'xlsx') => string }) {
-    return (
-        <div className="flex flex-wrap gap-1.5">
-            {exports.map(([name, text]) => (
-                <span key={name} className="inline-flex h-9 items-center overflow-hidden rounded-[10px] border border-line bg-white text-[12px]">
-                    <span className="flex items-center gap-1 px-2.5 text-muted"><Download className="size-3.5" />{text}</span>
-                    <a href={link(name, 'xlsx')} className="flex h-full items-center border-s border-line px-2.5 text-[#111] hover:bg-[#fafafa]">Excel</a>
-                    <a href={link(name, 'csv')} className="flex h-full items-center border-s border-line px-2.5 text-[#111] hover:bg-[#fafafa]">CSV</a>
-                </span>
-            ))}
-        </div>
-    );
-}
-
-function isThisMonth(from: string, to: string): boolean {
-    const now = new Date();
-    const first = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const today = `${first.slice(0, 8)}${String(now.getDate()).padStart(2, '0')}`;
-    return from === first && to === today;
-}
-
-function Kpi({ label, metric, format, metricKey, hint }: { label: string; metric: Metric; format: (v: number | string) => string; metricKey: string; hint?: string }) {
-    const comparison = `المقارنة: ${format(metric.previous)}`;
-    const [Icon, tone] = KPI_ICONS[metricKey] ?? [BarChart3, 'gray'];
-    return (
-        <StatCard
-            icon={<Icon />}
-            tone={tone}
-            label={label}
-            value={format(metric.current)}
-            trend={metric.change === null || metric.change === undefined ? null : { change: metric.change, label: comparison, inverted: lowerIsBetter.has(metricKey) }}
-            hint={[metric.change === null || metric.change === undefined ? comparison : null, hint].filter(Boolean).join(' · ') || undefined}
-        />
-    );
+function Body({ kind, data, canFinancial, to }: { kind: string; data: Data; canFinancial: boolean; to: string }) {
+    const d = data as never;
+    switch (kind) {
+        case 'finance': return <FinanceBody report={(data as unknown as { report: PeriodReport }).report} />;
+        case 'statements': return <StatementsBody data={d as Statements} to={to} />;
+        case 'movement': return <MovementBody data={d as Movement} />;
+        case 'dues': return <DuesBody data={d as Dues} />;
+        case 'sales': return <SalesBody data={d as Sales} />;
+        case 'members': return <MembersBody report={(data as unknown as { report: PeriodReport }).report} canFinancial={canFinancial} />;
+        case 'expiring': return <ExpiringBody data={d as Expiring} />;
+        case 'classes': return <ClassesBody report={(data as unknown as { report: PeriodReport }).report} />;
+        case 'trainers': return <TrainersBody data={d as Trainers} />;
+        case 'checkins': return <CheckinsBody data={d as Checkins} />;
+        case 'staff-attendance': return <StaffBody data={d as StaffAttendance} />;
+        case 'payroll': return <PayrollBody data={d as Payroll} />;
+        case 'payouts': return <PayoutsBody data={d as Payouts} />;
+        case 'documents': return <DocumentsBody data={d as Documents} />;
+        case 'renewals': return <RenewalsBody data={d as Renewals} />;
+        case 'branches': return <BranchesBody data={d as Branches} canFinancial={canFinancial} />;
+        default: return null;
+    }
 }

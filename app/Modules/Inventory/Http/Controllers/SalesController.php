@@ -2,7 +2,6 @@
 
 namespace App\Modules\Inventory\Http\Controllers;
 
-use App\Core\Export\TableExporter;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -12,14 +11,15 @@ use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\Sale;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * The sales section: summary, the list of sales from both sources, reports, export and the printed receipt.
+ * The sales section: summary, the list of sales from both sources and the printed receipt (the sales report is on
+ * the reports page).
  * Counted sales are completed ones (paid and handed over); voided and cancelled ones are listed but not summed.
  */
 class SalesController extends Controller
@@ -76,44 +76,15 @@ class SalesController extends Controller
         ]);
     }
 
-    public function reports(Request $request): Response
+    /** The sales report lives on the reports page now (ReportCatalog «sales»); an old link opens it. */
+    public function reports(Request $request): RedirectResponse
     {
-        [$from, $to] = $this->period($request);
-        $done = fn () => $this->scoped($request)->where('status', Sale::COMPLETED)->whereBetween('sales.created_at', [$from, $to->endOfDay()])->toBase();
-
-        $days = $done()->selectRaw('date(created_at) as day, count(*) as n, sum(total) as total')->groupBy('day')->orderBy('day')->get()
-            ->map(fn ($r) => ['day' => (string) $r->day, 'count' => (int) $r->n, 'total' => $this->m($r->total)]);
-        $methods = $done()->select('payment_method', DB::raw('count(*) as n'), DB::raw('sum(total) as total'))->groupBy('payment_method')->get()
-            ->map(fn ($r) => ['label' => self::METHOD_LABELS[$r->payment_method] ?? $r->payment_method, 'count' => (int) $r->n, 'total' => $this->m($r->total)]);
-        $staff = $done()->leftJoin('users', 'users.id', '=', 'sales.cashier_id')
-            ->select(DB::raw("coalesce(users.name, '—') as name"), DB::raw('count(*) as n'), DB::raw('sum(sales.total) as total'))->groupBy('users.name')->orderByDesc('total')->get()
-            ->map(fn ($r) => ['name' => $r->name, 'count' => (int) $r->n, 'total' => $this->m($r->total)]);
-        $sources = $done()->select('source', DB::raw('count(*) as n'), DB::raw('sum(total) as total'))->groupBy('source')->get()
-            ->map(fn ($r) => ['label' => self::SOURCE_LABELS[$r->source] ?? $r->source, 'count' => (int) $r->n, 'total' => $this->m($r->total)]);
-        $voided = $this->scoped($request)->whereIn('status', [Sale::VOIDED, Sale::CANCELLED])->whereBetween('created_at', [$from, $to->endOfDay()])
-            ->toBase()->selectRaw('count(*) as n, coalesce(sum(total), 0) as total')->first();
-
-        return Inertia::render('Sales/Reports', [
-            'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
-            'days' => $days,
-            'products' => $this->topProducts($request, $from, $to, 50),
-            'methods' => $methods,
-            'staff' => $staff,
-            'sources' => $sources,
-            'voided' => ['count' => (int) $voided->n, 'total' => $this->m($voided->total)],
-        ]);
+        return redirect()->route('club.reports.show', ['report' => 'sales'] + $request->query());
     }
 
-    public function export(Request $request): StreamedResponse
+    public function export(Request $request): RedirectResponse
     {
-        [$from, $to] = $this->period($request);
-        $rows = $this->scoped($request)->with(['cashier:id,name', 'customer'])->whereBetween('created_at', [$from, $to->endOfDay()])->orderBy('id')->get()
-            ->map(fn (Sale $s) => [$s->number, $s->created_at->format('Y-m-d H:i'), self::SOURCE_LABELS[$s->source] ?? $s->source, $s->buyerName(),
-                self::METHOD_LABELS[$s->payment_method] ?? $s->payment_method, $s->discount, $s->total, self::STATUS_LABELS[$s->status] ?? $s->status, $s->cashier?->name]);
-
-        return TableExporter::download("sales-{$from->toDateString()}-{$to->toDateString()}",
-            ['الرقم', 'التاريخ', 'المصدر', 'العميل', 'طريقة الدفع', 'الخصم', 'الإجمالي', 'الحالة', 'الموظف'], $rows,
-            $request->query('format') === 'xlsx' ? 'xlsx' : 'csv');
+        return redirect()->route('club.reports.export', ['report' => 'sales'] + $request->query());
     }
 
     /** A sale's printable receipt: for whoever sells or follows sales. */

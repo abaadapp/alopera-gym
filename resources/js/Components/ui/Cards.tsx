@@ -12,7 +12,7 @@ import { cardActive, cardHover, statTones } from './Card';
  *   StatCard           one figure with its label, icon, comparison  16px inside, 20px bold figure
  *   SummaryCard        a money or admin total, its lines, an action 20px inside, 22px bold figure
  *   NavCard            a section to open (settings)                 52px icon, title, description, chevron
- *   ReportCard         a report to open                             44px icon at the top, description, «فتح»
+ *   ReportCard         a report to open (and export)                44px icon at the top, description, «فتح» + actions
  *   IntegrationCard    a connected service (Components/Integrations)
  *   ItemCard           one of a list: a class, a booking, a note    12px corners, 12px inside
  *   ChoiceCard         one option of a choice (a plan, a method)    12px corners, a dark edge when chosen
@@ -69,11 +69,13 @@ export function NavCard({ href, icon: Icon, title, description }: { href: string
 
 /**
  * A report to open: the title with a 44px icon tile at the top, the description filling the middle (so the feet of a
- * row line up) and «فتح» at the foot. The whole card is the link.
+ * row line up) and, at the foot, «فتح» and the card's own actions (its export). «فتح» is the link and stretches over
+ * the whole card, so a tap anywhere opens the report; the actions sit above it as separate controls — never a
+ * button inside a link — each reached with the keyboard in turn.
  */
-export function ReportCard({ href, icon: Icon, title, description }: { href: string; icon: LucideIcon; title: ReactNode; description: ReactNode }) {
+export function ReportCard({ href, icon: Icon, title, description, actions }: { href: string; icon: LucideIcon; title: string; description: ReactNode; actions?: ReactNode }) {
     return (
-        <Link href={href} className={cn('group flex h-full flex-col rounded-2xl border border-line bg-white p-5 text-start', cardHover)}>
+        <div className={cn('group relative flex h-full flex-col rounded-2xl border border-line bg-white p-5 text-start has-[a:focus-visible]:ring-4 has-[a:focus-visible]:ring-[#111]/10', cardHover)}>
             <div className="flex items-start justify-between gap-3">
                 <h3 className="text-[15px] font-semibold text-[#111]">{title}</h3>
                 <span className="grid size-11 shrink-0 place-items-center rounded-[13px] bg-[#f5f5f4] text-[#111] transition-colors group-hover:bg-[#111] group-hover:text-white">
@@ -81,11 +83,14 @@ export function ReportCard({ href, icon: Icon, title, description }: { href: str
                 </span>
             </div>
             <p className="mt-2 flex-1 text-[13px] leading-relaxed text-[#9ca3af]">{description}</p>
-            <span className="mt-4 flex items-center gap-1.5 text-[13px] font-medium text-[#111]">
-                فتح
-                <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-1" />
-            </span>
-        </Link>
+            <div className="mt-4 flex items-center justify-between gap-3">
+                <Link href={href} className="flex items-center gap-1.5 text-[13px] font-medium text-[#111] outline-none after:absolute after:inset-0 after:rounded-2xl after:content-['']">
+                    فتح<span className="sr-only"> تقرير {title}</span>
+                    <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-1" />
+                </Link>
+                {actions && <div className="relative z-10">{actions}</div>}
+            </div>
+        </div>
     );
 }
 

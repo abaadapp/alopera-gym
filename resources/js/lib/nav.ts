@@ -70,7 +70,6 @@ export const NAV: NavGroup[] = [
                     { label: 'عمليات البيع', route: 'club.sales.index', permission: 'sales.view' },
                     { label: 'المنتجات', route: 'club.products.index', permission: 'products.manage' },
                     { label: 'طلبات الموقع الإلكتروني', route: 'club.sales.orders.index', permission: 'orders.manage' },
-                    { label: 'تقارير المبيعات', route: 'club.sales.reports', permission: 'sales.view' },
                 ],
             },
             {
@@ -78,7 +77,6 @@ export const NAV: NavGroup[] = [
                 icon: Wallet,
                 tabs: [
                     { label: 'الملخص المالي', route: 'club.finance.summary', permission: 'accounting.view' },
-                    { label: 'الحركة المالية', route: 'club.finance.movement', permission: 'accounting.view' },
                     { label: 'الحسابات البنكية', route: 'club.finance.banks', permission: 'accounting.view' },
                     { label: 'الفواتير', route: 'club.invoices.index', permission: 'invoices.view', match: ['club.invoices.*', 'club.credit-notes.*'] },
                     { label: 'المدفوعات والتحصيل', route: 'club.payments.index', permission: 'invoices.view', match: 'club.payments.*' },
@@ -86,7 +84,6 @@ export const NAV: NavGroup[] = [
                     { label: 'المصروفات', route: 'club.expenses.index', permission: 'expenses.manage', match: 'club.expenses.*' },
                     { label: 'شجرة الحسابات', route: 'club.finance.accounts', permission: 'accounting.view' },
                     { label: 'القيود اليومية', route: 'club.finance.journal', permission: 'accounting.view' },
-                    { label: 'التقارير المالية', route: 'club.finance.statements', permission: 'accounting.view' },
                 ],
             },
             {
@@ -131,7 +128,8 @@ export const NAV: NavGroup[] = [
             {
                 label: 'التقارير',
                 icon: BarChart3,
-                // One page: every report in categories; each card opens its report (club.reports.show or its section).
+                // The one place for reports: every report in categories; each card opens its page (club.reports.show) or
+                // exports it. The sections keep their working screens and have no report tabs of their own.
                 tabs: [{ label: 'التقارير', route: 'club.reports.index', permission: 'reports.view', match: 'club.reports.*' }],
             },
             {

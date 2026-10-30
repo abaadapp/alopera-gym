@@ -3,6 +3,7 @@
 namespace App\Modules\Accounting\Services;
 
 use App\Core\Support\Money;
+use App\Core\Tenancy\BranchContext;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalLine;
 use Illuminate\Support\Collection;
@@ -15,10 +16,15 @@ final class FinanceReports
 {
     public function __construct(private readonly ChartOfAccounts $chart) {}
 
-    /** @return array<int, array{debit: string, credit: string}> debit and credit totals per account id */
-    public function totals(?string $from = null, ?string $to = null): array
+    /**
+     * Debit and credit totals per account id; for one branch when $branch is given (its entries, and for the main
+     * branch also the entries without a branch — BranchContext::narrow()).
+     *
+     * @return array<int, array{debit: string, credit: string}>
+     */
+    public function totals(?string $from = null, ?string $to = null, ?int $branch = null): array
     {
-        return JournalLine::query()
+        return app(BranchContext::class)->narrow(JournalLine::query(), $branch, 'e.branch_id')
             ->join('gym_journal_entries as e', 'e.id', '=', 'gym_journal_lines.journal_entry_id')
             ->when($from, fn ($q) => $q->where('e.entry_date', '>=', $from))
             ->when($to, fn ($q) => $q->where('e.entry_date', '<=', $to))
@@ -62,10 +68,10 @@ final class FinanceReports
      *
      * @return array{revenue: list<array{account: Account, amount: string}>, expenses: list<array{account: Account, amount: string}>, total_revenue: string, total_expenses: string, net: string}
      */
-    public function incomeStatement(string $from, string $to): array
+    public function incomeStatement(string $from, string $to, ?int $branch = null): array
     {
         $this->chart->ensure();
-        $totals = $this->totals($from, $to);
+        $totals = $this->totals($from, $to, $branch);
         $rows = fn (string $type, string $side) => Account::where('type', $type)->where('is_group', false)->orderBy('code')->get()
             ->map(function (Account $a) use ($totals, $side) {
                 $t = $totals[$a->id] ?? ['debit' => '0', 'credit' => '0'];
@@ -84,10 +90,10 @@ final class FinanceReports
     }
 
     /** @return array{rows: list<array{account: Account, debit: string, credit: string, balance: string}>, total_debit: string, total_credit: string} */
-    public function trialBalance(?string $to = null): array
+    public function trialBalance(?string $to = null, ?int $branch = null): array
     {
         $this->chart->ensure();
-        $totals = $this->totals(null, $to);
+        $totals = $this->totals(null, $to, $branch);
         $rows = Account::where('is_group', false)->orderBy('code')->get()
             ->filter(fn (Account $a) => isset($totals[$a->id]))
             ->map(fn (Account $a) => ['account' => $a, 'debit' => $totals[$a->id]['debit'], 'credit' => $totals[$a->id]['credit'], 'balance' => $this->signed($a, $totals)])

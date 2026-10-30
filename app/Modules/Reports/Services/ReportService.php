@@ -134,7 +134,7 @@ final class ReportService
      *
      * @return array<string, mixed>
      */
-    public function period(CarbonImmutable $from, CarbonImmutable $to, bool $financial = true, ?CarbonImmutable $prevFrom = null, ?CarbonImmutable $prevTo = null): array
+    public function period(CarbonImmutable $from, CarbonImmutable $to, bool $financial = true, ?CarbonImmutable $prevFrom = null, ?CarbonImmutable $prevTo = null, ?int $branch = null): array
     {
         if ($prevFrom === null || $prevTo === null) {
             $days = (int) $from->diffInDays($to) + 1;
@@ -142,8 +142,8 @@ final class ReportService
             $prevFrom = $prevTo->subDays($days - 1);
         }
 
-        $current = $this->headline($from, $to, $financial);
-        $previous = $this->headline($prevFrom, $prevTo, $financial);
+        $current = $this->headline($from, $to, $financial, $branch);
+        $previous = $this->headline($prevFrom, $prevTo, $financial, $branch);
 
         $comparison = [];
         foreach ($current as $key => $value) {
@@ -158,31 +158,46 @@ final class ReportService
         return [
             'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'previous_from' => $prevFrom->toDateString(), 'previous_to' => $prevTo->toDateString()],
             'comparison' => $comparison,
-            'plans' => $this->byPlan($from, $to, $financial),
-            'programs' => $this->byProgram($from, $to),
-            'trainers' => $this->byTrainer($from, $to),
-            'revenue_by_method' => $financial ? $this->revenueBy('method', $from, $to) : [],
-            'revenue_by_type' => $financial ? $this->revenueByType($from, $to) : [],
-            'expenses_by_category' => $financial ? $this->expensesByCategory($from, $to) : [],
-            'products' => $financial && PermissionRegistry::moduleEnabled('sales') ? $this->productSales($from, $to) : [],
-            'trend' => $financial ? $this->dailyRevenue($from, $to) : [],
+            'plans' => $this->byPlan($from, $to, $financial, $branch),
+            'programs' => $this->byProgram($from, $to, $branch),
+            'trainers' => $this->byTrainer($from, $to, $branch),
+            'revenue_by_method' => $financial ? $this->revenueBy('method', $from, $to, $branch) : [],
+            'revenue_by_type' => $financial ? $this->revenueByType($from, $to, $branch) : [],
+            'expenses_by_category' => $financial ? $this->expensesByCategory($from, $to, $branch) : [],
+            'products' => $financial && PermissionRegistry::moduleEnabled('sales') ? $this->productSales($from, $to, $branch) : [],
+            'trend' => $financial ? $this->dailyRevenue($from, $to, $branch) : [],
         ];
     }
 
+    /**
+     * A query narrowed to one branch (its records, and for the main branch those without one); unchanged for the
+     * whole club. See BranchContext::narrow().
+     *
+     * @template T
+     *
+     * @param  T  $query
+     * @return T
+     */
+    private function in($query, ?int $branch, string $column = 'branch_id')
+    {
+        return app(BranchContext::class)->narrow($query, $branch, $column);
+    }
+
     /** @return array<string, int|float|string> */
-    private function headline(CarbonImmutable $from, CarbonImmutable $to, bool $financial): array
+    private function headline(CarbonImmutable $from, CarbonImmutable $to, bool $financial, ?int $branch = null): array
     {
         $end = $to->endOfDay();
         $events = MembershipEvent::whereBetween('created_at', [$from, $end])
+            ->when($branch, fn ($q) => $q->whereIn('membership_id', $this->in(Membership::query(), $branch)->select('id')))
             ->selectRaw('type, count(*) as total')->groupBy('type')->pluck('total', 'type');
 
-        $activated = Membership::whereBetween('activated_at', [$from, $end])
+        $activated = $this->in(Membership::whereBetween('activated_at', [$from, $end]), $branch)
             ->selectRaw('kind, count(*) as total')->groupBy('kind')->pluck('total', 'kind');
 
-        $sessions = ClassSession::whereBetween('starts_at', [$from, $end])->where('status', '!=', ClassSession::CANCELLED);
+        $sessions = $this->in(ClassSession::whereBetween('starts_at', [$from, $end])->where('status', '!=', ClassSession::CANCELLED), $branch);
         $sessionCount = (clone $sessions)->count();
         $capacity = (int) (clone $sessions)->sum('capacity');
-        $bookings = Booking::whereHas('session', fn ($q) => $q->whereBetween('starts_at', [$from, $end]))
+        $bookings = Booking::whereHas('session', fn ($q) => $this->in($q->whereBetween('starts_at', [$from, $end]), $branch))
             ->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
         $attended = (int) ($bookings[Booking::ATTENDED] ?? 0);
         $noShow = (int) ($bookings[Booking::NO_SHOW] ?? 0);
@@ -195,8 +210,8 @@ final class ReportService
             'cancellations' => (int) ($events['cancelled'] ?? 0),
             'freezes' => (int) ($events['frozen'] ?? 0),
             'expirations' => (int) ($events['expired'] ?? 0),
-            'new_members' => Member::whereBetween('joined_on', [$from, $to])->count(),
-            'checkins' => CheckIn::where('result', 'allowed')->whereBetween('checked_in_at', [$from, $end])->count(),
+            'new_members' => $this->in(Member::whereBetween('joined_on', [$from, $to]), $branch)->count(),
+            'checkins' => $this->in(CheckIn::where('result', 'allowed')->whereBetween('checked_in_at', [$from, $end]), $branch)->count(),
             'sessions' => $sessionCount,
             'bookings' => $live,
             'attendance_rate' => ($attended + $noShow) > 0 ? round($attended / ($attended + $noShow) * 100, 1) : 0,
@@ -204,11 +219,11 @@ final class ReportService
         ];
 
         if ($financial) {
-            $revenue = (float) $this->netCollected($from, $end);
-            $expenses = (float) Expense::whereBetween('expense_date', [$from, $to])->sum('amount');
+            $revenue = (float) $this->netCollected($from, $end, $branch);
+            $expenses = (float) $this->in(Expense::whereBetween('expense_date', [$from, $to]), $branch)->sum('amount');
             // net of credit notes: what the invoices are worth after partial refunds and reductions
-            $issued = (float) Invoice::whereBetween('issue_date', [$from, $to])->where('status', '!=', Invoice::VOID)->sum(DB::raw('total - credited_total'));
-            $collectedOnIssued = (float) Invoice::whereBetween('issue_date', [$from, $to])->where('status', '!=', Invoice::VOID)->sum('paid_total');
+            $issued = (float) $this->in(Invoice::whereBetween('issue_date', [$from, $to])->where('status', '!=', Invoice::VOID), $branch)->sum(DB::raw('total - credited_total'));
+            $collectedOnIssued = (float) $this->in(Invoice::whereBetween('issue_date', [$from, $to])->where('status', '!=', Invoice::VOID), $branch)->sum('paid_total');
 
             $row += [
                 'revenue' => round($revenue, 3),
@@ -216,10 +231,10 @@ final class ReportService
                 'net' => round($revenue - $expenses, 3),
                 'invoiced' => round($issued, 3),
                 'collection_rate' => $issued > 0 ? round($collectedOnIssued / $issued * 100, 1) : 0,
-                'refunds' => round((float) Payment::completed()->where('kind', Payment::KIND_REFUND)->whereBetween('paid_at', [$from, $end])->sum('amount'), 3),
-                'credit_notes' => round((float) CreditNote::whereBetween('created_at', [$from, $end])->sum('amount'), 3),
+                'refunds' => round((float) $this->in(Payment::completed()->where('kind', Payment::KIND_REFUND)->whereBetween('paid_at', [$from, $end]), $branch)->sum('amount'), 3),
+                'credit_notes' => round((float) $this->in(CreditNote::whereBetween('created_at', [$from, $end]), $branch)->sum('amount'), 3),
                 'product_sales' => PermissionRegistry::moduleEnabled('sales')
-                    ? round((float) SaleItem::whereHas('sale', fn ($q) => $q->where('status', 'completed')->whereBetween('created_at', [$from, $end]))->sum('line_total'), 3)
+                    ? round((float) SaleItem::whereHas('sale', fn ($q) => $this->in($q->where('status', 'completed')->whereBetween('created_at', [$from, $end]), $branch))->sum('line_total'), 3)
                     : 0,
             ];
         }
@@ -228,9 +243,9 @@ final class ReportService
     }
 
     /** @return list<array<string, mixed>> */
-    private function byPlan(CarbonImmutable $from, CarbonImmutable $to, bool $financial): array
+    private function byPlan(CarbonImmutable $from, CarbonImmutable $to, bool $financial, ?int $branch = null): array
     {
-        return Membership::whereBetween('activated_at', [$from, $to->endOfDay()])
+        return $this->in(Membership::whereBetween('activated_at', [$from, $to->endOfDay()]), $branch)
             ->selectRaw("membership_plan_id, plan_snapshot->>'name' as name, count(*) as sold, sum(case when kind = 'renewal' then 1 else 0 end) as renewals, sum(total) as revenue")
             ->groupBy('membership_plan_id', DB::raw("plan_snapshot->>'name'"))
             ->orderByDesc('sold')
@@ -244,9 +259,9 @@ final class ReportService
     }
 
     /** Programs ranked by demand. @return list<array<string, mixed>> */
-    public function byProgram(CarbonImmutable $from, CarbonImmutable $to): array
+    public function byProgram(CarbonImmutable $from, CarbonImmutable $to, ?int $branch = null): array
     {
-        return DB::table('gym_class_sessions as s')
+        return $this->in(DB::table('gym_class_sessions as s'), $branch, 's.branch_id')
             ->join('gym_programs as p', 'p.id', '=', 's.program_id')
             ->leftJoin('gym_bookings as b', function ($j) {
                 $j->on('b.class_session_id', '=', 's.id')->where('b.status', '!=', Booking::CANCELLED);
@@ -278,9 +293,9 @@ final class ReportService
      *
      * @return array{rows: list<array<string, mixed>>, comparison: array<string, array{current: int|float, previous: int|float, change: float|null}>}
      */
-    public function trainers(CarbonImmutable $from, CarbonImmutable $to, CarbonImmutable $prevFrom, CarbonImmutable $prevTo): array
+    public function trainers(CarbonImmutable $from, CarbonImmutable $to, CarbonImmutable $prevFrom, CarbonImmutable $prevTo, ?int $branch = null): array
     {
-        $rows = $this->trainerRows($from, $to);
+        $rows = $this->trainerRows($from, $to, $branch);
         $totals = fn (array $rows) => [
             'trainers' => count(array_filter($rows, fn ($r) => $r['sessions'] > 0 || $r['pt_completed'] > 0)),
             'sessions' => array_sum(array_column($rows, 'sessions')),
@@ -289,13 +304,13 @@ final class ReportService
             'pt_completed' => array_sum(array_column($rows, 'pt_completed')),
         ];
 
-        return ['rows' => $rows, 'comparison' => $this->compare($totals($rows), $totals($this->trainerRows($prevFrom, $prevTo)))];
+        return ['rows' => $rows, 'comparison' => $this->compare($totals($rows), $totals($this->trainerRows($prevFrom, $prevTo, $branch)))];
     }
 
     /** @return list<array<string, mixed>> */
-    private function trainerRows(CarbonImmutable $from, CarbonImmutable $to): array
+    private function trainerRows(CarbonImmutable $from, CarbonImmutable $to, ?int $branch = null): array
     {
-        $classes = DB::table('gym_class_sessions as s')
+        $classes = $this->in(DB::table('gym_class_sessions as s'), $branch, 's.branch_id')
             ->leftJoin('gym_bookings as b', function ($j) {
                 $j->on('b.class_session_id', '=', 's.id')->where('b.status', '!=', Booking::CANCELLED);
             })
@@ -308,7 +323,7 @@ final class ReportService
                 sum(case when b.status = 'attended' then 1 else 0 end) as attended,
                 sum(case when b.status = 'no_show' then 1 else 0 end) as no_show")
             ->get()->keyBy('trainer_id');
-        $pt = PtSession::where('status', PtSession::COMPLETED)->whereBetween('starts_at', [$from, $to->endOfDay()])
+        $pt = $this->in(PtSession::where('status', PtSession::COMPLETED)->whereBetween('starts_at', [$from, $to->endOfDay()]), $branch)
             ->selectRaw('trainer_id, count(*) as total')->groupBy('trainer_id')->pluck('total', 'trainer_id');
         $names = Trainer::whereIn('id', $classes->keys()->merge($pt->keys())->unique())->pluck('name', 'id');
 
@@ -378,9 +393,9 @@ final class ReportService
     }
 
     /** @return list<array<string, mixed>> */
-    private function byTrainer(CarbonImmutable $from, CarbonImmutable $to): array
+    private function byTrainer(CarbonImmutable $from, CarbonImmutable $to, ?int $branch = null): array
     {
-        return DB::table('gym_class_sessions as s')
+        return $this->in(DB::table('gym_class_sessions as s'), $branch, 's.branch_id')
             ->join('gym_trainers as t', 't.id', '=', 's.trainer_id')
             ->leftJoin('gym_bookings as b', function ($j) {
                 $j->on('b.class_session_id', '=', 's.id')->where('b.status', '!=', Booking::CANCELLED);
@@ -397,18 +412,18 @@ final class ReportService
     }
 
     /** @return list<array{key: string, amount: float}> */
-    private function revenueBy(string $column, CarbonImmutable $from, CarbonImmutable $to): array
+    private function revenueBy(string $column, CarbonImmutable $from, CarbonImmutable $to, ?int $branch = null): array
     {
-        return Payment::completed()->whereBetween('paid_at', [$from, $to->endOfDay()])
+        return $this->in(Payment::completed()->whereBetween('paid_at', [$from, $to->endOfDay()]), $branch)
             ->selectRaw("$column as k, sum(case when kind = 'refund' then -amount else amount end) as net")
             ->groupBy('k')->orderByDesc('net')->get()
             ->map(fn ($r) => ['key' => (string) $r->k, 'amount' => round((float) $r->net, 3)])->all();
     }
 
     /** @return list<array{key: string, amount: float}> */
-    private function revenueByType(CarbonImmutable $from, CarbonImmutable $to): array
+    private function revenueByType(CarbonImmutable $from, CarbonImmutable $to, ?int $branch = null): array
     {
-        return Payment::completed()->whereBetween('payments.paid_at', [$from, $to->endOfDay()])
+        return $this->in(Payment::completed()->whereBetween('payments.paid_at', [$from, $to->endOfDay()]), $branch, 'payments.branch_id')
             ->join('invoices', 'invoices.id', '=', 'payments.invoice_id')
             ->selectRaw("invoices.type as k, sum(case when payments.kind = 'refund' then -payments.amount else payments.amount end) as net")
             ->groupBy('invoices.type')->orderByDesc('net')->get()
@@ -416,9 +431,9 @@ final class ReportService
     }
 
     /** @return list<array{key: string, amount: float}> */
-    private function expensesByCategory(CarbonImmutable $from, CarbonImmutable $to): array
+    private function expensesByCategory(CarbonImmutable $from, CarbonImmutable $to, ?int $branch = null): array
     {
-        return Expense::whereBetween('expense_date', [$from, $to])
+        return $this->in(Expense::whereBetween('expense_date', [$from, $to]), $branch, 'expenses.branch_id')
             ->leftJoin('expense_categories', 'expense_categories.id', '=', 'expenses.expense_category_id')
             ->selectRaw("coalesce(expense_categories.name, 'غير مصنف') as k, sum(expenses.amount) as total")
             ->groupBy('k')->orderByDesc('total')->get()
@@ -426,9 +441,9 @@ final class ReportService
     }
 
     /** @return list<array<string, mixed>> */
-    private function productSales(CarbonImmutable $from, CarbonImmutable $to): array
+    private function productSales(CarbonImmutable $from, CarbonImmutable $to, ?int $branch = null): array
     {
-        return SaleItem::whereHas('sale', fn ($q) => $q->where('status', 'completed')->whereBetween('created_at', [$from, $to->endOfDay()]))
+        return SaleItem::whereHas('sale', fn ($q) => $this->in($q->where('status', 'completed')->whereBetween('created_at', [$from, $to->endOfDay()]), $branch))
             ->selectRaw('product_id, name, sum(quantity) as qty, sum(line_total) as revenue, sum(quantity * unit_cost) as cost')
             ->groupBy('product_id', 'name')->orderByDesc('revenue')->limit(20)->get()
             ->map(fn ($r) => [

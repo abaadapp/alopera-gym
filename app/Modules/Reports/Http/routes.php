@@ -1,13 +1,13 @@
 <?php
 
 use App\Modules\Reports\Http\Controllers\ReportController;
+use App\Modules\Reports\Services\ReportCatalog;
 use Illuminate\Support\Facades\Route;
 
+// The reports page and each report (ReportCatalog). Each report also checks its section's permission in the
+// controller, and its file also needs reports.export.
 Route::get('/reports', [ReportController::class, 'index'])->middleware('can:reports.view')->name('reports.index');
-Route::get('/reports/export/{report}', [ReportController::class, 'export'])
-    ->whereIn('report', ['memberships', 'revenue', 'classes', 'sales', 'expenses', 'members', 'trainers', 'branches'])
-    ->middleware(['can:reports.export', 'throttle:exports'])
-    ->name('reports.export');
-// A period report (ReportCatalog::DETAIL); each checks its own permission in the controller.
-Route::get('/reports/{report}', [ReportController::class, 'show'])->whereIn('report', ['finance', 'members', 'classes', 'trainers', 'branches'])
+Route::get('/reports/{report}/export', [ReportController::class, 'export'])->whereIn('report', ReportCatalog::keys())
+    ->middleware(['can:reports.export', 'throttle:exports'])->name('reports.export');
+Route::get('/reports/{report}', [ReportController::class, 'show'])->whereIn('report', ReportCatalog::keys())
     ->middleware('can:reports.view')->name('reports.show');
