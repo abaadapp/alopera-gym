@@ -3,6 +3,7 @@ import { router, useForm } from '@inertiajs/react';
 import { Info, Paperclip, Plus, RefreshCw, Save, Search, Send, Settings2, Trash2, UserPlus, UserRound, Users } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PaperFrame from '@/Components/Papers/PaperFrame';
+import { clientKey } from '@/Components/Inventory/parts';
 import { BackLink, Button, Card, Field, FileInput, Input, MemberPicker, Modal, PageHeader, Select, Textarea, type MemberHit } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { currencyLabel, money } from '@/lib/format';
@@ -66,6 +67,8 @@ const METHOD_LABEL: Record<Method, string> = { credit: 'آجل — لا يُقب
 const ACCEPT = '.jpg,.jpeg,.png,.pdf,.webp,.heic';
 const N = (v: string) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const blank = (): Line => ({ product_id: '', description: '', quantity: '1', unit_price: '0', discount: '0' });
+/** A line's columns where it has a row of its own: number, description, quantity, price, discount, total, delete. */
+const LINE_GRID = 'grid gap-x-2 gap-y-2 @[42rem]:grid-cols-[1.25rem_minmax(0,1fr)_5.5rem_7.5rem_7rem_6.5rem_2.25rem]';
 
 function addDays(from: string, days: number): string {
     const d = new Date(`${from}T00:00:00`);
@@ -130,7 +133,10 @@ export default function InvoiceCreate({ products, catalog_truncated, tax_rate, d
 
     // ── The lines ──
     const setLine = (i: number, patch: Partial<Line>) => setLines((prev) => prev.map((l, k) => (k === i ? { ...l, ...patch } : l)));
-    const lineNet = (l: Line) => Math.max(0, N(l.quantity) * N(l.unit_price) - N(l.discount));
+    // As the server works it: the price in baisa times the quantity, rounded, less the discount (InvoiceService::draft).
+    const lineGross = (l: Line) => Math.round(Math.round(N(l.unit_price) * 1000) * N(l.quantity));
+    const lineNet = (l: Line) => Math.max(0, lineGross(l) - Math.round(N(l.discount) * 1000)) / 1000;
+    const overDiscount = (l: Line) => Math.round(N(l.discount) * 1000) > lineGross(l);
     const pickProduct = (p: Product) =>
         setLines((prev) => {
             const line: Line = { product_id: String(p.id), description: p.name, quantity: '1', unit_price: Number(p.price).toFixed(3), discount: '0' };
@@ -182,16 +188,19 @@ export default function InvoiceCreate({ products, catalog_truncated, tax_rate, d
     const total = Number(totals?.total ?? 0);
     const paidNow = credit ? 0 : d.paid_amount === '' ? total : Math.min(N(d.paid_amount), total);
 
+    // One key per submission: a double click or a retry saves or issues once (SubmittedOnce); a new one after success.
+    const key = useRef(clientKey());
     const submit = (issue: boolean) => {
         form.transform((x) => ({
             ...payload,
+            client_key: key.current,
             issue: issue ? 1 : 0,
             attachments: x.attachments,
             remove_attachments: x.remove_attachments,
             ...(issue && !credit ? { payment_method: x.payment_method, paid_amount: x.paid_amount, payment_date: x.payment_date, payment_reference: x.payment_reference, payment_proof: x.payment_proof } : { payment_method: 'credit' }),
         }));
         const files = d.attachments.length > 0 || (issue && !credit && d.payment_proof !== null);
-        form.post(draft ? route('club.invoices.drafts.update', draft.id) : route('club.invoices.store'), { preserveScroll: true, forceFormData: files });
+        form.post(draft ? route('club.invoices.drafts.update', draft.id) : route('club.invoices.store'), { preserveScroll: true, forceFormData: files, onSuccess: () => (key.current = clientKey()) });
     };
 
     const addFiles = (list: FileList | null) => {
@@ -305,47 +314,45 @@ export default function InvoiceCreate({ products, catalog_truncated, tax_rate, d
                             <Button size="sm" icon={<Plus />} onClick={() => setLines((p) => [...p, blank()])} disabled={lines.length >= 50}>إضافة صنف</Button>
                             <Button variant="outline" size="sm" className="text-[#b91c1c]" title="تفريغ كل البنود" aria-label="تفريغ كل البنود" icon={<Trash2 />} onClick={() => setLines([blank()])} />
                         </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full min-w-[720px] text-[13px]">
-                                <thead className="text-[12px] text-[#71717a]">
-                                    <tr>
-                                        <th className="p-2 text-start font-medium">#</th>
-                                        <th className="p-2 text-start font-medium">الوصف</th>
-                                        <th className="w-[100px] p-2 text-start font-medium">الكمية</th>
-                                        <th className="w-[130px] p-2 text-start font-medium">سعر الوحدة ({symbol})</th>
-                                        <th className="w-[120px] p-2 text-start font-medium">الخصم ({symbol})</th>
-                                        <th className="w-[110px] p-2 text-start font-medium">الإجمالي ({symbol})</th>
-                                        <th className="w-[52px] p-2 text-start font-medium"><span className="sr-only">إجراءات</span></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {lines.map((line, i) => {
-                                        const product = productOf(line);
-                                        const short = product?.track_stock && product.stock !== null && N(line.quantity) > product.stock;
-                                        return (
-                                            <tr key={i} className="border-t border-line align-top">
-                                                <td className="p-2 pt-4 text-[#9ca3af] num">{i + 1}</td>
-                                                <td className="p-2">
-                                                    <Input value={line.description} onChange={(e) => setLine(i, { description: e.target.value })} placeholder="الوصف" maxLength={250} aria-label={`وصف البند ${i + 1}`} />
-                                                    {product && (
-                                                        <p className={cn('mt-1 text-[11px]', short ? 'text-[#b91c1c]' : 'text-[#9ca3af]')}>
-                                                            من الكتالوج{product.track_stock ? <> · المتوفر <span className="num">{product.stock}</span>{short && ' — أقل من الكمية'}</> : ' · خدمة بلا مخزون'}
-                                                        </p>
-                                                    )}
-                                                    {lineError(i) && <p className="mt-1 text-[12px] text-[#b91c1c]">{lineError(i)}</p>}
-                                                </td>
-                                                <td className="p-2"><Input dir="ltr" inputMode="decimal" value={line.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} aria-label={`كمية البند ${i + 1}`} /></td>
-                                                <td className="p-2"><Input dir="ltr" inputMode="decimal" value={line.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value })} aria-label={`سعر البند ${i + 1}`} /></td>
-                                                <td className="p-2"><Input dir="ltr" inputMode="decimal" value={line.discount} onChange={(e) => setLine(i, { discount: e.target.value })} aria-label={`خصم البند ${i + 1}`} /></td>
-                                                <td className="p-2 pt-4 font-semibold tabular-nums">{lineNet(line).toFixed(3)}</td>
-                                                <td className="p-2">
-                                                    <Button variant="outline" size="sm" className="text-[#b91c1c]" title="حذف البند" aria-label={`حذف البند ${i + 1}`} icon={<Trash2 />} disabled={lines.length === 1} onClick={() => setLines((p) => p.filter((_, k) => k !== i))} />
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                        {/* The lines fit the card at any width: one row each where there is room (a header over them), else
+                            the description on one row and the quantity, price, discount and total under it. */}
+                        <div className="@container text-[13px]">
+                            <div className={cn(LINE_GRID, 'hidden border-b border-line pb-2 text-[12px] text-[#71717a] @[42rem]:grid')} aria-hidden>
+                                <span>#</span>
+                                <span>الوصف</span>
+                                <span>الكمية</span>
+                                <span>سعر الوحدة ({symbol})</span>
+                                <span>الخصم ({symbol})</span>
+                                <span>الإجمالي ({symbol})</span>
+                                <span />
+                            </div>
+                            {lines.map((line, i) => {
+                                const product = productOf(line);
+                                const short = product?.track_stock && product.stock !== null && N(line.quantity) > product.stock;
+                                return (
+                                    <div key={i} className={cn(LINE_GRID, 'grid-cols-[1.25rem_minmax(0,1fr)_2.25rem] items-start border-b border-line py-3 last:border-b-0')}>
+                                        <span className="pt-2.5 text-[#9ca3af] num">{i + 1}</span>
+                                        <div className="min-w-0">
+                                            <Input value={line.description} onChange={(e) => setLine(i, { description: e.target.value })} placeholder="الوصف" maxLength={250} aria-label={`وصف البند ${i + 1}`} />
+                                            {product && (
+                                                <p className={cn('mt-1 text-[11px]', short ? 'text-[#b91c1c]' : 'text-[#9ca3af]')}>
+                                                    من الكتالوج{product.track_stock ? <> · المتوفر <span className="num">{product.stock}</span>{short && ' — أقل من الكمية'}</> : ' · خدمة بلا مخزون'}
+                                                </p>
+                                            )}
+                                            {lineError(i) ? <p className="mt-1 text-[12px] text-[#b91c1c]">{lineError(i)}</p> : overDiscount(line) && <p className="mt-1 text-[12px] text-[#b91c1c]">الخصم أكبر من قيمة البند.</p>}
+                                        </div>
+                                        <div className="col-start-3 row-start-1 @[42rem]:col-start-7">
+                                            <Button variant="outline" size="sm" className="h-10 w-9 px-0 text-[#b91c1c]" title="حذف البند" aria-label={`حذف البند ${i + 1}`} icon={<Trash2 />} disabled={lines.length === 1} onClick={() => setLines((p) => p.filter((_, k) => k !== i))} />
+                                        </div>
+                                        <div className="col-[2/-1] grid grid-cols-2 gap-2 @[26rem]:grid-cols-4 @[42rem]:contents">
+                                            <LineField label="الكمية"><Input dir="ltr" inputMode="decimal" value={line.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} aria-label={`كمية البند ${i + 1}`} /></LineField>
+                                            <LineField label={`سعر الوحدة (${symbol})`}><Input dir="ltr" inputMode="decimal" value={line.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value })} aria-label={`سعر البند ${i + 1}`} /></LineField>
+                                            <LineField label={`الخصم (${symbol})`}><Input dir="ltr" inputMode="decimal" value={line.discount} onChange={(e) => setLine(i, { discount: e.target.value })} aria-label={`خصم البند ${i + 1}`} /></LineField>
+                                            <LineField label={`الإجمالي (${symbol})`}><span className="flex h-10 items-center font-semibold tabular-nums text-ink" aria-label={`إجمالي البند ${i + 1}`}>{lineNet(line).toFixed(3)}</span></LineField>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                         <Button variant="outline" size="sm" className="mt-3" icon={<Plus />} onClick={() => setLines((p) => [...p, blank()])} disabled={lines.length >= 50}>إضافة بند</Button>
                         {errors.lines && <p className="mt-2 text-[12px] text-[#b91c1c]">{errors.lines}</p>}
@@ -520,6 +527,16 @@ function ModeLink({ icon, onClick, children }: { icon: ReactNode; onClick: () =>
             {icon}
             {children}
         </button>
+    );
+}
+
+/** A line's figure: named above it when the line wraps, under the header row when it does not. */
+function LineField({ label, children }: { label: string; children: ReactNode }) {
+    return (
+        <div className="min-w-0">
+            <span className="mb-1 block text-[11px] text-[#9ca3af] @[42rem]:sr-only">{label}</span>
+            {children}
+        </div>
     );
 }
 

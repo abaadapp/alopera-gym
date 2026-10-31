@@ -6,6 +6,7 @@ import {
     Send, ShieldCheck, Snowflake, Trash2, UserRound, Wallet, Repeat, Play, Ban, Fingerprint,
 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import { clientKey } from '@/Components/Inventory/parts';
 import { BackLink, Badge, Button, Card, CardHeader, ChoiceCard, ConfirmAction, EmptyState, Field, FlatCards, Input, Modal, PageHeader, Select, StatCard, StatGrid, Tabs, Textarea, FileInput } from '@/Components/ui';
 import { Dropdown, DropdownItem, DropdownSeparator } from '@/Components/ui/Dropdown';
 import { useCan, useCurrency } from '@/hooks/useShared';
@@ -785,10 +786,11 @@ function FinanceTab({ invoices, payments }: Props) {
 
 function RecordPaymentModal({ invoice, onClose }: { invoice: { id: number; number: string; balance: string | null } | null; onClose: () => void }) {
     const currency = useCurrency();
-    const form = useForm({ amount: '', method: 'cash', reference: '', notes: '', proof: null as File | null });
+    const form = useForm({ amount: '', method: 'cash', reference: '', notes: '', proof: null as File | null, client_key: '' });
 
+    // A new key each time it opens: the same form sent twice records one payment (SubmittedOnce).
     useEffect(() => {
-        if (invoice) form.setData((d) => ({ ...d, amount: invoice.balance ?? '' }));
+        if (invoice) form.setData((d) => ({ ...d, amount: invoice.balance ?? '', client_key: clientKey() }));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [invoice?.id]);
 

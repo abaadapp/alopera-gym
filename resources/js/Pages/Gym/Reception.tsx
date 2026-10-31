@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { cn } from '@/lib/cn';
+import { clientKey } from '@/Components/Inventory/parts';
 import { Badge, Button, Card, CardHeader, ChoiceCard, choiceClass, EmptyState, Field, Input, ItemCard, MemberPicker, Modal, PageHeader, Select, StatCard, StatGrid, type MemberHit } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, money, number, time, whatsappUrl, dayCount } from '@/lib/format';
@@ -386,10 +387,11 @@ function QuickBookModal({ open, onClose, memberId, sessions }: { open: boolean; 
 
 function QuickPayModal({ invoice, onClose }: { invoice: { id: number; number: string; balance: string | null } | null; onClose: () => void }) {
     const currency = useCurrency();
-    const form = useForm({ amount: '', method: 'cash', reference: '' });
+    const form = useForm({ amount: '', method: 'cash', reference: '', client_key: '' });
 
+    // A new key each time it opens: the same form sent twice records one payment (SubmittedOnce).
     useEffect(() => {
-        if (invoice) form.setData((d) => ({ ...d, amount: invoice.balance ?? '' }));
+        if (invoice) form.setData((d) => ({ ...d, amount: invoice.balance ?? '', client_key: clientKey() }));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [invoice?.id]);
 

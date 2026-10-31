@@ -107,9 +107,18 @@ pending ──دفع كامل──▶ scheduled ──تاريخ البداية
 - `App\Core\Support\Period` يقرأ `?range=today|week|month|year|all` أو `?range=custom&from&to` ويحسب التواريخ في الخادم؛
   `apply($query, $column)` يقيّد أي استعلام. في المتصفح `PeriodTabs`. التقارير تقرأ `range` في `ReportFilters` (و`preset` القديم).
 
+## الجداول
+
+- لا جدول يتمرر جانبيًا: `useStackedTables` (في `PanelShell`) يقيس كل `table.table-base` كلما تغيّرت الصفحة أو الصفوف أو العرض؛
+  الأعرض من بطاقته يلتف (`data-wrap`) ثم يصير بطاقات (`data-stacked`) بأسماء الأعمدة من رأس الجدول (`data-label`). جدول بتصميم
+  خاص يُعلَّم `data-stack="never"`. `DataTable` يقبل `card` لبطاقة الصفحة نفسها تحت 1280px (المبيعات).
+
 ## المدفوعات
 
 - `PaymentService` هو المكان الوحيد الذي يطبق المال على الفواتير، ويقفل صف الفاتورة دائمًا؛ لا دفع أكبر من المتبقي.
+- النماذج التي تُنشئ مالًا أو مستندًا ترسل `client_key` تصنعه عند فتحها، والإرسال الثاني بالمفتاح نفسه يُرجع نتيجة الأول: إصدار
+  الفاتورة وحفظ المسودة وتسجيل دفعة على فاتورة عبر `SubmittedOnce::run`؛ نقطة البيع وأوامر الشراء ودفعات الموردين والتحويلات
+  بمفاتيحها الخاصة (ذاكرة مؤقتة بقفل، أو عمود `client_key` فريد).
 - الرد (Refund) سطر مستقل؛ الدفعة الأصلية لا تُعدَّل.
 - Paymob: `OnlinePaymentService` ينشئ `PaymentIntent` ويفتح Intention API. الـ Webhook:
   تحقق HMAC-SHA512 بسر النادي ← تطابق المبلغ والعملة ← تسجيل دفعة مرة واحدة (`unique(gateway, gateway_transaction_id)`)

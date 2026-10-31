@@ -195,4 +195,81 @@ class InvoiceEditorTest extends TestCase
         $this->assertStringContainsString('شركة الواحة', $preview['html']);
         $this->assertSame('75.000', $preview['totals']['total']);
     }
+
+    public function test_the_paper_and_the_issued_invoice_add_up_the_same_with_tax_discounts_and_baisa(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $this->asTenant($club, fn () => $club->forceFill(['settings' => array_merge($club->settings ?? [], ['vat_rate' => 5])])->save());
+        // 1.5 × 0.333 = 0.4995 → 0.500 (the line rounded to the baisa, as the editor shows it); 3 × 12.250 less 1.125.
+        $lines = [
+            ['description' => 'مياه', 'quantity' => 1.5, 'unit_price' => 0.333, 'discount' => 0],
+            ['description' => 'حصة تدريب', 'quantity' => 3, 'unit_price' => 12.25, 'discount' => 1.125],
+        ];
+
+        $preview = $this->actingAs($owner)->postJson(route('club.invoices.preview'), $this->form(['lines' => $lines]))->assertOk()->json('totals');
+        // Gross 0.500 + 36.750 = 37.250; less 1.125 = 36.125; 5% = 1.80625 → 1.806; total 37.931.
+        $this->assertSame(['37.250', '1.125', '1.806', '37.931'], [$preview['subtotal'], $preview['discount_total'], $preview['tax_total'], $preview['total']]);
+
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1, 'lines' => $lines, 'payment_method' => 'cash', 'paid_amount' => 20]))->assertSessionHasNoErrors();
+        $invoice = $this->asTenant($club, fn () => Invoice::with('items')->sole());
+        $this->assertSame(['0.500', '35.625'], $invoice->items->pluck('line_total')->all());
+        $this->assertSame([$preview['subtotal'], $preview['tax_total'], $preview['total'], '20.000', '17.931'], [$invoice->subtotal, $invoice->tax_total, $invoice->total, $invoice->paid_total, $invoice->balance()]);
+    }
+
+    public function test_figures_beyond_the_baisa_and_a_discount_above_its_line_are_named_on_the_line(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1, 'lines' => [['description' => 'x', 'quantity' => 1, 'unit_price' => 1.2345, 'discount' => 0]]]))
+            ->assertSessionHasErrors(['lines.0.unit_price' => 'السعر بثلاث منازل عشرية على الأكثر.']);
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 0, 'lines' => [['description' => 'x', 'quantity' => 1, 'unit_price' => 2, 'discount' => 0], ['description' => 'y', 'quantity' => 2, 'unit_price' => 1, 'discount' => 2.5]]]))
+            ->assertSessionHasErrors(['lines.1.discount' => 'الخصم أكبر من قيمة البند.']);
+        $this->asTenant($club, fn () => $this->assertSame([0, 0], [Invoice::count(), Invoice::drafts()->count()]));
+    }
+
+    public function test_the_same_form_sent_twice_issues_one_invoice_with_one_payment_and_saves_one_draft(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $form = $this->form(['issue' => 1, 'payment_method' => 'cash', 'paid_amount' => 10, 'client_key' => 'editor-key-1']);
+
+        $first = $this->actingAs($owner)->post(route('club.invoices.store'), $form)->assertSessionHasNoErrors();
+        $again = $this->actingAs($owner)->post(route('club.invoices.store'), $form)->assertSessionHasNoErrors();
+        $invoice = $this->asTenant($club, fn () => Invoice::with('payments')->sole());
+        $first->assertRedirect(route('club.invoices.show', $invoice));
+        $again->assertRedirect(route('club.invoices.show', $invoice));
+        $this->assertSame(['10.000', 1], [$invoice->paid_total, $invoice->payments->count()]);
+
+        // A draft saved twice by the same form is one draft; another form (another key) is another document.
+        $draft = $this->form(['issue' => 0, 'client_key' => 'editor-key-2']);
+        $this->actingAs($owner)->post(route('club.invoices.store'), $draft);
+        $this->actingAs($owner)->post(route('club.invoices.store'), $draft);
+        $this->asTenant($club, fn () => $this->assertSame(1, Invoice::drafts()->count()));
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1, 'client_key' => 'editor-key-3']))->assertSessionHasNoErrors();
+        $this->asTenant($club, fn () => $this->assertSame(2, Invoice::count()));
+
+        // A refused submission keeps nothing: corrected, the same key goes through.
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1, 'client_key' => 'editor-key-4', 'payment_method' => 'cash', 'paid_amount' => 999]))->assertSessionHasErrors('paid_amount');
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1, 'client_key' => 'editor-key-4', 'payment_method' => 'cash', 'paid_amount' => 5]))->assertSessionHasNoErrors();
+        $this->asTenant($club, fn () => $this->assertSame(3, Invoice::count()));
+    }
+
+    public function test_a_payment_form_sent_twice_records_one_payment(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1]))->assertSessionHasNoErrors();
+        $invoice = $this->asTenant($club, fn () => Invoice::sole());
+
+        $pay = ['amount' => 20, 'method' => 'cash', 'client_key' => 'pay-key-1'];
+        $this->actingAs($owner)->post(route('club.payments.store', $invoice), $pay)->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.payments.store', $invoice), $pay)->assertSessionHasNoErrors();
+        $this->assertSame(['20.000', 1], [$invoice->fresh()->paid_total, $this->asTenant($club, fn () => Payment::where('invoice_id', $invoice->id)->count())]);
+
+        // The next payment (a new form) is recorded.
+        $this->actingAs($owner)->post(route('club.payments.store', $invoice), ['amount' => 20, 'method' => 'cash', 'client_key' => 'pay-key-2'])->assertSessionHasNoErrors();
+        $this->assertSame('40.000', $invoice->fresh()->paid_total);
+    }
 }

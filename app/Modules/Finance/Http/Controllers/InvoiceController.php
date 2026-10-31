@@ -6,6 +6,7 @@ use App\Core\Auth\PermissionRegistry;
 use App\Core\Papers\Papers;
 use App\Core\Support\Money;
 use App\Core\Support\Period;
+use App\Core\Support\SubmittedOnce;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
@@ -27,6 +28,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -186,7 +188,7 @@ class InvoiceController extends Controller
      */
     public function preview(Request $request, ManualInvoices $invoices): JsonResponse
     {
-        $data = $request->validate($this->rules(preview: true));
+        $data = $request->validate($this->rules(preview: true), self::MESSAGES);
         $data['lines'] = collect($data['lines'] ?? [])
             ->filter(fn ($l) => filled($l['description'] ?? null) && (float) ($l['quantity'] ?? 0) > 0)
             ->map(fn ($l) => [
@@ -232,28 +234,46 @@ class InvoiceController extends Controller
         // An older form (a member or a name, issued today) still issues: who is billed and the date follow from it.
         $request->mergeIfMissing(['customer_mode' => $request->filled('member_id') ? 'member' : 'walk_in', 'issue_date' => today()->toDateString(), 'issue' => $draft === null && ! $request->has('customer_mode')]);
         $issue = $request->boolean('issue');
-        $data = $request->validate($this->rules(issue: $issue));
+        $data = $request->validate($this->rules(issue: $issue), self::MESSAGES);
+        // A discount larger than its line is named on that line, not refused for the whole invoice.
+        foreach ($data['lines'] as $i => $line) {
+            if (Money::toMinor($line['discount'] ?? 0) > Money::toMinor(Money::mul($line['unit_price'], (float) $line['quantity']))) {
+                throw ValidationException::withMessages(["lines.$i.discount" => 'الخصم أكبر من قيمة البند.']);
+            }
+        }
         $files = $request->file('attachments', []);
         $remove = array_map('intval', $data['remove_attachments'] ?? []);
-
-        if (! $issue) {
-            $saved = $invoices->saveDraft($data, $files, $draft, $remove);
-
-            return redirect()->route('club.invoices.drafts.edit', $saved->id)->with('success', 'حُفظت المسودة. لا رقم لها ولا قيد حتى تُصدر.');
-        }
-
         $method = $data['payment_method'] ?? 'credit';
-        abort_if($method !== 'credit' && ! $request->user()->can('payments.record'), 403);
-        $invoice = $invoices->issue($data, [
-            'method' => $method,
-            'amount' => $data['paid_amount'] ?? null,
-            'paid_at' => $data['payment_date'] ?? null,
-            'reference' => $data['payment_reference'] ?? null,
-            'proof' => $request->file('payment_proof'),
-        ], $files, $draft, $remove);
+        abort_if($issue && $method !== 'credit' && ! $request->user()->can('payments.record'), 403);
 
-        return redirect()->route('club.invoices.show', $invoice)->with('success', 'تم إصدار الفاتورة '.$invoice->number);
+        // The form sent twice (a double click, a retry) saves or issues once: the second gets the first's result.
+        [$kind, $id, $number] = SubmittedOnce::run($data['client_key'] ?? null, 'invoice-editor:'.($issue ? 'issue' : 'draft').':'.($draft->id ?? 'new'), function () use ($invoices, $data, $files, $draft, $remove, $issue, $method, $request) {
+            if (! $issue) {
+                return ['draft', $invoices->saveDraft($data, $files, $draft, $remove)->id, null];
+            }
+            $invoice = $invoices->issue($data, [
+                'method' => $method,
+                'amount' => $data['paid_amount'] ?? null,
+                'paid_at' => $data['payment_date'] ?? null,
+                'reference' => $data['payment_reference'] ?? null,
+                'proof' => $request->file('payment_proof'),
+            ], $files, $draft, $remove);
+
+            return ['invoice', $invoice->id, $invoice->number];
+        });
+
+        return $kind === 'draft'
+            ? redirect()->route('club.invoices.drafts.edit', $id)->with('success', 'حُفظت المسودة. لا رقم لها ولا قيد حتى تُصدر.')
+            : redirect()->route('club.invoices.show', $id)->with('success', 'تم إصدار الفاتورة '.$number);
     }
+
+    /** The editor's figures, named as its fields are. */
+    private const MESSAGES = [
+        'lines.*.quantity.decimal' => 'الكمية بثلاث منازل عشرية على الأكثر.',
+        'lines.*.unit_price.decimal' => 'السعر بثلاث منازل عشرية على الأكثر.',
+        'lines.*.discount.decimal' => 'الخصم بثلاث منازل عشرية على الأكثر.',
+        'paid_amount.decimal' => 'المبلغ المدفوع بثلاث منازل عشرية على الأكثر.',
+    ];
 
     /** @return array<string, mixed> */
     private function rules(bool $issue = false, bool $preview = false): array
@@ -274,16 +294,18 @@ class InvoiceController extends Controller
             'lines' => [$preview ? 'nullable' : 'required', 'array', ...($preview ? [] : ['min:1']), 'max:50'],
             'lines.*.product_id' => ['nullable', TenantRule::exists('products')],
             'lines.*.description' => [$preview ? 'nullable' : 'required', 'string', 'max:250'],
-            'lines.*.quantity' => [$preview ? 'nullable' : 'required', 'numeric', $preview ? 'min:0' : 'min:0.001', 'max:10000'],
-            'lines.*.unit_price' => [$preview ? 'nullable' : 'required', 'numeric', 'min:0', 'max:99999'],
-            'lines.*.discount' => ['nullable', 'numeric', 'min:0'],
+            // Three decimals at most, as money is kept: the editor's line totals are then the server's to the baisa.
+            'lines.*.quantity' => [$preview ? 'nullable' : 'required', 'numeric', 'decimal:0,3', $preview ? 'min:0' : 'min:0.001', 'max:10000'],
+            'lines.*.unit_price' => [$preview ? 'nullable' : 'required', 'numeric', 'decimal:0,3', 'min:0', 'max:99999'],
+            'lines.*.discount' => ['nullable', 'numeric', 'decimal:0,3', 'min:0'],
             ...($preview ? [] : [
+                'client_key' => SubmittedOnce::RULE,
                 'attachments' => ['nullable', 'array', 'max:6'],
                 'attachments.*' => $file,
                 'remove_attachments' => ['nullable', 'array'],
                 'remove_attachments.*' => ['integer'],
                 'payment_method' => ['nullable', 'in:'.implode(',', ManualInvoices::METHODS)],
-                'paid_amount' => ['nullable', 'numeric', 'min:0', 'max:999999'],
+                'paid_amount' => ['nullable', 'numeric', 'decimal:0,3', 'min:0', 'max:999999'],
                 'payment_date' => ['nullable', 'date', 'before_or_equal:today'],
                 'payment_reference' => ['nullable', 'string', 'max:120'],
                 'payment_proof' => ['nullable', ...$file],

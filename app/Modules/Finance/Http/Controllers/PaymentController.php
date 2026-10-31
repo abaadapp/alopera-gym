@@ -4,6 +4,7 @@ namespace App\Modules\Finance\Http\Controllers;
 
 use App\Core\Papers\Papers;
 use App\Core\Support\Period;
+use App\Core\Support\SubmittedOnce;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -49,21 +50,26 @@ class PaymentController extends Controller
             'reference' => ['nullable', 'string', 'max:120', 'required_if:method,card'],
             'notes' => ['nullable', 'string', 'max:500'],
             'proof' => ['nullable', 'file', 'max:'.config('gym.max_document_kb'), 'mimes:pdf,jpg,jpeg,png,webp,heic'],
+            'client_key' => SubmittedOnce::RULE,
         ], ['reference.required_if' => 'أدخل رقم العملية من جهاز الشبكة.']);
 
-        $proof = $request->hasFile('proof')
-            ? $request->file('proof')->store('tenants/'.$tenants->require()->id.'/payment-proofs', 'local')
-            : null;
+        // One form, one payment: sent twice (a double click, a retry), the second gets the first payment back.
+        [$pending, $receipt] = SubmittedOnce::run($data['client_key'] ?? null, 'invoice-payment:'.$invoice->id, function () use ($request, $tenants, $invoice, $data) {
+            $proof = $request->hasFile('proof')
+                ? $request->file('proof')->store('tenants/'.$tenants->require()->id.'/payment-proofs', 'local')
+                : null;
+            $payment = $this->payments->record($invoice, $data['amount'], $data['method'], [
+                'reference' => $data['reference'] ?? null,
+                'notes' => $data['notes'] ?? null,
+                'proof_path' => $proof,
+            ]);
 
-        $payment = $this->payments->record($invoice, $data['amount'], $data['method'], [
-            'reference' => $data['reference'] ?? null,
-            'notes' => $data['notes'] ?? null,
-            'proof_path' => $proof,
-        ]);
+            return [$payment->status === Payment::PENDING, $payment->receipt_number];
+        });
 
-        return back()->with('success', $payment->status === Payment::PENDING
+        return back()->with('success', $pending
             ? 'تم تسجيل التحويل بانتظار تأكيد المالية. تُفعّل العضوية بعد التأكيد.'
-            : 'تم تسجيل الدفعة. رقم الإيصال '.$payment->receipt_number);
+            : 'تم تسجيل الدفعة. رقم الإيصال '.$receipt);
     }
 
     public function confirm(Payment $payment): RedirectResponse
