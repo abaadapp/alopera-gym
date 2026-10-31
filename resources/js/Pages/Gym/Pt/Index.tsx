@@ -167,7 +167,7 @@ export default function PtIndex({ subscriptions, upcoming, trainers, filters }: 
                 title={`جدولة جلسة — ${target?.member?.full_name ?? ''}`}
                 footer={
                     <>
-                        <Button variant="ghost" onClick={() => setTarget(null)}>إلغاء</Button>
+                        <Button variant="outline" onClick={() => setTarget(null)}>إلغاء</Button>
                         <Button type="submit" form="pt-form" loading={form.processing}>جدولة</Button>
                     </>
                 }

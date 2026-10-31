@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import { AlertTriangle, Check, Download, FileClock, FileText, FileX, FolderOpen, Lock, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, Checkbox, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Pagination, SearchInput, Select, StatCard, Textarea } from '@/Components/ui';
+import { Badge, Button, Card, Checkbox, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Pagination, SearchInput, Select, StatCard, Textarea, FileInput } from '@/Components/ui';
 import { date, dayCount, number } from '@/lib/format';
 import type { Paginated } from '@/types';
 import { useBranchDefault } from '@/hooks/useShared';
@@ -150,10 +150,11 @@ export default function DocumentsIndex(props: Props) {
     );
 }
 
-function FileInput({ onChange, current, error, maxKb }: { onChange: (f: File | null) => void; current?: string | null; error?: string; maxKb: number }) {
+function DocumentFile({ onChange, current, error, maxKb }: { onChange: (f: File | null) => void; current?: string | null; error?: string; maxKb: number }) {
+    const [file, setFile] = useState<File | null>(null);
     return (
         <Field label="الملف (PDF أو صورة)" hint={`${current ? `الحالي: ${current} — ` : ''}الحد ${number(Math.round(maxKb / 1024))} ميغابايت`} error={error}>
-            <Input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(e) => onChange(e.target.files?.[0] ?? null)} />
+            <FileInput accept="application/pdf,image/jpeg,image/png,image/webp" file={file} onChange={(f) => { setFile(f); onChange(f); }} />
         </Field>
     );
 }
@@ -190,7 +191,7 @@ function DocumentModal({ document, props, onClose }: { document: DocumentRow | n
     };
 
     return (
-        <Modal open onClose={onClose} size="lg" title={document ? `تعديل «${document.name}»` : 'مستند جديد'} footer={<><Button variant="ghost" onClick={onClose}>تراجع</Button><Button loading={form.processing} onClick={submit}>حفظ</Button></>}>
+        <Modal open onClose={onClose} size="lg" title={document ? `تعديل «${document.name}»` : 'مستند جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button loading={form.processing} onClick={submit}>حفظ</Button></>}>
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
                 <Field label="اسم المستند" error={form.errors.name} required className="sm:col-span-2">
                     <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} maxLength={160} placeholder="مثال: السجل التجاري — الفرع الرئيسي" />
@@ -234,7 +235,7 @@ function DocumentModal({ document, props, onClose }: { document: DocumentRow | n
                     </Field>
                 )}
                 <div className="sm:col-span-2">
-                    <FileInput onChange={(f) => form.setData('file', f)} current={document?.file_name} error={form.errors.file} maxKb={maxKb} />
+                    <DocumentFile onChange={(f) => form.setData('file', f)} current={document?.file_name} error={form.errors.file} maxKb={maxKb} />
                     {document?.has_file && <p className="mt-1 text-xs text-muted">رفع ملف هنا يصحّح النسخة الحالية. عند التجديد استخدم «تجديد» لتُحفظ النسخة السابقة في الأرشيف.</p>}
                 </div>
                 <Field label="ملاحظات" error={form.errors.notes} className="sm:col-span-2">
@@ -266,7 +267,7 @@ function RenewModal({ document, maxKb, onClose }: { document: DocumentRow; maxKb
     };
 
     return (
-        <Modal open onClose={onClose} title={`تجديد «${document.name}»`} footer={<><Button variant="ghost" onClick={onClose}>تراجع</Button><Button loading={form.processing} icon={<RefreshCw />} onClick={submit}>تسجيل التجديد</Button></>}>
+        <Modal open onClose={onClose} title={`تجديد «${document.name}»`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button loading={form.processing} icon={<RefreshCw />} onClick={submit}>تسجيل التجديد</Button></>}>
             <form onSubmit={submit} className="space-y-4">
                 <p className="text-sm text-muted">
                     {document.expiry_date ? <>ينتهي حاليًا في <span className="num">{date(document.expiry_date)}</span>. </> : null}
@@ -283,7 +284,7 @@ function RenewModal({ document, maxKb, onClose }: { document: DocumentRow; maxKb
                         <Input dir="ltr" value={form.data.reference_number} onChange={(e) => form.setData('reference_number', e.target.value)} />
                     </Field>
                 </div>
-                <FileInput onChange={(f) => form.setData('file', f)} error={form.errors.file} maxKb={maxKb} />
+                <DocumentFile onChange={(f) => form.setData('file', f)} error={form.errors.file} maxKb={maxKb} />
                 <Field label="ملاحظات" error={form.errors.notes}>
                     <Textarea rows={2} value={form.data.notes} onChange={(e) => form.setData('notes', e.target.value)} maxLength={1000} />
                 </Field>

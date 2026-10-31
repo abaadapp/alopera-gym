@@ -172,7 +172,7 @@ export default function SessionsIndex({ week, sessions, programs, trainers, filt
                 title="حصة إضافية (خارج الجدول الأسبوعي)"
                 footer={
                     <>
-                        <Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button>
+                        <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
                         <Button type="submit" form="session-form" loading={form.processing} icon={<Plus className="size-4" />}>إضافة</Button>
                     </>
                 }

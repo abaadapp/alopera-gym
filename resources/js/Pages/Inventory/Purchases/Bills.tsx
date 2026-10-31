@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, router, useForm } from '@inertiajs/react';
 import { AlertTriangle, Check, CreditCard, FileText, Paperclip, Plus, Wallet, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, Checkbox, EmptyState, Field, Input, Modal, Notice, PageHeader, Pagination, Select, StatCard, Textarea } from '@/Components/ui';
+import { Button, Card, Checkbox, EmptyState, Field, Input, Modal, Notice, PageHeader, Pagination, Select, StatCard, Textarea, FileInput } from '@/Components/ui';
 import { Toolbar, ToolbarSearch, visit } from '@/Components/Products/parts';
 import { BILL_STATES, Pill, ReasonDialog } from '@/Components/Inventory/parts';
 import PayBill from '@/Components/Inventory/PayBill';
@@ -120,7 +120,7 @@ function NewBill({ suppliers, orders, taxRate, preselect, canApprove, onClose }:
     };
 
     return (
-        <Modal open onClose={onClose} size="lg" title="سند مورد جديد" footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button type="submit" form="new-bill" loading={form.processing}>{form.data.approve ? 'تسجيل واعتماد' : 'تسجيل السند'}</Button></>}>
+        <Modal open onClose={onClose} size="lg" title="سند مورد جديد" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="new-bill" loading={form.processing}>{form.data.approve ? 'تسجيل واعتماد' : 'تسجيل السند'}</Button></>}>
             <form id="new-bill" onSubmit={submit} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="المورد" error={form.errors.supplier_id} required>
@@ -144,7 +144,7 @@ function NewBill({ suppliers, orders, taxRate, preselect, canApprove, onClose }:
                     <span>الإجمالي: <span className="font-semibold num">{money(total, currency)}</span></span>
                     {order && <span className="text-[#6b7280]">أمر الشراء <span className="num">{money(order.total, currency)}</span> · ما وصل واعتُمد <span className="num">{money(order.received, currency)}</span>{total > Number(order.total) && <span className="ms-2 font-semibold text-red-700">أكبر من أمر الشراء</span>}</span>}
                 </div>
-                <Field label="المرفق (PDF أو صورة)" error={form.errors.attachment}><Input type="file" accept="application/pdf,image/*" onChange={(e) => form.setData('attachment', e.target.files?.[0] ?? null)} /></Field>
+                <Field label="المرفق (PDF أو صورة)" error={form.errors.attachment}><FileInput accept="application/pdf,image/*" file={form.data.attachment} onChange={(f) => form.setData('attachment', f)} /></Field>
                 <Field label="ملاحظات" error={form.errors.notes}><Textarea rows={2} value={form.data.notes} onChange={(e) => form.setData('notes', e.target.value)} maxLength={1000} /></Field>
                 {canApprove && <Checkbox label="اعتماده الآن وتسجيل الالتزام للمورد" checked={form.data.approve} onChange={(e) => form.setData('approve', e.target.checked)} />}
             </form>

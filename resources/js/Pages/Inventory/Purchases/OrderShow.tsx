@@ -129,7 +129,7 @@ function Receive({ order, canApprove, onClose }: { order: Order; canApprove: boo
     const err = form.errors as Record<string, string>;
 
     return (
-        <Modal open onClose={onClose} size="lg" title={`استلام بضاعة — ${order.number}`} footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button loading={form.processing} onClick={() => form.post(route('club.purchases.receive', order.id), { preserveScroll: true, onSuccess: onClose })}>{form.data.approve ? 'تسجيل واعتماد' : 'تسجيل سند الاستلام'}</Button></>}>
+        <Modal open onClose={onClose} size="lg" title={`استلام بضاعة — ${order.number}`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button loading={form.processing} onClick={() => form.post(route('club.purchases.receive', order.id), { preserveScroll: true, onSuccess: onClose })}>{form.data.approve ? 'تسجيل واعتماد' : 'تسجيل سند الاستلام'}</Button></>}>
             <div className="space-y-4">
                 <div className="space-y-2">
                     {open.map((i) => (

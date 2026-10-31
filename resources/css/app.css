@@ -97,9 +97,24 @@ html:has(.admin-ui)::-webkit-scrollbar-thumb {
     border-radius: 9999px;
     background: #d8d8d4;
 }
+/* A box that scrolls inside the page (a wide table, a long menu) shows its bar while the pointer is over it, not as
+   a grey stripe that sits there for everyone; it scrolls either way. The page's own bar stays. */
+.admin-ui *::-webkit-scrollbar-thumb {
+    background: transparent;
+}
+.admin-ui *:hover::-webkit-scrollbar-thumb {
+    background: #d8d8d4;
+}
 .admin-ui ::-webkit-scrollbar-thumb:hover,
 html:has(.admin-ui)::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
+}
+/* A row that scrolls sideways with no bar at all (tabs, chips): reachable by finger, trackpad and wheel. */
+@utility no-scrollbar {
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+        display: none;
+    }
 }
 /* A keyboard focus everyone can see, on whatever has no ring of its own (a component's own ring wins). */
 @layer base {
@@ -135,6 +150,26 @@ html:has(.admin-ui)::-webkit-scrollbar-thumb:hover {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
+    }
+}
+
+/* A dialog (Components/ui/Modal): the page dims in, the card fades and grows from 95%. */
+@keyframes overlay-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+@keyframes dialog-in {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: none;
     }
 }
 

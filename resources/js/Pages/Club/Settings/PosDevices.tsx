@@ -35,7 +35,10 @@ export default function PosDevices({ devices, code, branches, accounts, policy, 
     const [editing, setEditing] = useState<Device | null>(null);
     const [hardware, setHardware] = useState<Device | null>(null);
     const [deleting, setDeleting] = useState<Device | null>(null);
-    const revoke = (d: Device) => { if (window.confirm(d.is_this ? `هذا هو الجهاز الذي تستخدمه الآن. إلغاء تفعيل «${d.name}»؟` : `إلغاء تفعيل «${d.name}»؟ لن يستطيع البيع حتى يُربط من جديد.`)) router.post(route('club.settings.pos-devices.revoke', d.id), {}, { preserveScroll: true }); };
+    // Asked in the system's own dialog, not the browser's.
+    const [revoking, setRevoking] = useState<Device | null>(null);
+    const [busy, setBusy] = useState(false);
+    const revoke = (d: Device) => setRevoking(d);
     const shown = code ? devices.find((d) => d.id === code.device) : null;
     const current = hardware ? devices.find((d) => d.id === hardware.id) ?? null : null;
 
@@ -110,6 +113,15 @@ export default function PosDevices({ devices, code, branches, accounts, policy, 
             {adding && <DeviceDialog branches={branches} accounts={accounts} onClose={() => setAdding(false)} />}
             {editing && <DeviceDialog device={editing} branches={branches} accounts={accounts} onClose={() => setEditing(null)} />}
             {current && <PeripheralsDialog device={current} types={types} drivable={drivable} connections={connections} onClose={() => setHardware(null)} />}
+            <Modal
+                open={revoking !== null}
+                onClose={() => setRevoking(null)}
+                size="xs"
+                title={`إلغاء تفعيل «${revoking?.name ?? ''}»`}
+                footer={<><Button variant="outline" onClick={() => setRevoking(null)}>تراجع</Button><Button variant="danger" loading={busy} onClick={() => revoking && router.post(route('club.settings.pos-devices.revoke', revoking.id), {}, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => { setBusy(false); setRevoking(null); } })}>إلغاء التفعيل</Button></>}
+            >
+                <p className="text-sm text-[#4b4b4b]">{revoking?.is_this ? 'هذا هو الجهاز الذي تستخدمه الآن. ' : ''}لن يستطيع البيع حتى يُربط من جديد.</p>
+            </Modal>
             <ConfirmDelete target={deleting} url={deleting && route('club.settings.pos-devices.destroy', deleting.id)} title={`حذف «${deleting?.name}»`} message="جهاز لم تُسجَّل عليه أي عملية بيع؛ يُحذف سجله وملحقاته." onClose={() => setDeleting(null)} />
         </SettingsScreen>
     );
@@ -127,7 +139,7 @@ function DeviceDialog({ device, branches, accounts, onClose }: { device?: Device
     };
 
     return (
-        <Modal open onClose={onClose} title={device ? `تعديل «${device.name}»` : 'إضافة جهاز نقطة بيع'} footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button type="submit" form="device-form" loading={form.processing}>{device ? 'حفظ' : 'إضافة وإصدار رمز ربط'}</Button></>}>
+        <Modal open onClose={onClose} title={device ? `تعديل «${device.name}»` : 'إضافة جهاز نقطة بيع'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="device-form" loading={form.processing}>{device ? 'حفظ' : 'إضافة وإصدار رمز ربط'}</Button></>}>
             <form id="device-form" onSubmit={submit} className="space-y-4">
                 <Field label="اسم الجهاز" error={form.errors.name} required><Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} maxLength={80} placeholder="مثل: كاشير الاستقبال" autoFocus /></Field>
                 <Field label="الفرع" error={form.errors.branch_id} required hint={moved ? undefined : 'تُسجَّل مبيعات الجهاز ومخزونها على هذا الفرع'}>
@@ -144,6 +156,7 @@ function DeviceDialog({ device, branches, accounts, onClose }: { device?: Device
 
 function PeripheralsDialog({ device, types, drivable, connections, onClose }: { device: Device; types: Record<string, string>; drivable: string[]; connections: Record<string, string>; onClose: () => void }) {
     const [editing, setEditing] = useState<Peripheral | 'new' | null>(device.peripherals.length ? null : 'new');
+    const [removing, setRemoving] = useState<Peripheral | null>(null);
 
     return (
         <Modal open onClose={onClose} size="lg" title={`ملحقات «${device.name}»`} footer={editing === null ? <><Button variant="outline" onClick={onClose}>إغلاق</Button><Button icon={<Plus />} onClick={() => setEditing('new')}>إضافة ملحق</Button></> : undefined}>
@@ -163,11 +176,12 @@ function PeripheralsDialog({ device, types, drivable, connections, onClose }: { 
                             </div>
                             {p.type === 'printer' && <Button size="sm" variant="outline" icon={<Printer />} href={route('club.settings.pos-devices.peripherals.test', { device: device.id, peripheral: p.id })} external>طباعة تجريبية</Button>}
                             <Button size="sm" variant="ghost" icon={<Pencil />} aria-label={`تعديل ${p.name}`} onClick={() => setEditing(p)} />
-                            <Button size="sm" variant="ghost" icon={<Trash2 />} aria-label={`حذف ${p.name}`} onClick={() => window.confirm(`حذف «${p.name}»؟`) && router.delete(route('club.settings.pos-devices.peripherals.destroy', { device: device.id, peripheral: p.id }), { preserveScroll: true })} />
+                            <Button size="sm" variant="ghost" icon={<Trash2 />} aria-label={`حذف ${p.name}`} onClick={() => setRemoving(p)} />
                         </li>
                     ))}
                 </ul>
             )}
+            <ConfirmDelete target={removing} url={removing && route('club.settings.pos-devices.peripherals.destroy', { device: device.id, peripheral: removing.id })} title={`حذف «${removing?.name ?? ''}»`} message="يُحذف الملحق من هذا الجهاز؛ لا يؤثر في عمليات البيع المسجلة." onClose={() => setRemoving(null)} />
         </Modal>
     );
 }

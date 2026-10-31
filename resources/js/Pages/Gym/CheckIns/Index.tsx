@@ -1,6 +1,7 @@
 import { Link, router } from '@inertiajs/react';
 import { CheckCircle2, Clock, XCircle } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
 import { Badge, Card, EmptyState, Input, PageHeader, Pagination, Tabs } from '@/Components/ui';
 import type { Paginated } from '@/types';
 
@@ -20,13 +21,15 @@ interface Row {
 
 const METHODS: Record<string, string> = { manual: 'يدوي (الاستقبال)', qr: 'رمز QR', card: 'بطاقة', fingerprint: 'بصمة', barcode: 'باركود', pin: 'رمز سري' };
 
-export default function CheckInsIndex({ checkins, filters }: { checkins: Paginated<Row>; filters: { result?: string; date?: string } }) {
+export default function CheckInsIndex({ checkins, filters, period }: { checkins: Paginated<Row>; filters: { result?: string }; period: Period }) {
     const go = (params: Record<string, string | undefined>) =>
-        router.get(route('club.checkins.index'), { result: filters.result || undefined, date: filters.date || undefined, ...params }, { preserveState: true, preserveScroll: true });
+        router.get(route('club.checkins.index'), { result: filters.result || undefined, ...periodParams(period), ...params }, { preserveState: true, preserveScroll: true });
 
     return (
         <ClubLayout title="سجل الدخول">
             <PageHeader title="سجل الدخول" subtitle="كل قرار دخول — من الاستقبال أو QR أو أجهزة البوابة — مسموحًا أو مرفوضًا مع السبب" />
+
+            <PeriodTabs period={period} params={{ ...filters }} />
 
             <Card padded={false}>
                 <div className="flex flex-wrap items-center justify-between gap-3 p-4">
@@ -36,9 +39,6 @@ export default function CheckInsIndex({ checkins, filters }: { checkins: Paginat
                         onChange={(key) => go({ result: key || undefined })}
                         className="border-0"
                     />
-                    <div className="w-full sm:w-48">
-                        <Input type="date" value={filters.date ?? ''} onChange={(e) => go({ date: e.target.value || undefined })} />
-                    </div>
                 </div>
 
                 {checkins.data.length === 0 ? (

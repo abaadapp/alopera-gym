@@ -2,6 +2,7 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Support\Period;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -18,10 +19,16 @@ class CheckInController extends Controller
 {
     public function index(Request $request): Response
     {
+        // An older link's ?date= is that one day.
+        if ($request->filled('date') && ! $request->hasAny(['range', 'from', 'to'])) {
+            $request->query->add(['from' => $request->query('date'), 'to' => $request->query('date')]);
+        }
+        $period = Period::fromRequest($request);
+
         return Inertia::render('Gym/CheckIns/Index', [
             'checkins' => BranchContext::scope(CheckIn::with(['member:id,full_name,member_no', 'device:id,name', 'performer:id,name']))
                 ->when($request->string('result')->toString(), fn ($q, $r) => $q->where('result', $r))
-                ->when($request->date('date'), fn ($q, $d) => $q->whereDate('checked_in_at', $d))
+                ->tap(fn ($q) => $period->apply($q, 'checked_in_at'))
                 ->latest('id')->paginate(50)->withQueryString()
                 ->through(fn (CheckIn $c) => $c->only('id', 'method', 'direction', 'result', 'reason', 'credential_hint') + [
                     'reason_label' => AccessDecision::REASONS[$c->reason] ?? $c->reason,
@@ -29,7 +36,8 @@ class CheckInController extends Controller
                     'device' => $c->device?->name, 'by' => $c->performer?->name,
                     'at' => $c->checked_in_at->format('Y-m-d H:i:s'),
                 ]),
-            'filters' => $request->only('result', 'date'),
+            'filters' => $request->only('result'),
+            'period' => $period->toArray(),
         ]);
     }
 

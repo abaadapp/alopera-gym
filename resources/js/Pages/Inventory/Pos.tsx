@@ -203,7 +203,7 @@ export default function Pos({ products, categories, plans, packages, can: allowe
                     </div>
 
                     {kinds.length > 1 && (
-                        <div className="mb-3 flex shrink-0 items-center gap-2 overflow-x-auto pb-1">
+                        <div className="no-scrollbar mb-3 flex shrink-0 items-center gap-2 overflow-x-auto pb-1">
                             {kinds.map(([k, label, Icon]) => (
                                 <button key={k} type="button" onClick={() => { setKind(k); setQuery(''); }} className={cn(chip, 'inline-flex items-center gap-2', kind === k ? chipOn : chipOff)}>
                                     <Icon className="size-4" /> {label}
@@ -212,7 +212,7 @@ export default function Pos({ products, categories, plans, packages, can: allowe
                         </div>
                     )}
                     {kind === 'products' && categories.length > 0 && (
-                        <div className="mb-4 flex shrink-0 items-center gap-2 overflow-x-auto pb-1">
+                        <div className="no-scrollbar mb-4 flex shrink-0 items-center gap-2 overflow-x-auto pb-1">
                             {['', ...categories].map((c) => (
                                 <button key={c || 'all'} type="button" onClick={() => setCategory(c)} className={cn(chip, category === c ? chipOn : chipOff)}>{c || 'الكل'}</button>
                             ))}

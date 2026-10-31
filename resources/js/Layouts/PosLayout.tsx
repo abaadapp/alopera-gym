@@ -33,7 +33,7 @@ export default function PosLayout({ title, device, branch, fill = false, childre
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-[12px] bg-[#111] text-white">
                     <Store className="size-[18px]" />
                 </span>
-                <nav className="flex min-w-0 items-center gap-1 overflow-x-auto" aria-label="نقطة البيع">
+                <nav className="no-scrollbar flex min-w-0 items-center gap-1 overflow-x-auto" aria-label="نقطة البيع">
                     {NAV.map((item) => {
                         const active = route().current(item.route);
                         return (

@@ -113,7 +113,7 @@ export function SupplierDialog({ supplier, onClose }: { supplier: SupplierRow | 
     };
 
     return (
-        <Modal open onClose={onClose} title={supplier ? 'تعديل بيانات المورّد' : 'إضافة مورّد جديد'} footer={<><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button type="submit" form="supplier-form" loading={form.processing}>{supplier ? 'حفظ' : 'إضافة'}</Button></>}>
+        <Modal open onClose={onClose} title={supplier ? 'تعديل بيانات المورّد' : 'إضافة مورّد جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="supplier-form" loading={form.processing}>{supplier ? 'حفظ' : 'إضافة'}</Button></>}>
             <form id="supplier-form" onSubmit={submit} className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <Field label="اسم المورّد" error={form.errors.name} required><Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} maxLength={160} autoFocus={!supplier} required /></Field>

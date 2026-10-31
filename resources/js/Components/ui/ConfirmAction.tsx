@@ -67,7 +67,8 @@ export default function ConfirmAction({
                 size="xs"
                 footer={
                     <>
-                        <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
+                        {/* «إلغاء» beside «إلغاء العملية» reads as the action itself: the way back is then «تراجع». */}
+                        <Button variant="outline" onClick={() => setOpen(false)}>{confirmLabel.includes('إلغاء') ? 'تراجع' : 'إلغاء'}</Button>
                         <Button variant={tone === 'danger' ? 'danger' : 'primary'} loading={busy} disabled={!!reason && text.trim() === ''} onClick={submit}>
                             {confirmLabel}
                         </Button>

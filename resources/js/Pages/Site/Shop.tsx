@@ -70,7 +70,7 @@ export default function Shop({ site, seo, products, categories, currency }: { si
 
             <section className="mx-auto max-w-6xl px-4 py-12">
                 {categories.length > 1 && (
-                    <div className="mb-8 flex gap-2 overflow-x-auto pb-1">
+                    <div className="no-scrollbar mb-8 flex gap-2 overflow-x-auto pb-1">
                         {['', ...categories].map((c) => (
                             <button key={c || 'all'} type="button" onClick={() => setCategory(c)} className={cn('whitespace-nowrap rounded-full border px-4 py-2 text-sm transition', category === c ? 'border-brand bg-brand text-white' : 'border-line bg-white hover:border-brand-300')}>
                                 {c || 'الكل'}

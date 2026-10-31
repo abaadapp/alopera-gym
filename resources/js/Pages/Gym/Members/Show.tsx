@@ -6,7 +6,7 @@ import {
     Send, ShieldCheck, Snowflake, Trash2, UserRound, Wallet, Repeat, Play, Ban, Fingerprint,
 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { BackLink, Badge, Button, Card, CardHeader, ChoiceCard, ConfirmAction, EmptyState, Field, FlatCards, Input, Modal, PageHeader, Select, StatCard, StatGrid, Tabs, Textarea } from '@/Components/ui';
+import { BackLink, Badge, Button, Card, CardHeader, ChoiceCard, ConfirmAction, EmptyState, Field, FlatCards, Input, Modal, PageHeader, Select, StatCard, StatGrid, Tabs, Textarea, FileInput } from '@/Components/ui';
 import { Dropdown, DropdownItem, DropdownSeparator } from '@/Components/ui/Dropdown';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, money, whatsappUrl, dayCount } from '@/lib/format';
@@ -485,7 +485,7 @@ function FreezeModal({ membership, onClose }: { membership: MembershipItem | nul
             onClose={onClose}
             title="تجميد العضوية"
             size="sm"
-            footer={<><Button variant="ghost" onClick={onClose}>تراجع</Button><Button onClick={submit} loading={form.processing}>تجميد</Button></>}
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>تجميد</Button></>}
         >
             <form onSubmit={submit} className="space-y-4">
                 <p className="text-sm text-muted">تُلغى الحجوزات القادمة وتُستعاد حصصها، ويُمدَّد تاريخ الانتهاء عند الاستئناف بعدد الأيام الفعلية.</p>
@@ -591,7 +591,7 @@ function SellModal({ open, onClose, member, current, plans, hasMemberships }: { 
             size="lg"
             footer={
                 <>
-                    <Button variant="ghost" onClick={onClose}>إلغاء</Button>
+                    <Button variant="outline" onClick={onClose}>إلغاء</Button>
                     <Button onClick={submit} loading={form.processing} disabled={!form.data.membership_plan_id}>إصدار الفاتورة</Button>
                 </>
             }
@@ -665,7 +665,7 @@ function ChangePlanModal({ membership, onClose, plans, memberId }: { membership:
             open={membership !== null}
             onClose={onClose}
             title="تغيير / ترقية الباقة"
-            footer={<><Button variant="ghost" onClick={onClose}>تراجع</Button><Button onClick={submit} loading={form.processing} disabled={!form.data.membership_plan_id}>إصدار فاتورة التغيير</Button></>}
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing} disabled={!form.data.membership_plan_id}>إصدار فاتورة التغيير</Button></>}
         >
             <form onSubmit={submit} className="space-y-4">
                 <p className="text-sm text-muted">تبدأ الباقة الجديدة اليوم، وتُحتسب قيمة الأيام غير المستخدمة من «{membership?.plan}» رصيدًا. تبقى العضوية الحالية فعّالة حتى دفع فاتورة التغيير.</p>
@@ -695,7 +695,7 @@ function PortalPasswordModal({ open, onClose, memberId, hasAccess }: { open: boo
             onClose={onClose}
             title={hasAccess ? 'تغيير كلمة مرور البوابة' : 'تفعيل بوابة العضو'}
             size="sm"
-            footer={<><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}
         >
             <form onSubmit={submit} className="space-y-3">
                 <p className="text-sm text-muted">يدخل العضو إلى البوابة برقم هاتفه وكلمة المرور هذه، ويمكنه تغييرها لاحقًا من ملفه.</p>
@@ -804,7 +804,7 @@ function RecordPaymentModal({ invoice, onClose }: { invoice: { id: number; numbe
             onClose={onClose}
             title={`تحصيل دفعة — ${invoice?.number ?? ''}`}
             size="sm"
-            footer={<><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>تسجيل الدفعة</Button></>}
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>تسجيل الدفعة</Button></>}
         >
             <form onSubmit={submit} className="space-y-4">
                 <p className="text-sm text-muted">المتبقي: <span className="font-semibold text-ink num">{money(invoice?.balance ?? 0, currency)}</span></p>
@@ -827,7 +827,7 @@ function RecordPaymentModal({ invoice, onClose }: { invoice: { id: number; numbe
                 {form.data.method === 'bank_transfer' && (
                     <>
                         <Field label="إثبات التحويل" error={form.errors.proof} hint="يُسجَّل التحويل «بانتظار التأكيد» ولا تُفعّل العضوية حتى تؤكده المالية.">
-                            <input type="file" accept="image/*,application/pdf" className="block w-full text-sm" onChange={(e) => form.setData('proof', e.target.files?.[0] ?? null)} />
+                            <FileInput accept="image/*,application/pdf" file={form.data.proof} onChange={(f) => form.setData('proof', f)} />
                         </Field>
                     </>
                 )}
@@ -1010,7 +1010,7 @@ function DocumentsTab({ documents, member }: Props) {
                         <Input type="date" value={form.data.expires_on} onChange={(e) => form.setData('expires_on', e.target.value)} />
                     </Field>
                     <Field label="الملف" error={form.errors.file} hint="PDF أو صورة أو Word — حتى 10MB" required>
-                        <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.doc,.docx" className="block w-full text-sm" onChange={(e) => form.setData('file', e.target.files?.[0] ?? null)} />
+                        <FileInput accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.doc,.docx" file={form.data.file} onChange={(f) => form.setData('file', f)} />
                     </Field>
                     {form.progress && <div className="h-1.5 overflow-hidden rounded-full bg-brand-50"><div className="h-full bg-brand" style={{ width: `${form.progress.percentage ?? 0}%` }} /></div>}
                     <Button type="submit" className="w-full" loading={form.processing} disabled={!form.data.file || !form.data.title}>رفع</Button>

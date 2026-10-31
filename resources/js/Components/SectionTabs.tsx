@@ -24,7 +24,7 @@ export default function SectionTabs({ className }: { className?: string }) {
 
     return (
         <nav aria-label="صفحات القسم" className={cn('no-print', className)}>
-            <div ref={ref} className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] lg:mx-0 lg:px-0 [&::-webkit-scrollbar]:hidden">
+            <div ref={ref} className="no-scrollbar -mx-4 overflow-x-auto px-4 lg:mx-0 lg:px-0">
                 <div className="flex min-w-max gap-1 border-b border-line">
                     {tabs.map((tab) => {
                         const current = tab === active;

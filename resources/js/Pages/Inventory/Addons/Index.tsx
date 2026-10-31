@@ -182,7 +182,7 @@ function AddonDialog({ addon, products, categories, onClose }: { addon: Addon | 
     const choice = (on: boolean) => cn('flex-1 rounded-[10px] border px-3 py-2 text-[13px] font-medium transition', on ? 'border-[#111] bg-[#111] text-white' : 'border-line bg-white text-ink hover:bg-[#fafafa]');
 
     return (
-        <Modal open onClose={onClose} size="lg" title={addon ? `تعديل «${addon.name}»` : 'إضافة جديدة'} footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button type="submit" form="addon-form" loading={form.processing}>حفظ</Button></>}>
+        <Modal open onClose={onClose} size="lg" title={addon ? `تعديل «${addon.name}»` : 'إضافة جديدة'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="addon-form" loading={form.processing}>حفظ</Button></>}>
             <form id="addon-form" onSubmit={submit} className="space-y-5">
                 <div className="grid gap-4 sm:grid-cols-[1fr_9rem_8rem]">
                     <Field label="اسم الإضافة" error={form.errors.name} required>

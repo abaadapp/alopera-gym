@@ -12,7 +12,7 @@ export default function PayBill({ bill, accounts, onClose }: { bill: { id: numbe
     const form = useForm({ account_id: String(accounts[0]?.id ?? ''), amount: String(Number(bill.balance)), paid_on: new Date().toISOString().slice(0, 10), reference: '', notes: '', client_key: key });
 
     return (
-        <Modal open onClose={onClose} title={`سداد ${bill.reference} — ${bill.supplier ?? ''}`} footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button loading={form.processing} onClick={() => form.post(route('club.purchases.bills.pay', bill.id), { preserveScroll: true, onSuccess: onClose })}>تسجيل السداد</Button></>}>
+        <Modal open onClose={onClose} title={`سداد ${bill.reference} — ${bill.supplier ?? ''}`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button loading={form.processing} onClick={() => form.post(route('club.purchases.bills.pay', bill.id), { preserveScroll: true, onSuccess: onClose })}>تسجيل السداد</Button></>}>
             <div className="space-y-4">
                 <p className="rounded-[12px] bg-[#fafafa] px-4 py-3 text-[13px]">المتبقي على السند: <span className="font-semibold num">{money(bill.balance, currency)}</span></p>
                 <div className="grid gap-4 sm:grid-cols-2">

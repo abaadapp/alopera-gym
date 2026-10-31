@@ -5,6 +5,7 @@ namespace App\Modules\Finance\Http\Controllers;
 use App\Core\Auth\PermissionRegistry;
 use App\Core\Export\TableExporter;
 use App\Core\Support\NumberSequence;
+use App\Core\Support\Period;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
@@ -35,7 +36,8 @@ class ExpenseController extends Controller
             'categories' => ExpenseCategory::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             // Suppliers belong to the sales & inventory module; without it the expense form has no supplier field.
             'suppliers' => PermissionRegistry::moduleEnabled('inventory') ? Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name']) : [],
-            'filters' => $request->only('category_id', 'from', 'to', 'q'),
+            'filters' => $request->only('category_id', 'q'),
+            'period' => Period::fromRequest($request)->toArray(),
         ]);
     }
 
@@ -104,8 +106,7 @@ class ExpenseController extends Controller
     {
         return BranchContext::scope(Expense::query())
             ->when($request->integer('category_id'), fn ($q, $id) => $q->where('expense_category_id', $id))
-            ->when($request->date('from'), fn ($q, $d) => $q->where('expense_date', '>=', $d))
-            ->when($request->date('to'), fn ($q, $d) => $q->where('expense_date', '<=', $d))
+            ->tap(fn ($q) => Period::fromRequest($request)->apply($q, 'expense_date'))
             ->when($request->string('q')->toString(), fn ($q, $t) => $q->where(fn ($w) => $w->where('description', 'ilike', "%{$t}%")->orWhere('payee', 'ilike', "%{$t}%")));
     }
 

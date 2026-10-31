@@ -3,6 +3,7 @@
 namespace App\Modules\Accounting\Http\Controllers;
 
 use App\Core\Support\BusinessRuleException;
+use App\Core\Support\Period;
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
@@ -21,12 +22,11 @@ class JournalController extends Controller
 {
     public function index(Request $request): Response
     {
-        $from = $request->string('from')->toString() ?: now()->startOfMonth()->toDateString();
-        $to = $request->string('to')->toString() ?: today()->toDateString();
+        $period = Period::fromRequest($request, 'month');
         $source = $request->string('source')->toString();
 
         $entries = JournalEntry::with(['lines.account:id,code,name', 'author:id,name'])
-            ->whereBetween('entry_date', [$from, $to])
+            ->tap(fn ($q) => $period->apply($q, 'entry_date'))
             ->when($source === 'manual', fn ($q) => $q->whereNull('source_type')->whereNull('reverses_id'))
             ->when($source && $source !== 'manual', fn ($q) => $q->where('source_type', $source))
             ->when($request->string('q')->toString(), fn ($q, $s) => $q->where(fn ($w) => $w->where('description', 'ilike', "%{$s}%")->orWhere('number', 'ilike', "%{$s}%")))
@@ -42,7 +42,8 @@ class JournalController extends Controller
             'entries' => $entries,
             'accounts' => Account::postable()->orderBy('code')->get(['id', 'code', 'name', 'type']),
             'sources' => ['manual' => 'قيد يدوي'] + JournalEntry::SOURCES,
-            'filters' => ['from' => $from, 'to' => $to, 'source' => $source ?: null, 'q' => $request->string('q')->toString() ?: null],
+            'period' => $period->toArray(),
+            'filters' => ['source' => $source ?: null, 'q' => $request->string('q')->toString() ?: null],
             'canManage' => $request->user()->hasPermission('accounting.manage'),
         ]);
     }

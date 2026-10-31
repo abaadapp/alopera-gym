@@ -2,7 +2,7 @@ import { Fragment, useState, type FormEvent } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import { ChevronDown, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import PeriodFilter from '@/Components/PeriodFilter';
+import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
 import { Badge, Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Pagination, SearchInput, Select } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
@@ -16,11 +16,12 @@ interface Props {
     entries: Paginated<Entry>;
     accounts: { id: number; code: string; name: string; type: string }[];
     sources: Record<string, string>;
-    filters: { from: string; to: string; source: string | null; q: string | null };
+    filters: { source: string | null; q: string | null };
+    period: Period;
     canManage: boolean;
 }
 
-export default function FinanceJournal({ entries, accounts, sources, filters, canManage }: Props) {
+export default function FinanceJournal({ entries, accounts, sources, filters, period, canManage }: Props) {
     const currency = useCurrency();
     const [open, setOpen] = useState<number | null>(null);
     const [creating, setCreating] = useState(false);
@@ -33,17 +34,18 @@ export default function FinanceJournal({ entries, accounts, sources, filters, ca
                 actions={canManage && <Button icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>قيد جديد</Button>}
             />
 
-            <PeriodFilter routeName="club.finance.journal" from={filters.from} to={filters.to} extra={{ source: filters.source, q: filters.q }}>
-                <Select className="h-8 w-44 py-1 text-[13px]" value={filters.source ?? ''} aria-label="المصدر"
-                    onChange={(e) => router.get(route('club.finance.journal'), Object.fromEntries(Object.entries({ ...filters, source: e.target.value }).filter(([, v]) => v)) as Record<string, string>, { preserveState: true, replace: true })}>
-                    <option value="">كل المصادر</option>
-                    {Object.entries(sources).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </Select>
-            </PeriodFilter>
+            <PeriodTabs period={period} params={filters} />
 
             <Card padded={false}>
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line p-4">
-                    <div className="w-full max-w-xs"><SearchInput value={filters.q} placeholder="رقم القيد أو البيان…" extra={{ from: filters.from, to: filters.to, source: filters.source }} /></div>
+                    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                        <div className="w-full max-w-xs"><SearchInput value={filters.q} placeholder="رقم القيد أو البيان…" extra={{ ...periodParams(period), source: filters.source }} /></div>
+                        <Select className="w-44" value={filters.source ?? ''} aria-label="المصدر"
+                            onChange={(e) => router.get(route('club.finance.journal'), Object.fromEntries(Object.entries({ ...filters, ...periodParams(period), source: e.target.value }).filter(([, v]) => v)) as Record<string, string>, { preserveState: true, replace: true })}>
+                            <option value="">كل المصادر</option>
+                            {Object.entries(sources).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                        </Select>
+                    </div>
                     <span className="text-[13px] text-muted">{entries.total} قيدًا</span>
                 </div>
                 {entries.data.length ? (

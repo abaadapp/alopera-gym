@@ -2,13 +2,13 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Support\Period;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Gym\Access\AccessControlService;
 use App\Modules\Gym\Models\StaffAttendance;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -19,11 +19,10 @@ class StaffAttendanceController extends Controller
 {
     public function index(Request $request, TenantContext $tenants): Response
     {
-        $from = CarbonImmutable::parse($request->string('from')->toString() ?: now()->startOfMonth()->toDateString());
-        $to = CarbonImmutable::parse($request->string('to')->toString() ?: today()->toDateString());
+        $period = Period::fromRequest($request, 'month');
 
         $rows = BranchContext::scope(StaffAttendance::with(['user:id,name', 'device:id,name']))
-            ->whereBetween('clock_in_at', [$from->startOfDay(), $to->endOfDay()])
+            ->tap(fn ($q) => $period->apply($q, 'clock_in_at'))
             ->when($request->integer('user_id'), fn ($q, $id) => $q->where('user_id', $id))
             ->latest('clock_in_at')->paginate(50)->withQueryString()
             ->through(fn (StaffAttendance $a) => [
@@ -34,19 +33,20 @@ class StaffAttendanceController extends Controller
 
         // Over the whole period (not just this page): hours worked and punches left open. Each person's days and hours
         // are the staff attendance report (the reports page).
-        $period = BranchContext::scope(StaffAttendance::query())
-            ->whereBetween('clock_in_at', [$from->startOfDay(), $to->endOfDay()])
+        $punches = BranchContext::scope(StaffAttendance::query())
+            ->tap(fn ($q) => $period->apply($q, 'clock_in_at'))
             ->when($request->integer('user_id'), fn ($q, $id) => $q->where('user_id', $id))
             ->get(['clock_in_at', 'clock_out_at']);
 
         return Inertia::render('Gym/StaffAttendance/Index', [
             'rows' => $rows,
             'stats' => [
-                'hours' => round($period->sum(fn ($a) => $a->clock_out_at ? $a->clock_in_at->diffInMinutes($a->clock_out_at) : 0) / 60, 2),
-                'open' => $period->whereNull('clock_out_at')->count(),
+                'hours' => round($punches->sum(fn ($a) => $a->clock_out_at ? $a->clock_in_at->diffInMinutes($a->clock_out_at) : 0) / 60, 2),
+                'open' => $punches->whereNull('clock_out_at')->count(),
             ],
             'staff' => User::ofTenant($tenants->require()->id)->orderBy('name')->get(['id', 'name']),
-            'filters' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'user_id' => $request->integer('user_id') ?: null],
+            'period' => $period->toArray(),
+            'filters' => ['user_id' => $request->integer('user_id') ?: null],
         ]);
     }
 

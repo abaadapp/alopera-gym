@@ -3,6 +3,7 @@
 namespace App\Modules\Accounting\Http\Controllers;
 
 use App\Core\Support\Money;
+use App\Core\Support\Period;
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
@@ -10,7 +11,6 @@ use App\Modules\Accounting\Services\FinanceReports;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Payroll\Models\PayrollItem;
 use App\Modules\Payroll\Models\PayrollRun;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -23,7 +23,10 @@ class FinanceController extends Controller
 
     public function summary(Request $request): Response
     {
-        [$from, $to] = $this->period($request);
+        // «الكل» is everything in the books, from their first day.
+        $period = Period::fromRequest($request, 'month');
+        $from = $period->from?->toDateString() ?? '2000-01-01';
+        $to = $period->to?->toDateString() ?? today()->toDateString();
         $summary = $this->reports->summary($from, $to);
 
         return Inertia::render('Finance/Summary', [
@@ -35,7 +38,7 @@ class FinanceController extends Controller
             ],
             'unpaidSalaries' => Money::normalize(PayrollItem::whereNull('paid_at')->whereHas('run', fn ($q) => $q->where('status', PayrollRun::APPROVED))->sum('net')),
             'recent' => JournalEntry::with('lines.account:id,name,kind')->latest('entry_date')->latest('id')->limit(8)->get()->map(fn (JournalEntry $e) => $this->entryRow($e)),
-            'filters' => ['from' => $from, 'to' => $to],
+            'period' => $period->toArray(),
         ]);
     }
 
@@ -54,15 +57,6 @@ class FinanceController extends Controller
     public function export(Request $request): RedirectResponse
     {
         return redirect()->route('club.reports.export', ['report' => 'statements'] + $request->query());
-    }
-
-    /** @return array{0: string, 1: string} */
-    private function period(Request $request): array
-    {
-        $from = CarbonImmutable::parse($request->string('from')->toString() ?: now()->startOfMonth()->toDateString());
-        $to = CarbonImmutable::parse($request->string('to')->toString() ?: today()->toDateString());
-
-        return $from->greaterThan($to) ? [$to->toDateString(), $from->toDateString()] : [$from->toDateString(), $to->toDateString()];
     }
 
     private function money(Account $a, string $balance): array

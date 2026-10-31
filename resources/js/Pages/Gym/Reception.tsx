@@ -321,7 +321,7 @@ function QuickSellModal({ open, onClose, member, plans }: { open: boolean; onClo
             open={open}
             onClose={onClose}
             title={`${member.membership ? 'تجديد' : 'بيع عضوية'} — ${member.full_name}`}
-            footer={<><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing} disabled={!form.data.membership_plan_id}>إصدار الفاتورة</Button></>}
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing} disabled={!form.data.membership_plan_id}>إصدار الفاتورة</Button></>}
         >
             <form onSubmit={submit} className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -362,7 +362,7 @@ function QuickBookModal({ open, onClose, memberId, sessions }: { open: boolean; 
     };
 
     return (
-        <Modal open={open} onClose={onClose} title="حجز حصة اليوم" size="sm" footer={<><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={busy} disabled={!sessionId}>حجز</Button></>}>
+        <Modal open={open} onClose={onClose} title="حجز حصة اليوم" size="sm" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={busy} disabled={!sessionId}>حجز</Button></>}>
             {upcoming.length === 0 ? (
                 <p className="text-sm text-muted">لا توجد حصص متبقية اليوم. للحجز في أيام أخرى افتح «الحصص والحجوزات».</p>
             ) : (
@@ -405,7 +405,7 @@ function QuickPayModal({ invoice, onClose }: { invoice: { id: number; number: st
             onClose={onClose}
             title={`تحصيل — ${invoice?.number ?? ''}`}
             size="sm"
-            footer={<><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>تسجيل الدفعة</Button></>}
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>تسجيل الدفعة</Button></>}
         >
             <form onSubmit={submit} className="space-y-4">
                 <p className="text-sm text-muted">المتبقي: <span className="font-semibold text-ink num">{money(invoice?.balance ?? 0, currency)}</span></p>

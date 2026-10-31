@@ -1,7 +1,7 @@
-import { useState } from 'react';
 import { router } from '@inertiajs/react';
-import { BarChart3, Clock, Fingerprint, LogIn, Search, UserRoundCheck } from 'lucide-react';
+import { BarChart3, Clock, Fingerprint, LogIn, UserRoundCheck } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
 import { Badge, Button, Card, EmptyState, Field, Input, PageHeader, Pagination, Select, StatCard } from '@/Components/ui';
 import { date, number } from '@/lib/format';
 import type { Option, Paginated } from '@/types';
@@ -10,12 +10,9 @@ type Row = { id: number; user: string | null; method: string; device: string | n
 
 const METHODS: Record<string, string> = { manual: 'يدوي من اللوحة', fingerprint: 'بصمة', card: 'بطاقة', pin: 'رمز PIN' };
 
-export default function StaffAttendanceIndex({ rows, stats, staff, filters }: { rows: Paginated<Row>; stats: { hours: number; open: number }; staff: Option[]; filters: { from: string; to: string; user_id: number | null } }) {
-    const [from, setFrom] = useState(filters.from);
-    const [to, setTo] = useState(filters.to);
-    const [userId, setUserId] = useState<string>(filters.user_id ? String(filters.user_id) : '');
-
-    const apply = () => router.get(route('club.staff-attendance.index'), { from, to, user_id: userId || undefined }, { preserveState: true });
+export default function StaffAttendanceIndex({ rows, stats, staff, filters, period }: { rows: Paginated<Row>; stats: { hours: number; open: number }; staff: Option[]; filters: { user_id: number | null }; period: Period }) {
+    const userId = filters.user_id ? String(filters.user_id) : '';
+    const pick = (id: string) => router.get(route('club.staff-attendance.index'), { ...periodParams(period), user_id: id || undefined }, { preserveState: true, replace: true });
 
     return (
         <ClubLayout title="الحضور والانصراف">
@@ -24,7 +21,7 @@ export default function StaffAttendanceIndex({ rows, stats, staff, filters }: { 
                 subtitle="حضور الموظفين من أجهزة البصمة والتسجيل اليدوي — منفصل عن دخول الأعضاء"
                 actions={
                     <>
-                        <Button variant="outline" href={route('club.reports.show', { report: 'staff-attendance', from, to, ...(userId ? { user_id: userId } : {}) })} icon={<BarChart3 className="size-4" />}>تقرير الحضور</Button>
+                        <Button variant="outline" href={route('club.reports.show', { report: 'staff-attendance', ...periodParams(period), ...(userId ? { user_id: userId } : {}) })} icon={<BarChart3 className="size-4" />}>تقرير الحضور</Button>
                         <Button icon={<LogIn className="size-4" />} onClick={() => router.post(route('club.staff-attendance.punch'), {}, { preserveScroll: true })}>تسجيل حضوري/انصرافي</Button>
                     </>
                 }
@@ -36,16 +33,15 @@ export default function StaffAttendanceIndex({ rows, stats, staff, filters }: { 
                 <StatCard label="لم يُسجّل انصرافه" value={number(stats.open)} icon={<Fingerprint className="size-5" />} tone="amber" />
             </div>
 
+            <PeriodTabs period={period} params={{ user_id: filters.user_id }} />
+
             <Card className="mb-4">
                 <div className="grid gap-3 sm:grid-cols-4 sm:items-end">
-                    <Field label="من"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
-                    <Field label="إلى"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
                     <Field label="الموظف">
-                        <Select value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="الكل">
+                        <Select value={userId} onChange={(e) => pick(e.target.value)} placeholder="الكل">
                             {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </Select>
                     </Field>
-                    <Button variant="secondary" icon={<Search className="size-4" />} onClick={apply}>عرض</Button>
                 </div>
             </Card>
 

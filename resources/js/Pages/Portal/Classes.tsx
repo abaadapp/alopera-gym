@@ -125,7 +125,7 @@ export default function Classes({ site, seo, sessions, membership, cutoffHours, 
                 size="sm"
                 footer={
                     <>
-                        <Button variant="ghost" onClick={() => setCancelling(null)}>تراجع</Button>
+                        <Button variant="outline" onClick={() => setCancelling(null)}>تراجع</Button>
                         <Button variant="danger" loading={busy !== null} onClick={cancel}>إلغاء الحجز</Button>
                     </>
                 }

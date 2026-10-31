@@ -30,7 +30,7 @@ export default function ShopProductPage({ site, seo, product, currency }: { site
                             {photos.length ? <img src={photos[photo]} alt={product.name} className="size-full object-cover" /> : <ProductImage product={product} />}
                         </div>
                         {photos.length > 1 && (
-                            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                            <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
                                 {photos.map((url, i) => (
                                     <button key={url} type="button" onClick={() => setPhoto(i)} aria-label={`الصورة ${i + 1}`} aria-pressed={photo === i} className={cn('size-16 shrink-0 overflow-hidden rounded-2xl border-2 transition', photo === i ? 'border-brand' : 'border-transparent opacity-70 hover:opacity-100')}>
                                         <img src={url} alt="" className="size-full object-cover" />

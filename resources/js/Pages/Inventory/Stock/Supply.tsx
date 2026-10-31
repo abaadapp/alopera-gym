@@ -68,7 +68,7 @@ function NewRequest({ branch, products, onClose }: { branch: BranchFilterState; 
     const err = form.errors as Record<string, string>;
 
     return (
-        <Modal open onClose={onClose} size="lg" title="طلب تزويد" footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button type="submit" form="new-supply" loading={form.processing}>إرسال الطلب</Button></>}>
+        <Modal open onClose={onClose} size="lg" title="طلب تزويد" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="new-supply" loading={form.processing}>إرسال الطلب</Button></>}>
             <form id="new-supply" onSubmit={submit} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="الفرع الطالب" error={form.errors.branch_id} required>

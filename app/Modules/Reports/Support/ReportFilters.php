@@ -17,7 +17,8 @@ use Illuminate\Http\Request;
  */
 final class ReportFilters
 {
-    public const PRESETS = ['today', 'week', 'month', 'last_month', 'quarter', 'year'];
+    /** The periods of the shared period tabs, then two an older link may still name. */
+    public const PRESETS = ['today', 'week', 'month', 'year', 'all', 'last_month', 'quarter'];
 
     /** @param array<string, mixed> $query */
     public function __construct(
@@ -34,7 +35,8 @@ final class ReportFilters
     public static function fromRequest(Request $request, User $user, string $defaultPreset = 'month'): self
     {
         $today = CarbonImmutable::today();
-        $asked = $request->string('preset')->toString();
+        // ?range= as on every screen (PeriodTabs); ?preset= from older links.
+        $asked = $request->string('range')->toString() ?: $request->string('preset')->toString();
         $dated = $request->filled('from') || $request->filled('to');
         $preset = in_array($asked, self::PRESETS, true) ? $asked : ($dated ? 'custom' : $defaultPreset);
 
@@ -45,6 +47,8 @@ final class ReportFilters
             'last_month' => [$today->subMonthNoOverflow()->startOfMonth(), $today->subMonthNoOverflow()->endOfMonth()->startOfDay()],
             'quarter' => [$today->firstOfQuarter(), $today],
             'year' => [$today->startOfYear(), $today],
+            // «الكل» as far back as a report reaches (two years, below).
+            'all' => [$today->subYears(2), $today],
             // a malformed date in the address falls back to the default instead of failing
             default => [
                 rescue(fn () => CarbonImmutable::parse($request->string('from')->toString() ?: $today->startOfMonth()->toDateString())->startOfDay(), $today->startOfMonth(), false),
@@ -132,6 +136,7 @@ final class ReportFilters
     {
         return [
             'from' => $this->from->toDateString(), 'to' => $this->to->toDateString(), 'preset' => $this->preset,
+            'range' => in_array($this->preset, ['today', 'week', 'month', 'year', 'all'], true) ? $this->preset : 'custom',
             'compare' => $this->compare, 'compare_from' => $this->prevFrom->toDateString(), 'compare_to' => $this->prevTo->toDateString(),
             'previous_from' => $this->prevFrom->toDateString(), 'previous_to' => $this->prevTo->toDateString(),
             'branch' => $this->branch,

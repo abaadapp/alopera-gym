@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Http\Controllers;
 
+use App\Core\Support\Period;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -81,16 +82,14 @@ class InventoryController extends Controller
             'q' => $request->string('q')->trim()->toString(),
             'type' => array_key_exists((string) $request->query('type'), StockMovement::TYPES) ? $request->query('type') : '',
             'reason' => array_key_exists((string) $request->query('reason'), StockService::REASONS) ? $request->query('reason') : '',
-            'from' => $request->date('from')?->toDateString() ?? '',
-            'to' => $request->date('to')?->toDateString() ?? '',
         ];
+        $period = Period::fromRequest($request);
         // One branch (old rows without a branch are the main branch's), or all of them.
         $query = app(BranchContext::class)->narrow(StockMovement::query(), $branch, 'stock_movements.branch_id')
             ->when($filters['q'], fn ($q, $t) => $q->where(fn ($w) => $w->where('document', 'ilike', '%'.$t.'%')->orWhereHas('product', fn ($p) => $p->where('name', 'ilike', '%'.$t.'%'))))
             ->when($filters['type'], fn ($q, $t) => $q->where('type', $t))
             ->when($filters['reason'], fn ($q, $r) => $q->where('reason', $r))
-            ->when($filters['from'], fn ($q, $d) => $q->whereDate('created_at', '>=', $d))
-            ->when($filters['to'], fn ($q, $d) => $q->whereDate('created_at', '<=', $d));
+            ->tap(fn ($q) => $period->apply($q, 'stock_movements.created_at'));
         $losses = (clone $query)->where('type', 'adjustment')->where('quantity', '<', 0)->whereIn('reason', ['damaged', 'lost', 'expired', 'internal'])->toBase()
             ->selectRaw('count(*) as n, coalesce(sum(-quantity * unit_cost), 0) as value')->first();
         $gains = (clone $query)->where('type', 'adjustment')->where('quantity', '>', 0)->toBase()->selectRaw('coalesce(sum(quantity * unit_cost), 0) as value')->first();
@@ -105,6 +104,7 @@ class InventoryController extends Controller
                 ]),
             'summary' => ['count' => (clone $query)->count(), 'losses' => round((float) $losses->value, 3), 'loss_count' => (int) $losses->n, 'gains' => round((float) $gains->value, 3)],
             'filters' => $filters,
+            'period' => $period->toArray(),
             'branch' => $this->branchFilter($request, $branch),
             'types' => StockMovement::TYPES,
             'reasons' => StockService::REASONS,

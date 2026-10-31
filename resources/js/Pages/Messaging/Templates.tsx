@@ -211,7 +211,7 @@ function TemplateModal({ template, onClose }: { template: Template | null; onClo
             title={template ? `قالب: ${template.label}` : 'قالب تسويقي جديد'}
             footer={
                 <>
-                    <Button variant="ghost" onClick={onClose}>إلغاء</Button>
+                    <Button variant="outline" onClick={onClose}>إلغاء</Button>
                     <Button onClick={submit} loading={form.processing}>حفظ</Button>
                 </>
             }

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { Download, Maximize2, Printer, X } from 'lucide-react';
-import { Button } from '@/Components/ui';
+import { Download, Maximize2, Printer } from 'lucide-react';
+import { Button, Modal } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 import PaperFrame from './PaperFrame';
 import { useCan } from '@/hooks/useShared';
@@ -37,20 +37,10 @@ export default function PaperPanel({ paper, printUrl, pdfUrl, heading = 'الو�
                 {note && <p className="border-b border-line bg-[#fafafa] px-4 py-2 text-[12px] leading-relaxed text-muted">{note}</p>}
                 <PaperFrame html={paper.html} paper={paper.size} height="auto" className="max-h-[min(78svh,1000px)] rounded-none border-0" />
             </div>
-            {open && (
-                <div className="fixed inset-0 z-50 flex flex-col bg-black/50 p-3 sm:p-6" role="dialog" aria-modal onClick={() => setOpen(false)}>
-                    <div className="mx-auto flex w-full max-w-5xl min-h-0 flex-1 flex-col overflow-hidden rounded-[18px] bg-white" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
-                            <h2 className="text-[15px] font-semibold">{heading}</h2>
-                            <div className="flex items-center gap-1.5">
-                                {mayPrint && <Button variant="outline" size="sm" href={printUrl} external icon={<Printer className="size-3.5" />}>طباعة</Button>}
-                                <Button variant="ghost" size="sm" icon={<X className="size-4" />} onClick={() => setOpen(false)} aria-label="إغلاق" />
-                            </div>
-                        </div>
-                        <PaperFrame html={paper.html} paper={paper.size} height="100%" className="min-h-0 flex-1 rounded-none border-0" />
-                    </div>
-                </div>
-            )}
+            {/* The paper at full size, in the system's dialog (Escape, focus and the page behind held as everywhere). */}
+            <Modal open={open} onClose={() => setOpen(false)} size="full" title={heading} footer={mayPrint ? <Button variant="outline" href={printUrl} external icon={<Printer className="size-3.5" />}>طباعة</Button> : undefined}>
+                <PaperFrame html={paper.html} paper={paper.size} height="100%" className="h-full min-h-[60svh] rounded-[12px]" />
+            </Modal>
         </>
     );
 }

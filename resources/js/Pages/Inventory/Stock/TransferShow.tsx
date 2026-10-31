@@ -82,7 +82,7 @@ function Resolve({ transfer, line, onClose }: { transfer: Transfer; line: Line; 
     const submit = () => router.post(route('club.inventory.transfers.step', { transfer: transfer.id, step: 'resolve' }), { line_id: line.id, outcome, quantity, reason }, { preserveScroll: true, onSuccess: onClose, onError: setErrors });
 
     return (
-        <Modal open onClose={onClose} size="sm" title={`تسوية الناقص: ${line.product}`} footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button onClick={submit}>تسجيل</Button></>}>
+        <Modal open onClose={onClose} size="sm" title={`تسوية الناقص: ${line.product}`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit}>تسجيل</Button></>}>
             <div className="space-y-4">
                 <Field label="ما حدث للكمية" error={errors.outcome}>
                     <Select value={outcome} onChange={(e) => setOutcome(e.target.value)}>

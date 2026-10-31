@@ -56,7 +56,7 @@ function TypeModal({ type, onClose }: { type: Type | null; onClose: () => void }
     };
 
     return (
-        <Modal open onClose={onClose} title={type ? 'تعديل النوع' : 'نوع جديد'} footer={<><Button variant="ghost" onClick={onClose}>تراجع</Button><Button loading={form.processing} onClick={submit}>حفظ</Button></>}>
+        <Modal open onClose={onClose} title={type ? 'تعديل النوع' : 'نوع جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button loading={form.processing} onClick={submit}>حفظ</Button></>}>
             <form onSubmit={submit} className="space-y-4">
                 <Field label="اسم النوع" error={form.errors.name} required>
                     <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} maxLength={120} />

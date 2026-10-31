@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { History, SlidersHorizontal, TrendingDown, TrendingUp } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
 import { Button, Card, EmptyState, Input, PageHeader, Pagination, StatCard } from '@/Components/ui';
 import { FilterMenu, Toolbar, ToolbarSearch, visit } from '@/Components/Products/parts';
 import AdjustDialog from '@/Components/Inventory/AdjustDialog';
@@ -27,18 +28,18 @@ interface Row {
     note: string | null;
 }
 
-type Filters = { q: string; type: string; reason: string; from: string; to: string };
+type Filters = { q: string; type: string; reason: string };
 
 /**
  * سجل المخزون: every movement — purchases received, sales, website orders, voids, counts, damage and loss, transfers
  * — with its date, who, quantity, cost, the branch's balance after it and the document behind it. Rows are never
  * edited; a mistake is put right with an opposite adjustment.
  */
-export default function StockMovements({ rows, summary, filters, branch, types, reasons, products }: { rows: Paginated<Row>; summary: { count: number; losses: number; loss_count: number; gains: number }; filters: Filters; branch: BranchFilterState; types: Record<string, string>; reasons: Record<string, string>; products: { id: number; name: string; cost: string }[] }) {
+export default function StockMovements({ rows, summary, filters, period, branch, types, reasons, products }: { rows: Paginated<Row>; summary: { count: number; losses: number; loss_count: number; gains: number }; filters: Filters; period: Period; branch: BranchFilterState; types: Record<string, string>; reasons: Record<string, string>; products: { id: number; name: string; cost: string }[] }) {
     const currency = useCurrency();
     const can = useCan();
     const [adjusting, setAdjusting] = useState(false);
-    const go = (change: Partial<Filters> & { branch?: string }) => visit('club.inventory.movements', { ...filters, branch: branch.locked ? undefined : branch.value }, change);
+    const go = (change: Partial<Filters> & { branch?: string }) => visit('club.inventory.movements', { ...filters, ...periodParams(period), branch: branch.locked ? undefined : branch.value }, change);
 
     return (
         <ClubLayout title="سجل المخزون">
@@ -49,6 +50,8 @@ export default function StockMovements({ rows, summary, filters, branch, types, 
                 <StatCard label="قيمة التالف والفاقد" value={money(summary.losses, currency)} hint={`${number(summary.loss_count)} تسوية`} icon={<TrendingDown />} tone={summary.losses ? 'red' : 'gray'} href={route('club.inventory.movements', { type: 'adjustment' })} />
                 <StatCard label="زيادات الجرد والتصحيح" value={money(summary.gains, currency)} icon={<TrendingUp />} tone="green" />
             </div>
+
+            <PeriodTabs period={period} params={{ ...filters, branch: branch.locked ? undefined : branch.value }} />
 
             <Card padded={false} className="overflow-hidden">
                 <Toolbar>
@@ -62,8 +65,6 @@ export default function StockMovements({ rows, summary, filters, branch, types, 
                         onChange={(key, value) => go({ [key]: value })}
                     />
                     <div className="ms-auto flex flex-wrap items-center gap-2">
-                        <Input type="date" className="h-9 w-36 py-1.5 text-[13px]" value={filters.from} onChange={(e) => go({ from: e.target.value })} aria-label="من" />
-                        <Input type="date" className="h-9 w-36 py-1.5 text-[13px]" value={filters.to} onChange={(e) => go({ to: e.target.value })} aria-label="إلى" />
                         <BranchPicker state={branch} onChange={(value) => go({ branch: value })} />
                     </div>
                 </Toolbar>

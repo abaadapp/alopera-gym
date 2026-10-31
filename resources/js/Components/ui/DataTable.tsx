@@ -105,6 +105,7 @@ export default function DataTable<T>({ rows, columns, rowKey, params, pagination
     const sort = sorts.find((s) => s.key === value('sort'));
     const dir = value('dir') === 'desc' ? 'desc' : 'asc';
     const hasToolbar = Boolean(search || unapplied.length || dateFilters.length || sorts.length || toolbar);
+    const sortKeys = new Set(sorts.map((s) => s.key));
 
     return (
         <div className={className}>
@@ -180,9 +181,21 @@ export default function DataTable<T>({ rows, columns, rowKey, params, pagination
                 <table className="table-base [&_tbody_tr:last-child_td]:border-0">
                     <thead>
                         <tr>
-                            {columns.map((c) => (
-                                <th key={c.key} className={cn('h-11 py-0 align-middle text-[12px] text-[#6b7280]', c.align === 'end' && 'text-end', c.align === 'center' && 'text-center', c.className)}>{c.header}</th>
-                            ))}
+                            {columns.map((c) => {
+                                // A column the server sorts on sorts from its heading too (again: the other way).
+                                const sorts = sortKeys.has(c.key);
+                                const on = sort?.key === c.key;
+                                return (
+                                    <th key={c.key} aria-sort={on ? (dir === 'asc' ? 'ascending' : 'descending') : undefined} className={cn('h-11 py-0 align-middle text-[12px] text-[#6b7280]', c.align === 'end' && 'text-end', c.align === 'center' && 'text-center', c.className)}>
+                                        {sorts ? (
+                                            <button type="button" onClick={() => go({ sort: c.key, dir: on && dir === 'asc' ? 'desc' : 'asc' })} className="inline-flex items-center gap-1 font-[inherit] transition-colors hover:text-ink">
+                                                {c.header}
+                                                {on && (dir === 'asc' ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />)}
+                                            </button>
+                                        ) : c.header}
+                                    </th>
+                                );
+                            })}
                         </tr>
                     </thead>
                     <tbody>

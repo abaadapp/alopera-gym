@@ -67,7 +67,7 @@ function StartCount({ branch, categories, onClose }: { branch: BranchFilterState
     };
 
     return (
-        <Modal open onClose={onClose} title="جرد جديد" footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button type="submit" form="start-count" loading={form.processing}>بدء الجرد</Button></>}>
+        <Modal open onClose={onClose} title="جرد جديد" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="start-count" loading={form.processing}>بدء الجرد</Button></>}>
             <form id="start-count" onSubmit={submit} className="space-y-4">
                 <Field label="الفرع" error={form.errors.branch_id} required>
                     <Select value={form.data.branch_id} onChange={(e) => form.setData('branch_id', e.target.value)}>

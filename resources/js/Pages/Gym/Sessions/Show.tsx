@@ -205,7 +205,7 @@ export default function SessionShow({ session, bookings, trainers }: { session: 
                 title="تعديل هذه الحصة"
                 footer={
                     <>
-                        <Button variant="ghost" onClick={() => setEditOpen(false)}>إلغاء</Button>
+                        <Button variant="outline" onClick={() => setEditOpen(false)}>إلغاء</Button>
                         <Button type="submit" form="session-edit" loading={form.processing} icon={<Check className="size-4" />}>حفظ</Button>
                     </>
                 }

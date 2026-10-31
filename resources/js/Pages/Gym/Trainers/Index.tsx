@@ -203,7 +203,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                 size="lg"
                 footer={
                     <>
-                        <Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button>
+                        <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
                         <Button type="submit" form="trainer-form" loading={form.processing}>حفظ</Button>
                     </>
                 }
@@ -278,7 +278,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                 size="lg"
                 footer={
                     <>
-                        <Button variant="ghost" onClick={() => setAvailabilityFor(null)}>إلغاء</Button>
+                        <Button variant="outline" onClick={() => setAvailabilityFor(null)}>إلغاء</Button>
                         <Button onClick={saveAvailability} loading={slotsForm.processing}>حفظ الأوقات</Button>
                     </>
                 }

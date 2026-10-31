@@ -165,7 +165,7 @@ function CampaignModal({ onClose, templates, segments, plans, programs }: Omit<P
             title="حملة جديدة"
             footer={
                 <>
-                    <Button variant="ghost" onClick={onClose}>إلغاء</Button>
+                    <Button variant="outline" onClick={onClose}>إلغاء</Button>
                     <Button onClick={submit} loading={form.processing}>حفظ كمسودة</Button>
                 </>
             }

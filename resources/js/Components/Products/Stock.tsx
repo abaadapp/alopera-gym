@@ -30,7 +30,7 @@ export function AdjustModal({ product, onClose }: { product: Target; onClose: ()
     const diff = Number(form.data.counted || 0) - Number(product.stock_quantity);
 
     return (
-        <Modal open onClose={onClose} size="sm" title={`جرد: ${product.name}`} footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button type="submit" form="adjust-form" loading={form.processing}>حفظ الجرد</Button></>}>
+        <Modal open onClose={onClose} size="sm" title={`جرد: ${product.name}`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="adjust-form" loading={form.processing}>حفظ الجرد</Button></>}>
             <form id="adjust-form" onSubmit={submit} className="space-y-4">
                 <p className="text-sm text-muted">الرصيد في النظام: <span className="font-medium text-ink num">{number(product.stock_quantity, 3)}</span></p>
                 <Field label="الكمية الفعلية على الرف" error={form.errors.counted} required>

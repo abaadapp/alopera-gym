@@ -1,6 +1,7 @@
 import { Fragment, useState, type FormEvent } from 'react';
 import { router } from '@inertiajs/react';
 import { ChevronDown, ScrollText } from 'lucide-react';
+import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
 import { SettingsScreen, SettingsTitle } from '@/Components/Settings';
 import { Badge, Button, Card, EmptyState, Input, Pagination } from '@/Components/ui';
 import type { Paginated } from '@/types';
@@ -32,11 +33,11 @@ const QUICK = [
     { key: 'backup.', label: 'النسخ الاحتياطي' },
 ];
 
-export default function Audit({ logs, filters }: { logs: Paginated<Log>; filters: { event?: string; actor?: string; from?: string; to?: string } }) {
-    const [f, setF] = useState({ event: filters.event ?? '', actor: filters.actor ?? '', from: filters.from ?? '', to: filters.to ?? '' });
+export default function Audit({ logs, filters, period }: { logs: Paginated<Log>; filters: { event?: string; actor?: string }; period: Period }) {
+    const [f, setF] = useState({ event: filters.event ?? '', actor: filters.actor ?? '' });
     const [open, setOpen] = useState<number | null>(null);
 
-    const apply = (next = f) => router.get(route('club.audit.index'), Object.fromEntries(Object.entries(next).filter(([, v]) => v)), { preserveState: true, replace: true });
+    const apply = (next = f) => router.get(route('club.audit.index'), Object.fromEntries(Object.entries({ ...next, ...periodParams(period) }).filter(([, v]) => v)), { preserveState: true, replace: true });
     const submit = (e: FormEvent) => {
         e.preventDefault();
         apply();
@@ -45,6 +46,8 @@ export default function Audit({ logs, filters }: { logs: Paginated<Log>; filters
     return (
         <SettingsScreen title="سجل العمليات" width="full">
             <SettingsTitle title="سجل العمليات الحساسة" description="من فعل ماذا ومتى — سجل غير قابل للتعديل أو الحذف" />
+
+            <PeriodTabs period={period} params={{ ...filters }} />
 
             <Card padded={false}>
                 <div className="space-y-3 p-4">
@@ -66,8 +69,6 @@ export default function Audit({ logs, filters }: { logs: Paginated<Log>; filters
                     <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
                         <Input className="w-44" value={f.event} onChange={(e) => setF({ ...f, event: e.target.value })} placeholder="الحدث (مثل payment.)" dir="ltr" />
                         <Input className="w-44" value={f.actor} onChange={(e) => setF({ ...f, actor: e.target.value })} placeholder="اسم المنفّذ" />
-                        <Input className="w-40" type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} />
-                        <Input className="w-40" type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} />
                         <Button type="submit" variant="secondary">تصفية</Button>
                     </form>
                 </div>

@@ -1,6 +1,7 @@
 import { Link, router } from '@inertiajs/react';
 import { Check, FileDown, Receipt, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
 import { Badge, Button, Card, ConfirmAction, EmptyState, Input, Notice, PageHeader, Pagination, Select, Tabs } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
@@ -27,16 +28,14 @@ interface PaymentRow {
 interface Filters {
     status?: string;
     method?: string;
-    from?: string;
-    to?: string;
 }
 
-export default function PaymentsIndex({ payments, pendingCount, filters }: { payments: Paginated<PaymentRow>; pendingCount: number; filters: Filters }) {
+export default function PaymentsIndex({ payments, pendingCount, filters, period }: { payments: Paginated<PaymentRow>; pendingCount: number; filters: Filters; period: Period }) {
     const can = useCan();
     const currency = useCurrency();
 
     const apply = (patch: Partial<Filters>) => {
-        const next = { ...filters, ...patch };
+        const next = { ...filters, ...periodParams(period), ...patch };
         router.get(route('club.payments.index'), Object.fromEntries(Object.entries(next).filter(([, v]) => v)) as Record<string, string>, { preserveState: true, replace: true });
     };
 
@@ -49,6 +48,8 @@ export default function PaymentsIndex({ payments, pendingCount, filters }: { pay
                     <span className="font-semibold num">{pendingCount}</span> تحويل بنكي بانتظار التأكيد — اضغط للمراجعة
                 </Notice>
             )}
+
+            <PeriodTabs period={period} params={{ ...filters }} />
 
             <Card padded={false}>
                 <div className="flex flex-wrap items-end justify-between gap-3 p-4">
@@ -69,8 +70,6 @@ export default function PaymentsIndex({ payments, pendingCount, filters }: { pay
                                 {Object.entries(paymentMethod).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                             </Select>
                         </div>
-                        <Input type="date" className="w-40" value={filters.from ?? ''} onChange={(e) => apply({ from: e.target.value })} aria-label="من" />
-                        <Input type="date" className="w-40" value={filters.to ?? ''} onChange={(e) => apply({ to: e.target.value })} aria-label="إلى" />
                     </div>
                 </div>
 

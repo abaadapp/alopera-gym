@@ -115,7 +115,7 @@ function PostModal({ post, onClose }: { post: Post | null; onClose: () => void }
             title={post ? 'تعديل' : 'خبر أو عرض جديد'}
             footer={
                 <>
-                    <Button variant="ghost" onClick={onClose}>إلغاء</Button>
+                    <Button variant="outline" onClick={onClose}>إلغاء</Button>
                     <Button onClick={submit} loading={form.processing}>حفظ</Button>
                 </>
             }

@@ -186,7 +186,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                 size="lg"
                 footer={
                     <>
-                        <Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button>
+                        <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
                         <Button type="submit" form="program-form" loading={form.processing}>حفظ</Button>
                     </>
                 }

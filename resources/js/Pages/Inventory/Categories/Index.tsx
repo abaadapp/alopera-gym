@@ -122,7 +122,7 @@ function CategoryModal({ category, onClose }: { category: Category | null; onClo
     };
 
     return (
-        <Modal open onClose={onClose} size="sm" title={category ? 'تعديل التصنيف' : 'تصنيف جديد'} footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button type="submit" form="category-form" loading={form.processing}>حفظ</Button></>}>
+        <Modal open onClose={onClose} size="sm" title={category ? 'تعديل التصنيف' : 'تصنيف جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="category-form" loading={form.processing}>حفظ</Button></>}>
             <form id="category-form" onSubmit={submit}>
                 <Field label="اسم التصنيف" error={form.errors.name} required>
                     <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} maxLength={80} placeholder="مثل: المكملات الغذائية" autoFocus />

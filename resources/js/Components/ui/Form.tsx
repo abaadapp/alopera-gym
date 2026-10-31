@@ -1,4 +1,5 @@
 import { cloneElement, isValidElement, useId, type ComponentProps, type InputHTMLAttributes, type ReactElement, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { Paperclip, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useAdmin } from './AdminScope';
 
@@ -47,6 +48,25 @@ export function Select({ className, children, placeholder, ...props }: SelectHTM
             {placeholder !== undefined && <option value="">{placeholder}</option>}
             {children}
         </select>
+    );
+}
+
+/**
+ * A file to attach: a dashed 40px box with a paperclip and «اختيار ملف», then the chosen file's name (with ✕ to take it
+ * off) — the system's own control in place of the browser's, whose words follow the browser's language.
+ */
+export function FileInput({ accept, file, onChange, placeholder = 'اختيار ملف', className }: { accept?: string; file: File | null | undefined; onChange: (file: File | null) => void; placeholder?: string; className?: string }) {
+    return (
+        <label className={cn('flex h-10 cursor-pointer items-center gap-2 rounded-[10px] border border-dashed border-line bg-[#fafafa] px-3 text-[13px] text-ink transition-colors hover:bg-[#f4f4f5] focus-within:ring-2 focus-within:ring-[#d1d5db]', className)}>
+            <Paperclip className="size-4 shrink-0 text-[#6b7280]" />
+            <span className={cn('min-w-0 flex-1 truncate', !file && 'text-[#6b7280]')}>{file?.name ?? placeholder}</span>
+            {file && (
+                <button type="button" className="shrink-0 rounded p-0.5 text-[#6b7280] hover:text-[#b91c1c]" aria-label="إزالة الملف" onClick={(e) => { e.preventDefault(); onChange(null); }}>
+                    <X className="size-3.5" />
+                </button>
+            )}
+            <input type="file" accept={accept} className="sr-only" onChange={(e) => { onChange(e.target.files?.[0] ?? null); e.target.value = ''; }} />
+        </label>
     );
 }
 

@@ -103,7 +103,7 @@ export default function PtPackages({ packages, trainers }: { packages: PtPackage
 
             <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'تعديل الباقة' : 'باقة تدريب شخصي جديدة'} footer={
                 <>
-                    <Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button>
+                    <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
                     <Button type="submit" form="pkg-form" loading={form.processing}>حفظ</Button>
                 </>
             }>

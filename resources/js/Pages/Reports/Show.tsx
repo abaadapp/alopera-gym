@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { router, usePage } from '@inertiajs/react';
 import { Info } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import PeriodTabs, { type Range } from '@/Components/PeriodTabs';
 import ExportMenu from '@/Components/Reports/ExportMenu';
 import { DuesBody, FinanceBody, MovementBody, StatementsBody, type Dues, type Movement, type PeriodReport, type Statements } from '@/Components/Reports/Finance';
 import { CheckinsBody, ClassesBody, ExpiringBody, MembersBody, StaffBody, TrainersBody, type Checkins, type Expiring, type StaffAttendance, type Trainers } from '@/Components/Reports/People';
@@ -9,7 +10,7 @@ import { PayoutsBody, PayrollBody, type Payouts, type Payroll } from '@/Componen
 import { DocumentsBody, RenewalsBody, type Documents, type Renewals } from '@/Components/Reports/Documents';
 import { BranchesBody, SalesBody, type Branches, type Sales } from '@/Components/Reports/Sales';
 import { TablesBody, type Tables } from '@/Components/Reports/Tables';
-import { BackLink, Button, Card, Checkbox, Input, Notice, PageHeader, Select, Tabs } from '@/Components/ui';
+import { BackLink, Button, Card, Checkbox, Input, Notice, PageHeader, Select } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 import { date } from '@/lib/format';
 
@@ -23,21 +24,13 @@ interface Props {
     /** «period»: dates and a comparison; «snapshot»: how things stand today. */
     mode: 'period' | 'snapshot';
     compare: boolean;
-    filters: { from: string; to: string; preset: string; compare: string; compare_from: string; compare_to: string; previous_from: string; previous_to: string; branch: number | null };
+    filters: { from: string; to: string; preset: string; range: Range; compare: string; compare_from: string; compare_to: string; previous_from: string; previous_to: string; branch: number | null };
     branchFilter: { choices: { id: number; name: string }[]; name: string } | null;
     canFinancial: boolean;
     canExport: boolean;
     data: Data;
 }
 
-const presets = [
-    { key: 'today', label: 'اليوم' },
-    { key: 'week', label: 'هذا الأسبوع' },
-    { key: 'month', label: 'هذا الشهر' },
-    { key: 'last_month', label: 'الشهر الماضي' },
-    { key: 'quarter', label: 'هذا الربع' },
-    { key: 'year', label: 'هذه السنة' },
-];
 
 const compareModes = [
     { key: 'previous', label: 'الفترة السابقة (بنفس المدة)' },
@@ -77,8 +70,6 @@ function Captioned({ label, children }: { label: string; children: ReactNode }) 
 export default function ReportShow({ kind, title, description, mode, compare, filters, branchFilter, canFinancial, canExport, data }: Props) {
     const { url } = usePage();
     const query = Object.fromEntries(new URLSearchParams(url.split('?')[1] ?? '')) as Record<string, string>;
-    const [from, setFrom] = useState(filters.from);
-    const [to, setTo] = useState(filters.to);
     const [compareFrom, setCompareFrom] = useState(filters.compare_from);
     const [compareTo, setCompareTo] = useState(filters.compare_to);
     const [customCompare, setCustomCompare] = useState(filters.compare === 'custom');
@@ -109,20 +100,7 @@ export default function ReportShow({ kind, title, description, mode, compare, fi
             />
 
             {mode === 'period' && (
-                <Tabs
-                    className="mb-4"
-                    tabs={presets.map((p) => ({ key: p.key, label: p.label }))}
-                    value={filters.preset}
-                    onChange={(key) => go({ preset: key, from: null, to: null })}
-                    trailing={
-                        <form className="flex items-center gap-2 py-1.5" onSubmit={(e) => { e.preventDefault(); go({ preset: null, from, to }); }}>
-                            <Input type="date" className="h-8 w-[8.5rem] text-[13px]" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="من" />
-                            <span className="text-[#9ca3af]">—</span>
-                            <Input type="date" className="h-8 w-[8.5rem] text-[13px]" value={to} onChange={(e) => setTo(e.target.value)} aria-label="إلى" />
-                            <Button type="submit" variant="outline" size="sm">عرض</Button>
-                        </form>
-                    }
-                />
+                <PeriodTabs period={{ range: filters.range, from: filters.from, to: filters.to }} params={Object.fromEntries(Object.entries(query).filter(([k]) => !['preset', 'range', 'from', 'to', 'page'].includes(k)))} />
             )}
 
             <ReportFilters kind={kind} data={data} option={option} go={go} branch={branchFilter && (

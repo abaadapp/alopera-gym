@@ -228,7 +228,7 @@ export default function ScheduleIndex({ slots, programs, trainers, branches }: {
                             )}
                         </div>
                         <div className="flex gap-2">
-                            <Button variant="ghost" onClick={() => setOpen(false)}>إلغاء</Button>
+                            <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
                             <Button type="submit" form="slot-form" loading={form.processing}>حفظ</Button>
                         </div>
                     </div>

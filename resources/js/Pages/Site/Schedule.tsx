@@ -39,7 +39,7 @@ export function groupByDay<T extends { date: string }>(sessions: T[]): [string, 
 
 export function DayChips({ days, value, onChange }: { days: string[]; value: string; onChange: (d: string) => void }) {
     return (
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+        <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
             {days.map((d) => {
                 const dt = new Date(`${d}T00:00:00`);
                 return (

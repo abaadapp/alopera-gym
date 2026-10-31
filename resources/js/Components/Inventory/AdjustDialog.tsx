@@ -26,7 +26,7 @@ export default function AdjustDialog({ products, branch, reasons, onClose }: { p
     };
 
     return (
-        <Modal open onClose={onClose} title="تعديل مخزون" footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button type="submit" form="adjust-stock" loading={form.processing}>تسجيل</Button></>}>
+        <Modal open onClose={onClose} title="تعديل مخزون" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="adjust-stock" loading={form.processing}>تسجيل</Button></>}>
             <form id="adjust-stock" onSubmit={submit} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="الفرع" error={form.errors.branch_id} required>

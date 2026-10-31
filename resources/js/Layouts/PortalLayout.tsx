@@ -28,7 +28,7 @@ export default function PortalLayout({ site, title, children }: { site: SiteInfo
                         <LogOut className="size-4" /> خروج
                     </button>
                 </div>
-                <nav className="mb-6 flex gap-1 overflow-x-auto rounded-2xl border border-line bg-white p-1">
+                <nav className="no-scrollbar mb-6 flex gap-1 overflow-x-auto rounded-2xl border border-line bg-white p-1">
                     {tabs.map(({ label, route: r, icon: Icon }) => (
                         <Link key={r} href={route(r)} className={cn('flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-sm', route().current(r) ? 'bg-brand text-white' : 'text-ink/80 hover:bg-brand-50')}>
                             <Icon className="size-4" /> {label}

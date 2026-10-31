@@ -309,7 +309,7 @@ function AccessModal({ employeeId, account, access, onClose }: { employeeId: num
     };
 
     return (
-        <Modal open onClose={onClose} size="xl" title="الدور والصلاحيات" footer={<><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
+        <Modal open onClose={onClose} size="xl" title="الدور والصلاحيات" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
             <form onSubmit={submit} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="الدور" error={form.errors.role_id} required>
@@ -368,7 +368,7 @@ function PunchModal({ employeeId, onClose }: { employeeId: number; onClose: () =
     };
 
     return (
-        <Modal open onClose={onClose} title="تسجيل حضور يدوي" footer={<><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>تسجيل</Button></>}>
+        <Modal open onClose={onClose} title="تسجيل حضور يدوي" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>تسجيل</Button></>}>
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-3">
                 <Field label="التاريخ" error={form.errors.date} required><Input type="date" max={today} value={form.data.date} onChange={(e) => form.setData('date', e.target.value)} /></Field>
                 <Field label="الحضور" error={form.errors.in} required><Input type="time" value={form.data.in} onChange={(e) => form.setData('in', e.target.value)} /></Field>

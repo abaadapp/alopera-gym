@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Club;
 
 use App\Core\Audit\AuditRedaction;
+use App\Core\Support\Period;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
@@ -14,11 +15,11 @@ class AuditController extends Controller
 {
     public function index(Request $request): Response
     {
+        $period = Period::fromRequest($request);
         $logs = AuditLog::query()
             ->when($request->string('event')->toString(), fn ($q, $e) => $q->where('event', 'like', $e.'%'))
             ->when($request->string('actor')->toString(), fn ($q, $a) => $q->where('actor_name', 'ilike', '%'.$a.'%'))
-            ->when($request->date('from'), fn ($q, $d) => $q->where('created_at', '>=', $d))
-            ->when($request->date('to'), fn ($q, $d) => $q->where('created_at', '<=', $d->endOfDay()))
+            ->tap(fn ($q) => $period->apply($q, 'created_at'))
             ->latest('id')->paginate(40)->withQueryString()
             ->through(fn (AuditLog $l) => $l->only('id', 'actor_type', 'actor_name', 'event', 'subject_type', 'subject_id', 'ip_address') + [
                 // Salary and bank values on employee entries reach only someone who may read salaries.
@@ -28,6 +29,6 @@ class AuditController extends Controller
                 'created_at' => $l->created_at->format('Y-m-d H:i:s'),
             ]);
 
-        return Inertia::render('Club/Settings/Audit', ['logs' => $logs, 'filters' => $request->only('event', 'actor', 'from', 'to')]);
+        return Inertia::render('Club/Settings/Audit', ['logs' => $logs, 'filters' => $request->only('event', 'actor'), 'period' => $period->toArray()]);
     }
 }

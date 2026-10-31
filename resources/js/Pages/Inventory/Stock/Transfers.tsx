@@ -84,7 +84,7 @@ function NewTransfer({ branch, branches, products, onClose }: { branch: BranchFi
     const err = form.errors as Record<string, string>;
 
     return (
-        <Modal open onClose={onClose} size="lg" title="نقل مخزون جديد" footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button type="submit" form="new-transfer" loading={form.processing}>{form.data.direct ? 'اعتماد وإرسال' : 'إرسال الطلب'}</Button></>}>
+        <Modal open onClose={onClose} size="lg" title="نقل مخزون جديد" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="new-transfer" loading={form.processing}>{form.data.direct ? 'اعتماد وإرسال' : 'إرسال الطلب'}</Button></>}>
             <form id="new-transfer" onSubmit={submit} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="من الفرع" error={form.errors.from_branch_id} required>

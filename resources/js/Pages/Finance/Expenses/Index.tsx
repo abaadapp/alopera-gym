@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import { Download, Paperclip, Pencil, Plus, Trash2, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Pagination, SearchInput, Select, StatCard } from '@/Components/ui';
+import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
+import { Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Pagination, SearchInput, Select, StatCard, FileInput } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { date, money } from '@/lib/format';
 import { paymentMethod } from '@/lib/labels';
@@ -25,8 +26,6 @@ interface ExpenseRow {
 
 interface Filters {
     category_id?: string;
-    from?: string;
-    to?: string;
     q?: string;
 }
 
@@ -36,22 +35,23 @@ interface Props {
     categories: Option[];
     suppliers: Option[];
     filters: Filters;
+    period: Period;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export default function ExpensesIndex({ expenses, total, categories, suppliers, filters }: Props) {
+export default function ExpensesIndex({ expenses, total, categories, suppliers, filters, period }: Props) {
     const currency = useCurrency();
     const [editing, setEditing] = useState<ExpenseRow | 'new' | null>(null);
     const [categoryOpen, setCategoryOpen] = useState(false);
 
     const apply = (patch: Partial<Filters>) => {
-        const next = { ...filters, ...patch };
+        const next = { ...filters, ...periodParams(period), ...patch };
         router.get(route('club.expenses.index'), Object.fromEntries(Object.entries(next).filter(([, v]) => v)) as Record<string, string>, { preserveState: true, replace: true });
     };
 
     const exportUrl = (format: 'csv' | 'xlsx') =>
-        route('club.expenses.export', { ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)), format });
+        route('club.expenses.export', { ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)), ...periodParams(period), format });
 
     return (
         <ClubLayout title="المصروفات">
@@ -71,6 +71,8 @@ export default function ExpensesIndex({ expenses, total, categories, suppliers, 
                 <StatCard label="إجمالي المصروفات (حسب المرشحات)" value={money(total, currency)} tone="red" icon={<Wallet className="size-5" />} />
             </div>
 
+            <PeriodTabs period={period} params={{ ...filters }} />
+
             <Card padded={false}>
                 <div className="flex flex-wrap items-end justify-between gap-3 p-4">
                     <div className="flex flex-wrap items-center gap-2">
@@ -79,11 +81,9 @@ export default function ExpensesIndex({ expenses, total, categories, suppliers, 
                                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </Select>
                         </div>
-                        <Input type="date" className="w-40" value={filters.from ?? ''} onChange={(e) => apply({ from: e.target.value })} aria-label="من" />
-                        <Input type="date" className="w-40" value={filters.to ?? ''} onChange={(e) => apply({ to: e.target.value })} aria-label="إلى" />
                         <Button variant="ghost" size="sm" icon={<Plus className="size-3.5" />} onClick={() => setCategoryOpen(true)}>تصنيف</Button>
                     </div>
-                    <SearchInput value={filters.q} placeholder="الوصف أو المستفيد…" extra={{ category_id: filters.category_id, from: filters.from, to: filters.to }} />
+                    <SearchInput value={filters.q} placeholder="الوصف أو المستفيد…" extra={{ category_id: filters.category_id, ...periodParams(period) }} />
                 </div>
 
                 {expenses.data.length === 0 ? (
@@ -169,7 +169,7 @@ function ExpenseModal({ expense, categories, suppliers, onClose }: { expense: Ex
             title={expense ? `تعديل ${expense.number}` : 'مصروف جديد'}
             footer={
                 <>
-                    <Button variant="ghost" onClick={onClose}>تراجع</Button>
+                    <Button variant="outline" onClick={onClose}>إلغاء</Button>
                     <Button type="submit" form="expense-form" loading={form.processing}>حفظ</Button>
                 </>
             }
@@ -209,7 +209,7 @@ function ExpenseModal({ expense, categories, suppliers, onClose }: { expense: Ex
                     <Input value={form.data.reference} onChange={(e) => form.setData('reference', e.target.value)} />
                 </Field>
                 <Field label={expense?.has_attachment ? 'استبدال المرفق' : 'مرفق (فاتورة/إيصال)'} error={form.errors.attachment}>
-                    <Input type="file" accept="image/*,application/pdf" onChange={(e) => form.setData('attachment', e.target.files?.[0] ?? null)} />
+                    <FileInput accept="image/*,application/pdf" file={form.data.attachment} onChange={(f) => form.setData('attachment', f)} />
                 </Field>
             </form>
         </Modal>
@@ -227,7 +227,7 @@ function CategoryModal({ open, onClose }: { open: boolean; onClose: () => void }
             size="sm"
             footer={
                 <>
-                    <Button variant="ghost" onClick={onClose}>تراجع</Button>
+                    <Button variant="outline" onClick={onClose}>إلغاء</Button>
                     <Button
                         loading={form.processing}
                         onClick={() => form.post(route('club.expense-categories.store'), { preserveScroll: true, onSuccess: () => { form.reset(); onClose(); } })}

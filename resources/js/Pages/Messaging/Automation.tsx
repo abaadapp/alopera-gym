@@ -126,7 +126,7 @@ function AutoReplyModal({ reply, onClose }: { reply: AutoReply | null; onClose: 
             title={reply ? 'تعديل الرد الآلي' : 'رد آلي جديد'}
             footer={
                 <>
-                    <Button variant="ghost" onClick={onClose}>إلغاء</Button>
+                    <Button variant="outline" onClick={onClose}>إلغاء</Button>
                     <Button onClick={submit} loading={form.processing}>حفظ</Button>
                 </>
             }
