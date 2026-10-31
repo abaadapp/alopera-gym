@@ -82,17 +82,24 @@ class ProductionSafetyTest extends TestCase
         $this->assertSame(0, Tenant::count());
     }
 
-    public function test_create_admin_command_enforces_production_rules(): void
+    public function test_the_install_command_enforces_production_rules_and_sets_up_one_gym(): void
     {
         $this->asProduction();
+        $install = fn (array $owner) => $this->artisan('gym:install', ['--name' => 'Alopera Gym', '--slug' => 'alopera', '--owner-name' => 'صاحب النشاط'] + $owner);
 
-        $this->artisan('platform:create-admin', ['email' => 'admin@alopera.test'])->assertFailed();
-        $this->artisan('platform:create-admin', ['email' => 'owner@alopera.om', '--password' => 'password'])->assertFailed();
+        $install(['--owner-email' => 'owner@alopera.test', '--owner-password' => 'Str0ng-Passw0rd!'])->assertFailed();
+        $install(['--owner-email' => 'owner@alopera.om', '--owner-password' => 'password'])->assertFailed();
         $this->assertSame(0, User::count());
 
         Http::fake(['api.pwnedpasswords.com/*' => Http::response('')]);
-        $this->artisan('platform:create-admin', ['email' => 'owner@alopera.om', '--password' => 'Str0ng-Passw0rd!'])->assertSuccessful();
-        $this->assertTrue(User::where('email', 'owner@alopera.om')->value('is_platform_admin'));
+        $install(['--owner-email' => 'owner@alopera.om', '--owner-password' => 'Str0ng-Passw0rd!'])->assertSuccessful();
+        $gym = Tenant::sole();
+        $this->assertSame(['alopera', Tenant::STATUS_ACTIVE], [$gym->slug, $gym->status]);
+        $this->assertTrue($this->owner($gym)->is(User::where('email', 'owner@alopera.om')->sole()));
+
+        // One gym per installation: a second run changes nothing.
+        $this->artisan('gym:install', ['--name' => 'Other', '--owner-name' => 'X', '--owner-email' => 'x@other.om', '--owner-password' => 'Str0ng-Passw0rd!'])->assertFailed();
+        $this->assertSame(1, Tenant::count());
     }
 
     public function test_reserved_emails_cannot_be_given_to_new_accounts_in_production(): void
@@ -111,9 +118,8 @@ class ProductionSafetyTest extends TestCase
         $club = $this->club();
         $demo = $this->owner($club);
         $demo->forceFill(['email' => 'owner@alopera.test'])->save();
-        $real = new User(['name' => 'Admin', 'email' => 'admin@platform.om', 'password' => 'Str0ng-Passw0rd!']);
-        $real->forceFill(['is_platform_admin' => true])->save();
-        config(['app.debug' => false, 'app.url' => 'https://app.platform.om', 'session.secure' => true, 'session.encrypt' => true, 'queue.default' => 'database']);
+        $real = $this->staff($club, 'manager', ['email' => 'manager@alopera.om']);
+        config(['app.debug' => false, 'app.url' => 'https://app.alopera.om', 'session.secure' => true, 'session.encrypt' => true, 'queue.default' => 'database']);
 
         // The gate also wants public/storage linked; a fresh checkout (CI) does not have the link yet.
         if (! file_exists(public_path('storage'))) {
@@ -126,7 +132,7 @@ class ProductionSafetyTest extends TestCase
         $this->assertTrue($demo->fresh()->is_active);
 
         $this->app['env'] = 'production';
-        $this->artisan('platform:preflight')->expectsOutputToContain('No active demo staff/admin accounts')->assertFailed();
+        $this->artisan('platform:preflight')->expectsOutputToContain('No active demo staff accounts')->assertFailed();
 
         $this->artisan('platform:preflight', ['--deactivate-demo' => true])->expectsOutputToContain('Deactivated 1 demo account(s).')->assertSuccessful();
         $this->assertFalse($demo->fresh()->is_active);

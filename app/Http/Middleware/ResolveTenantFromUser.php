@@ -28,11 +28,8 @@ class ResolveTenantFromUser
             return redirect()->route('login');
         }
 
-        if ($user->isPlatformAdmin() || ! $user->tenant_id) {
-            return redirect()->route('platform.dashboard');
-        }
-
-        $tenant = $user->tenant()->first();
+        // An account that belongs to no gym (an old platform account) has no screen here.
+        $tenant = $user->tenant_id ? $user->tenant()->first() : null;
         if (! $tenant) {
             Auth::guard('web')->logout();
 

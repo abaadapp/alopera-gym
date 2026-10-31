@@ -6,7 +6,6 @@ export interface StaffUser {
     email: string;
     role: string | null;
     role_key: string | null;
-    is_platform_admin: boolean;
 }
 
 /** The branch the panel shows: the current one (null = all), whether the user is tied to it, the choices. */
@@ -33,13 +32,11 @@ export interface TenantInfo {
     id: number;
     name: string;
     slug: string;
-    status: string;
     logo_url: string | null;
     primary_color: string;
     secondary_color: string;
     currency: string;
     phone: string | null;
-    trial_ends_at: string | null;
 }
 
 export interface SharedProps {

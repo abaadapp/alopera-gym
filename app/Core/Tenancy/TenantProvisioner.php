@@ -1,12 +1,10 @@
 <?php
 
-namespace App\Modules\Platform\Services;
+namespace App\Core\Tenancy;
 
 use App\Core\Audit\AuditLogger;
 use App\Core\Auth\SystemRoles;
-use App\Core\Tenancy\TenantContext;
 use App\Models\Branch;
-use App\Models\PlatformPlan;
 use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\User;
@@ -17,9 +15,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Creates a ready-to-use club: tenant row, main branch, system roles, owner
- * account, website defaults, expense categories, WhatsApp template stubs and
- * a trial subscription to the chosen platform plan.
+ * Sets up the gym once, on installation (php artisan gym:install): its record, main branch, system roles, owner
+ * account, website defaults, expense categories and WhatsApp template stubs. The tests use it to build clubs too.
  */
 final class TenantProvisioner
 {
@@ -27,7 +24,6 @@ final class TenantProvisioner
 
     public function __construct(
         private readonly TenantContext $tenants,
-        private readonly SubscriptionService $subscriptions,
         private readonly AuditLogger $audit,
     ) {}
 
@@ -35,9 +31,9 @@ final class TenantProvisioner
      * @param  array{name: string, slug?: string|null, email?: string|null, phone?: string|null, city?: string|null, primary_color?: string|null, secondary_color?: string|null}  $club
      * @param  array{name: string, email: string, password: string, phone?: string|null}  $owner
      */
-    public function provision(array $club, array $owner, ?PlatformPlan $plan = null, string $cycle = 'monthly'): Tenant
+    public function provision(array $club, array $owner): Tenant
     {
-        return DB::transaction(function () use ($club, $owner, $plan, $cycle) {
+        return DB::transaction(function () use ($club, $owner) {
             $tenant = Tenant::create([
                 'name' => $club['name'],
                 'slug' => $this->uniqueSlug($club['slug'] ?? $club['name']),
@@ -46,10 +42,10 @@ final class TenantProvisioner
                 'city' => $club['city'] ?? null,
                 'primary_color' => $club['primary_color'] ?? '#9d174d',
                 'secondary_color' => $club['secondary_color'] ?? '#f9a8d4',
-                'status' => Tenant::STATUS_TRIAL,
+                'status' => Tenant::STATUS_ACTIVE,
             ]);
 
-            $this->tenants->run($tenant, function (Tenant $tenant) use ($owner, $plan, $cycle) {
+            $this->tenants->run($tenant, function (Tenant $tenant) use ($owner) {
                 Branch::create(['name' => 'الفرع الرئيسي', 'code' => 'MAIN', 'is_main' => true, 'phone' => $tenant->phone]);
 
                 $roles = [];
@@ -91,10 +87,6 @@ final class TenantProvisioner
                 }
 
                 TemplateCatalog::seedDefaults();
-
-                if ($plan) {
-                    $this->subscriptions->startTrial($tenant, $plan, $cycle);
-                }
             });
 
             $this->audit->log('tenant.provisioned', $tenant, ['owner' => $owner['email']], tenantId: $tenant->id);

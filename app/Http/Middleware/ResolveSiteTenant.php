@@ -24,7 +24,7 @@ class ResolveSiteTenant
         $slug = (string) $request->route('club');
         $tenant = Tenant::where('slug', $slug)->first();
 
-        if (! $tenant || ! $tenant->isOperational()) {
+        if (! $tenant) {
             abort(404);
         }
 

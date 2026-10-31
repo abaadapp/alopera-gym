@@ -7,8 +7,7 @@ use Illuminate\Database\Seeder;
 class DatabaseSeeder extends Seeder
 {
     /**
-     * Local/demo only. Production gets its platform admin from
-     * `php artisan platform:create-admin` and clubs from the Super Admin panel.
+     * Local/demo only. A live installation sets its gym up once with `php artisan gym:install`.
      */
     public function run(): void
     {

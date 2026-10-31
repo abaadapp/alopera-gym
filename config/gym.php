@@ -1,13 +1,9 @@
 <?php
 
 return [
-    // Platform-wide defaults. Club-level rules live in tenants.settings (see Tenant::DEFAULT_SETTINGS).
-    'platform_currency' => env('PLATFORM_CURRENCY', 'OMR'),
-    'platform_admin_email' => env('PLATFORM_ADMIN_EMAIL'),
-    'platform_sales_email' => env('PLATFORM_SALES_EMAIL'),
-
-    // Days a club keeps working after its platform subscription lapses.
-    'subscription_grace_days' => 7,
+    // The gym whose website the bare address (/) opens: its web-address part (slug). Empty: the only gym on record.
+    // The gym's own rules live in tenants.settings (see Tenant::DEFAULT_SETTINGS).
+    'home_club' => env('GYM_HOME_CLUB'),
 
     'devices_rate_limit' => (int) env('DEVICES_RATE_LIMIT_PER_MINUTE', 120),
 
@@ -19,10 +15,6 @@ return [
     'modules' => [
         'sales' => (bool) env('GYM_SALES_MODULE', true),
         'inventory' => (bool) env('GYM_INVENTORY_MODULE', true),
-        // The platform owner's screens (/platform) and the platform's marketing page (/) are switched off: clubs are
-        // managed from the command line (php artisan clubs:list), and / opens the staff sign-in. Code and data stay.
-        'platform_panel' => (bool) env('GYM_PLATFORM_PANEL', false),
-        'marketing_site' => (bool) env('GYM_MARKETING_SITE', false),
     ],
 
     // Upload limits (kilobytes)

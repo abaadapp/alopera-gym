@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Auth;
 
 use App\Core\Audit\AuditLogger;
 use App\Core\Auth\DemoAccounts;
-use App\Core\Auth\PermissionRegistry;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -43,14 +42,10 @@ class LoginController extends Controller
 
         /** @var User $user */
         $user = Auth::guard('web')->user();
-        // The platform owner's screens are switched off; clubs are managed from the command line instead.
-        if ($user->isPlatformAdmin() && ! PermissionRegistry::moduleEnabled('platform_panel')) {
+        // Only the gym's staff sign in here; an account that belongs to no gym (an old platform account) has no screen.
+        if ($user->tenant_id === null) {
             Auth::guard('web')->logout();
-            throw ValidationException::withMessages(['email' => 'لوحة إدارة المنصة غير مفعّلة. تُدار الأندية من خادم النظام.']);
-        }
-        if (! $user->isPlatformAdmin() && ! $user->tenant?->isOperational() && ! $user->hasPermission('billing.view')) {
-            Auth::guard('web')->logout();
-            throw ValidationException::withMessages(['email' => 'حساب النادي موقوف. تواصل مع إدارة النادي.']);
+            throw ValidationException::withMessages(['email' => 'هذا الحساب لا يملك صلاحية الدخول إلى النظام.']);
         }
 
         return redirect()->intended(route($user->homeRoute()));

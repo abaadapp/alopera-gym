@@ -2,23 +2,22 @@
 
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetController;
-use App\Http\Controllers\LandingController;
+use App\Http\Controllers\HomeController;
 use App\Modules\Messaging\Http\Controllers\WhatsAppWebhookController;
 use App\Modules\Payments\Http\Controllers\PaymobWebhookController;
 use Illuminate\Support\Facades\Route;
 
 /*
 | Route map
-|   /                 platform landing (off unless GYM_MARKETING_SITE=true: opens the staff sign-in)
-|   /login            staff sign-in (platform admins and club staff)
-|   /platform/*       super admin (off unless GYM_PLATFORM_PANEL=true; clubs are managed with php artisan clubs:*)
-|   /app/*            club panel — tenant = the signed-in user's club
+|   /                 the gym's website (config gym.home_club), else the staff sign-in
+|   /login            staff sign-in
+|   /app/*            the gym's panel: the owner, staff by permission, and the point of sale
 |   /c/{club}/*       club website and member portal — tenant = slug
 |   /webhooks/*       Paymob and WhatsApp callbacks (signature-verified)
 |   /api/devices/v1/* access-control hardware (routes/api.php)
 */
 
-Route::get('/', LandingController::class)->name('landing');
+Route::get('/', HomeController::class)->name('landing');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'create'])->name('login');
@@ -31,10 +30,7 @@ Route::middleware('guest')->group(function () {
 
 Route::post('/logout', [LoginController::class, 'destroy'])->middleware('auth')->name('logout');
 
-Route::prefix('platform')->name('platform.')->middleware(['module:platform_panel', 'auth', 'platform'])
-    ->group(app_path('Modules/Platform/Http/routes.php'));
-
-Route::prefix('app')->name('club.')->middleware(['auth', 'tenant.user', 'tenant.active', 'branch.guard'])->group(function () {
+Route::prefix('app')->name('club.')->middleware(['auth', 'tenant.user', 'branch.guard'])->group(function () {
     require app_path('Http/club-routes.php');
     require app_path('Modules/Gym/Http/routes.php');
     require app_path('Modules/Finance/Http/routes.php');

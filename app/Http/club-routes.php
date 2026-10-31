@@ -3,7 +3,6 @@
 use App\Http\Controllers\Club\AccountController;
 use App\Http\Controllers\Club\AuditController;
 use App\Http\Controllers\Club\BackupController;
-use App\Http\Controllers\Club\BillingController;
 use App\Http\Controllers\Club\BranchController;
 use App\Http\Controllers\Club\BranchSwitchController;
 use App\Http\Controllers\Club\DashboardController;
@@ -80,10 +79,12 @@ Route::prefix('settings')->group(function () {
         Route::post('/backups/restore', [BackupController::class, 'restore'])->name('backups.restore');
     });
 
-    Route::get('/billing', [BillingController::class, 'index'])->middleware('can:billing.view')->name('billing');
+    // The gym's subscription to a hosting platform is gone (the system is the gym's own); old links open the settings.
+    Route::redirect('/billing', '/app/settings');
 });
 
 // Settings screens used to live at the top level; keep old bookmarks working.
-foreach (['branches', 'users', 'roles', 'audit', 'backups', 'billing'] as $screen) {
+foreach (['branches', 'users', 'roles', 'audit', 'backups'] as $screen) {
     Route::redirect("/{$screen}", "/app/settings/{$screen}");
 }
+Route::redirect('/billing', '/app/settings');

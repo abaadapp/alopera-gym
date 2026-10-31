@@ -14,8 +14,8 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * The club website's sections (order and visibility on the home page) and identity (logo and colours). The
- * owner's alone, like the rest of the website (website.manage). The public page keeps its design; it only
+ * The club website's sections (order and visibility on the home page) and identity (logo and colours), for whoever
+ * holds website.manage, like the rest of the website. The public page keeps its design; it only
  * follows the order and shows what is switched on.
  */
 class SiteDesignController extends Controller

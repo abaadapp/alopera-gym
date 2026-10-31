@@ -6,8 +6,6 @@ use App\Core\Tenancy\MissingTenantException;
 use App\Http\Middleware\AuthenticateDevice;
 use App\Http\Middleware\EnforceBranchAccess;
 use App\Http\Middleware\EnsureModuleEnabled;
-use App\Http\Middleware\EnsurePlatformAdmin;
-use App\Http\Middleware\EnsureTenantIsOperational;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ResolveCustomDomain;
 use App\Http\Middleware\ResolveSiteTenant;
@@ -38,8 +36,6 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'tenant.user' => ResolveTenantFromUser::class,
-            'tenant.active' => EnsureTenantIsOperational::class,
-            'platform' => EnsurePlatformAdmin::class,
             'site.tenant' => ResolveSiteTenant::class,
             'device' => AuthenticateDevice::class,
             'module' => EnsureModuleEnabled::class,

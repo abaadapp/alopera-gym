@@ -12,7 +12,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Role;
 use App\Models\User;
-use App\Modules\Platform\Services\PlanLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -45,9 +44,8 @@ class UserController extends Controller
         ]);
     }
 
-    public function store(Request $request, PlanLimits $limits, AuditLogger $audit): RedirectResponse
+    public function store(Request $request, AuditLogger $audit): RedirectResponse
     {
-        $limits->assertCanAddStaff();
         $data = $this->validated($request);
         $this->guardRole($request, (int) $data['role_id']);
 

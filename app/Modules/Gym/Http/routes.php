@@ -83,9 +83,10 @@ Route::post('/bookings/{booking}/attendance', [BookingController::class, 'attend
 Route::resource('pt-packages', PtPackageController::class)->except(['show', 'create', 'edit'])->middleware('can:pt.manage');
 Route::middleware('can:pt.manage')->group(function () {
     Route::get('/pt', [PtController::class, 'index'])->name('pt.index');
-    Route::post('/members/{member}/pt', [PtController::class, 'store'])->name('pt.store');
     Route::post('/pt/{subscription}/sessions', [PtController::class, 'schedule'])->name('pt.schedule');
 });
+// Selling a package is a permission of its own (the point of sale sells them too); scheduling stays with pt.manage.
+Route::post('/members/{member}/pt', [PtController::class, 'store'])->middleware('can:pt.sell')->name('pt.store');
 Route::post('/pt-sessions/{ptSession}/close', [PtController::class, 'close'])->middleware('can:attendance.mark')->name('pt.close');
 
 // ─── Access ────────────────────────────────────────────────────────────

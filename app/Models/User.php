@@ -56,8 +56,8 @@ class User extends Authenticatable
     }
 
     /**
-     * Loaded without the tenant scope: it is needed at login and on platform
-     * screens before a tenant is set. permissions() still refuses a role that
+     * Loaded without the tenant scope: it is needed at login and in console
+     * commands before a tenant is set. permissions() still refuses a role that
      * belongs to another club.
      */
     public function role(): BelongsTo
@@ -78,11 +78,6 @@ class User extends Authenticatable
     public function scopeOfTenant(Builder $query, int $tenantId): Builder
     {
         return $query->where('tenant_id', $tenantId);
-    }
-
-    public function isPlatformAdmin(): bool
-    {
-        return $this->is_platform_admin && $this->tenant_id === null;
     }
 
     public function isOwner(): bool
@@ -134,10 +129,6 @@ class User extends Authenticatable
     /** Route name of the screen this user lands on after login. */
     public function homeRoute(): string
     {
-        if ($this->isPlatformAdmin()) {
-            return 'platform.dashboard';
-        }
-
         $key = $this->role?->key;
         $definitions = SystemRoles::definitions();
 
@@ -159,6 +150,7 @@ class User extends Authenticatable
     private const LANDINGS = [
         'dashboard.view' => 'club.dashboard',
         'checkin.perform' => 'club.reception',
+        'pos.sell' => 'club.pos.index',
         'members.view' => 'club.members.index',
         'invoices.view' => 'club.invoices.index',
         'purchases.view' => 'club.purchases.register',

@@ -20,7 +20,7 @@ export default function Branches({ branches }: { branches: Branch[] }) {
 
     return (
         <ClubLayout title="الفروع">
-            <PageHeader back={<SettingsBack />} title="الفروع" subtitle="النظام جاهز لتعدد الفروع؛ عدد الفروع المتاح يحدده اشتراك المنصة" actions={<Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>فرع جديد</Button>} />
+            <PageHeader back={<SettingsBack />} title="الفروع" subtitle="فروع النشاط: لكل فرع موظفوه ومخزونه وعملياته، ويُدار الكل من هذه اللوحة" actions={<Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>فرع جديد</Button>} />
             <Card padded={false}>
                 {branches.length === 0 ? (
                     <EmptyState icon={<Building2 className="size-6" />} title="لا توجد فروع" />

@@ -13,7 +13,6 @@ export default function ClubLayout({ title, children }: { title: string; childre
         <>
             <Head title={`${title} · ${tenant?.name ?? ''}`} />
             <PanelShell
-                title={title}
                 groups={groups.map((group) => ({ footer: group.footer, links: group.sections.map((s) => ({ label: s.label, href: s.href, icon: s.icon, active: s.active })) }))}
                 identity={
                     <>

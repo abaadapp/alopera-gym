@@ -134,7 +134,7 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
                                 <Input dir="ltr" inputMode="decimal" value={form.data.longitude} onChange={(e) => form.setData('longitude', e.target.value)} placeholder="58.3829" />
                             </Field>
                         </div>
-                        {club.domain && <p className="mt-4 text-xs text-muted">نطاق الموقع: <span dir="ltr" className="font-medium text-ink">{club.domain}</span> (يُدار من إدارة المنصة)</p>}
+                        {club.domain && <p className="mt-4 text-xs text-muted">نطاق الموقع: <span dir="ltr" className="font-medium text-ink">{club.domain}</span> (يُضبط مع إعداد الخادم)</p>}
                     </Card>
 
                     <Card>

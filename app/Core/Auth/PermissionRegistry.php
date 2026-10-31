@@ -38,6 +38,7 @@ final class PermissionRegistry
             'bookings.manage' => 'حجز الحصص للأعضاء وإلغاؤها',
             'attendance.mark' => 'تسجيل الحضور والغياب في الحصص',
             'pt.manage' => 'إدارة الجلسات الفردية',
+            'pt.sell' => 'بيع باقات التدريب الشخصي',
             'pt.close_early' => 'إغلاق الجلسات الفردية قبل موعدها',
         ]],
         'access' => ['label' => 'الدخول والحضور', 'permissions' => [
@@ -108,8 +109,11 @@ final class PermissionRegistry
         ]],
         'reports' => ['label' => 'التقارير', 'permissions' => [
             'reports.view' => 'عرض التقارير',
-            'reports.financial' => 'التقارير المالية',
+            'reports.financial' => 'عرض البيانات المالية: إيرادات لوحة التحكم والتقارير المالية',
             'reports.export' => 'تصدير التقارير',
+        ]],
+        'printing' => ['label' => 'الطباعة', 'permissions' => [
+            'papers.print' => 'طباعة المستندات وتنزيلها PDF: الفواتير والإيصالات والسندات والكشوف',
         ]],
         'messaging' => ['label' => 'واتساب والتسويق', 'permissions' => [
             'whatsapp.inbox' => 'صندوق المحادثات',
@@ -118,7 +122,7 @@ final class PermissionRegistry
             'templates.manage' => 'القوالب والردود الآلية',
         ]],
         'website' => ['label' => 'الموقع الإلكتروني', 'permissions' => [
-            'website.manage' => 'إدارة محتوى الموقع',
+            'website.manage' => 'إدارة الموقع الإلكتروني: المحتوى والأقسام والهوية والأخبار والرسائل',
         ]],
         'settings' => ['label' => 'الإعدادات والإدارة', 'permissions' => [
             'settings.manage' => 'إعدادات النادي والهوية',
@@ -129,15 +133,8 @@ final class PermissionRegistry
             'integrations.manage' => 'التطبيقات التكاملية: مفاتيح Paymob وواتساب',
             'audit.view' => 'سجل التدقيق',
             'backups.manage' => 'النسخ الاحتياطي والاستعادة',
-            'billing.view' => 'اشتراك النادي في المنصة',
         ]],
     ];
-
-    /**
-     * Permissions only the club owner holds (the owner role is "*"): never granted through another role, whatever is
-     * stored on it or sent by the role editor. The club website is the owner's alone.
-     */
-    public const OWNER_ONLY = ['website.manage'];
 
     /** Permission groups that belong to an optional module (config gym.modules.<module>). */
     private const MODULE_GROUPS = ['sales' => 'sales', 'inventory' => 'inventory'];
@@ -206,18 +203,16 @@ final class PermissionRegistry
      */
     public static function sanitize(array $permissions): array
     {
-        return array_values(array_diff(array_intersect(self::all(), $permissions), self::OWNER_ONLY));
+        return array_values(array_intersect(self::all(), $permissions));
     }
 
     /**
-     * The groups as the role editor shows them: owner-only permissions are not offered.
+     * The groups as the role editor shows them.
      *
      * @return array<string, array{label: string, permissions: array<string, string>}>
      */
     public static function editorGroups(): array
     {
-        $groups = array_map(fn (array $group) => ['label' => $group['label'], 'permissions' => array_diff_key($group['permissions'], array_flip(self::OWNER_ONLY))], self::groups());
-
-        return array_filter($groups, fn (array $group) => $group['permissions'] !== []);
+        return self::groups();
     }
 }

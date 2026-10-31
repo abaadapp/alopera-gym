@@ -120,10 +120,6 @@ class AppServiceProvider extends ServiceProvider
                 return null;
             }
 
-            if ($ability === 'platform') {
-                return $user->isPlatformAdmin();
-            }
-
             if (PermissionRegistry::exists($ability)) {
                 return $user->hasPermission($ability);
             }

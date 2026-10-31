@@ -74,7 +74,6 @@ class HandleInertiaRequests extends Middleware
                 'email' => $user->email,
                 'role' => $user->role?->name,
                 'role_key' => $user->role?->key,
-                'is_platform_admin' => $user->isPlatformAdmin(),
             ],
             'permissions' => $user->permissions(),
             'branch' => $this->branch($user),
@@ -121,13 +120,11 @@ class HandleInertiaRequests extends Middleware
             'id' => $tenant->id,
             'name' => $tenant->name,
             'slug' => $tenant->slug,
-            'status' => $tenant->status,
             'logo_url' => $tenant->logoUrl(),
             'primary_color' => $tenant->primary_color,
             'secondary_color' => $tenant->secondary_color,
             'currency' => $tenant->currency,
             'phone' => $tenant->phone,
-            'trial_ends_at' => $tenant->trial_ends_at?->toDateString(),
         ];
     }
 

@@ -146,6 +146,12 @@ class StaffPermissionsTest extends TestCase
 
         $clerk = $this->holding($club, ['payroll.payslips']);
         $this->actingAs($clerk)->get(route('club.papers.show', ['type' => 'payslip', 'id' => $item->id]))->assertOk()->assertSee('كشف راتب')->assertSee('450.000');
+        // Reading it on screen is enough with payroll.payslips; printing it and its PDF also need papers.print.
+        $this->actingAs($clerk)->get(route('club.papers.show', ['type' => 'payslip', 'id' => $item->id, 'print' => 1]))->assertForbidden();
+        $this->actingAs($clerk)->get(route('club.papers.pdf', ['type' => 'payslip', 'id' => $item->id]))->assertForbidden();
+        $this->actingAs($clerk)->get(route('club.payroll.print', ['run' => $run->id, 'item' => $item->id]))->assertForbidden();
+        $clerk = $this->holding($club, ['payroll.payslips', 'papers.print']);
+        $this->actingAs($clerk)->get(route('club.papers.show', ['type' => 'payslip', 'id' => $item->id, 'print' => 1]))->assertOk();
         $pdf = $this->actingAs($clerk)->get(route('club.papers.pdf', ['type' => 'payslip', 'id' => $item->id]))->assertOk()->assertHeader('Content-Type', 'application/pdf');
         $this->assertStringStartsWith('%PDF', $pdf->getContent());
         // The bank line is for whoever may also read bank details.

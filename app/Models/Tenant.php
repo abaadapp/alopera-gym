@@ -5,13 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * A club on the platform.
+ * The gym: its name, brand, contact details and business settings. The system runs one gym; its tables keep a
+ * tenant_id so every query stays scoped to it (see BelongsToTenant).
  *
  * @property array<string, mixed>|null $settings
  */
@@ -19,15 +19,7 @@ class Tenant extends Model
 {
     use HasFactory, SoftDeletes;
 
-    public const STATUS_TRIAL = 'trial';
-
     public const STATUS_ACTIVE = 'active';
-
-    public const STATUS_PAST_DUE = 'past_due';
-
-    public const STATUS_SUSPENDED = 'suspended';
-
-    public const STATUS_CANCELLED = 'cancelled';
 
     /** Club business rules. Stored overrides are merged on top of these. */
     public const DEFAULT_SETTINGS = [
@@ -49,12 +41,11 @@ class Tenant extends Model
         'invoice_due_days' => 0,
         'allow_pay_at_reception' => true,
         'member_signup_enabled' => true,
-        'listed_on_landing' => false,
     ];
 
     protected $guarded = ['id'];
 
-    protected $attributes = ['status' => 'trial', 'country' => 'OM', 'timezone' => 'Asia/Muscat', 'currency' => 'OMR', 'locale' => 'ar', 'primary_color' => '#9d174d', 'secondary_color' => '#f9a8d4'];
+    protected $attributes = ['status' => 'active', 'country' => 'OM', 'timezone' => 'Asia/Muscat', 'currency' => 'OMR', 'locale' => 'ar', 'primary_color' => '#9d174d', 'secondary_color' => '#f9a8d4'];
 
     protected function casts(): array
     {
@@ -78,11 +69,6 @@ class Tenant extends Model
         return array_replace(self::DEFAULT_SETTINGS, $this->settings ?? []);
     }
 
-    public function isOperational(): bool
-    {
-        return in_array($this->status, [self::STATUS_TRIAL, self::STATUS_ACTIVE, self::STATUS_PAST_DUE], true);
-    }
-
     public function logoUrl(): ?string
     {
         return $this->logo_path ? Storage::disk('public')->url($this->logo_path) : null;
@@ -103,26 +89,9 @@ class Tenant extends Model
         return $this->hasMany(Branch::class);
     }
 
-    public function subscriptions(): HasMany
-    {
-        return $this->hasMany(TenantSubscription::class);
-    }
-
-    public function currentSubscription(): HasOne
-    {
-        return $this->hasOne(TenantSubscription::class)
-            ->whereIn('status', [TenantSubscription::TRIALING, TenantSubscription::ACTIVE, TenantSubscription::PAST_DUE])
-            ->latestOfMany('ends_on');
-    }
-
     public function integrations(): HasMany
     {
         return $this->hasMany(TenantIntegration::class);
-    }
-
-    public function platformInvoices(): HasMany
-    {
-        return $this->hasMany(PlatformInvoice::class);
     }
 
     public function mainBranch(): ?Branch

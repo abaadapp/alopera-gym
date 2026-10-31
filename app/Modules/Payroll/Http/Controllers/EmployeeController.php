@@ -22,7 +22,6 @@ use App\Modules\Gym\Models\Trainer;
 use App\Modules\Payroll\Models\Employee;
 use App\Modules\Payroll\Models\JobTitle;
 use App\Modules\Payroll\Models\PayrollItem;
-use App\Modules\Platform\Services\PlanLimits;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -176,15 +175,12 @@ class EmployeeController extends Controller
         ]);
     }
 
-    public function store(Request $request, AuditLogger $audit, PlanLimits $limits): RedirectResponse
+    public function store(Request $request, AuditLogger $audit): RedirectResponse
     {
         $data = $this->validated($request, null);
         $data['branch_id'] = app(BranchContext::class)->assign($data['branch_id'] ?? null);
         $this->guardSelf($request, null, $data);
         $account = $this->accountRequest($request, null);
-        if ($account && $account['mode'] === 'new') {
-            $limits->assertCanAddStaff();
-        }
 
         $employee = DB::transaction(function () use ($data, $account, $request) {
             $employee = Employee::create(Arr::except($data, ['user_id']) + ['user_id' => $account && $account['mode'] === 'link' ? $account['user_id'] : null]);

@@ -3,7 +3,7 @@
 namespace Tests\Concerns;
 
 use App\Core\Tenancy\TenantContext;
-use App\Models\PlatformPlan;
+use App\Core\Tenancy\TenantProvisioner;
 use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\User;
@@ -15,26 +15,18 @@ use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Models\Program;
 use App\Modules\Gym\Services\MemberService;
 use App\Modules\Gym\Services\MembershipService;
-use App\Modules\Platform\Services\TenantProvisioner;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 
 /** Helpers to build clubs, staff and members through the real services. */
 trait BuildsClubs
 {
-    protected function platformPlan(array $attributes = []): PlatformPlan
-    {
-        return PlatformPlan::create($attributes + [
-            'code' => 'plan-'.Str::random(6), 'name' => 'Pro', 'price_monthly' => 45, 'price_yearly' => 450,
-        ]);
-    }
-
-    protected function club(string $name = 'Club', ?PlatformPlan $plan = null): Tenant
+    /** The gym (the system runs one; tests build a second to prove nothing leaks between records of two). */
+    protected function club(string $name = 'Club'): Tenant
     {
         $tenant = app(TenantProvisioner::class)->provision(
             ['name' => $name.' '.Str::random(4)],
             ['name' => 'Owner', 'email' => Str::lower(Str::random(10)).'@owner.test', 'password' => 'password'],
-            $plan ?? $this->platformPlan(),
         );
         app(TenantContext::class)->set(null);
 

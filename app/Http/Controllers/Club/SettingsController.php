@@ -17,7 +17,7 @@ class SettingsController extends Controller
     /** Opening the hub needs at least one of the screens it links to. */
     public const HUB_PERMISSIONS = [
         'settings.manage', 'branches.manage', 'users.manage', 'roles.manage',
-        'audit.view', 'backups.manage', 'billing.view', 'accounting.manage', 'documents.manage', 'pos_devices.manage',
+        'audit.view', 'backups.manage', 'accounting.manage', 'documents.manage', 'pos_devices.manage',
     ];
 
     private const NOTIFICATION_RULES = ['expiry_reminder_days', 'expired_followup_days', 'notify_class_changes', 'class_reminder_hours'];

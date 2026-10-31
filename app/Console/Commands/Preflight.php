@@ -42,7 +42,6 @@ class Preflight extends Command
         $this->check(! in_array(config('mail.default'), ['log', 'array'], true), 'Mail is delivered', 'MAIL_MAILER='.config('mail.default').' (password resets)', warn: true);
         $this->check($this->logLevel() !== 'debug', 'Log level is not debug', 'LOG_LEVEL='.$this->logLevel(), warn: true);
         $this->check(config('services.whatsapp.driver') !== 'log', 'WhatsApp sends for real', warn: true, hint: 'WHATSAPP_DRIVER=meta once Meta is set up');
-        $this->check(filled(config('gym.platform_sales_email')), 'Sales email on the landing page', (string) config('gym.platform_sales_email'), warn: true, hint: 'PLATFORM_SALES_EMAIL — the pricing buttons are hidden without it');
         $this->check(is_link(public_path('storage')) || is_dir(public_path('storage')), 'Public storage is linked', hint: 'php artisan storage:link');
 
         try {
@@ -55,7 +54,7 @@ class Preflight extends Command
             return $this->report();
         }
 
-        $demoStaff = User::query()->get(['id', 'email', 'is_active', 'is_platform_admin'])
+        $demoStaff = User::query()->get(['id', 'email', 'is_active'])
             ->filter(fn (User $u) => DemoAccounts::isReservedEmail($u->email));
         $activeDemo = $demoStaff->where('is_active', true);
 
@@ -71,7 +70,7 @@ class Preflight extends Command
             $activeDemo = collect();
         }
 
-        $this->check($activeDemo->isEmpty(), 'No active demo staff/admin accounts', $activeDemo->isEmpty()
+        $this->check($activeDemo->isEmpty(), 'No active demo staff accounts', $activeDemo->isEmpty()
             ? 'none'.($demoStaff->isNotEmpty() ? ' ('.$demoStaff->count().' deactivated)' : '')
             : $activeDemo->count().': '.$activeDemo->pluck('email')->take(3)->implode(', ').($activeDemo->count() > 3 ? ' …' : ''), hint: '— run with --deactivate-demo');
 
@@ -81,8 +80,8 @@ class Preflight extends Command
         $demoClubs = Tenant::whereIn('slug', ['alopera', 'demofit'])->get()->filter(fn (Tenant $t) => DemoAccounts::isReservedEmail($t->email))->pluck('slug');
         $this->check($demoClubs->isEmpty(), 'No demo clubs', $demoClubs->isEmpty() ? 'none' : $demoClubs->implode(', ').' look like seeded demo data', warn: true);
 
-        $admins = User::where('is_platform_admin', true)->where('is_active', true)->get(['email'])->reject(fn (User $u) => DemoAccounts::isReservedEmail($u->email));
-        $this->check($admins->isNotEmpty(), 'A real platform admin exists', $admins->count().' admin(s)', warn: true, hint: '— php artisan platform:create-admin you@yourdomain');
+        $owners = User::whereNotNull('tenant_id')->where('is_active', true)->whereHas('role', fn ($q) => $q->where('key', 'owner'))->get(['email'])->reject(fn (User $u) => DemoAccounts::isReservedEmail($u->email));
+        $this->check($owners->isNotEmpty(), 'The gym is set up with a real owner account', $owners->count().' owner(s)', warn: true, hint: '— php artisan gym:install');
 
         return $this->report();
     }

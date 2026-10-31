@@ -200,15 +200,15 @@ class PermissionsTest extends TestCase
         $this->actingAs($mine)->get(route('club.trainer.session', $otherSession->id))->assertForbidden();
     }
 
-    public function test_platform_and_club_areas_are_separate(): void
+    public function test_an_account_that_belongs_to_no_gym_opens_nothing(): void
     {
-        config(['gym.modules.platform_panel' => true]);
-        $club = $this->club();
+        $this->club();
+        // An old platform account (no gym): signed out of the panel, never shown a gym's records.
         $admin = User::factory()->platformAdmin()->create();
 
-        $this->actingAs($this->owner($club))->get(route('platform.dashboard'))->assertForbidden();
-        $this->actingAs($admin)->get(route('platform.dashboard'))->assertOk();
-        $this->actingAs($admin)->get(route('club.members.index'))->assertRedirect(route('platform.dashboard'));
+        $this->actingAs($admin)->get(route('club.members.index'))->assertRedirect(route('login'));
+        $this->assertGuest();
+        $this->get('/platform')->assertNotFound();
     }
 
     public function test_deactivated_staff_lose_access_immediately(): void

@@ -14,18 +14,25 @@ use Illuminate\Http\Response;
  *
  * The record is looked up inside the club (tenant scope), must be in a branch the user reaches (else 404, as if it did
  * not exist), and the user needs that document's own permission (else 403) — the same checks for every format, so
- * a payslip is no easier to reach as a PDF than on screen.
+ * a payslip is no easier to reach as a PDF than on screen. Printing it (the print dialog) and the PDF also need
+ * papers.print; reading the paper on screen does not.
  */
 class PaperController extends Controller
 {
     public function show(Request $request, string $type, int $id): Response
     {
-        return $this->paper($request, $type, $id)->page($request->boolean('print'));
+        $paper = $this->paper($request, $type, $id);
+        abort_if($request->boolean('print') && ! $request->user()->can('papers.print'), 403, 'الطباعة تحتاج صلاحية «طباعة المستندات».');
+
+        return $paper->page($request->boolean('print'));
     }
 
     public function pdf(Request $request, string $type, int $id): Response
     {
-        return $this->paper($request, $type, $id)->pdf($request->boolean('download'));
+        $paper = $this->paper($request, $type, $id);
+        abort_unless($request->user()->can('papers.print'), 403, 'ملف PDF يحتاج صلاحية «طباعة المستندات».');
+
+        return $paper->pdf($request->boolean('download'));
     }
 
     private function paper(Request $request, string $type, int $id): Paper

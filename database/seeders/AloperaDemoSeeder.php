@@ -5,7 +5,7 @@ namespace Database\Seeders;
 use App\Core\Auth\SystemRoles;
 use App\Core\Support\NumberSequence;
 use App\Core\Tenancy\TenantContext;
-use App\Models\PlatformPlan;
+use App\Core\Tenancy\TenantProvisioner;
 use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\TenantIntegration;
@@ -40,8 +40,6 @@ use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Models\MessageTemplate;
 use App\Modules\Messaging\Services\TemplateCatalog;
-use App\Modules\Platform\Services\SubscriptionService;
-use App\Modules\Platform\Services\TenantProvisioner;
 use App\Modules\Website\Models\SitePost;
 use App\Modules\Website\Models\SiteSetting;
 use Carbon\Carbon;
@@ -51,10 +49,9 @@ use Illuminate\Database\Seeder;
 /**
  * Demo data for local development and demos. Never run in production.
  *
- * Builds the platform plans, a super admin, Alopera Gym as the first club
- * (with staff for every role, plans, programs, trainers, timetable, members
- * with realistic history, payments, POS, expenses, WhatsApp log and website
- * content) and a second small club to demonstrate tenant isolation.
+ * Builds Alopera Gym with staff for every role, plans, programs, trainers,
+ * timetable, members with realistic history, payments, POS, expenses,
+ * WhatsApp log and website content.
  *
  * History is produced by the real services with time travel, so every
  * invoice, receipt, activation and expiry went through production code paths.
@@ -75,55 +72,18 @@ class AloperaDemoSeeder extends Seeder
         mt_srand(2026);
         fake()->seed(2026);
 
-        $plans = $this->platformPlans();
-        $this->platformAdmin();
-
         $alopera = app(TenantProvisioner::class)->provision(
             ['name' => 'Alopera Gym', 'slug' => 'alopera', 'email' => 'hello@alopera.test', 'phone' => '96824000000', 'city' => 'مسقط', 'primary_color' => '#9d174d', 'secondary_color' => '#f9a8d4'],
-            ['name' => 'مالك النادي', 'email' => 'owner@alopera.test', 'password' => self::PASSWORD, 'phone' => '96890000001'],
-            $plans['pro'],
+            ['name' => 'صاحب النشاط', 'email' => 'owner@alopera.test', 'password' => self::PASSWORD, 'phone' => '96890000001'],
         );
-        $alopera->update(['legal_name' => 'Alopera Ladies Fitness LLC', 'address' => 'الخوير، مسقط', 'status' => Tenant::STATUS_ACTIVE]);
-        app(SubscriptionService::class)->markPaid(
-            app(SubscriptionService::class)->subscribe($alopera, $plans['pro'], 'yearly')->invoices()->first(),
-            'bank_transfer', 'DEMO-TRX-001'
-        );
+        $alopera->update(['legal_name' => 'Alopera Ladies Fitness LLC', 'address' => 'الخوير، مسقط']);
 
         app(TenantContext::class)->run($alopera->fresh(), fn () => $this->seedAlopera());
-
-        $demo = app(TenantProvisioner::class)->provision(
-            ['name' => 'Demo Fit Club', 'slug' => 'demofit', 'city' => 'صلالة', 'primary_color' => '#0f766e', 'secondary_color' => '#99f6e4'],
-            ['name' => 'Demo Owner', 'email' => 'owner@demofit.test', 'password' => self::PASSWORD],
-            $plans['starter'],
-        );
-        app(TenantContext::class)->run($demo, fn () => $this->seedSecondClub());
 
         Carbon::setTestNow();
         CarbonImmutable::setTestNow();
 
         $this->command?->info('Demo ready. Staff password for all demo accounts: '.self::PASSWORD);
-    }
-
-    /** @return array<string, PlatformPlan> */
-    private function platformPlans(): array
-    {
-        $rows = [
-            'starter' => ['name' => 'Starter', 'description' => 'لنادٍ صغير بفرع واحد', 'price_monthly' => 25, 'price_yearly' => 250, 'max_members' => 300, 'max_staff' => 5, 'max_branches' => 1, 'sort' => 1,
-                'features' => ['إدارة العضويات والحجوزات', 'الموقع وبوابة الأعضاء', 'التقارير الأساسية']],
-            'pro' => ['name' => 'Pro', 'description' => 'الأكثر طلبًا للأندية النشطة', 'price_monthly' => 45, 'price_yearly' => 450, 'max_members' => 1500, 'max_staff' => 20, 'max_branches' => 3, 'sort' => 2,
-                'features' => ['كل مزايا Starter', 'أتمتة واتساب والحملات', 'الدفع الإلكتروني', 'أجهزة الدخول']],
-            'enterprise' => ['name' => 'Enterprise', 'description' => 'سلاسل أندية وفروع متعددة', 'price_monthly' => 95, 'price_yearly' => 950, 'max_members' => null, 'max_staff' => null, 'max_branches' => null, 'sort' => 3,
-                'features' => ['كل مزايا Pro', 'فروع غير محدودة', 'خادم وقاعدة بيانات مستقلة', 'دعم أولوية']],
-        ];
-
-        return collect($rows)->mapWithKeys(fn ($r, $code) => [$code => PlatformPlan::updateOrCreate(['code' => $code], $r + ['trial_days' => 14])])->all();
-    }
-
-    private function platformAdmin(): void
-    {
-        $admin = User::firstOrNew(['email' => 'admin@alopera.test']);
-        $admin->fill(['name' => 'مدير المنصة', 'password' => self::PASSWORD]);
-        $admin->forceFill(['is_platform_admin' => true, 'tenant_id' => null, 'email_verified_at' => now()])->save();
     }
 
     private function seedAlopera(): void
@@ -169,6 +129,7 @@ class AloperaDemoSeeder extends Seeder
         $make('ليلى — الإدارة', 'manager@alopera.test', SystemRoles::MANAGER);
         $make('هند — الاستقبال', 'reception@alopera.test', SystemRoles::RECEPTION);
         $make('سلمى — المالية', 'finance@alopera.test', SystemRoles::FINANCE);
+        $make('نورة — نقطة البيع', 'cashier@alopera.test', SystemRoles::CASHIER);
 
         return ['trainers' => [
             $make('الكوتش ريم', 'trainer@alopera.test', SystemRoles::TRAINER),
@@ -550,22 +511,6 @@ class AloperaDemoSeeder extends Seeder
         }
     }
 
-    private function seedSecondClub(): void
-    {
-        $program = Program::create(['name' => 'Functional Training', 'slug' => 'functional', 'color' => '#0f766e']);
-        $plan = MembershipPlan::create(['name' => 'Monthly', 'type' => 'combo', 'duration_value' => 1, 'duration_unit' => 'month', 'price' => 20]);
-        $member = app(MemberService::class)->create(['full_name' => 'عضو نادٍ آخر', 'phone' => '96890000004']);
-        $m = app(MembershipService::class)->sell($member, $plan);
-        app(PaymentService::class)->record($m->invoice()->first(), $m->total, 'cash');
-        unset($program);
-    }
-
-    /**
-     * @template T
-     *
-     * @param  callable(): T  $callback
-     * @return T
-     */
     private function travel(\DateTimeInterface $at, callable $callback): mixed
     {
         Carbon::setTestNow($at);

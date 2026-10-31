@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
-import { Menu } from 'lucide-react';
 import { AdminScope, Flash } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 
@@ -19,20 +18,17 @@ const idle = 'font-medium text-[#4b4b4b] hover:bg-[rgba(17,17,17,0.045)] hover:t
 const current = "bg-[#f2f2f0] font-[650] text-[#111] before:absolute before:-start-3 before:top-1/2 before:h-[18px] before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-[#111] before:content-['']";
 
 /**
- * The frame of a control panel (club and platform): a 256px sidebar — one link per section, groups split by thin
+ * The frame of the gym's panel: a 256px sidebar — one link per section, groups split by thin
  * rules, the footer group (integrations, settings) pinned to the bottom, no dropdowns — that slides in as a drawer
  * on phones; a 64px top bar; and the page, up to 1600px wide with 16/24px gutters. Everything inside is in the
  * control-panel look (AdminScope).
  *
- * `topbar` draws the club's bar (search, quick icons, bell, user); without it the bar shows the page title and
- * `actions` (the platform panel).
+ * `topbar` draws the bar (search, quick icons, bell, user).
  */
-export default function PanelShell({ title, identity, groups, actions, topbar, children }: {
-    title: string;
+export default function PanelShell({ identity, groups, topbar, children }: {
     identity: ReactNode;
     groups: PanelGroup[];
-    actions?: ReactNode;
-    topbar?: (openMenu: () => void) => ReactNode;
+    topbar: (openMenu: () => void) => ReactNode;
     children: ReactNode;
 }) {
     const [open, setOpen] = useState(false);
@@ -82,19 +78,7 @@ export default function PanelShell({ title, identity, groups, actions, topbar, c
             </aside>
 
             <div className="lg:ms-64">
-                {topbar ? (
-                    topbar(() => setOpen(true))
-                ) : (
-                    <header className="no-print sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-[#e8e8e8] bg-white/95 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-white/80 lg:px-6">
-                        <div className="flex min-w-0 items-center gap-2">
-                            <button className="grid size-10 shrink-0 place-items-center rounded-[10px] text-[#4b4b4b] hover:bg-[rgba(17,17,17,0.045)] lg:hidden" onClick={() => setOpen(true)} aria-label="القائمة">
-                                <Menu className="size-[18px]" />
-                            </button>
-                            <h2 className="truncate text-sm font-medium text-muted">{title}</h2>
-                        </div>
-                        <div className="flex items-center gap-1.5">{actions}</div>
-                    </header>
-                )}
+                {topbar(() => setOpen(true))}
 
                 <main className="mx-auto w-full max-w-[1600px] p-4 lg:p-6">{children}</main>
             </div>

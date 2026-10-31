@@ -3,8 +3,9 @@
 namespace App\Core\Auth;
 
 /**
- * Roles every new club starts with. Clubs can add custom roles; only the owner
- * role is locked.
+ * The gym's starting roles: the business owner, the manager (of the gym or a branch), reception, finance and
+ * accounting, the sales and point-of-sale clerk, and the trainer. The owner adds custom roles; only the owner role is
+ * locked.
  */
 final class SystemRoles
 {
@@ -18,21 +19,25 @@ final class SystemRoles
 
     public const TRAINER = 'trainer';
 
+    public const CASHIER = 'cashier';
+
     /** @return array<string, array{name: string, description: string, permissions: list<string>, home: string}> */
     public static function definitions(): array
     {
         return [
             self::OWNER => [
-                'name' => 'مالك النادي',
+                'name' => 'صاحب النشاط',
                 'description' => 'كل الصلاحيات، ولا يمكن تعديل هذا الدور.',
                 'permissions' => ['*'],
                 'home' => 'club.dashboard',
             ],
             self::MANAGER => [
-                'name' => 'الإدارة',
-                'description' => 'إدارة النادي اليومية دون النسخ الاحتياطي والأدوار.',
+                'name' => 'مدير النشاط أو الفرع',
+                'description' => 'إدارة النادي اليومية دون النسخ الاحتياطي والأدوار والرواتب السرية والموقع الإلكتروني.',
                 'permissions' => array_values(array_diff(PermissionRegistry::all(), [
-                    'roles.manage', 'backups.manage', 'billing.view', 'integrations.manage', 'members.delete', ...PermissionRegistry::OWNER_ONLY,
+                    'roles.manage', 'backups.manage', 'integrations.manage', 'members.delete',
+                    // The website is the owner's, or whoever the owner grants it to by name.
+                    'website.manage',
                     // Salaries stay confidential, approved by the owner and paid by finance; suppliers are paid by finance.
                     'payroll.salaries', 'payroll.compensation', 'payroll.approve', 'payroll.pay', 'accounting.manage', 'purchases.pay',
                     // Sensitive business documents are the owner's unless shared one by one.
@@ -49,12 +54,12 @@ final class SystemRoles
                     'classes.view', 'bookings.manage', 'attendance.mark',
                     'checkin.perform', 'checkin.view',
                     'invoices.view', 'invoices.manage', 'payments.record',
-                    'pos.sell', 'orders.manage', 'whatsapp.inbox', 'whatsapp.send',
+                    'pos.sell', 'orders.manage', 'whatsapp.inbox', 'whatsapp.send', 'papers.print',
                 ],
                 'home' => 'club.reception',
             ],
             self::FINANCE => [
-                'name' => 'المالية',
+                'name' => 'المالية والمحاسبة',
                 'description' => 'الفواتير والتحصيل والمصروفات والحسابات، وإعداد الرواتب وصرفها بعد اعتماد المالك.',
                 'permissions' => [
                     'dashboard.view', 'members.view', 'memberships.view',
@@ -65,7 +70,7 @@ final class SystemRoles
                     'employees.view', 'payroll.salaries', 'payroll.prepare', 'payroll.edit', 'payroll.pay', 'payroll.payslips', 'payroll.reports',
                     'sales.view', 'sales.refund', 'products.manage', 'suppliers.view', 'suppliers.create', 'suppliers.manage', 'purchases.manage', 'pos.sell',
                     'inventory.view', 'purchases.view', 'purchases.pay',
-                    'reports.view', 'reports.financial', 'reports.export',
+                    'reports.view', 'reports.financial', 'reports.export', 'papers.print',
                 ],
                 'home' => 'club.dashboard',
             ],
@@ -74,6 +79,12 @@ final class SystemRoles
                 'description' => 'حصصه وجلساته الفردية وتسجيل حضور أعضائه.',
                 'permissions' => ['classes.view', 'attendance.mark'],
                 'home' => 'club.trainer',
+            ],
+            self::CASHIER => [
+                'name' => 'موظف المبيعات ونقطة البيع',
+                'description' => 'البيع من نقطة البيع: المنتجات والعضويات وتجديدها والتدريب الشخصي، وطباعة الإيصالات.',
+                'permissions' => ['pos.sell', 'members.view', 'memberships.view', 'memberships.sell', 'pt.sell', 'papers.print'],
+                'home' => 'club.pos.index',
             ],
         ];
     }

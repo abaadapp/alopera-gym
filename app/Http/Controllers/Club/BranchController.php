@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Club;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
-use App\Modules\Platform\Services\PlanLimits;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -18,9 +17,8 @@ class BranchController extends Controller
         return Inertia::render('Club/Settings/Branches', ['branches' => Branch::orderByDesc('is_main')->orderBy('name')->get()]);
     }
 
-    public function store(Request $request, PlanLimits $limits): RedirectResponse
+    public function store(Request $request): RedirectResponse
     {
-        $limits->assertCanAddBranch();
         Branch::create($this->validated($request));
 
         return back()->with('success', 'تمت إضافة الفرع.');

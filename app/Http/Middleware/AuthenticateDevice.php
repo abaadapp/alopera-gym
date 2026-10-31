@@ -27,7 +27,7 @@ class AuthenticateDevice
         }
 
         $tenant = Tenant::find($device->tenant_id);
-        if (! $tenant || ! $tenant->isOperational()) {
+        if (! $tenant) {
             return response()->json(['allowed' => false, 'error' => 'club_unavailable'], 403);
         }
 

@@ -18,7 +18,7 @@ Route::middleware('can:sales.view')->group(function () {
     Route::get('/sales/reports', [SalesController::class, 'reports'])->name('sales.reports');
     Route::get('/sales/reports/export', [SalesController::class, 'export'])->middleware('throttle:exports')->name('sales.reports.export');
 });
-Route::get('/sales/{sale}/receipt', [SalesController::class, 'receipt'])->whereNumber('sale')->name('sales.receipt');
+Route::get('/sales/{sale}/receipt', [SalesController::class, 'receipt'])->whereNumber('sale')->middleware('can:papers.print')->name('sales.receipt');
 Route::post('/sales/{sale}/void', [PosController::class, 'void'])->whereNumber('sale')->middleware(['can:sales.refund', 'throttle:20,1'])->name('pos.void');
 
 Route::middleware('can:pos.sell')->group(function () {

@@ -11,20 +11,20 @@ use App\Models\User;
  * Nobody gives what they do not hold: a role, a person's own list, or a role assignment may only carry permissions the
  * acting user holds themselves (the owner holds them all). An account that opens more than the acting user is not
  * theirs to edit, rename, reset or switch off — only someone holding at least as much may. The owner role is given
- * and taken only by an owner, and owner-only permissions are never given at all.
+ * and taken only by an owner.
  */
 final class Grants
 {
     /** @return list<string> */
     public static function grantable(User $actor): array
     {
-        return array_values(array_diff($actor->isOwner() ? PermissionRegistry::all() : $actor->permissions(), PermissionRegistry::OWNER_ONLY));
+        return array_values($actor->isOwner() ? PermissionRegistry::all() : $actor->permissions());
     }
 
     /** @param  list<string>  $permissions */
     public static function covers(User $actor, array $permissions): bool
     {
-        return array_diff(array_diff($permissions, PermissionRegistry::OWNER_ONLY), self::grantable($actor)) === [];
+        return array_diff($permissions, self::grantable($actor)) === [];
     }
 
     /** May the actor give this role to someone? */

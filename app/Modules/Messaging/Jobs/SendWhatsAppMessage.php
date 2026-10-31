@@ -30,7 +30,7 @@ class SendWhatsAppMessage implements ShouldQueue
     public function handle(TenantContext $tenants, WhatsAppService $whatsapp): void
     {
         $tenant = Tenant::find($this->tenantId);
-        if (! $tenant || ! $tenant->isOperational()) {
+        if (! $tenant) {
             return;
         }
 

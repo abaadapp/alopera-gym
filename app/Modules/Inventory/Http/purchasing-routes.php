@@ -51,7 +51,7 @@ Route::prefix('purchases')->name('purchases.')->group(function () {
         Route::get('/', [PurchaseOrderController::class, 'register'])->name('register');
         Route::get('/orders', [PurchaseOrderController::class, 'index'])->name('index');
         Route::get('/orders/{purchaseOrder}', [PurchaseOrderController::class, 'show'])->whereNumber('purchaseOrder')->name('show');
-        Route::get('/orders/{purchaseOrder}/print', [PurchaseOrderController::class, 'print'])->whereNumber('purchaseOrder')->name('print');
+        Route::get('/orders/{purchaseOrder}/print', [PurchaseOrderController::class, 'print'])->whereNumber('purchaseOrder')->middleware('can:papers.print')->name('print');
         Route::get('/bills', [SupplierBillController::class, 'index'])->name('bills');
         Route::get('/bills/{supplierBill}', [SupplierBillController::class, 'show'])->whereNumber('supplierBill')->name('bills.show');
         Route::get('/bills/{supplierBill}/attachment', [SupplierBillController::class, 'attachment'])->whereNumber('supplierBill')->name('bills.attachment');

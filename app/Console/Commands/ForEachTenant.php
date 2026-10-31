@@ -7,7 +7,7 @@ use App\Models\Tenant;
 use Illuminate\Console\Command;
 use Throwable;
 
-/** Runs a scheduled job once per operational club, isolating failures. */
+/** Runs a scheduled job once per club record, isolating failures. */
 abstract class ForEachTenant extends Command
 {
     abstract protected function handleTenant(Tenant $tenant): string;
@@ -15,7 +15,7 @@ abstract class ForEachTenant extends Command
     public function handle(TenantContext $tenants): int
     {
         $failed = 0;
-        $query = Tenant::query()->whereIn('status', [Tenant::STATUS_TRIAL, Tenant::STATUS_ACTIVE, Tenant::STATUS_PAST_DUE]);
+        $query = Tenant::query();
         if ($slug = $this->option('tenant')) {
             $query->where('slug', $slug);
         }

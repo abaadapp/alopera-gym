@@ -115,6 +115,8 @@ class NavigationAndSettingsTest extends TestCase
         $owner = $this->owner($this->club());
 
         $this->actingAs($owner)->get('/app/users')->assertRedirect('/app/settings/users');
-        $this->actingAs($owner)->get('/app/billing')->assertRedirect('/app/settings/billing');
+        // The gym's subscription to a hosting platform is gone: its old addresses open the settings.
+        $this->actingAs($owner)->get('/app/billing')->assertRedirect('/app/settings');
+        $this->actingAs($owner)->get('/app/settings/billing')->assertRedirect('/app/settings');
     }
 }

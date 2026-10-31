@@ -20,7 +20,7 @@ export type NavGroup = { sections: NavSection[]; footer?: boolean };
 const REPORT_PERMISSIONS = ['reports.view', 'reports.financial', 'accounting.view', 'dues.view', 'sales.view', 'memberships.view', 'checkin.view', 'staff_attendance.view', 'payroll.reports', 'documents.view'];
 
 /** Settings screens live behind the settings hub; none of them appears in the main menu. */
-const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'billing.view', 'accounting.manage', 'documents.manage', 'pos_devices.manage', 'papers.manage'];
+const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'accounting.manage', 'documents.manage', 'pos_devices.manage', 'papers.manage'];
 
 export const NAV: NavGroup[] = [
     {
@@ -174,7 +174,7 @@ export const NAV: NavGroup[] = [
             {
                 label: 'الموقع الإلكتروني',
                 icon: Globe,
-                // The club owner's alone (website.manage is never granted through another role).
+                // The owner's, or whoever the owner grants website.manage to by name (no role holds it by default).
                 tabs: [
                     { label: 'المحتوى', route: 'club.website.edit', permission: 'website.manage' },
                     { label: 'أقسام الموقع', route: 'club.website.sections', permission: 'website.manage' },
@@ -199,7 +199,7 @@ export const NAV: NavGroup[] = [
                 label: 'الإعدادات',
                 icon: Settings,
                 tabs: [{ label: 'الإعدادات', route: 'club.settings.index', permission: SETTINGS_PERMISSIONS }],
-                match: ['club.settings.*', 'club.branches.*', 'club.users.*', 'club.roles.*', 'club.audit.*', 'club.backups.*', 'club.billing'],
+                match: ['club.settings.*', 'club.branches.*', 'club.users.*', 'club.roles.*', 'club.audit.*', 'club.backups.*'],
             },
         ],
     },

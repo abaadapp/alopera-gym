@@ -12,7 +12,7 @@ import type { StaffNotification } from '@/types';
 /* 40px square icon buttons with an 18px line icon, quiet grey that darkens on hover. */
 const iconButton = 'relative grid size-10 shrink-0 place-items-center rounded-[10px] text-[#4b4b4b] transition-colors hover:bg-[rgba(17,17,17,0.045)] hover:text-[#111] [&_svg]:size-[18px]';
 
-const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'billing.view', 'accounting.manage', 'documents.manage'];
+const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'accounting.manage', 'documents.manage'];
 
 export const NOTIFICATION_ICONS: Record<StaffNotification['kind'], LucideIcon> = {
     document: FileText, order: ShoppingBag, payment: CreditCard, membership: Ticket, integration: Blocks, contact: Mail, inbox: MessageCircle,
@@ -52,10 +52,6 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
 
             <div className="ms-auto flex shrink-0 items-center gap-1.5">
                 <BranchPicker />
-
-                {tenant?.status === 'trial' && (
-                    <span className="hidden rounded-full border border-[#e8e8e8] bg-[#f2f2f0] px-2.5 py-1 text-[12px] font-medium text-[#444] xl:inline">فترة تجريبية حتى {tenant.trial_ends_at}</span>
-                )}
 
                 {modules.sales && can('pos.sell') && (
                     <Link href={route('club.pos.index')} className={cn(iconButton, 'max-sm:hidden')} title="نقطة البيع">
