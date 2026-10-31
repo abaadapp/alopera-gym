@@ -7,6 +7,7 @@ use App\Modules\Finance\Events\InvoicePaid;
 use App\Modules\Finance\Events\InvoiceVoided;
 use App\Modules\Inventory\Console\CheckStock;
 use App\Modules\Inventory\Console\ExpireOrders;
+use App\Modules\Inventory\Listeners\ReturnInvoicedStock;
 use App\Modules\Inventory\Listeners\SettleWebsiteOrders;
 use Illuminate\Support\Facades\Event;
 
@@ -21,6 +22,7 @@ class InventoryServiceProvider extends ModuleServiceProvider
     {
         Event::listen(InvoicePaid::class, [SettleWebsiteOrders::class, 'handlePaid']);
         Event::listen(InvoiceVoided::class, [SettleWebsiteOrders::class, 'handleVoided']);
+        Event::listen(InvoiceVoided::class, [ReturnInvoicedStock::class, 'handle']);
 
         if ($this->app->runningInConsole()) {
             $this->commands([ExpireOrders::class, CheckStock::class]);

@@ -12,6 +12,11 @@ Route::get('/invoices/create', [InvoiceController::class, 'create'])->middleware
 Route::post('/invoices', [InvoiceController::class, 'store'])->middleware('can:invoices.manage')->name('invoices.store');
 // The manual invoice's live paper while it is filled in (nothing saved).
 Route::post('/invoices/preview', [InvoiceController::class, 'preview'])->middleware(['can:invoices.manage', 'throttle:120,1'])->name('invoices.preview');
+// A saved draft: reopened in the editor, saved again or issued, or thrown away (drafts are not invoices yet: their own key).
+Route::get('/invoices/drafts/{draft}/edit', [InvoiceController::class, 'edit'])->whereNumber('draft')->middleware('can:invoices.manage')->name('invoices.drafts.edit');
+Route::post('/invoices/drafts/{draft}', [InvoiceController::class, 'update'])->whereNumber('draft')->middleware('can:invoices.manage')->name('invoices.drafts.update');
+Route::delete('/invoices/drafts/{draft}', [InvoiceController::class, 'discard'])->whereNumber('draft')->middleware('can:invoices.manage')->name('invoices.drafts.discard');
+Route::get('/invoices/attachments/{attachment}', [InvoiceController::class, 'attachment'])->whereNumber('attachment')->middleware('can:invoices.view')->name('invoices.attachments.show');
 Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->middleware('can:invoices.view')->name('invoices.show');
 Route::get('/invoices/{invoice}/print', [InvoiceController::class, 'print'])->middleware(['can:invoices.view', 'can:papers.print'])->name('invoices.print');
 Route::post('/invoices/{invoice}/void', [InvoiceController::class, 'void'])->middleware('can:invoices.void')->name('invoices.void');

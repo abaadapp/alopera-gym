@@ -17,7 +17,7 @@ class StockMovement extends Model
     public const TYPES = [
         'purchase' => 'استلام مشتريات', 'sale' => 'بيع', 'order' => 'محجوز لطلب من الموقع', 'release' => 'إلغاء طلب من الموقع',
         'void' => 'إلغاء بيع', 'return' => 'مرتجع', 'adjustment' => 'تسوية', 'transfer_out' => 'نقل — صادر', 'transfer_in' => 'نقل — وارد',
-        'transfer_return' => 'نقل — عاد للمرسل',
+        'transfer_return' => 'نقل — عاد للمرسل', 'invoice' => 'بيع بفاتورة', 'invoice_void' => 'إلغاء فاتورة',
     ];
 
     protected $guarded = ['id', 'tenant_id'];

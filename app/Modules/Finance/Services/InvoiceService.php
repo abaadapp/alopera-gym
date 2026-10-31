@@ -64,7 +64,7 @@ final class InvoiceService
      * paper is drawn from it, so what is previewed is what is issued.
      *
      * @param  list<array{description: string, quantity?: int|float|string, unit_price: string|int|float, discount?: string|int|float|null, itemable?: Model|null}>  $lines
-     * @param  array{type?: string, branch_id?: int|null, due_date?: string|null, notes?: string|null, tax_rate?: float|int|null, issue_date?: string|null}  $options
+     * @param  array{type?: string, branch_id?: int|null, due_date?: string|null, notes?: string|null, tax_rate?: float|int|null, issue_date?: string|null, customer_phone?: string|null, customer_email?: string|null, payment_terms_days?: int|null, internal_notes?: string|null}  $options
      */
     public function draft(?Billable $billable, array $lines, array $options = [], ?string $customerName = null): Invoice
     {
@@ -112,8 +112,8 @@ final class InvoiceService
             'billable_type' => $billable instanceof Model ? $billable->getMorphClass() : null,
             'billable_id' => $billable instanceof Model ? $billable->getKey() : null,
             'customer_name' => $billable?->billingName() ?? ($customerName ?: 'عميل نقدي'),
-            'customer_phone' => $billable?->billingPhone(),
-            'customer_email' => $billable?->billingEmail(),
+            'customer_phone' => $billable?->billingPhone() ?? ($options['customer_phone'] ?? null),
+            'customer_email' => $billable?->billingEmail() ?? ($options['customer_email'] ?? null),
             'type' => $options['type'] ?? 'other',
             'status' => Invoice::ISSUED,
             'issue_date' => $issueDate,
@@ -128,6 +128,9 @@ final class InvoiceService
             // The club as it is today, printed on this invoice from now on (PaperIssuer).
             'issuer' => PaperIssuer::stamp($tenant),
             'notes' => $options['notes'] ?? null,
+            // The editor's: the terms the due date came from, and the team's note (never printed).
+            'payment_terms_days' => $options['payment_terms_days'] ?? null,
+            'internal_notes' => $options['internal_notes'] ?? null,
         ]);
 
         return $invoice->setRelation('items', new Collection($items));

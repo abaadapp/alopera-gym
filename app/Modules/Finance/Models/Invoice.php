@@ -41,14 +41,31 @@ class Invoice extends Model implements BranchOwned
 
     protected $guarded = ['id', 'tenant_id'];
 
+    /**
+     * A draft is the editor's work in progress, not an invoice yet: no number, nothing owed, no entry in the books. It
+     * is out of every query of invoices (lists, dues, statements, reports, a member's balance) unless asked for by
+     * name: Invoice::drafts().
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope('issued', fn (Builder $query) => $query->where($query->qualifyColumn('status'), '!=', self::DRAFT));
+    }
+
+    /** The drafts (and nothing else), for the editor and the drafts tab. */
+    public static function drafts(): Builder
+    {
+        return static::withoutGlobalScope('issued')->where('status', self::DRAFT);
+    }
+
     protected $attributes = ['paid_total' => 0, 'credited_total' => 0, 'discount_total' => 0, 'tax_total' => 0, 'tax_rate' => 0];
 
-    protected $hidden = ['public_token'];
+    protected $hidden = ['public_token', 'internal_notes'];
 
     protected function casts(): array
     {
         return [
             'issue_date' => 'immutable_date',
+            'payment_terms_days' => 'integer',
             'due_date' => 'immutable_date',
             'subtotal' => 'decimal:3',
             'discount_total' => 'decimal:3',
@@ -76,6 +93,11 @@ class Invoice extends Model implements BranchOwned
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class)->latest('id');
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(InvoiceAttachment::class)->oldest('id');
     }
 
     public function creditNotes(): HasMany

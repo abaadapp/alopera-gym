@@ -1,6 +1,7 @@
 import { Link } from '@inertiajs/react';
 import { AlertTriangle, CalendarClock, Coins, Plus, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
 import { Button, DataTable, PageHeader, StatCard, type Column, type PageMeta, type TableFilter } from '@/Components/ui';
 import { useCan, useCurrency, useShared } from '@/hooks/useShared';
 import { money } from '@/lib/format';
@@ -10,7 +11,7 @@ import type { Paginated } from '@/types';
 
 export interface InvoiceRow {
     id: number;
-    number: string;
+    number: string | null;
     type: string;
     status: string;
     state: string;
@@ -51,8 +52,10 @@ interface Props {
     invoices: Paginated<InvoiceRow>;
     totals: { receivable: string; overdue: string; due_soon: string; refund_due: string };
     filters: Record<string, string | undefined>;
+    period: Period;
     states: Record<string, string>;
     statuses: Record<string, string>;
+    draftCount: number;
 }
 
 /**
@@ -60,7 +63,7 @@ interface Props {
  * product sales, other services and manual invoices — and what is still owed on them. Invoices are issued where the
  * sale happens; this page lists them, and «إنشاء فاتورة» is for a manual one.
  */
-export default function InvoicesIndex({ invoices, totals, filters, states, statuses }: Props) {
+export default function InvoicesIndex({ invoices, totals, filters, period, states, statuses, draftCount }: Props) {
     const can = useCan();
     const currency = useCurrency();
     const sales = useShared().modules.sales;
@@ -70,9 +73,12 @@ export default function InvoicesIndex({ invoices, totals, filters, states, statu
         {
             key: 'number',
             header: 'رقم الفاتورة',
+            // A draft has no number yet: it opens in the editor.
             cell: (i) => (
                 <>
-                    <Link href={route('club.invoices.show', i.id)} className="font-medium text-[#1d4ed8] num">{i.number}</Link>
+                    {i.state === 'draft'
+                        ? <Link href={route('club.invoices.drafts.edit', i.id)} className="font-medium text-[#1d4ed8]">مسودة</Link>
+                        : <Link href={route('club.invoices.show', i.id)} className="font-medium text-[#1d4ed8] num">{i.number}</Link>}
                     <div className="text-[11px] text-[#9ca3af]">{invoiceType[i.type] ?? i.type}</div>
                 </>
             ),
@@ -99,7 +105,8 @@ export default function InvoicesIndex({ invoices, totals, filters, states, statu
 
     // All on the server: a filter of the page in view would say «no overdue invoices» with twenty on page three.
     const tableFilters: TableFilter[] = [
-        { param: 'state', label: 'الحالة', tabs: true, options: Object.entries(states).map(([value, label]) => ({ value, label, dot: INVOICE_STATES[value]?.[2] })) },
+        // The drafts tab for whoever writes invoices, while there is one (or it is open).
+        { param: 'state', label: 'الحالة', tabs: true, options: Object.entries(states).filter(([value]) => value !== 'draft' || (can('invoices.manage') && (draftCount > 0 || filters.state === 'draft'))).map(([value, label]) => ({ value, label: value === 'draft' ? `${label} (${draftCount})` : label, dot: INVOICE_STATES[value]?.[2] })) },
         {
             param: 'status',
             label: 'حالة المستند',
@@ -114,10 +121,8 @@ export default function InvoicesIndex({ invoices, totals, filters, states, statu
             ],
         },
         { param: 'type', label: 'نوع الفاتورة', options: Object.entries(invoiceType).filter(([k]) => k !== 'pos' || sales).map(([value, label]) => ({ value, label })) },
-        { param: 'from', label: 'صدرت من', type: 'date' },
-        { param: 'to', label: 'صدرت إلى', type: 'date' },
-        { param: 'due_from', label: 'تستحق من', type: 'date' },
-        { param: 'due_to', label: 'تستحق إلى', type: 'date' },
+        // The issue date is the page's period (above the table); the due date is chosen in words.
+        { param: 'due', label: 'الاستحقاق', options: [{ value: 'past', label: 'فات موعدها' }, { value: 'week', label: 'تستحق خلال ٧ أيام' }, { value: 'month', label: 'تستحق هذا الشهر' }] },
         { param: 'per_page', label: 'عدد الصفوف', options: ['20', '50', '100'].map((n) => ({ value: n, label: n })) },
     ];
 
@@ -136,11 +141,13 @@ export default function InvoicesIndex({ invoices, totals, filters, states, statu
                 <StatCard label="مستحق ردّه للعملاء" value={m(totals.refund_due)} icon={<Coins />} tone="green" />
             </div>
 
+            <PeriodTabs period={period} params={filters} />
+
             <DataTable
                 rows={invoices.data}
                 columns={columns}
                 rowKey={(i) => i.id}
-                params={filters}
+                params={{ ...filters, ...periodParams(period) }}
                 pagination={invoices as PageMeta}
                 search={{ placeholder: 'رقم الفاتورة أو اسم العميل أو هاتفه' }}
                 filters={tableFilters}

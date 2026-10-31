@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { toast } from 'sonner';
-import { AlertTriangle, Banknote, Check, Clock, Copy, CreditCard, ExternalLink, FileDown, MessageCircle, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
+import { AlertTriangle, Banknote, Check, Clock, Copy, CreditCard, ExternalLink, FileDown, MessageCircle, Paperclip, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PaperPanel, { DocumentMeta, LtrDates, PaperAside, type PaperData } from '@/Components/Papers/PaperPanel';
-import { Badge, Button, Card, ChoiceCard, ConfirmAction, Field, Input, Modal, Notice, PageHeader, Select, Textarea, BackLink } from '@/Components/ui';
+import { Badge, Button, Card, ChoiceCard, ConfirmAction, Field, Input, Modal, Notice, PageHeader, Select, Textarea, BackLink, FileInput } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, dayCount, money } from '@/lib/format';
@@ -72,6 +72,8 @@ interface Invoice {
     days_overdue: number;
     state: string;
     notes: string | null;
+    internal_notes: string | null;
+    attachments: { id: number; name: string; size: number; url: string }[];
     void_reason: string | null;
     creator: string | null;
     paid_at: string | null;
@@ -263,6 +265,25 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                         </Card>
                     )}
 
+                    {(invoice.internal_notes || invoice.attachments.length > 0) && (
+                        <Card className="p-4">
+                            <h3 className="mb-1 text-[13px] font-bold">للفريق</h3>
+                            <p className="mb-2 text-[12px] text-[#9ca3af]">لا يظهر للعميل ولا يُطبع.</p>
+                            {invoice.internal_notes && <p className="whitespace-pre-line rounded-[10px] bg-[#fafafa] p-3 text-[13px] text-[#4b4b4b]">{invoice.internal_notes}</p>}
+                            {invoice.attachments.length > 0 && (
+                                <ul className="mt-2 space-y-1.5 text-[13px]">
+                                    {invoice.attachments.map((a) => (
+                                        <li key={a.id} className="flex items-center gap-2">
+                                            <Paperclip className="size-4 shrink-0 text-[#9ca3af]" />
+                                            <a href={a.url} className="min-w-0 flex-1 truncate text-[#1d4ed8] hover:underline">{a.name}</a>
+                                            <span className="shrink-0 text-[11px] text-[#9ca3af] num">{Math.max(1, Math.round(a.size / 1024))} KB</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </Card>
+                    )}
+
                     {invoice.credit_notes.length > 0 && (
                         <Card className="p-4">
                             <h3 className="mb-2 text-[13px] font-bold">إشعارات دائنة</h3>
@@ -408,7 +429,7 @@ function RecordPaymentModal({ open, onClose, invoice, currency }: { open: boolea
             title="تسجيل دفعة"
             footer={
                 <>
-                    <Button variant="ghost" onClick={onClose}>تراجع</Button>
+                    <Button variant="outline" onClick={onClose}>إلغاء</Button>
                     <Button type="submit" form="record-payment" loading={form.processing}>تسجيل</Button>
                 </>
             }
@@ -440,7 +461,7 @@ function RecordPaymentModal({ open, onClose, invoice, currency }: { open: boolea
                             <Input dir="ltr" value={form.data.reference} onChange={(e) => form.setData('reference', e.target.value)} />
                         </Field>
                         <Field label="إثبات التحويل (صورة أو PDF)" error={form.errors.proof}>
-                            <Input type="file" accept="image/*,application/pdf" onChange={(e) => form.setData('proof', e.target.files?.[0] ?? null)} />
+                            <FileInput accept="image/*,application/pdf" file={form.data.proof} onChange={(f) => form.setData('proof', f)} />
                         </Field>
                     </>
                 )}
@@ -488,7 +509,7 @@ function CreditNoteModal({ open, onClose, invoice, currency, canRefund }: { open
             title="إصدار إشعار دائن"
             footer={
                 <>
-                    <Button variant="ghost" onClick={onClose}>تراجع</Button>
+                    <Button variant="outline" onClick={onClose}>إلغاء</Button>
                     <Button type="submit" form="credit-form" loading={form.processing}>إصدار الإشعار</Button>
                 </>
             }
@@ -561,7 +582,7 @@ function CreditRefundModal({ note, invoice, onClose, currency }: { note: CreditN
             size="sm"
             footer={
                 <>
-                    <Button variant="ghost" onClick={onClose}>تراجع</Button>
+                    <Button variant="outline" onClick={onClose}>إلغاء</Button>
                     <Button type="submit" form="credit-refund-form" variant="danger" loading={form.processing}>تسجيل الرد</Button>
                 </>
             }
