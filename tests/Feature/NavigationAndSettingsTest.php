@@ -15,7 +15,7 @@ class NavigationAndSettingsTest extends TestCase
 {
     use BuildsClubs, RefreshDatabase;
 
-    public function test_sales_are_on_while_suppliers_and_purchases_stay_off(): void
+    public function test_sales_and_inventory_with_purchasing_are_on_and_each_can_be_switched_off(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
@@ -25,13 +25,19 @@ class NavigationAndSettingsTest extends TestCase
         $this->actingAs($owner)->get(route('club.pos.index'))->assertOk();
         $this->actingAs($owner)->get(route('club.products.index'))->assertOk();
         $this->assertContains('pos.sell', $owner->fresh()->permissions());
-        // Suppliers and purchases stay off, and their permissions are not granted.
-        $this->actingAs($owner)->get(route('club.purchases.index'))->assertNotFound();
-        $this->actingAs($owner)->get(route('club.suppliers.index'))->assertNotFound();
+        // Inventory and purchasing (stock per branch, counts, transfers, purchase orders, supplier bills) are on too.
+        $this->actingAs($owner)->get(route('club.purchases.index'))->assertOk();
+        $this->actingAs($owner)->get(route('club.inventory.index'))->assertOk();
+        $this->assertContains('purchases.manage', $owner->fresh()->permissions());
+        $this->actingAs($owner)->get(route('club.dashboard'))->assertInertia(fn ($page) => $page->where('modules.sales', true)->where('modules.inventory', true));
+
+        // Switched off, their screens answer 404 and their permissions are granted to no one; the data stays.
+        config(['gym.modules.inventory' => false]);
+        $this->actingAs($owner->fresh())->get(route('club.purchases.index'))->assertNotFound();
+        $this->actingAs($owner->fresh())->get(route('club.inventory.index'))->assertNotFound();
         $this->assertNotContains('purchases.manage', $owner->fresh()->permissions());
-        $this->actingAs($owner)->get(route('club.roles.index'))
+        $this->actingAs($owner->fresh())->get(route('club.roles.index'))
             ->assertInertia(fn ($page) => $page->where('groups', fn ($groups) => collect($groups)->pluck('key')->contains('sales') && collect($groups)->pluck('key')->doesntContain('inventory')));
-        $this->actingAs($owner)->get(route('club.dashboard'))->assertInertia(fn ($page) => $page->where('modules.sales', true)->where('modules.inventory', false));
 
         // Switching sales off hides their screens and the sales report; the data stays.
         config(['gym.modules.sales' => false]);
@@ -47,6 +53,7 @@ class NavigationAndSettingsTest extends TestCase
 
     public function test_editing_a_role_keeps_the_permissions_of_a_switched_off_module(): void
     {
+        config(['gym.modules.inventory' => false]);
         $club = $this->club();
         $owner = $this->owner($club);
         $role = $this->asTenant($club, fn () => Role::create(['key' => 'custom_shop', 'name' => 'Shop', 'permissions' => ['members.view', 'purchases.manage'], 'is_system' => false]));

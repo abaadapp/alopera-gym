@@ -7,10 +7,11 @@ import type { SaleRow } from '@/Pages/Inventory/Sales';
 interface Props {
     sale: Omit<SaleRow, 'items'> & { subtotal: string; discount: string; tax: string; invoice: string | null; phone: string | null; items: { name: string; quantity: string; unit_price: string; line_total: string; addons: { name: string; quantity: string; unit_price: string; line_total: string }[] }[] };
     club: { name: string; phone: string | null; logo: string | null; currency: string };
+    paper: number;
 }
 
-/** A sale's receipt, sized for an 80mm receipt printer and readable on A4; opens the print dialog. */
-export default function SaleReceipt({ sale, club }: Props) {
+/** A sale's receipt, sized for the device's receipt printer (58 or 80 mm) and readable on A4; opens the print dialog. Printing it again creates nothing. */
+export default function SaleReceipt({ sale, club, paper }: Props) {
     const m = (v: string) => money(v, club.currency);
 
     useEffect(() => {
@@ -21,13 +22,13 @@ export default function SaleReceipt({ sale, club }: Props) {
     return (
         <>
             <Head title={`إيصال ${sale.number}`} />
-            <style>{'@page { size: 80mm auto; margin: 4mm; }'}</style>
+            <style>{`@page { size: ${paper}mm auto; margin: ${paper === 58 ? 2 : 4}mm; }`}</style>
             <div className="min-h-screen bg-stone-100 py-8 print:bg-white print:py-0">
                 <div className="no-print mx-auto mb-4 flex max-w-sm justify-end gap-2 px-4">
                     <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-sm text-white"><Printer className="size-4" /> طباعة</button>
                     <button onClick={() => window.close()} className="rounded-xl border border-stone-300 bg-white px-4 py-2 text-sm">إغلاق</button>
                 </div>
-                <article className="mx-auto max-w-sm bg-white p-6 text-[12px] leading-relaxed shadow-sm print:max-w-none print:p-0 print:shadow-none">
+                <article className={`mx-auto max-w-sm bg-white p-6 leading-relaxed shadow-sm print:max-w-none print:p-0 print:shadow-none ${paper === 58 ? 'text-[11px]' : 'text-[12px]'}`}>
                     <header className="border-b border-dashed border-stone-300 pb-3 text-center">
                         {club.logo && <img src={club.logo} alt="" className="mx-auto mb-2 size-12 rounded-lg object-cover" />}
                         <h1 className="text-sm font-semibold">{club.name}</h1>

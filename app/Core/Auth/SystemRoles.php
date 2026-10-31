@@ -33,8 +33,8 @@ final class SystemRoles
                 'description' => 'إدارة النادي اليومية دون النسخ الاحتياطي والأدوار.',
                 'permissions' => array_values(array_diff(PermissionRegistry::all(), [
                     'roles.manage', 'backups.manage', 'billing.view', 'integrations.manage', 'members.delete', ...PermissionRegistry::OWNER_ONLY,
-                    // Salaries stay confidential, approved by the owner and paid by finance.
-                    'payroll.salaries', 'payroll.approve', 'payroll.pay', 'accounting.manage',
+                    // Salaries stay confidential, approved by the owner and paid by finance; suppliers are paid by finance.
+                    'payroll.salaries', 'payroll.approve', 'payroll.pay', 'accounting.manage', 'purchases.pay',
                     // Sensitive business documents are the owner's unless shared one by one.
                     'documents.confidential',
                 ])),
@@ -64,6 +64,7 @@ final class SystemRoles
                     'accounting.view', 'accounting.manage',
                     'employees.view', 'payroll.salaries', 'payroll.prepare', 'payroll.pay', 'payroll.reports',
                     'sales.view', 'sales.refund', 'products.manage', 'suppliers.manage', 'purchases.manage', 'pos.sell',
+                    'inventory.view', 'purchases.view', 'purchases.pay',
                     'reports.view', 'reports.financial', 'reports.export',
                 ],
                 'home' => 'club.dashboard',

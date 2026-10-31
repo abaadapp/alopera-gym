@@ -2,6 +2,8 @@
 
 use App\Modules\Inventory\Http\Controllers\OrderController;
 use App\Modules\Inventory\Http\Controllers\PosController;
+use App\Modules\Inventory\Http\Controllers\PosDeviceController;
+use App\Modules\Inventory\Http\Controllers\PosDeviceSetupController;
 use App\Modules\Inventory\Http\Controllers\ProductAddonController;
 use App\Modules\Inventory\Http\Controllers\ProductCategoryController;
 use App\Modules\Inventory\Http\Controllers\ProductController;
@@ -22,6 +24,25 @@ Route::post('/sales/{sale}/void', [PosController::class, 'void'])->whereNumber('
 Route::middleware('can:pos.sell')->group(function () {
     Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
     Route::post('/pos/checkout', [PosController::class, 'checkout'])->middleware('throttle:30,1')->name('pos.checkout');
+    // This browser as a point-of-sale device: paired with a one-time code, or activated by a device manager.
+    Route::get('/pos/device', [PosDeviceSetupController::class, 'show'])->name('pos.device');
+    Route::post('/pos/device/pair', [PosDeviceSetupController::class, 'pair'])->middleware('throttle:pos-pairing')->name('pos.device.pair');
+    Route::post('/pos/device/activate', [PosDeviceSetupController::class, 'activate'])->middleware('throttle:pos-pairing')->name('pos.device.activate');
+});
+
+// Point-of-sale devices and their peripherals, in Settings: their own permission, separate from selling.
+Route::middleware('can:pos_devices.manage')->prefix('settings/pos-devices')->name('settings.pos-devices')->group(function () {
+    Route::get('/', [PosDeviceController::class, 'index']);
+    Route::post('/', [PosDeviceController::class, 'store'])->name('.store');
+    Route::put('/policy', [PosDeviceController::class, 'policy'])->name('.policy');
+    Route::put('/{device}', [PosDeviceController::class, 'update'])->whereNumber('device')->name('.update');
+    Route::post('/{device}/revoke', [PosDeviceController::class, 'revoke'])->whereNumber('device')->name('.revoke');
+    Route::post('/{device}/code', [PosDeviceController::class, 'code'])->whereNumber('device')->middleware('throttle:pos-pairing')->name('.code');
+    Route::delete('/{device}', [PosDeviceController::class, 'destroy'])->whereNumber('device')->name('.destroy');
+    Route::post('/{device}/peripherals', [PosDeviceController::class, 'storePeripheral'])->whereNumber('device')->name('.peripherals.store');
+    Route::put('/{device}/peripherals/{peripheral}', [PosDeviceController::class, 'updatePeripheral'])->whereNumber(['device', 'peripheral'])->name('.peripherals.update');
+    Route::delete('/{device}/peripherals/{peripheral}', [PosDeviceController::class, 'destroyPeripheral'])->whereNumber(['device', 'peripheral'])->name('.peripherals.destroy');
+    Route::get('/{device}/peripherals/{peripheral}/test', [PosDeviceController::class, 'testPrint'])->whereNumber(['device', 'peripheral'])->name('.peripherals.test');
 });
 
 Route::middleware('can:orders.manage')->prefix('sales/orders')->name('sales.orders.')->group(function () {

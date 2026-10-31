@@ -73,6 +73,11 @@ class Sale extends Model implements BranchOwned
         return $this->belongsTo(User::class, 'cashier_id');
     }
 
+    public function posDevice(): BelongsTo
+    {
+        return $this->belongsTo(PosDevice::class)->withTrashed();
+    }
+
     public function deliveredBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'delivered_by');

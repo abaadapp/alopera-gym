@@ -17,11 +17,12 @@ class PosInventoryTest extends TestCase
 {
     use BuildsClubs, RefreshDatabase;
 
-    protected function setUp(): void
+    /** An order approved and received in full at once (an approved goods receipt). */
+    private function buy(Supplier $supplier, Product $product, float $quantity, float $cost): void
     {
-        parent::setUp();
-        // The module is switched off by default (config gym.modules.inventory); its code is kept working.
-        config(['gym.modules.inventory' => true]);
+        $service = app(PurchaseService::class);
+        $order = $service->approve($service->create($supplier, [['product_id' => $product->id, 'quantity' => $quantity, 'unit_cost' => $cost]]));
+        $service->receive($order, [$order->items()->value('id') => ['quantity' => $quantity]], [], approveNow: true);
     }
 
     public function test_receiving_a_purchase_adds_stock_at_weighted_average_cost(): void
@@ -31,10 +32,8 @@ class PosInventoryTest extends TestCase
         $this->asTenant($club, function () {
             $product = Product::create(['name' => 'Water', 'price' => 0.2]);
             $supplier = Supplier::create(['name' => 'Supplier']);
-            $service = app(PurchaseService::class);
-
-            $service->receive($service->create($supplier, [['product_id' => $product->id, 'quantity' => 10, 'unit_cost' => 0.1]]));
-            $service->receive($service->create($supplier, [['product_id' => $product->id, 'quantity' => 10, 'unit_cost' => 0.2]]));
+            $this->buy($supplier, $product, 10, 0.1);
+            $this->buy($supplier, $product, 10, 0.2);
 
             $product->refresh();
             $this->assertSame('20.000', $product->stock_quantity);
@@ -50,8 +49,7 @@ class PosInventoryTest extends TestCase
 
         $this->asTenant($club, function () use ($member) {
             $bar = Product::create(['name' => 'Protein bar', 'price' => 1.2]);
-            $service = app(PurchaseService::class);
-            $service->receive($service->create(Supplier::create(['name' => 'S']), [['product_id' => $bar->id, 'quantity' => 5, 'unit_cost' => 0.7]]));
+            $this->buy(Supplier::create(['name' => 'S']), $bar, 5, 0.7);
 
             $sale = app(PosService::class)->checkout([['product_id' => $bar->id, 'quantity' => 2]], 'cash', $member, 0.4);
             $this->assertSame('2.000', $sale->total);

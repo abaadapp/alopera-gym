@@ -1,9 +1,10 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { Link, router } from '@inertiajs/react';
 import { toast } from 'sonner';
-import { Banknote, CreditCard, Minus, Package, Plus, Printer, ReceiptText, ScanBarcode, ShoppingBag, Trash2, UserRound, X } from 'lucide-react';
+import { Banknote, CreditCard, Minus, MonitorSmartphone, Package, Plus, Printer, ReceiptText, ScanBarcode, ShoppingBag, Trash2, UserRound, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, cardHover, ChoiceCard, EmptyState, Field, Input, MemberPicker, Modal, PageHeader, type MemberHit } from '@/Components/ui';
+import { Button, Card, cardHover, ChoiceCard, EmptyState, Field, Input, MemberPicker, Modal, Notice, PageHeader, type MemberHit } from '@/Components/ui';
+import { clientKey as newKey } from '@/Components/Inventory/parts';
 import { Stepper } from '@/Components/Products/parts';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { describe, lineKey, lineTotal, payload, unitPrice, type AddonOption, type ChosenAddon } from '@/lib/addons';
@@ -35,7 +36,9 @@ interface CartLine {
  * The point of sale: scan or tap products, choose their add-ons, take cash or card, print the receipt. A discount
  * needs its own permission. Totals here are for the cashier; the server prices the sale again from the database.
  */
-export default function Pos({ products, categories, can: allowed, lastSale }: { products: Product[]; categories: string[]; can: { discount: boolean }; lastSale: number | null }) {
+type Device = { name: string; branch: string | null; auto_print: boolean; paper_width: number; printer: string | null } | null;
+
+export default function Pos({ products, categories, can: allowed, lastSale, device, branch, requireDevice }: { products: Product[]; categories: string[]; can: { discount: boolean; devices: boolean }; lastSale: number | null; device: Device; branch: string | null; requireDevice: boolean }) {
     const currency = useCurrency();
     const can = useCan();
     const [query, setQuery] = useState('');
@@ -49,7 +52,10 @@ export default function Pos({ products, categories, can: allowed, lastSale }: { 
     const [busy, setBusy] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [picking, setPicking] = useState<Product | null>(null);
+    // One key per basket: a double click or a retried request is one sale, never two (the server keeps the first).
+    const [basketKey, setBasketKey] = useState(newKey);
     const scanRef = useRef<HTMLInputElement>(null);
+    const blocked = requireDevice && !device;
 
     const visible = products.filter((p) => {
         const q = query.trim().toLowerCase();
@@ -104,9 +110,11 @@ export default function Pos({ products, categories, can: allowed, lastSale }: { 
     const total = subtotal - discountValue;
 
     const checkout = () => {
-        if (cart.length === 0) return;
+        if (cart.length === 0 || blocked) return;
         setBusy(true);
         setErrors({});
+        // Opened now, while the click still counts, so a popup blocker lets the receipt through after the sale.
+        const receipt = device?.auto_print ? window.open('', '_blank') : null;
         router.post(
             route('club.pos.checkout'),
             {
@@ -116,10 +124,15 @@ export default function Pos({ products, categories, can: allowed, lastSale }: { 
                 member_id: member?.id ?? null,
                 customer_name: member ? null : guest.trim() || null,
                 discount: discountValue || 0,
+                client_key: basketKey,
             },
             {
                 preserveScroll: true,
-                onSuccess: () => {
+                onSuccess: (page) => {
+                    const sale = (page.props as { lastSale?: number | null }).lastSale;
+                    if (receipt && sale) receipt.location.replace(route('club.sales.receipt', sale));
+                    else receipt?.close();
+                    setBasketKey(newKey());
                     setCart([]);
                     setMember(null);
                     setGuest('');
@@ -129,6 +142,7 @@ export default function Pos({ products, categories, can: allowed, lastSale }: { 
                     scanRef.current?.focus();
                 },
                 onError: (errs) => {
+                    receipt?.close();
                     setErrors(errs);
                     const first = Object.values(errs)[0];
                     if (first) toast.error(first);
@@ -150,6 +164,17 @@ export default function Pos({ products, categories, can: allowed, lastSale }: { 
                     </>
                 }
             />
+
+            {device ? (
+                <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[12px] border border-line bg-white px-4 py-2.5 text-[13px] text-[#4b4b4b]">
+                    <MonitorSmartphone className="size-4 text-emerald-700" /> جهاز «{device.name}» · {device.branch}
+                    {device.printer && <span className="text-[#9ca3af]">· الطابعة {device.printer} (<span className="num">{device.paper_width}</span> مم){device.auto_print ? ' · طباعة تلقائية' : ''}</span>}
+                </div>
+            ) : (
+                <Notice tone={blocked ? 'red' : 'gray'} className="mb-4" href={route('club.pos.device')}>
+                    {blocked ? 'البيع من أجهزة نقاط البيع المفعّلة فقط. فعّل هذا الجهاز برمز الربط لتتمكن من البيع.' : `هذا المتصفح ليس جهاز نقطة بيع مفعّلًا؛ تُسجَّل المبيعات على ${branch ?? 'الفرع الحالي'}. تفعيل هذا الجهاز`}
+                </Notice>
+            )}
 
             <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
                 <div className="min-w-0 space-y-4">
@@ -281,7 +306,7 @@ export default function Pos({ products, categories, can: allowed, lastSale }: { 
                             <div className="flex justify-between border-t border-line pt-2 text-lg font-semibold"><dt>الإجمالي</dt><dd className="num">{money(total, currency)}</dd></div>
                         </dl>
                         {errors.items && <p className="text-xs text-red-600">{errors.items}</p>}
-                        <Button size="lg" className="w-full" disabled={cart.length === 0 || (method === 'card' && cardRef.trim() === '')} loading={busy} onClick={checkout}>
+                        <Button size="lg" className="w-full" disabled={blocked || cart.length === 0 || (method === 'card' && cardRef.trim() === '')} loading={busy} onClick={checkout}>
                             إتمام البيع
                         </Button>
                         <p className="text-center text-xs text-muted">

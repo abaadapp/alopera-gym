@@ -1,6 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
-import { BarChart3, Blocks, Briefcase, DoorOpen, Dumbbell, FolderOpen, Globe, LayoutGrid, MessageCircle, Package, ScanLine, Settings, ShoppingBag, Ticket, Users, Wallet } from 'lucide-react';
+import { BarChart3, Blocks, Boxes, Briefcase, ClipboardList, DoorOpen, Dumbbell, FolderOpen, Globe, LayoutGrid, MessageCircle, Package, ScanLine, Settings, ShoppingBag, Ticket, Users, Wallet } from 'lucide-react';
 import { useCan, useShared } from '@/hooks/useShared';
 
 /**
@@ -9,8 +9,9 @@ import { useCan, useShared } from '@/hooks/useShared';
  */
 
 /** A page of a section. `permission` may list several (any one is enough); `match` lists the route patterns
- *  of its detail pages, which keep the section lit; `params` marks a tab that is a view of a shared route. */
-export type NavTab = { label: string; route: string; params?: Record<string, string>; permission?: string | string[]; match?: string | string[]; roleKey?: string };
+ *  of its detail pages, which keep the section lit; `params` marks a tab that is a view of a shared route;
+ *  `multiBranch` shows a tab only in a club with more than one open branch. */
+export type NavTab = { label: string; route: string; params?: Record<string, string>; permission?: string | string[]; match?: string | string[]; roleKey?: string; multiBranch?: boolean };
 export type NavSection = { label: string; icon: LucideIcon; tabs: NavTab[]; match?: string[] };
 /** A run of sections between two thin separators; the `footer` group sits at the bottom of the menu. */
 export type NavGroup = { sections: NavSection[]; footer?: boolean };
@@ -19,7 +20,7 @@ export type NavGroup = { sections: NavSection[]; footer?: boolean };
 const REPORT_PERMISSIONS = ['reports.view', 'reports.financial', 'accounting.view', 'dues.view', 'sales.view', 'memberships.view', 'checkin.view', 'staff_attendance.view', 'payroll.reports', 'documents.view'];
 
 /** Settings screens live behind the settings hub; none of them appears in the main menu. */
-const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'billing.view', 'accounting.manage', 'documents.manage'];
+const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'billing.view', 'accounting.manage', 'documents.manage', 'pos_devices.manage'];
 
 export const NAV: NavGroup[] = [
     {
@@ -84,6 +85,29 @@ export const NAV: NavGroup[] = [
                     { label: 'نقطة البيع', route: 'club.pos.index', permission: 'pos.sell' },
                     { label: 'عمليات البيع', route: 'club.sales.index', permission: 'sales.view' },
                     { label: 'طلبات الموقع الإلكتروني', route: 'club.sales.orders.index', permission: 'orders.manage' },
+                ],
+            },
+            {
+                label: 'المخزون',
+                icon: Boxes,
+                // Stock per branch and its documents; exports and stock reports are on the reports page.
+                tabs: [
+                    { label: 'المخزون', route: 'club.inventory.index', permission: 'inventory.view' },
+                    { label: 'الجرد الفعلي', route: 'club.inventory.counts', permission: 'inventory.view', match: 'club.inventory.counts.*' },
+                    { label: 'سجل المخزون', route: 'club.inventory.movements', permission: 'inventory.view' },
+                    { label: 'إشعارات استلام البضاعة', route: 'club.inventory.receipts', permission: 'purchases.view', match: 'club.inventory.receipts.*' },
+                    { label: 'نقل المخزون بين الفروع', route: 'club.inventory.transfers', permission: 'inventory.view', match: 'club.inventory.transfers.*', multiBranch: true },
+                    { label: 'طلبات تزويد الفروع', route: 'club.inventory.supply', permission: 'inventory.view', match: 'club.inventory.supply.*', multiBranch: true },
+                ],
+            },
+            {
+                label: 'المشتريات',
+                icon: ClipboardList,
+                tabs: [
+                    { label: 'قائمة المشتريات', route: 'club.purchases.register', permission: 'purchases.view' },
+                    { label: 'أوامر الشراء', route: 'club.purchases.index', permission: 'purchases.view', match: ['club.purchases.show', 'club.purchases.create', 'club.purchases.edit', 'club.purchases.print'] },
+                    { label: 'سندات الموردين', route: 'club.purchases.bills', permission: 'purchases.view', match: 'club.purchases.bills.*' },
+                    { label: 'الموردون', route: 'club.purchases.suppliers', permission: 'suppliers.manage', match: 'club.purchases.suppliers.*' },
                 ],
             },
             {
@@ -209,7 +233,7 @@ export function useNavigation() {
 
     const allowed = (permission?: string | string[]) => !permission || list(permission).some(can);
     // The trainer screen is for trainers (and whoever manages classes); a trainer lands on it.
-    const visible = (tab: NavTab) => allowed(tab.permission) && (!tab.roleKey || roleKey === tab.roleKey || can('classes.manage'));
+    const visible = (tab: NavTab) => allowed(tab.permission) && (!tab.roleKey || roleKey === tab.roleKey || can('classes.manage')) && (!tab.multiBranch || Boolean(auth?.branch?.multi));
     const onTab = (tab: NavTab) => route().current(tab.route) && Object.entries(tab.params ?? {}).every(([key, value]) => query.get(key) === value);
 
     const groups = NAV.map((group) => ({

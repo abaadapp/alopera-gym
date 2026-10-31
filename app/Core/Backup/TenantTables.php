@@ -12,7 +12,8 @@ final class TenantTables
     public const ORDER = [
         'roles', 'branches', 'users', 'number_sequences', 'tenant_integrations',
         'site_settings', 'site_posts', 'site_media', 'contact_messages',
-        'expense_categories', 'product_categories', 'suppliers', 'products',
+        // Accounts first among the money tables: devices, sales and supplier payments point at them.
+        'expense_categories', 'gym_accounts', 'product_categories', 'suppliers', 'products', 'product_stocks',
         'product_addons', 'product_addon_product', 'product_addon_category',
         'gym_programs', 'gym_membership_plans', 'gym_plan_program', 'gym_coupons',
         'gym_trainers', 'gym_trainer_availabilities',
@@ -23,10 +24,14 @@ final class TenantTables
         'gym_class_schedules', 'gym_class_sessions', 'gym_bookings',
         'gym_pt_packages', 'gym_pt_subscriptions', 'gym_pt_sessions',
         'gym_access_devices', 'gym_access_credentials', 'gym_check_ins', 'gym_staff_attendances',
-        'expenses', 'purchase_orders', 'purchase_order_items', 'sales', 'sale_items', 'sale_item_addons', 'stock_movements',
+        'expenses', 'purchase_orders', 'purchase_order_items',
+        'goods_receipts', 'goods_receipt_lines', 'supplier_bills', 'supplier_payments',
+        'stocktakes', 'stocktake_lines', 'stock_transfers', 'stock_transfer_lines', 'supply_requests', 'supply_request_lines',
+        'pos_devices', 'pos_peripherals',
+        'sales', 'sale_items', 'sale_item_addons', 'stock_movements',
         'message_templates', 'conversations', 'campaigns', 'messages', 'auto_replies',
         'payment_intents',
-        'gym_accounts', 'gym_journal_entries', 'gym_journal_lines',
+        'gym_journal_entries', 'gym_journal_lines',
         'gym_job_titles', 'gym_employees', 'gym_payroll_runs', 'gym_payroll_payouts', 'gym_payroll_items',
         'gym_document_types', 'gym_documents', 'gym_document_renewals', 'gym_document_alerts',
     ];

@@ -27,6 +27,8 @@ final class ReportCatalog
     public const CATEGORIES = [
         'finance' => 'التقارير المالية',
         'sales' => 'تقارير المبيعات والمنتجات',
+        'inventory' => 'تقارير المخزون',
+        'purchasing' => 'تقارير المشتريات والموردين',
         'members' => 'تقارير الأعضاء والعضويات',
         'classes' => 'تقارير الحصص والحجوزات',
         'training' => 'تقارير التدريب والمدربين',
@@ -54,6 +56,15 @@ final class ReportCatalog
         'documents' => ['documents.view'],
         'renewals' => ['documents.view'],
         'branches' => ['reports.view'],
+        'stock-balance' => ['inventory.view'],
+        'low-stock' => ['inventory.view'],
+        'stock-movements' => ['inventory.view'],
+        'stocktakes' => ['inventory.view'],
+        'transfers' => ['inventory.view'],
+        'purchases' => ['purchases.view'],
+        'suppliers' => ['purchases.view'],
+        'supplier-dues' => ['purchases.view'],
+        'goods-receipts' => ['purchases.view'],
     ];
 
     /** @return list<array{key: string, category: string, title: string, desc: string, icon: string, class: class-string<Report>, mode: string, preset: string, compare: bool, branch: bool, module?: string}> */
@@ -74,6 +85,26 @@ final class ReportCatalog
 
             ['key' => 'sales', 'category' => 'sales', 'title' => 'تقرير المبيعات', 'icon' => 'shopping-bag', 'class' => Reports\SalesReport::class, 'module' => 'sales',
                 'desc' => 'إجمالي المبيعات وعدد العمليات والملغى والمسترد، يوميًا وحسب المنتج وطريقة الدفع والمصدر والموظف.'] + $period,
+
+            ['key' => 'stock-balance', 'category' => 'inventory', 'title' => 'المخزون والأرصدة', 'icon' => 'boxes', 'class' => Reports\Stock\StockBalanceReport::class, 'module' => 'inventory',
+                'desc' => 'رصيد كل منتج مخزني في الفرع أو في كل الفروع، وحده الأدنى وتكلفته وقيمته وحالته، اليوم.'] + $snapshot,
+            ['key' => 'low-stock', 'category' => 'inventory', 'title' => 'المنتجات منخفضة المخزون', 'icon' => 'package-x', 'class' => Reports\Stock\LowStockReport::class, 'module' => 'inventory',
+                'desc' => 'ما وصل إلى حد إعادة الطلب أو نفد، في كل فرع، مع كمية مقترحة للطلب.'] + $snapshot,
+            ['key' => 'stock-movements', 'category' => 'inventory', 'title' => 'حركة المخزون', 'icon' => 'history', 'class' => Reports\Stock\StockMovementsReport::class, 'module' => 'inventory',
+                'desc' => 'كل حركة في الفترة: الاستلام والبيع والطلبات والإلغاء والجرد والتالف والنقل، بمستندها والموظف والرصيد بعدها.'] + ['compare' => false] + $period,
+            ['key' => 'stocktakes', 'category' => 'inventory', 'title' => 'نتائج الجرد', 'icon' => 'clipboard-check', 'class' => Reports\Stock\StocktakesReport::class, 'module' => 'inventory',
+                'desc' => 'عمليات الجرد المعتمدة في الفترة وفروقاتها بالكمية والقيمة وأسبابها.'] + ['compare' => false] + $period,
+            ['key' => 'transfers', 'category' => 'inventory', 'title' => 'التحويلات بين الفروع', 'icon' => 'truck', 'class' => Reports\Stock\TransfersReport::class, 'module' => 'inventory',
+                'desc' => 'عمليات النقل بين الفروع في الفترة: المرسل والمستلم والناقص والمفقود، حسب الحالة.'] + ['compare' => false] + $period,
+
+            ['key' => 'purchases', 'category' => 'purchasing', 'title' => 'المشتريات', 'icon' => 'shopping-cart', 'class' => Reports\Stock\PurchasesReport::class, 'module' => 'inventory',
+                'desc' => 'أوامر الشراء المعتمدة وسندات الموردين بلا أمر في الفترة، حسب المورد والمنتج، وما استُلم منها.'] + ['compare' => false] + $period,
+            ['key' => 'suppliers', 'category' => 'purchasing', 'title' => 'الموردون', 'icon' => 'users', 'class' => Reports\Stock\SuppliersReport::class, 'module' => 'inventory',
+                'desc' => 'أوامر كل مورد وسنداته المعتمدة ومدفوعاته في الفترة، وما له اليوم.'] + ['compare' => false] + $period,
+            ['key' => 'supplier-dues', 'category' => 'purchasing', 'title' => 'المستحقات للموردين', 'icon' => 'hand-coins', 'class' => Reports\Stock\SupplierDuesReport::class, 'module' => 'inventory',
+                'desc' => 'المتبقي على سندات الموردين المعتمدة اليوم، موزعًا على مدة التأخير، والسندات المفتوحة.'] + $snapshot,
+            ['key' => 'goods-receipts', 'category' => 'purchasing', 'title' => 'استلام البضائع', 'icon' => 'package-check', 'class' => Reports\Stock\GoodsReceiptsReport::class, 'module' => 'inventory',
+                'desc' => 'سندات استلام البضاعة في الفترة: المعتمد والمنتظر والمرفوض، وما وصل ناقصًا عن المطلوب.'] + ['compare' => false] + $period,
 
             ['key' => 'members', 'category' => 'members', 'title' => 'العضويات والأعضاء', 'icon' => 'ticket', 'class' => Reports\MembersReport::class,
                 'desc' => 'الاشتراكات الجديدة والتجديدات والترقيات والإلغاءات والتجميد، والأعضاء الجدد ومرات الدخول، والباقات المباعة.'] + $period,

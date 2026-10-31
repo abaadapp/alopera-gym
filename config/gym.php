@@ -15,10 +15,10 @@ return [
 
     // Optional modules. A switched-off module keeps its tables and data, but its screens and routes are
     // unavailable and its permissions are not granted. Sales (products, point of sale, website shop and orders)
-    // is on; suppliers and purchase orders stay off and are switched on separately.
+    // and inventory with purchasing (stock per branch, counts, transfers, purchase orders, supplier bills) are on.
     'modules' => [
         'sales' => (bool) env('GYM_SALES_MODULE', true),
-        'inventory' => (bool) env('GYM_INVENTORY_MODULE', false),
+        'inventory' => (bool) env('GYM_INVENTORY_MODULE', true),
         // The platform owner's screens (/platform) and the platform's marketing page (/) are switched off: clubs are
         // managed from the command line (php artisan clubs:list), and / opens the staff sign-in. Code and data stay.
         'platform_panel' => (bool) env('GYM_PLATFORM_PANEL', false),

@@ -19,11 +19,12 @@ final class ShopSettings
         'online_payment_enabled' => true, // pay online with Paymob, when the club has it set up
         'payment_window_minutes' => 30,  // stock held for an unpaid online-payment order
         'pickup_note' => null,
+        'pos_require_device' => false,   // sell only from an activated point-of-sale device
     ];
 
     public function __construct(private readonly OnlinePaymentService $online) {}
 
-    /** @return array{shop_enabled: bool, pickup_enabled: bool, online_payment_enabled: bool, payment_window_minutes: int, pickup_note: ?string} */
+    /** @return array{shop_enabled: bool, pickup_enabled: bool, online_payment_enabled: bool, payment_window_minutes: int, pickup_note: ?string, pos_require_device: bool} */
     public static function of(Tenant $tenant): array
     {
         $stored = (array) $tenant->setting('sales', []);
@@ -34,6 +35,7 @@ final class ShopSettings
             'online_payment_enabled' => (bool) ($stored['online_payment_enabled'] ?? self::DEFAULTS['online_payment_enabled']),
             'payment_window_minutes' => max(10, min(1440, (int) ($stored['payment_window_minutes'] ?? self::DEFAULTS['payment_window_minutes']))),
             'pickup_note' => $stored['pickup_note'] ?? null,
+            'pos_require_device' => (bool) ($stored['pos_require_device'] ?? self::DEFAULTS['pos_require_device']),
         ];
     }
 

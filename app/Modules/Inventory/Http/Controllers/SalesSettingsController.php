@@ -33,7 +33,8 @@ class SalesSettingsController extends Controller
         ]);
         $tenant = $tenants->require();
         $settings = $tenant->settings ?? [];
-        $settings['sales'] = [
+        // Merged: the point-of-sale device policy is kept in the same settings and set on the devices page.
+        $settings['sales'] = [...(array) ($settings['sales'] ?? []),
             'shop_enabled' => (bool) ($data['shop_enabled'] ?? false),
             'pickup_enabled' => (bool) ($data['pickup_enabled'] ?? false),
             'online_payment_enabled' => (bool) ($data['online_payment_enabled'] ?? false),

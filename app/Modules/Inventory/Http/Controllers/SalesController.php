@@ -10,6 +10,7 @@ use App\Modules\Finance\Models\Payment;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Inventory\Models\SaleItem;
+use App\Modules\Inventory\Services\PosDevices;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -89,7 +90,7 @@ class SalesController extends Controller
     }
 
     /** A sale's printable receipt: for whoever sells or follows sales. */
-    public function receipt(Request $request, Sale $sale, TenantContext $tenants): Response
+    public function receipt(Request $request, Sale $sale, TenantContext $tenants, PosDevices $devices): Response
     {
         abort_unless($request->user()->canAny(['pos.sell', 'sales.view', 'orders.manage']), 403);
         $this->ensureBranch($request->user(), $sale);
@@ -103,6 +104,8 @@ class SalesController extends Controller
                 'items' => $sale->items->map(fn (SaleItem $i) => $i->summary()),
             ],
             'club' => ['name' => $tenant->name, 'phone' => $tenant->phone, 'logo' => $tenant->logoUrl(), 'currency' => $tenant->currency],
+            // The paper of the printer here (this browser's device), else of the device it was sold on; 80 mm otherwise.
+            'paper' => ($devices->current($request) ?? $sale->posDevice)?->loadMissing('peripherals')->printer()?->paper_width ?? 80,
         ]);
     }
 

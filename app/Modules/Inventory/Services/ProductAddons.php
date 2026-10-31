@@ -21,32 +21,36 @@ final class ProductAddons
      * Each product's add-ons, as the screen needs them (no costs, no stock figures).
      *
      * @param  iterable<Product>  $products
+     * @param  array<int, string>|null  $stock  one branch's quantities by product id (none: the club total)
      * @return array<int, list<array<string, mixed>>> keyed by product id
      */
-    public function map(iterable $products, string $channel, bool $availableOnly = false): array
+    public function map(iterable $products, string $channel, bool $availableOnly = false, ?array $stock = null): array
     {
         $addons = $this->offered($channel);
         $map = [];
         foreach ($products as $product) {
-            $map[$product->id] = $addons->filter(fn (ProductAddon $a) => $a->fits($product) && (! $availableOnly || $this->available($a)))
+            $map[$product->id] = $addons->filter(fn (ProductAddon $a) => $a->fits($product) && (! $availableOnly || $this->available($a, $stock)))
                 ->map(fn (ProductAddon $a) => [
                     'id' => $a->id,
                     'name' => $a->name,
                     'description' => $a->description,
                     'price' => $a->price,
                     'max' => max(1, $a->max_quantity),
-                    'available' => $this->available($a),
+                    'available' => $this->available($a, $stock),
                 ])->values()->all();
         }
 
         return $map;
     }
 
-    /** Enough of the stock it uses for one more (or it uses none). */
-    public function available(ProductAddon $addon): bool
+    /** Enough of the stock it uses for one more (or it uses none), in the branch given or the whole club. */
+    public function available(ProductAddon $addon, ?array $stock = null): bool
     {
-        $stock = $addon->stockProduct;
+        $product = $addon->stockProduct;
+        if (! $product || ! $product->track_stock) {
+            return true;
+        }
 
-        return ! $stock || ! $stock->track_stock || (float) $stock->stock_quantity >= (float) $addon->stock_usage;
+        return (float) ($stock === null ? $product->stock_quantity : ($stock[$product->id] ?? 0)) >= (float) $addon->stock_usage;
     }
 }

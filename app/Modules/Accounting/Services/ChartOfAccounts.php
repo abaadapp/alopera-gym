@@ -44,6 +44,10 @@ final class ChartOfAccounts
     /** Created only when something posts to them (sales from before the point-of-sale module was switched off). */
     private const ON_DEMAND = [
         'revenue_pos' => ['4104', 'إيرادات المبيعات', 'revenue', 'credit', 'revenues', false, null],
+        // Purchasing: a supplier bill, once approved, is a debt to the supplier and a purchase of goods for sale.
+        'suppliers_payable' => ['2103', 'الموردون (ذمم دائنة)', 'liability', 'credit', 'liabilities', false, null],
+        'cost_of_goods' => ['53', 'تكلفة البضاعة', 'expense', 'debit', 'expenses', true, null],
+        'purchases' => ['5301', 'مشتريات البضاعة', 'expense', 'debit', 'cost_of_goods', false, null],
     ];
 
     /** Where money lands or leaves by payment method, unless the club chose otherwise (finance settings). */

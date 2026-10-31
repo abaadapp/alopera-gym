@@ -25,11 +25,15 @@ type Tab = 'open' | 'completed' | 'cancelled' | 'all';
 
 const stepTone = { new: 'amber', preparing: 'blue', ready: 'violet', delivered: 'green' } as const;
 
-export default function Orders({ orders, tab, counts, filters, can }: { orders: Paginated<Order>; tab: Tab; counts: { open: number; new: number }; filters: { q?: string }; can: { refund: boolean } }) {
+export default function Orders({ orders, tab, counts, filters, can, printOrders = false }: { orders: Paginated<Order>; tab: Tab; counts: { open: number; new: number }; filters: { q?: string }; can: { refund: boolean }; printOrders?: boolean }) {
     const currency = useCurrency();
     const [delivering, setDelivering] = useState<Order | null>(null);
     const [cancelling, setCancelling] = useState<Order | null>(null);
-    const advance = (o: Order, status: 'preparing' | 'ready') => router.post(route('club.sales.orders.status', o.id), { status }, { preserveScroll: true });
+    const advance = (o: Order, status: 'preparing' | 'ready') => {
+        // The device's printer prints the order once, when its preparation starts (opened on the click, filled on success).
+        const sheet = status === 'preparing' && printOrders ? window.open('', '_blank') : null;
+        router.post(route('club.sales.orders.status', o.id), { status }, { preserveScroll: true, onSuccess: () => sheet?.location.replace(route('club.sales.receipt', o.id)), onError: () => sheet?.close() });
+    };
 
     return (
         <ClubLayout title="طلبات الموقع الإلكتروني">

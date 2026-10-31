@@ -83,7 +83,7 @@ class HandleInertiaRequests extends Middleware
      * The top bar's branch: the one shown, whether the user is tied to it, and — for a club-wide user of a club with
      * more than one branch — the branches to choose from.
      *
-     * @return array{current: array{id: int, name: string}|null, locked: bool, options: list<array{id: int, name: string}>}|null
+     * @return array{current: array{id: int, name: string}|null, locked: bool, options: list<array{id: int, name: string}>, multi: bool}|null
      */
     private function branch(User $user): ?array
     {
@@ -99,6 +99,8 @@ class HandleInertiaRequests extends Middleware
             'current' => $current ? ['id' => $current->id, 'name' => $current->name] : null,
             'locked' => ! $context->canSwitch($user),
             'options' => $options->count() > 1 ? $options->map(fn (Branch $b) => ['id' => $b->id, 'name' => $b->name])->all() : [],
+            // The club has more than one open branch (screens between branches — transfers, supply — show only then).
+            'multi' => $context->canSwitch($user) ? $options->count() > 1 : Branch::where('is_active', true)->count() > 1,
         ];
     }
 

@@ -19,10 +19,18 @@ use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\PtSession;
 use App\Modules\Gym\Models\PtSubscription;
+use App\Modules\Inventory\Models\GoodsReceipt;
+use App\Modules\Inventory\Models\PosDevice;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Models\PurchaseOrder;
 use App\Modules\Inventory\Models\Sale;
+use App\Modules\Inventory\Models\Stocktake;
+use App\Modules\Inventory\Models\StockTransfer;
+use App\Modules\Inventory\Models\Supplier;
+use App\Modules\Inventory\Models\SupplierBill;
+use App\Modules\Inventory\Models\SupplierPayment;
+use App\Modules\Inventory\Models\SupplyRequest;
 use App\Modules\Reports\Services\ReportCatalog;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -78,6 +86,14 @@ class AppServiceProvider extends ServiceProvider
             'product_addon' => ProductAddon::class,
             'sale' => Sale::class,
             'purchase_order' => PurchaseOrder::class,
+            'goods_receipt' => GoodsReceipt::class,
+            'supplier_bill' => SupplierBill::class,
+            'supplier_payment' => SupplierPayment::class,
+            'supplier' => Supplier::class,
+            'stocktake' => Stocktake::class,
+            'stock_transfer' => StockTransfer::class,
+            'supply_request' => SupplyRequest::class,
+            'pos_device' => PosDevice::class,
             'business_document' => BusinessDocument::class,
         ]);
 
@@ -139,5 +155,13 @@ class AppServiceProvider extends ServiceProvider
         )->by(substr(hash('sha256', (string) $request->bearerToken()), 0, 16) ?: $request->ip()));
 
         RateLimiter::for('exports', fn (Request $request) => Limit::perMinute(10)->by((string) optional($request->user())->id));
+
+        // Named, so each has its own counter: a plain throttle:N,M counts every such route of a user together, and a
+        // busy morning of receipts and transfers would lock the user out of pairing a till.
+        RateLimiter::for('stock', fn (Request $request) => Limit::perMinute(60)->by('stock|'.optional($request->user())->id));
+        RateLimiter::for('pos-pairing', fn (Request $request) => [
+            Limit::perMinute(10)->by('pair|'.optional($request->user())->id),
+            Limit::perMinute(30)->by('pair-ip|'.$request->ip()),
+        ]);
     }
 }

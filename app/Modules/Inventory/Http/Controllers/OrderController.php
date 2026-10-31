@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Inventory\Models\SaleItem;
 use App\Modules\Inventory\Services\OrderService;
+use App\Modules\Inventory\Services\PosDevices;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -43,7 +44,11 @@ class OrderController extends Controller
                 'items' => $s->items->map(fn (SaleItem $i) => $i->summary()),
             ]);
 
+        $printer = app(PosDevices::class)->current($request)?->load('peripherals')->printer();
+
         return Inertia::render('Sales/Orders', [
+            // This device's printer prints an order when its preparation starts (set on the device's peripherals).
+            'printOrders' => (bool) ($printer?->print_website_orders ?? false),
             'orders' => $orders,
             'tab' => $tab,
             'counts' => [

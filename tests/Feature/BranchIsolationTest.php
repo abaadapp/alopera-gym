@@ -147,15 +147,17 @@ class BranchIsolationTest extends TestCase
         $this->actingAs($reception)->get(route('club.members.show', $visitor))->assertOk()
             ->assertInertia(fn ($page) => $page->where('invoices.0.reachable', false)->where('memberships.0.invoice_reachable', false));
 
-        // A point-of-sale sale is Al Khoud's.
-        $product = $this->asTenant($club, function () {
+        // A point-of-sale sale is Al Khoud's, and takes Al Khoud's stock (stock is kept per branch).
+        $product = $this->asTenant($club, function () use ($khoud) {
             $product = Product::create(['name' => 'ماء', 'price' => 0.5]);
             app(StockService::class)->move($product, 10, 'adjustment', null, 'opening', 0.2);
+            app(StockService::class)->move($product, 4, 'adjustment', null, 'opening', 0.2, branchId: $khoud->id);
 
             return $product;
         });
         $this->actingAs($reception)->post(route('club.pos.checkout'), ['items' => [['product_id' => $product->id, 'quantity' => 1]], 'payment_method' => 'cash'])->assertSessionHasNoErrors();
         $this->assertSame($khoud->id, (int) $this->asTenant($club, fn () => Sale::latest('id')->value('branch_id')));
+        $this->asTenant($club, fn () => $this->assertSame(['3.000', '13.000'], [app(StockService::class)->quantity($product, $khoud->id), $product->fresh()->stock_quantity]));
 
         // A club-wide user's manual invoice goes to the branch the top bar shows.
         $owner = $this->owner($club);

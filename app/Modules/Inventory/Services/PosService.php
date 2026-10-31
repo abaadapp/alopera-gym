@@ -11,8 +11,10 @@ use App\Modules\Finance\Services\CreditNoteService;
 use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Gym\Models\Member;
+use App\Modules\Inventory\Models\PosDevice;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\Sale;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -33,8 +35,23 @@ final class PosService
      * @param  list<array{product_id: int, quantity: float|int, addons?: list<array{addon_id: int, quantity: int}>}>  $items
      * @param  string|null  $cardReference  transaction number printed by the bank card terminal
      * @param  string|null  $customerName  a walk-in buyer's name, when no member is chosen
+     * @param  PosDevice|null  $device  the activated device it is rung up on (its branch is the sale's)
+     * @param  string|null  $clientKey  one per basket: a retried checkout returns the first sale, never a second
      */
-    public function checkout(array $items, string $method, ?Member $member = null, string|float $discount = 0, ?int $branchId = null, ?string $cardReference = null, ?string $customerName = null): Sale
+    public function checkout(array $items, string $method, ?Member $member = null, string|float $discount = 0, ?int $branchId = null, ?string $cardReference = null, ?string $customerName = null, ?PosDevice $device = null, ?string $clientKey = null): Sale
+    {
+        if ($clientKey && ($existing = Sale::where('client_key', $clientKey)->first())) {
+            return $existing->load('items');
+        }
+        try {
+            return $this->sell($items, $method, $member, $discount, $device?->branch_id ?? $branchId, $cardReference, $customerName, $device, $clientKey);
+        } catch (UniqueConstraintViolationException $e) {
+            // The same basket submitted twice at once: the first one won.
+            return Sale::where('client_key', $clientKey ?? '')->first()?->load('items') ?? throw $e;
+        }
+    }
+
+    private function sell(array $items, string $method, ?Member $member, string|float $discount, ?int $branchId, ?string $cardReference, ?string $customerName, ?PosDevice $device, ?string $clientKey): Sale
     {
         if (! in_array($method, ['cash', 'card'], true)) {
             throw new BusinessRuleException('pos.method', 'طريقة الدفع في نقطة البيع: نقدًا أو بطاقة.', 'payment_method');
@@ -43,7 +60,7 @@ final class PosService
             throw new BusinessRuleException('pos.empty', 'السلة فارغة.', 'items');
         }
 
-        return DB::transaction(function () use ($items, $method, $member, $discount, $branchId, $cardReference, $customerName) {
+        return DB::transaction(function () use ($items, $method, $member, $discount, $branchId, $cardReference, $customerName, $device, $clientKey) {
             $products = Product::whereIn('id', array_column($items, 'product_id'))->where('is_active', true)->get()->keyBy('id');
             ['lines' => $lines, 'subtotal' => $subtotal] = $this->lines->price($products, $items, 'pos');
 
@@ -66,6 +83,11 @@ final class PosService
                 'total' => Money::sub($subtotal, $discount),
                 'payment_method' => $method,
                 'cashier_id' => Auth::guard('web')->id(),
+                'pos_device_id' => $device?->id,
+                // A card payment settles into the bank the device's terminal pays into (recorded; the money is
+                // confirmed when the bank settles it, as for any card payment).
+                'settlement_account_id' => $method === 'card' ? $device?->settlement_account_id : null,
+                'client_key' => $clientKey,
             ]);
 
             $invoiceLines = $this->spreadDiscount($this->lines->record($sale, $lines, 'sale'), $discount);

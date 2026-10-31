@@ -5,6 +5,7 @@ namespace App\Modules\Inventory;
 use App\Core\Support\ModuleServiceProvider;
 use App\Modules\Finance\Events\InvoicePaid;
 use App\Modules\Finance\Events\InvoiceVoided;
+use App\Modules\Inventory\Console\CheckStock;
 use App\Modules\Inventory\Console\ExpireOrders;
 use App\Modules\Inventory\Listeners\SettleWebsiteOrders;
 use Illuminate\Support\Facades\Event;
@@ -22,7 +23,7 @@ class InventoryServiceProvider extends ModuleServiceProvider
         Event::listen(InvoiceVoided::class, [SettleWebsiteOrders::class, 'handleVoided']);
 
         if ($this->app->runningInConsole()) {
-            $this->commands([ExpireOrders::class]);
+            $this->commands([ExpireOrders::class, CheckStock::class]);
         }
     }
 }

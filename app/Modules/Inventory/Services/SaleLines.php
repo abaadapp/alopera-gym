@@ -7,7 +7,7 @@ use App\Core\Support\Money;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Models\Sale;
-use App\Modules\Inventory\Models\SaleItemAddon;
+use App\Modules\Inventory\Models\StockMovement;
 use Illuminate\Support\Collection;
 
 /**
@@ -112,7 +112,7 @@ final class SaleLines
                 'addons_cost' => $addonsCost,
                 'line_total' => $line['lineTotal'],
             ]);
-            $this->stock->move($product, -$line['qty'], $movement, $sale);
+            $this->stock->move($product, -$line['qty'], $movement, $sale, branchId: $sale->branch_id);
             $invoiceLines[] = ['description' => $product->name, 'quantity' => $line['qty'], 'unit_price' => $product->price, 'itemable' => $product];
 
             foreach ($rows as $i => $row) {
@@ -120,7 +120,7 @@ final class SaleLines
                 unset($row['stock']);
                 $item->addons()->create($row);
                 if ($stock && $row['stock_quantity'] > 0) {
-                    $this->stock->move($stock, -$row['stock_quantity'], $movement, $sale, 'إضافة «'.$row['name'].'» مع «'.$product->name.'»');
+                    $this->stock->move($stock, -$row['stock_quantity'], $movement, $sale, 'إضافة «'.$row['name'].'» مع «'.$product->name.'»', branchId: $sale->branch_id);
                 }
                 $pick = $line['addons'][$i];
                 $invoiceLines[] = ['description' => '+ '.$row['name'].' — '.$product->name, 'quantity' => $pick['units'], 'unit_price' => $row['unit_price'], 'itemable' => $pick['addon']];
@@ -130,16 +130,19 @@ final class SaleLines
         return $invoiceLines;
     }
 
-    /** Put back everything the sale took off the shelf (as $movement: void|release). */
+    /**
+     * Put back everything the sale took off the shelf (as $movement: void|release): each product, add-on stock
+     * included, to the branch it was taken from, as its movements recorded (an old movement without a branch is the
+     * main branch's).
+     */
     public function restock(Sale $sale, string $movement, ?string $note = null): void
     {
-        foreach ($sale->items()->with(['product', 'addons.stockProduct'])->orderBy('id')->get() as $item) {
-            $this->stock->move($item->product, (float) $item->quantity, $movement, $sale, $note);
-            $item->addons->each(function (SaleItemAddon $addon) use ($movement, $sale, $note) {
-                if ($addon->stockProduct && (float) $addon->stock_quantity > 0) {
-                    $this->stock->move($addon->stockProduct, (float) $addon->stock_quantity, $movement, $sale, trim('إضافة «'.$addon->name.'» '.($note ?? '')));
-                }
-            });
+        $taken = StockMovement::where('reference_type', $sale->getMorphClass())->where('reference_id', $sale->id)
+            ->selectRaw('product_id, branch_id, sum(quantity) as quantity')->groupBy('product_id', 'branch_id')->orderBy('product_id')->get();
+        foreach ($taken as $row) {
+            if ((float) $row->quantity < 0) {
+                $this->stock->move(Product::withTrashed()->findOrFail($row->product_id), -(float) $row->quantity, $movement, $sale, $note, branchId: $row->branch_id);
+            }
         }
     }
 }

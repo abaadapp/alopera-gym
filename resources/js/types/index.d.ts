@@ -14,6 +14,8 @@ export interface BranchState {
     current: { id: number; name: string } | null;
     locked: boolean;
     options: { id: number; name: string }[];
+    /** More than one open branch in the club. */
+    multi: boolean;
 }
 
 /** One notification of the bell / the notifications page (App\Http\Controllers\Club\NotificationController::row). */

@@ -77,10 +77,19 @@ final class PermissionRegistry
             'sales.refund' => 'إلغاء عمليات البيع ورد المبالغ',
             'products.manage' => 'المنتجات والتصنيفات والإضافات والأسعار والمخزون',
             'orders.manage' => 'طلبات الموقع: المراجعة والتجهيز والتسليم',
+            'pos_devices.manage' => 'أجهزة نقاط البيع وملحقاتها وتفعيلها',
         ]],
-        'inventory' => ['label' => 'الموردون والمشتريات', 'permissions' => [
+        'inventory' => ['label' => 'المخزون والمشتريات', 'permissions' => [
+            'inventory.view' => 'عرض المخزون والأرصدة وسجل الحركة',
+            'inventory.adjust' => 'الجرد وتسجيل التالف والفاقد والتسويات',
+            'inventory.transfer' => 'طلب نقل المخزون وصرفه واستلامه وطلبات تزويد الفروع',
+            'inventory.approve' => 'اعتماد الجرد ونقل المخزون وطلبات التزويد',
+            'purchases.view' => 'عرض المشتريات وأوامر الشراء وسندات الموردين',
+            'purchases.manage' => 'إنشاء أوامر الشراء وسندات الموردين',
+            'purchases.approve' => 'اعتماد أوامر الشراء وسندات الاستلام وسندات الموردين',
+            'purchases.receive' => 'استلام البضاعة',
+            'purchases.pay' => 'سداد الموردين',
             'suppliers.manage' => 'الموردون',
-            'purchases.manage' => 'المشتريات',
         ]],
         'documents' => ['label' => 'مستندات النشاط', 'permissions' => [
             'documents.view' => 'عرض المستندات (العامة، والسرية المسندة إليه)',

@@ -18,7 +18,17 @@ class Supplier extends Model
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean'];
+        return ['is_active' => 'boolean', 'payment_terms_days' => 'integer'];
+    }
+
+    public function bills(): HasMany
+    {
+        return $this->hasMany(SupplierBill::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(SupplierPayment::class);
     }
 
     public function purchaseOrders(): HasMany

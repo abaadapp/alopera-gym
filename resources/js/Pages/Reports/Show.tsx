@@ -8,6 +8,7 @@ import { CheckinsBody, ClassesBody, ExpiringBody, MembersBody, StaffBody, Traine
 import { PayoutsBody, PayrollBody, type Payouts, type Payroll } from '@/Components/Reports/Payroll';
 import { DocumentsBody, RenewalsBody, type Documents, type Renewals } from '@/Components/Reports/Documents';
 import { BranchesBody, SalesBody, type Branches, type Sales } from '@/Components/Reports/Sales';
+import { TablesBody, type Tables } from '@/Components/Reports/Tables';
 import { Button, Card, Checkbox, Input, Notice, PageHeader, Select } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 import { date } from '@/lib/format';
@@ -195,6 +196,14 @@ function ReportFilters({ kind, data, option, go, branch, first }: { kind: string
                 {d.staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </Select>
         );
+    } else if (kind === 'stock-movements') {
+        const d = data as unknown as Tables;
+        own = (
+            <Select className="h-9 w-56 py-1 text-[13px]" value={String(d.options.type ?? '')} onChange={(e) => go({ type: e.target.value || null })} aria-label="نوع الحركة">
+                <option value="">كل أنواع الحركة</option>
+                {Object.entries((d.options.types ?? {}) as Record<string, string>).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </Select>
+        );
     } else if (kind === 'documents') {
         const d = data as unknown as Documents;
         own = (
@@ -231,6 +240,8 @@ function Body({ kind, data, canFinancial, to }: { kind: string; data: Data; canF
         case 'documents': return <DocumentsBody data={d as Documents} />;
         case 'renewals': return <RenewalsBody data={d as Renewals} />;
         case 'branches': return <BranchesBody data={d as Branches} canFinancial={canFinancial} />;
+        case 'stock-balance': case 'low-stock': case 'stock-movements': case 'stocktakes': case 'transfers':
+        case 'purchases': case 'suppliers': case 'supplier-dues': case 'goods-receipts': return <TablesBody data={d as Tables} />;
         default: return null;
     }
 }
