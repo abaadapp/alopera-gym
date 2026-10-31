@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import { Lock, Pencil, Plus, ShieldCheck, Trash2, Users } from 'lucide-react';
+import { cn } from '@/lib/cn';
 import ClubLayout from '@/Layouts/ClubLayout';
 import SettingsBack from '@/Components/SettingsBack';
 import { Badge, Button, Card, ConfirmAction, Field, Input, Modal, PageHeader, Textarea } from '@/Components/ui';
@@ -22,7 +23,7 @@ interface Group {
     permissions: { key: string; label: string }[];
 }
 
-export default function Roles({ roles, groups }: { roles: Role[]; groups: Group[] }) {
+export default function Roles({ roles, groups, grantable }: { roles: Role[]; groups: Group[]; grantable: string[] }) {
     const [editing, setEditing] = useState<Role | 'new' | null>(null);
     const total = groups.reduce((n, g) => n + g.permissions.length, 0);
 
@@ -69,19 +70,21 @@ export default function Roles({ roles, groups }: { roles: Role[]; groups: Group[
                     </Card>
                 ))}
             </div>
-            {editing && <RoleModal role={editing === 'new' ? null : editing} groups={groups} onClose={() => setEditing(null)} />}
+            {editing && <RoleModal role={editing === 'new' ? null : editing} groups={groups} grantable={grantable} onClose={() => setEditing(null)} />}
         </ClubLayout>
     );
 }
 
-function RoleModal({ role, groups, onClose }: { role: Role | null; groups: Group[]; onClose: () => void }) {
+function RoleModal({ role, groups, grantable, onClose }: { role: Role | null; groups: Group[]; grantable: string[]; onClose: () => void }) {
     const locked = role?.is_locked ?? false;
+    // Nobody gives what they do not hold: those boxes stay as they are, and the server keeps them so.
+    const mine = (p: string) => grantable.includes(p);
     const form = useForm({ name: role?.name ?? '', description: role?.description ?? '', permissions: role?.permissions ?? ([] as string[]) });
     const has = (p: string) => form.data.permissions.includes(p);
-    const toggle = (p: string) => !locked && form.setData('permissions', has(p) ? form.data.permissions.filter((x) => x !== p) : [...form.data.permissions, p]);
+    const toggle = (p: string) => !locked && mine(p) && form.setData('permissions', has(p) ? form.data.permissions.filter((x) => x !== p) : [...form.data.permissions, p]);
     const toggleGroup = (g: Group) => {
         if (locked) return;
-        const keys = g.permissions.map((p) => p.key);
+        const keys = g.permissions.map((p) => p.key).filter(mine);
         const all = keys.every(has);
         form.setData('permissions', all ? form.data.permissions.filter((p) => !keys.includes(p)) : Array.from(new Set([...form.data.permissions, ...keys])));
     };
@@ -103,6 +106,7 @@ function RoleModal({ role, groups, onClose }: { role: Role | null; groups: Group
             footer={locked ? <Button variant="ghost" onClick={onClose}>إغلاق</Button> : <><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}
         >
             {locked && <p className="mb-4 rounded-xl bg-brand-50 px-4 py-3 text-sm text-brand-700">دور المالك يملك كل الصلاحيات ولا يمكن تعديله، حتى لا يُغلق النادي على نفسه.</p>}
+            {!locked && groups.some((g) => g.permissions.some((p) => !mine(p.key))) && <p className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">الصلاحيات الباهتة لا تملكها أنت، فلا تمنحها ولا تسحبها؛ تبقى على حالها في الدور.</p>}
             <form onSubmit={submit} className="space-y-4">
                 {!locked && (
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -129,8 +133,8 @@ function RoleModal({ role, groups, onClose }: { role: Role | null; groups: Group
                                 </label>
                                 <div className="space-y-1.5">
                                     {g.permissions.map((p) => (
-                                        <label key={p.key} className="flex cursor-pointer items-center gap-2 text-sm text-ink/85">
-                                            <input type="checkbox" className="size-4 accent-[var(--brand)]" checked={has(p.key)} onChange={() => toggle(p.key)} disabled={locked} />
+                                        <label key={p.key} title={!locked && !mine(p.key) ? 'لا تملك هذه الصلاحية، فلا تمنحها ولا تسحبها.' : undefined} className={cn('flex items-center gap-2 text-sm text-ink/85', !locked && !mine(p.key) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer')}>
+                                            <input type="checkbox" className="size-4 accent-[var(--brand)]" checked={has(p.key)} onChange={() => toggle(p.key)} disabled={locked || !mine(p.key)} />
                                             {p.label}
                                         </label>
                                     ))}

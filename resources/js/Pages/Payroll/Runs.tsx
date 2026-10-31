@@ -14,7 +14,7 @@ export type Item = {
     attendance_days: number | null; attendance_hours: string | null; payment_method: string; paid_at: string | null; payout: { number: string; paid_on: string } | null;
 };
 export type RunDetail = RunSummary & { approved_at: string | null; approver: string | null; month_end: string; items: Item[]; unpaid: string };
-type Can = { prepare: boolean; approve: boolean; pay: boolean; reports: boolean };
+type Can = { prepare: boolean; edit: boolean; approve: boolean; pay: boolean; payslips: boolean; reports: boolean };
 
 export const runStatus: Record<string, ['مسودة' | 'معتمدة' | 'مصروفة', 'gray' | 'blue' | 'green']> = { draft: ['مسودة', 'gray'], approved: ['معتمدة', 'blue'], paid: ['مصروفة', 'green'] };
 
@@ -58,9 +58,10 @@ export default function PayrollRuns({ runs, run, months, can }: Props) {
                                         <p className="mt-0.5 text-[13px] text-muted num">{run.number}{run.approved_at && ` · اعتمدها ${run.approver ?? ''} في ${date(run.approved_at)}`}</p>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
-                                        <Button variant="outline" size="sm" href={route('club.payroll.print', run.id)} external icon={<Printer className="size-3.5" />}>طباعة الكشف</Button>
+                                        {can.payslips && <Button variant="outline" size="sm" href={route('club.payroll.print', run.id)} external icon={<Printer className="size-3.5" />}>طباعة الكشف</Button>}
+                                        {can.payslips && <Button variant="outline" size="sm" href={route('club.papers.pdf', { type: 'payroll_sheet', id: run.id, download: 1 })} external icon={<Download className="size-3.5" />}>PDF</Button>}
                                         {can.reports && <Button variant="outline" size="sm" href={route('club.payroll.export', { run: run.id, format: 'xlsx' })} external icon={<Download className="size-3.5" />}>Excel</Button>}
-                                        {draft && can.prepare && (
+                                        {draft && can.edit && (
                                             <ConfirmAction url={route('club.payroll.destroy', run.id)} method="delete" title="حذف المسودة" message={`ستُحذف مسودة ${run.label} وسطورها.`} variant="ghost" size="sm" icon={<Trash2 className="size-3.5" />}>حذف</ConfirmAction>
                                         )}
                                         {draft && can.approve && (
@@ -94,8 +95,8 @@ export default function PayrollRuns({ runs, run, months, can }: Props) {
                                                     <td className="text-[13px]">{i.paid_at ? <Badge tone="green">صُرف {date(i.paid_at)}</Badge> : <span className="text-muted">{run.status === 'draft' ? '—' : 'بانتظار الصرف'}</span>}</td>
                                                     <td className="text-end">
                                                         <span className="inline-flex gap-1">
-                                                            <a href={route('club.payroll.print', { run: run.id, item: i.id })} target="_blank" rel="noreferrer" className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/[0.045] hover:text-ink" title="قسيمة الراتب"><FileText className="size-4" /></a>
-                                                            {draft && can.prepare && (
+                                                            {can.payslips && <a href={route('club.payroll.print', { run: run.id, item: i.id })} target="_blank" rel="noreferrer" className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/[0.045] hover:text-ink" title="كشف راتب الموظف"><FileText className="size-4" /></a>}
+                                                            {draft && can.edit && (
                                                                 <>
                                                                     <button type="button" onClick={() => setEditing(i)} className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/[0.045] hover:text-ink" aria-label={`تعديل ${i.name}`}><Pencil className="size-4" /></button>
                                                                     <ConfirmAction url={route('club.payroll.items.destroy', i.id)} method="delete" title="إزالة من المسيرة" message={`سيُزال ${i.name} من مسيرة هذا الشهر.`} variant="ghost" size="sm" icon={<X className="size-4" />}>{''}</ConfirmAction>

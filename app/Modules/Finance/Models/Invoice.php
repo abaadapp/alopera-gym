@@ -59,6 +59,7 @@ class Invoice extends Model implements BranchOwned
             'paid_total' => 'decimal:3',
             'paid_at' => 'datetime',
             'voided_at' => 'datetime',
+            'issuer' => 'array',
         ];
     }
 

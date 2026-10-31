@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
-import { Banknote, Clock, Wallet } from 'lucide-react';
+import { Banknote, Clock, Printer, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Modal, PageHeader, Select, StatCard } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
@@ -17,7 +17,7 @@ interface Props {
     waiting: string;
     accounts: MoneyAccount[];
     defaultAccount: number | null;
-    can: { pay: boolean; reports: boolean };
+    can: { pay: boolean; payslips: boolean; reports: boolean };
 }
 
 export default function PayrollPayouts({ runs, run, payouts, waiting, accounts, defaultAccount, can }: Props) {
@@ -83,7 +83,7 @@ export default function PayrollPayouts({ runs, run, payouts, waiting, accounts, 
                                 {payouts.length ? (
                                     <div className="overflow-x-auto">
                                         <table className="table-base">
-                                            <thead><tr><th>الرقم</th><th>المسيرة</th><th>التاريخ</th><th>من حساب</th><th>الموظفون</th><th>المرجع</th><th className="text-end">المبلغ</th></tr></thead>
+                                            <thead><tr><th>الرقم</th><th>المسيرة</th><th>التاريخ</th><th>من حساب</th><th>الموظفون</th><th>المرجع</th><th className="text-end">المبلغ</th><th /></tr></thead>
                                             <tbody>
                                                 {payouts.map((p) => (
                                                     <tr key={p.id}>
@@ -94,6 +94,7 @@ export default function PayrollPayouts({ runs, run, payouts, waiting, accounts, 
                                                         <td className="num">{p.items}</td>
                                                         <td className="text-muted">{p.reference ?? '—'}</td>
                                                         <td className="text-end font-medium num">{m(p.total)}</td>
+                                                        <td className="text-end"><a href={route('club.papers.show', { type: 'payroll_payout', id: p.id, print: 1 })} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] text-muted hover:bg-ink/[0.045] hover:text-ink" title="سند صرف الرواتب: الموظفون ومبالغهم"><Printer className="size-3.5" /> السند</a></td>
                                                     </tr>
                                                 ))}
                                             </tbody>

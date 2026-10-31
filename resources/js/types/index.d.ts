@@ -53,7 +53,7 @@ export interface SharedProps {
     member: { id: number; name: string; member_no: string } | null;
     /** The club panel's bell; null outside the club panel. */
     notifications: { unread: number; items: StaffNotification[] } | null;
-    flash: { success: string | null; error: string | null; token: string | null; id: string | null };
+    flash: { success: string | null; error: string | null; token: string | null; password?: string | null; id: string | null };
     errors: Record<string, string>;
     [key: string]: unknown;
 }

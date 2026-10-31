@@ -51,6 +51,8 @@ class HandleInertiaRequests extends Middleware
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
                 'token' => $request->session()->get('device_token'),
+                // A temporary password just issued for a staff account: shown once, never stored readable.
+                'password' => $request->session()->get('password'),
                 // Unique per response that carries a message, so the same text twice still shows twice.
                 'id' => $request->session()->hasAny(['success', 'error']) ? (string) Str::ulid() : null,
             ],

@@ -44,6 +44,7 @@ class Tenant extends Model
         'class_session_weeks_ahead' => 4,
         'vat_rate' => 0,
         'vat_number' => null,
+        'cr_number' => null,
         'invoice_footer' => null,
         'invoice_due_days' => 0,
         'allow_pay_at_reception' => true,

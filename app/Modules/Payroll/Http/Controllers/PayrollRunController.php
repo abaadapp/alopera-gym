@@ -3,8 +3,8 @@
 namespace App\Modules\Payroll\Http\Controllers;
 
 use App\Core\Export\TableExporter;
+use App\Core\Papers\Papers;
 use App\Core\Support\Money;
-use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Services\FinanceReports;
@@ -15,6 +15,7 @@ use App\Modules\Payroll\Services\PayrollService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -22,7 +23,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /** Payroll runs (مسيرات الرواتب) and their payouts (صرف الرواتب). Each action checks its own permission. */
 class PayrollRunController extends Controller
 {
-    private const ANY = ['payroll.prepare', 'payroll.approve', 'payroll.pay', 'payroll.reports'];
+    private const ANY = ['payroll.prepare', 'payroll.edit', 'payroll.approve', 'payroll.pay', 'payroll.payslips', 'payroll.reports'];
 
     public function __construct(private readonly PayrollService $payroll) {}
 
@@ -87,23 +88,16 @@ class PayrollRunController extends Controller
         return back()->with('success', 'اعتُمدت المسيرة وسُجّلت الرواتب المستحقة في الحسابات.');
     }
 
-    /** The printable run sheet, or one employee's payslip (?item=). */
-    public function print(Request $request, PayrollRun $run, TenantContext $tenants): Response
+    /** The printed run sheet, or one employee's payslip (?item=) — drawn by the paper engine (payroll.payslips). */
+    public function print(Request $request, PayrollRun $run): HttpResponse
     {
-        $this->allowAny($request, self::ANY);
-        $items = $run->items()->with(['employee:id,name,iban,bank_name,payment_method', 'payout:id,number,paid_on'])->orderBy('employee_name')->get();
         if ($request->integer('item')) {
-            $items = $items->where('id', $request->integer('item'))->values();
-            abort_if($items->isEmpty(), 404);
-        }
-        $club = $tenants->require();
+            $item = PayrollItem::where('payroll_run_id', $run->id)->findOrFail($request->integer('item'));
 
-        return Inertia::render('Payroll/Print', [
-            'mode' => $request->integer('item') ? 'payslip' : 'sheet',
-            'run' => $this->summary($run->loadCount(['items', 'items as paid_count' => fn ($q) => $q->whereNotNull('paid_at')])) + ['approved_at' => $run->approved_at?->toDateString(), 'approver' => $run->approver?->name],
-            'items' => $items->map(fn (PayrollItem $i) => $this->item($i) + ['iban' => $i->employee?->iban ? '•••• '.mb_substr($i->employee->iban, -4) : null, 'bank_name' => $i->employee?->bank_name]),
-            'club' => ['name' => $club->name, 'logo_url' => $club->logoUrl(), 'phone' => $club->phone, 'email' => $club->email],
-        ]);
+            return Papers::for('payslip', $item)->page($request->boolean('print', true));
+        }
+
+        return Papers::for('payroll_sheet', $run)->page($request->boolean('print', true));
     }
 
     public function export(Request $request, PayrollRun $run): StreamedResponse
@@ -120,7 +114,7 @@ class PayrollRunController extends Controller
     /** صرف الرواتب: approved runs with what is still owed, payouts made, and the accounts to pay from. */
     public function payouts(Request $request, FinanceReports $reports): Response
     {
-        $this->allowAny($request, ['payroll.pay', 'payroll.reports']);
+        $this->allowAny($request, ['payroll.pay', 'payroll.payslips', 'payroll.reports']);
         $runs = PayrollRun::with('approver:id,name')->whereIn('status', [PayrollRun::APPROVED, PayrollRun::PAID])
             ->withCount(['items', 'items as paid_count' => fn ($q) => $q->whereNotNull('paid_at')])
             ->withSum(['items as unpaid' => fn ($q) => $q->whereNull('paid_at')], 'net')
@@ -165,7 +159,10 @@ class PayrollRunController extends Controller
     {
         $u = $request->user();
 
-        return ['prepare' => $u->hasPermission('payroll.prepare'), 'approve' => $u->hasPermission('payroll.approve'), 'pay' => $u->hasPermission('payroll.pay'), 'reports' => $u->hasPermission('payroll.reports')];
+        return [
+            'prepare' => $u->hasPermission('payroll.prepare'), 'edit' => $u->hasPermission('payroll.edit'), 'approve' => $u->hasPermission('payroll.approve'),
+            'pay' => $u->hasPermission('payroll.pay'), 'payslips' => $u->hasPermission('payroll.payslips'), 'reports' => $u->hasPermission('payroll.reports'),
+        ];
     }
 
     private function summary(PayrollRun $r): array

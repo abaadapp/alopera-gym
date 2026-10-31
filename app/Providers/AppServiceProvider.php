@@ -158,6 +158,8 @@ class AppServiceProvider extends ServiceProvider
 
         // Named, so each has its own counter: a plain throttle:N,M counts every such route of a user together, and a
         // busy morning of receipts and transfers would lock the user out of pairing a till.
+        // Drawing a paper (and above all a PDF) costs more than a page; a person printing is far below this.
+        RateLimiter::for('papers', fn (Request $request) => Limit::perMinute(120)->by('papers|'.(optional($request->user())->id ?? $request->ip())));
         RateLimiter::for('stock', fn (Request $request) => Limit::perMinute(60)->by('stock|'.optional($request->user())->id));
         RateLimiter::for('pos-pairing', fn (Request $request) => [
             Limit::perMinute(10)->by('pair|'.optional($request->user())->id),

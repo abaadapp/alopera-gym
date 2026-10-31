@@ -2,7 +2,7 @@
 
 namespace App\Modules\Website\Http\Controllers;
 
-use App\Core\Tenancy\TenantContext;
+use App\Core\Papers\Papers;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Inventory\Models\Sale;
@@ -10,6 +10,7 @@ use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Http\RendersSite;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
@@ -70,18 +71,28 @@ class PayController extends Controller
         return response()->json(['status' => $intent->status]);
     }
 
-    public function invoice(string $token, TenantContext $tenants, OnlinePaymentService $online): Response
+    /** The invoice link sent to the member: the invoice paper itself (as printed and as the PDF), and a pay button. */
+    public function invoice(string $token, OnlinePaymentService $online): Response
     {
-        $invoice = $this->invoiceByToken($token)->load(['items', 'payments' => fn ($q) => $q->where('status', 'completed')]);
-        $tenant = $tenants->require();
+        $invoice = $this->invoiceByToken($token);
 
         return $this->page('Site/Invoice', [
-            'invoice' => $this->present($invoice) + [
-                'payments' => $invoice->payments->map(fn ($p) => $p->only('receipt_number', 'kind', 'method', 'amount') + ['paid_at' => $p->paid_at?->format('Y-m-d H:i')]),
-                'pay_url' => $invoice->isOpen() && $online->available() ? route('site.pay.show', ['token' => $token]) : null,
-            ],
-            'club' => $tenant->only('name', 'legal_name', 'phone', 'address') + ['vat_number' => $tenant->setting('vat_number'), 'footer' => $tenant->setting('invoice_footer')],
+            'invoice' => ['number' => $invoice->number, 'balance' => $invoice->status === Invoice::VOID ? '0.000' : $invoice->balance(), 'status' => $invoice->status],
+            'paper' => Papers::for('invoice', $invoice)->toArray(),
+            'pay_url' => $invoice->isOpen() && $online->available() ? route('site.pay.show', ['token' => $token]) : null,
+            'print_url' => route('site.invoice.print', ['token' => $token]),
+            'pdf_url' => route('site.invoice.pdf', ['token' => $token]),
         ], 'فاتورة '.$invoice->number);
+    }
+
+    public function invoicePrint(string $token): HttpResponse
+    {
+        return Papers::for('invoice', $this->invoiceByToken($token))->page();
+    }
+
+    public function invoicePdf(Request $request, string $token): HttpResponse
+    {
+        return Papers::for('invoice', $this->invoiceByToken($token))->pdf($request->boolean('download'));
     }
 
     /** @return array<string, mixed> */

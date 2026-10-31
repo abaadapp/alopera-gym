@@ -19,11 +19,13 @@ interface StaffRow {
     role_key: string | null;
     branch: string | null;
     last_login_at: string | null;
+    own_permissions: boolean;
+    may_manage: boolean;
 }
 
 interface Props {
     users: StaffRow[];
-    roles: (Option & { key: string })[];
+    roles: (Option & { key: string; assignable: boolean })[];
     branches: Option[];
 }
 
@@ -46,14 +48,14 @@ export default function Users({ users, roles, branches }: Props) {
                                     <tr key={u.id} className={u.is_active ? '' : 'opacity-60'}>
                                         <td className="font-medium">{u.name}{u.id === auth?.user.id && <span className="ms-1 text-xs text-muted">(أنت)</span>}</td>
                                         <td className="text-xs" dir="ltr">{u.email}</td>
-                                        <td><Badge tone={u.role_key === 'owner' ? 'brand' : 'gray'}>{u.role ?? '—'}</Badge></td>
+                                        <td><Badge tone={u.role_key === 'owner' ? 'brand' : 'gray'}>{u.role ?? '—'}</Badge>{u.own_permissions && <span className="ms-1 text-[11px] text-muted">صلاحيات مخصصة</span>}</td>
                                         <td className="text-xs">{u.branch ?? 'كل الفروع'}</td>
                                         <td className="text-xs text-muted num">{u.last_login_at ?? 'لم يسجّل بعد'}</td>
                                         <td>{u.is_active ? <Badge tone="green">نشط</Badge> : <Badge tone="red">موقوف</Badge>}</td>
                                         <td>
                                             <div className="flex justify-end gap-1">
-                                                <Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(u)}>تعديل</Button>
-                                                {u.is_active && u.id !== auth?.user.id && (
+                                                {(u.may_manage || u.id === auth?.user.id) ? <Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(u)}>تعديل</Button> : <span className="text-[11px] text-muted" title="هذا الحساب يفتح ما لا تفتحه؛ يعدّله من يملك ذلك.">يفتح ما لا تفتحه</span>}
+                                                {u.is_active && u.may_manage && u.id !== auth?.user.id && (
                                                     <ConfirmAction url={route('club.users.destroy', u.id)} method="delete" title="إيقاف الحساب" message={`إيقاف حساب ${u.name}؟ لن يتمكن من الدخول.`} variant="ghost">إيقاف</ConfirmAction>
                                                 )}
                                             </div>
@@ -102,7 +104,7 @@ function UserModal({ user, roles, branches, onClose }: { user: StaffRow | null; 
                 </Field>
                 <Field label="الدور" error={form.errors.role_id} required>
                     <Select value={form.data.role_id} onChange={(e) => form.setData('role_id', e.target.value)} placeholder="اختر الدور">
-                        {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                        {roles.map((r) => <option key={r.id} value={r.id} disabled={!r.assignable && String(r.id) !== String(user?.role_id ?? '')}>{r.name}{!r.assignable ? ' — يفتح ما لا تملكه' : ''}</option>)}
                     </Select>
                 </Field>
                 <Field label="الفرع" error={form.errors.branch_id}>

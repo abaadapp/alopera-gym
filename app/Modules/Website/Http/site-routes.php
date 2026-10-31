@@ -37,6 +37,9 @@ Route::get('/pay/status/{reference}', [PayController::class, 'status'])->name('s
 Route::get('/pay/{token}', [PayController::class, 'show'])->where('token', '[A-Za-z0-9]{48}')->name('site.pay.show');
 Route::post('/pay/{token}', [PayController::class, 'start'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:public-forms')->name('site.pay.start');
 Route::get('/invoice/{token}', [PayController::class, 'invoice'])->where('token', '[A-Za-z0-9]{48}')->name('site.invoice');
+// The same invoice paper as the club panel prints: its print page and its PDF, by the same unguessable link.
+Route::get('/invoice/{token}/print', [PayController::class, 'invoicePrint'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:portal')->name('site.invoice.print');
+Route::get('/invoice/{token}/pdf', [PayController::class, 'invoicePdf'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:portal')->name('site.invoice.pdf');
 
 // Member portal
 Route::prefix('portal')->name('portal.')->group(function () {

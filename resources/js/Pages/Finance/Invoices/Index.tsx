@@ -1,7 +1,7 @@
 import { Link, router } from '@inertiajs/react';
-import { FilePlus2, FileText } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Coins, FilePlus2, FileText, Printer, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, EmptyState, Input, PageHeader, Pagination, SearchInput, Select, Tabs } from '@/Components/ui';
+import { Badge, Button, Card, EmptyState, Input, PageHeader, Pagination, SearchInput, Select, StatCard, Tabs } from '@/Components/ui';
 import { useCan, useCurrency, useShared } from '@/hooks/useShared';
 import { date, money } from '@/lib/format';
 import { invoiceStatus, invoiceType, label } from '@/lib/labels';
@@ -26,6 +26,7 @@ export interface InvoiceRow {
     issue_date: string;
     due_date: string | null;
     overdue: boolean;
+    days_overdue: number;
 }
 
 interface Filters {
@@ -39,12 +40,13 @@ interface Filters {
 const statusTabs = [
     { key: '', label: 'الكل' },
     { key: 'open', label: 'غير مسددة' },
+    { key: 'overdue', label: 'متأخرة' },
     { key: 'partially_paid', label: 'مدفوعة جزئيًا' },
     { key: 'paid', label: 'مدفوعة' },
     { key: 'void', label: 'ملغاة' },
 ];
 
-export default function InvoicesIndex({ invoices, filters }: { invoices: Paginated<InvoiceRow>; filters: Filters }) {
+export default function InvoicesIndex({ invoices, totals, filters }: { invoices: Paginated<InvoiceRow>; totals: { receivable: string; overdue: string; due_soon: string; refund_due: string }; filters: Filters }) {
     const can = useCan();
     const currency = useCurrency();
     const inventory = useShared().modules.sales;
@@ -62,11 +64,18 @@ export default function InvoicesIndex({ invoices, filters }: { invoices: Paginat
         <ClubLayout title="الفواتير">
             <PageHeader
                 title="الفواتير"
-                subtitle={`${invoices.total} فاتورة`}
+                subtitle={`فواتير الأعضاء والعملاء — العضويات والتدريب والمبيعات والخدمات · ${invoices.total} فاتورة`}
                 actions={can('invoices.manage') && (
                     <Button href={route('club.invoices.create')} icon={<FilePlus2 className="size-4" />}>فاتورة يدوية</Button>
                 )}
             />
+
+            <div className="mb-6 grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard label="إجمالي الذمم" value={money(totals.receivable, currency)} icon={<Wallet className="size-5" />} tone="brand" href={route('club.invoices.index', { status: 'open' })} active={filters.status === 'open'} />
+                <StatCard label="المتأخر" value={money(totals.overdue, currency)} icon={<AlertTriangle className="size-5" />} tone="red" href={route('club.invoices.index', { status: 'overdue' })} active={filters.status === 'overdue'} />
+                <StatCard label="يستحق خلال ٧ أيام" value={money(totals.due_soon, currency)} icon={<CalendarClock className="size-5" />} tone="amber" />
+                <StatCard label="مستحق ردّه للعملاء" value={money(totals.refund_due, currency)} hint="مدفوع أكثر من صافي الفاتورة بعد إشعار دائن" icon={<Coins className="size-5" />} tone="green" />
+            </div>
 
             <Card padded={false}>
                 <div className="space-y-3 p-4">
@@ -101,10 +110,14 @@ export default function InvoicesIndex({ invoices, filters }: { invoices: Paginat
                                     <th>الرقم</th>
                                     <th>العميل</th>
                                     <th>النوع</th>
-                                    <th>التاريخ</th>
+                                    <th>الإصدار</th>
+                                    <th>الاستحقاق</th>
                                     <th>الإجمالي</th>
+                                    <th>المدفوع</th>
                                     <th>المتبقي</th>
                                     <th>الحالة</th>
+                                    <th>أيام التأخير</th>
+                                    <th />
                                 </tr>
                             </thead>
                             <tbody>
@@ -121,7 +134,9 @@ export default function InvoicesIndex({ invoices, filters }: { invoices: Paginat
                                             </td>
                                             <td className="text-muted">{invoiceType[inv.type] ?? inv.type}</td>
                                             <td>{date(inv.issue_date)}</td>
+                                            <td className="text-muted">{date(inv.due_date)}</td>
                                             <td className="num">{money(inv.total, currency)}</td>
+                                            <td className="num text-emerald-700">{money(inv.paid_total, currency)}</td>
                                             <td className={Number(inv.balance) > 0 && inv.status !== 'void' ? 'font-medium text-red-600 num' : 'text-muted num'}>
                                                 {inv.status === 'void' ? '—' : money(inv.balance, currency)}
                                             </td>
@@ -130,6 +145,10 @@ export default function InvoicesIndex({ invoices, filters }: { invoices: Paginat
                                                     <Badge tone={tone}>{statusLabel}</Badge>
                                                     {inv.overdue && <Badge tone="red">متأخرة</Badge>}
                                                 </div>
+                                            </td>
+                                            <td className="num">{inv.days_overdue > 0 ? <span className="font-medium text-red-700">{inv.days_overdue}</span> : <span className="text-[#d4d4d8]">—</span>}</td>
+                                            <td onClick={(e) => e.stopPropagation()}>
+                                                <a href={route('club.invoices.print', inv.id)} target="_blank" rel="noreferrer" className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/[0.045] hover:text-ink" title="طباعة الفاتورة"><Printer className="size-4" /></a>
                                             </td>
                                         </tr>
                                     );

@@ -8,6 +8,8 @@ use App\Http\Controllers\Club\BranchController;
 use App\Http\Controllers\Club\BranchSwitchController;
 use App\Http\Controllers\Club\DashboardController;
 use App\Http\Controllers\Club\NotificationController;
+use App\Http\Controllers\Club\PaperController;
+use App\Http\Controllers\Club\PaperTemplateController;
 use App\Http\Controllers\Club\RoleController;
 use App\Http\Controllers\Club\SearchController;
 use App\Http\Controllers\Club\SettingsController;
@@ -37,6 +39,12 @@ Route::post('/notifications/read-all', [NotificationController::class, 'readAll'
 Route::get('/notifications/{notification}/open', [NotificationController::class, 'open'])->whereNumber('notification')->name('notifications.open');
 Route::post('/notifications/{notification}/read', [NotificationController::class, 'read'])->whereNumber('notification')->name('notifications.read');
 
+// Papers: one print page and one PDF per document, for every type; each type checks its own permission and branch.
+Route::middleware('throttle:papers')->group(function () {
+    Route::get('/papers/{type}/{id}', [PaperController::class, 'show'])->whereNumber('id')->where('type', '[a-z_]+')->name('papers.show');
+    Route::get('/papers/{type}/{id}/pdf', [PaperController::class, 'pdf'])->whereNumber('id')->where('type', '[a-z_]+')->name('papers.pdf');
+});
+
 Route::prefix('settings')->group(function () {
     Route::get('/', [SettingsController::class, 'index'])->name('settings.index');
 
@@ -45,6 +53,15 @@ Route::prefix('settings')->group(function () {
         Route::put('/club', [SettingsController::class, 'update'])->name('settings.update');
         Route::get('/notifications', [SettingsController::class, 'notifications'])->name('settings.notifications');
         Route::put('/notifications', [SettingsController::class, 'updateNotifications'])->name('settings.notifications.update');
+    });
+
+    // قوالب الأوراق: printing templates (not WhatsApp templates, not the business documents section).
+    Route::middleware('can:papers.manage')->group(function () {
+        Route::get('/papers', [PaperTemplateController::class, 'index'])->name('settings.papers');
+        Route::get('/papers/{type}', [PaperTemplateController::class, 'edit'])->where('type', '[a-z_]+')->name('settings.papers.edit');
+        Route::post('/papers/{type}/preview', [PaperTemplateController::class, 'preview'])->where('type', '[a-z_]+')->middleware('throttle:120,1')->name('settings.papers.preview');
+        Route::put('/papers/{type}', [PaperTemplateController::class, 'update'])->where('type', '[a-z_]+')->name('settings.papers.update');
+        Route::delete('/papers/{type}', [PaperTemplateController::class, 'reset'])->where('type', '[a-z_]+')->name('settings.papers.reset');
     });
 
     Route::resource('branches', BranchController::class)->except(['show', 'create', 'edit'])->middleware('can:branches.manage');

@@ -759,7 +759,7 @@ function FinanceTab({ invoices, payments }: Props) {
                                             <td className={`num ${p.kind === 'refund' ? 'text-red-600' : ''}`}>{p.kind === 'refund' ? '− ' : ''}{money(p.amount, currency)}</td>
                                             <td><Badge tone={tone}>{p.kind === 'refund' ? 'رد مبلغ' : l}</Badge></td>
                                             <td className="text-end">
-                                                {p.status === 'completed' && p.reachable && <Link href={route('club.payments.receipt', p.id)} className="text-sm text-brand">الإيصال</Link>}
+                                                {p.status === 'completed' && p.reachable && <a href={route('club.payments.receipt', p.id)} target="_blank" rel="noreferrer" className="text-sm text-brand">الإيصال</a>}
                                             </td>
                                         </tr>
                                     );

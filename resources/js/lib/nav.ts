@@ -20,7 +20,7 @@ export type NavGroup = { sections: NavSection[]; footer?: boolean };
 const REPORT_PERMISSIONS = ['reports.view', 'reports.financial', 'accounting.view', 'dues.view', 'sales.view', 'memberships.view', 'checkin.view', 'staff_attendance.view', 'payroll.reports', 'documents.view'];
 
 /** Settings screens live behind the settings hub; none of them appears in the main menu. */
-const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'billing.view', 'accounting.manage', 'documents.manage', 'pos_devices.manage'];
+const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'billing.view', 'accounting.manage', 'documents.manage', 'pos_devices.manage', 'papers.manage'];
 
 export const NAV: NavGroup[] = [
     {
@@ -128,10 +128,10 @@ export const NAV: NavGroup[] = [
                 label: 'الرواتب والموظفون',
                 icon: Briefcase,
                 tabs: [
-                    { label: 'الموظفون', route: 'club.employees.index', permission: 'employees.view', match: 'club.employees.*' },
-                    { label: 'مسيرات الرواتب', route: 'club.payroll.index', permission: ['payroll.prepare', 'payroll.approve', 'payroll.pay', 'payroll.reports'], match: 'club.payroll.print' },
-                    { label: 'صرف الرواتب', route: 'club.payroll.payouts', permission: ['payroll.pay', 'payroll.reports'] },
-                    { label: 'الحضور والانصراف', route: 'club.staff-attendance.index', permission: 'staff_attendance.view', match: 'club.staff-attendance.*' },
+                    // Staff attendance opens from the employees page (and each employee's file); it keeps that tab lit.
+                    { label: 'الموظفون', route: 'club.employees.index', permission: 'employees.view', match: ['club.employees.*', 'club.staff-attendance.*'] },
+                    { label: 'مسيرات الرواتب', route: 'club.payroll.index', permission: ['payroll.prepare', 'payroll.edit', 'payroll.approve', 'payroll.pay', 'payroll.payslips', 'payroll.reports'], match: 'club.payroll.print' },
+                    { label: 'صرف الرواتب', route: 'club.payroll.payouts', permission: ['payroll.pay', 'payroll.payslips', 'payroll.reports'] },
                     { label: 'المسميات الوظيفية', route: 'club.job-titles.index', permission: 'employees.view', match: 'club.job-titles.*' },
                 ],
             },

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Finance\Http\Controllers;
 
+use App\Core\Papers\Papers;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -10,6 +11,7 @@ use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\PaymentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -77,19 +79,12 @@ class PaymentController extends Controller
         return back()->with('success', 'تم رفض التحويل.');
     }
 
-    public function receipt(Payment $payment, TenantContext $tenants): Response
+    /** سند القبض: the receipt paper (A4/A5, or the thermal strip with ?face=strip). Only a completed payment has one. */
+    public function receipt(Request $request, Payment $payment): HttpResponse
     {
         abort_if($payment->status !== Payment::COMPLETED, 404);
-        $payment->load('invoice', 'receiver:id,name');
-        $tenant = $tenants->require();
 
-        return Inertia::render('Finance/Payments/Receipt', [
-            'payment' => $payment->only('receipt_number', 'kind', 'method', 'amount', 'currency', 'reference') + [
-                'paid_at' => $payment->paid_at?->format('Y-m-d H:i'), 'receiver' => $payment->receiver?->name,
-                'invoice' => $payment->invoice?->only('id', 'number', 'customer_name', 'total', 'paid_total') + ['balance' => $payment->invoice?->balance()],
-            ],
-            'club' => $tenant->only('name', 'phone', 'address') + ['logo_url' => $tenant->logoUrl(), 'vat_number' => $tenant->setting('vat_number')],
-        ]);
+        return Papers::for('receipt', $payment, null, $request->string('face')->toString() === 'strip' ? 'strip' : 'sheet')->page($request->boolean('print', true));
     }
 
     public function proof(Payment $payment): StreamedResponse

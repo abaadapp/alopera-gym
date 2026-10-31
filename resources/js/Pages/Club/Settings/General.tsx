@@ -30,6 +30,7 @@ type Rules = {
     class_session_weeks_ahead: number;
     vat_rate: number;
     vat_number: string | null;
+    cr_number: string | null;
     invoice_footer: string | null;
     invoice_due_days: number;
     allow_pay_at_reception: boolean;
@@ -74,6 +75,7 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
             class_session_weeks_ahead: Number(rules.class_session_weeks_ahead),
             vat_rate: Number(rules.vat_rate),
             vat_number: rules.vat_number ?? '',
+            cr_number: rules.cr_number ?? '',
             invoice_footer: rules.invoice_footer ?? '',
             invoice_due_days: Number(rules.invoice_due_days),
             allow_pay_at_reception: Boolean(rules.allow_pay_at_reception),
@@ -185,8 +187,11 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
                             <Field label="الرقم الضريبي" error={errors['rules.vat_number']}>
                                 <Input dir="ltr" value={form.data.rules.vat_number ?? ''} onChange={(e) => setRule('vat_number', e.target.value)} />
                             </Field>
+                            <Field label="السجل التجاري" hint="يُطبع تحت هوية النادي في الفواتير والسندات" error={errors['rules.cr_number']}>
+                                <Input dir="ltr" value={form.data.rules.cr_number ?? ''} onChange={(e) => setRule('cr_number', e.target.value)} />
+                            </Field>
                             <NumberField label="مهلة السداد (أيام)" value={form.data.rules.invoice_due_days} onChange={(v) => setRule('invoice_due_days', v)} error={errors['rules.invoice_due_days']} min={0} max={90} hint="تحدد تاريخ استحقاق الفاتورة" />
-                            <Field label="تذييل الفاتورة" error={errors['rules.invoice_footer']} className="sm:col-span-2">
+                            <Field label="تذييل الفاتورة" hint="يُطبع أسفل فاتورة العميل ما لم يُكتب تذييل آخر في «قوالب الأوراق»" error={errors['rules.invoice_footer']} className="sm:col-span-2">
                                 <Textarea rows={2} value={form.data.rules.invoice_footer ?? ''} onChange={(e) => setRule('invoice_footer', e.target.value)} maxLength={500} placeholder="شكرًا لاختيارك ناديّنا. المبالغ المدفوعة غير مستردة بعد تفعيل العضوية." />
                             </Field>
                         </div>

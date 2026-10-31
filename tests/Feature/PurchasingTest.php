@@ -73,7 +73,7 @@ class PurchasingTest extends TestCase
             $this->assertSame('0.000', $water->fresh()->stock_quantity);
             $this->assertSame(0, JournalEntry::count());
         });
-        $this->actingAs($this->owner($club))->get(route('club.purchases.print', $order))->assertOk()->assertInertia(fn ($page) => $page->component('Inventory/Purchases/OrderPrint')->where('order.total', '26.250'));
+        $this->actingAs($this->owner($club))->get(route('club.purchases.print', $order))->assertOk()->assertSee('أمر شراء')->assertSee('26.250');
     }
 
     public function test_goods_arrive_in_parts_onto_the_branch_shelf_only_when_approved_and_once(): void

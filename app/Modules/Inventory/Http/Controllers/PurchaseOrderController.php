@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Http\Controllers;
 
+use App\Core\Papers\Papers;
 use App\Core\Support\Money;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
@@ -18,6 +19,7 @@ use App\Modules\Inventory\Services\SupplierBillService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -170,15 +172,10 @@ class PurchaseOrderController extends Controller
     }
 
     /** A printable order (preview and print); writes nothing. */
-    public function print(PurchaseOrder $purchaseOrder, TenantContext $tenants): Response
+    /** The purchase order paper, as sent to the supplier (the paper engine). */
+    public function print(Request $request, PurchaseOrder $purchaseOrder): HttpResponse
     {
-        $o = $purchaseOrder->load(['supplier', 'branch:id,name', 'items.product:id,name,sku']);
-        $club = $tenants->require();
-
-        return Inertia::render('Inventory/Purchases/OrderPrint', [
-            'order' => $this->present($o) + ['items' => $o->items->map(fn ($i) => $i->only('quantity', 'unit', 'unit_factor', 'unit_cost', 'line_total') + ['product' => $i->product?->name, 'sku' => $i->product?->sku])],
-            'club' => ['name' => $club->name, 'phone' => $club->phone, 'logo' => $club->logoUrl(), 'currency' => $club->currency, 'tax_number' => $club->setting('tax_number')],
-        ]);
+        return Papers::for('purchase_order', $purchaseOrder)->page($request->boolean('print', true));
     }
 
     public function approve(PurchaseOrder $purchaseOrder): RedirectResponse

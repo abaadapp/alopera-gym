@@ -183,8 +183,9 @@ class ProductsAddonsTest extends TestCase
         $this->assertSame('6.600', $this->balance($club, 'revenue_pos'));
         $this->assertSame('6.600', $this->balance($club, 'cash'));
 
+        // The receipt paper lists each add-on as its own line under its product, at the price it was sold for.
         $this->actingAs($owner)->get(route('club.sales.receipt', $sale))->assertOk()
-            ->assertInertia(fn ($page) => $page->where('sale.items.0.addons.0.name', 'Extra scoop')->where('sale.items.0.addons.1.name', 'Add banana')->where('sale.items.0.line_total', '6.600'));
+            ->assertSeeInOrder(['+ Extra scoop', '+ Add banana', 'الإجمالي', '6.600'], false);
 
         // A price changed later does not change what was sold.
         $this->asTenant($club, fn () => $scoop->update(['price' => 0.9]));

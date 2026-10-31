@@ -3,6 +3,7 @@ import { Link, useForm } from '@inertiajs/react';
 import { toast } from 'sonner';
 import { ArrowRight, Banknote, Check, Copy, CreditCard, ExternalLink, FileDown, FileMinus, MessageCircle, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import PaperPanel, { DocumentMeta, LtrDates, PaperAside, type PaperData } from '@/Components/Papers/PaperPanel';
 import { Badge, Button, Card, CardHeader, ChoiceCard, ConfirmAction, EmptyState, Field, Input, Modal, Notice, PageHeader, Select, Stat, Textarea } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
@@ -93,7 +94,7 @@ interface Props {
     intents: Intent[];
     onlinePayments: boolean;
     whatsappEnabled: boolean;
-    club: { vat_number: string | null; footer: string | null };
+    paper: PaperData;
 }
 
 const intentStatus: Record<string, ['green' | 'amber' | 'red' | 'gray', string]> = {
@@ -105,7 +106,7 @@ const intentStatus: Record<string, ['green' | 'amber' | 'red' | 'gray', string]>
 
 const channelLabel: Record<string, string> = { portal: 'البوابة', website: 'الموقع', whatsapp: 'رابط واتساب', reception: 'الاستقبال' };
 
-export default function InvoiceShow({ invoice, intents, onlinePayments, whatsappEnabled, club }: Props) {
+export default function InvoiceShow({ invoice, intents, onlinePayments, whatsappEnabled, paper }: Props) {
     const can = useCan();
     const currency = useCurrency() || invoice.currency;
     const [payOpen, setPayOpen] = useState(false);
@@ -148,35 +149,31 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                 </Notice>
             )}
 
-            <div className="grid gap-6 lg:grid-cols-3">
-                <div className="min-w-0 space-y-6 lg:col-span-2">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
+                <div className="min-w-0 space-y-4 xl:col-span-3">
+                    <DocumentMeta cells={[
+                        { label: 'الحالة', value: <span className="flex flex-wrap items-center gap-1"><Badge tone={statusTone}>{statusLabel}</Badge>{invoice.overdue && <Badge tone="red">متأخرة</Badge>}</span> },
+                        { label: invoice.billable_type === 'member' ? 'العضو' : 'العميل', value: invoice.billable_type === 'member' && invoice.billable_id ? <Link href={route('club.members.show', invoice.billable_id)} className="font-medium hover:text-brand">{invoice.customer_name}</Link> : invoice.customer_name },
+                        invoice.customer_phone ? { label: 'الهاتف', value: invoice.customer_phone, ltr: true } : null,
+                        { label: 'نوع الفاتورة', value: invoiceType[invoice.type] ?? invoice.type },
+                        { label: 'تاريخ الإصدار', value: invoice.issue_date, ltr: true },
+                        invoice.due_date ? { label: 'الاستحقاق', value: invoice.due_date, ltr: true } : null,
+                        invoice.paid_at ? { label: 'تاريخ السداد', value: invoice.paid_at, ltr: true } : null,
+                        invoice.creator ? { label: 'أصدرها', value: invoice.creator } : null,
+                        invoice.notes ? { label: 'ملاحظات تُطبع', value: invoice.notes, wide: true } : null,
+                    ]} />
+
                     <Card padded={false}>
-                        <div className="flex flex-wrap items-start justify-between gap-4 p-5">
-                            <div>
-                                <p className="text-xs text-muted">فاتورة إلى</p>
-                                {invoice.billable_type === 'member' && invoice.billable_id ? (
-                                    <Link href={route('club.members.show', invoice.billable_id)} className="text-lg font-semibold hover:text-brand">{invoice.customer_name}</Link>
-                                ) : (
-                                    <p className="text-lg font-semibold">{invoice.customer_name}</p>
-                                )}
-                                {invoice.customer_phone && <p className="text-sm text-muted num">{invoice.customer_phone}</p>}
-                            </div>
-                            <dl className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                                <Stat label="تاريخ الإصدار" value={date(invoice.issue_date)} />
-                                <Stat label="الاستحقاق" value={date(invoice.due_date)} />
-                                {invoice.paid_at && <Stat label="تاريخ السداد" value={invoice.paid_at} />}
-                                {club.vat_number && <Stat label="الرقم الضريبي" value={<span className="num">{club.vat_number}</span>} />}
-                            </dl>
-                        </div>
+                        <div className="p-5 pb-3"><CardHeader title="البنود" className="mb-0" /></div>
                         <div className="overflow-x-auto">
                             <table className="table-base">
                                 <thead>
-                                    <tr><th>البند</th><th>الكمية</th><th>السعر</th><th>الخصم</th><th>الإجمالي</th></tr>
+                                    <tr><th>البيان</th><th>الكمية</th><th>السعر</th><th>الخصم</th><th>الإجمالي</th></tr>
                                 </thead>
                                 <tbody>
                                     {invoice.items.map((item) => (
                                         <tr key={item.id}>
-                                            <td className="font-medium">{item.description}</td>
+                                            <td className="font-medium"><LtrDates text={item.description} /></td>
                                             <td className="num">{Number(item.quantity)}</td>
                                             <td className="num">{money(item.unit_price, currency)}</td>
                                             <td className="num text-muted">{Number(item.discount) > 0 ? money(item.discount, currency) : '—'}</td>
@@ -187,7 +184,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                             </table>
                         </div>
                         <div className="flex justify-end p-5">
-                            <dl className="w-full max-w-xs space-y-2 text-sm">
+                            <dl className="w-full max-w-xs space-y-2 border-t border-line pt-4 text-sm">
                                 <Row label="المجموع" value={money(invoice.subtotal, currency)} />
                                 {Number(invoice.discount_total) > 0 && <Row label="الخصومات" value={`- ${money(invoice.discount_total, currency)}`} />}
                                 {Number(invoice.tax_total) > 0 && <Row label={`ضريبة القيمة المضافة (${Number(invoice.tax_rate)}%)`} value={money(invoice.tax_total, currency)} />}
@@ -203,12 +200,6 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                                 {Number(invoice.refund_due) > 0 && <Row label="مستحق ردّه للعميل" value={money(invoice.refund_due, currency)} tone="text-amber-700" />}
                             </dl>
                         </div>
-                        {(invoice.notes || club.footer) && (
-                            <div className="border-t border-line px-5 py-4 text-sm text-muted">
-                                {invoice.notes && <p>{invoice.notes}</p>}
-                                {club.footer && <p className="mt-1 text-xs">{club.footer}</p>}
-                            </div>
-                        )}
                     </Card>
 
                     <Card padded={false}>
@@ -294,9 +285,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                             </ul>
                         </Card>
                     )}
-                </div>
 
-                <div className="space-y-6">
                     {canCredit && (
                         <Card>
                             <CardHeader title="استرداد أو تخفيض" subtitle="إشعار دائن مرقّم يخفّض صافي الفاتورة مع إبقاء الفاتورة الأصلية كما هي." />
@@ -367,6 +356,10 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                         </Card>
                     )}
                 </div>
+
+                <PaperAside className="xl:col-span-2">
+                    <PaperPanel paper={paper} printUrl={route('club.invoices.print', invoice.id)} pdfUrl={route('club.papers.pdf', { type: 'invoice', id: invoice.id })} note="الورقة نفسها التي يراها العميل في رابطه وتُطبع وتُنزَّل؛ شكلها من «قوالب الأوراق» في الإعدادات." />
+                </PaperAside>
             </div>
 
             <RecordPaymentModal open={payOpen} onClose={() => setPayOpen(false)} invoice={invoice} currency={currency} />

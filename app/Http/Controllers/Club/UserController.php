@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Club;
 
 use App\Core\Audit\AuditLogger;
 use App\Core\Auth\DemoAccounts;
+use App\Core\Auth\Grants;
 use App\Core\Auth\SystemRoles;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
@@ -16,6 +17,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -24,17 +26,21 @@ class UserController extends Controller
 {
     public function __construct(private readonly TenantContext $tenants) {}
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $tid = $this->tenants->require()->id;
+        $actor = $request->user();
 
         return Inertia::render('Club/Settings/Users', [
-            'users' => User::ofTenant($tid)->with('role:id,name,key', 'branch:id,name')->orderBy('name')->get()
+            'users' => User::ofTenant($tid)->with('role', 'branch:id,name')->orderBy('name')->get()
                 ->map(fn (User $u) => $u->only('id', 'name', 'email', 'phone', 'is_active', 'role_id', 'branch_id') + [
                     'role' => $u->role?->name, 'role_key' => $u->role?->key, 'branch' => $u->branch?->name,
                     'last_login_at' => $u->last_login_at?->format('Y-m-d H:i'),
+                    'own_permissions' => $u->hasOwnPermissions(),
+                    // An account that opens more than this user is shown, not edited.
+                    'may_manage' => Grants::mayManage($actor, $u),
                 ]),
-            'roles' => Role::orderBy('id')->get(['id', 'name', 'key']),
+            'roles' => Role::orderBy('id')->get(['id', 'name', 'key', 'permissions'])->map(fn (Role $r) => $r->only('id', 'name', 'key') + ['assignable' => Grants::mayAssign($actor, $r)]),
             'branches' => Branch::where('is_active', true)->get(['id', 'name']),
         ]);
     }
@@ -43,6 +49,7 @@ class UserController extends Controller
     {
         $limits->assertCanAddStaff();
         $data = $this->validated($request);
+        $this->guardRole($request, (int) $data['role_id']);
 
         $user = new User(collect($data)->only('name', 'email', 'phone', 'password')->all());
         $user->email = strtolower($user->email);
@@ -59,7 +66,11 @@ class UserController extends Controller
     public function update(Request $request, User $user, AuditLogger $audit): RedirectResponse
     {
         $this->ensureOwnClub($user);
+        abort_unless($user->id === $request->user()->id || Grants::mayManage($request->user(), $user), 403, 'هذا الحساب يفتح ما لا تفتحه، فلا تعدّله.');
         $data = $this->validated($request, $user);
+        if ((int) $data['role_id'] !== $user->role_id) {
+            $this->guardRole($request, (int) $data['role_id']);
+        }
 
         // The club must always keep at least one active owner.
         $ownerRole = Role::where('key', SystemRoles::OWNER)->value('id');
@@ -87,6 +98,7 @@ class UserController extends Controller
     public function destroy(Request $request, User $user, AuditLogger $audit): RedirectResponse
     {
         $this->ensureOwnClub($user);
+        abort_unless(Grants::mayManage($request->user(), $user), 403, 'هذا الحساب يفتح ما لا تفتحه، فلا توقفه.');
         if ($user->id === $request->user()->id) {
             return back()->with('error', 'لا يمكنك إيقاف حسابك.');
         }
@@ -98,6 +110,15 @@ class UserController extends Controller
         $audit->log('user.deactivated', $user);
 
         return back()->with('success', 'تم إيقاف حساب المستخدم.');
+    }
+
+    /** A role is given only by someone who holds everything it opens (the owner role: only by an owner). */
+    private function guardRole(Request $request, int $roleId): void
+    {
+        $role = Role::findOrFail($roleId);
+        if (! Grants::mayAssign($request->user(), $role)) {
+            throw ValidationException::withMessages(['role_id' => 'لا يمكنك إسناد دور يفتح ما لا تملكه.']);
+        }
     }
 
     private function ensureOwnClub(User $user): void

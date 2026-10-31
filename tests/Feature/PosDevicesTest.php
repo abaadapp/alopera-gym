@@ -164,7 +164,7 @@ class PosDevicesTest extends TestCase
         // The receipt follows the device printer's paper width.
         $water = $this->product($club, $branch->id);
         $sale = $this->asTenant($club, fn () => app(PosService::class)->checkout([['product_id' => $water->id, 'quantity' => 1]], 'cash', device: $device->fresh()));
-        $this->actingAs($owner)->get(route('club.sales.receipt', $sale))->assertInertia(fn ($page) => $page->where('paper', 58));
+        $this->actingAs($owner)->get(route('club.sales.receipt', $sale))->assertOk()->assertSee('size: 58mm auto', false)->assertDontSee('size: 80mm auto', false);
 
         // Reception sells but does not manage devices.
         $reception = $this->staff($club, 'reception');

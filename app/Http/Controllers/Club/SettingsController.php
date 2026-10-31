@@ -66,6 +66,7 @@ class SettingsController extends Controller
             'rules.class_session_weeks_ahead' => ['integer', 'between:1,12'],
             'rules.vat_rate' => ['numeric', 'between:0,30'],
             'rules.vat_number' => ['nullable', 'string', 'max:40'],
+            'rules.cr_number' => ['nullable', 'string', 'max:40'],
             'rules.invoice_footer' => ['nullable', 'string', 'max:500'],
             'rules.invoice_due_days' => ['integer', 'between:0,90'],
             'rules.allow_pay_at_reception' => ['boolean'],

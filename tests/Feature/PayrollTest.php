@@ -184,7 +184,7 @@ class PayrollTest extends TestCase
     public function test_nobody_but_the_owner_changes_her_own_salary(): void
     {
         $club = $this->club();
-        $hr = $this->asTenant($club, fn () => Role::create(['key' => 'hr', 'name' => 'شؤون الموظفين', 'permissions' => ['employees.view', 'employees.manage', 'payroll.salaries']]));
+        $hr = $this->asTenant($club, fn () => Role::create(['key' => 'hr', 'name' => 'شؤون الموظفين', 'permissions' => ['employees.view', 'employees.manage', 'payroll.salaries', 'payroll.compensation']]));
         $user = $this->staff($club, 'reception');
         $user->forceFill(['role_id' => $hr->id])->save();
         $mine = $this->employee($club, ['user_id' => $user->id]);

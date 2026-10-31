@@ -2,8 +2,9 @@
 
 namespace App\Modules\Finance\Http\Controllers;
 
+use App\Core\Papers\Papers;
+use App\Core\Support\Money;
 use App\Core\Tenancy\BranchContext;
-use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
@@ -15,6 +16,7 @@ use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -23,7 +25,11 @@ class InvoiceController extends Controller
     public function index(Request $request): Response
     {
         $invoices = BranchContext::scope(Invoice::query())
-            ->when($request->string('status')->toString(), fn ($q, $s) => $s === 'open' ? $q->open() : $q->where('status', $s))
+            ->when($request->string('status')->toString(), fn ($q, $s) => match ($s) {
+                'open' => $q->open(),
+                'overdue' => $q->overdue(),
+                default => $q->where('status', $s),
+            })
             ->when($request->string('type')->toString(), fn ($q, $t) => $q->where('type', $t))
             ->when($request->string('q')->toString(), fn ($q, $term) => $q->where(fn ($w) => $w->where('number', 'ilike', "%{$term}%")->orWhere('customer_name', 'ilike', "%{$term}%")->orWhere('customer_phone', 'like', '%'.preg_replace('/\D/', '', $term).'%')))
             ->when($request->date('from'), fn ($q, $d) => $q->where('issue_date', '>=', $d))
@@ -31,7 +37,21 @@ class InvoiceController extends Controller
             ->latest('id')->paginate(25)->withQueryString()
             ->through(fn (Invoice $i) => self::row($i));
 
-        return Inertia::render('Finance/Invoices/Index', ['invoices' => $invoices, 'filters' => $request->only('status', 'type', 'q', 'from', 'to')]);
+        // What is owed across the branch in view: still open, past due, due within a week, and owed back to customers.
+        $open = 'greatest(total - credited_total - paid_total, 0)';
+        $totals = BranchContext::scope(Invoice::query())->where('status', '!=', Invoice::VOID)->selectRaw(
+            "coalesce(sum(case when status in ('issued','partially_paid') then {$open} end), 0) as receivable,
+             coalesce(sum(case when status in ('issued','partially_paid') and due_date < ? then {$open} end), 0) as overdue,
+             coalesce(sum(case when status in ('issued','partially_paid') and due_date between ? and ? then {$open} end), 0) as due_soon,
+             coalesce(sum(greatest(paid_total - (total - credited_total), 0)), 0) as refund_due",
+            [today()->toDateString(), today()->toDateString(), today()->addDays(7)->toDateString()],
+        )->first();
+
+        return Inertia::render('Finance/Invoices/Index', [
+            'invoices' => $invoices,
+            'totals' => collect(['receivable', 'overdue', 'due_soon', 'refund_due'])->mapWithKeys(fn ($k) => [$k => Money::normalize($totals->{$k} ?? 0)]),
+            'filters' => $request->only('status', 'type', 'q', 'from', 'to'),
+        ]);
     }
 
     /** @return array<string, mixed> */
@@ -44,6 +64,7 @@ class InvoiceController extends Controller
             'issue_date' => $i->issue_date->toDateString(),
             'due_date' => $i->due_date?->toDateString(),
             'overdue' => $i->isOpen() && $i->due_date && $i->due_date->lt(today()),
+            'days_overdue' => $i->isOpen() && $i->due_date && $i->due_date->lt(today()) ? (int) $i->due_date->diffInDays(today()) : 0,
         ];
     }
 
@@ -73,7 +94,7 @@ class InvoiceController extends Controller
         return redirect()->route('club.invoices.show', $invoice)->with('success', 'تم إصدار الفاتورة '.$invoice->number);
     }
 
-    public function show(Request $request, Invoice $invoice, OnlinePaymentService $online, TenantContext $tenants): Response
+    public function show(Request $request, Invoice $invoice, OnlinePaymentService $online): Response
     {
         $invoice->load(['items', 'payments.receiver:id,name', 'creator:id,name', 'creditNotes.creator:id,name']);
 
@@ -94,24 +115,15 @@ class InvoiceController extends Controller
             'intents' => PaymentIntent::where('invoice_id', $invoice->id)->latest()->limit(10)->get()->map(fn ($i) => $i->only('id', 'reference', 'amount', 'status', 'channel', 'failure_reason') + ['created_at' => $i->created_at->format('Y-m-d H:i')]),
             'onlinePayments' => $online->available(),
             'whatsappEnabled' => app(WhatsAppService::class)->enabled(),
-            'club' => ['vat_number' => $tenants->require()->setting('vat_number'), 'footer' => $tenants->require()->setting('invoice_footer')],
+            // The invoice as it prints: the same paper as the print page, the PDF and the customer's link.
+            'paper' => Papers::for('invoice', $invoice)->toArray(),
         ]);
     }
 
-    public function print(Invoice $invoice, TenantContext $tenants): Response
+    /** The print page: the invoice paper with the browser's print dialog. */
+    public function print(Request $request, Invoice $invoice): HttpResponse
     {
-        $invoice->load(['items', 'creditNotes', 'payments' => fn ($q) => $q->where('status', 'completed')]);
-        $tenant = $tenants->require();
-
-        return Inertia::render('Finance/Invoices/Print', [
-            'invoice' => self::row($invoice) + [
-                'notes' => $invoice->notes,
-                'items' => $invoice->items->map(fn ($i) => $i->only('description', 'quantity', 'unit_price', 'discount', 'line_total')),
-                'payments' => $invoice->payments->map(fn ($p) => $p->only('receipt_number', 'kind', 'method', 'reference', 'amount') + ['paid_at' => $p->paid_at?->format('Y-m-d H:i')]),
-                'credit_notes' => $invoice->creditNotes->map(fn ($n) => $n->only('number', 'amount', 'reason') + ['issued_at' => $n->created_at->toDateString()]),
-            ],
-            'club' => $tenant->only('name', 'legal_name', 'phone', 'email', 'address') + ['logo_url' => $tenant->logoUrl(), 'vat_number' => $tenant->setting('vat_number'), 'footer' => $tenant->setting('invoice_footer')],
-        ]);
+        return Papers::for('invoice', $invoice)->page($request->boolean('print', true));
     }
 
     public function void(Request $request, Invoice $invoice, InvoiceService $service): RedirectResponse

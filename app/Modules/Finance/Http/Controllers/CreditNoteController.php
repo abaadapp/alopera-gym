@@ -2,8 +2,8 @@
 
 namespace App\Modules\Finance\Http\Controllers;
 
+use App\Core\Papers\Papers;
 use App\Core\Support\Money;
-use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
@@ -11,8 +11,7 @@ use App\Modules\Finance\Services\CreditNoteService;
 use App\Modules\Finance\Services\PaymentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Inertia\Response;
+use Illuminate\Http\Response as HttpResponse;
 
 class CreditNoteController extends Controller
 {
@@ -50,22 +49,9 @@ class CreditNoteController extends Controller
         return back()->with('success', 'تم تسجيل رد المبلغ.');
     }
 
-    public function print(CreditNote $creditNote, TenantContext $tenants): Response
+    /** The print page of the credit note — the paper engine, as on screen and in the PDF. */
+    public function print(Request $request, CreditNote $creditNote): HttpResponse
     {
-        $creditNote->load(['invoice', 'creator:id,name', 'refunds' => fn ($q) => $q->where('status', 'completed')]);
-        $tenant = $tenants->require();
-        $invoice = $creditNote->invoice;
-
-        return Inertia::render('Finance/CreditNotes/Print', [
-            'note' => $creditNote->only('number', 'amount', 'refunded_total', 'currency', 'reason') + [
-                'issued_at' => $creditNote->created_at->format('Y-m-d H:i'),
-                'creator' => $creditNote->creator?->name,
-                'refunds' => $creditNote->refunds->map(fn ($p) => $p->only('receipt_number', 'method', 'amount', 'reference') + ['paid_at' => $p->paid_at?->format('Y-m-d H:i')]),
-                'invoice' => $invoice->only('id', 'number', 'customer_name', 'customer_phone', 'total', 'credited_total', 'paid_total') + [
-                    'issue_date' => $invoice->issue_date->toDateString(), 'net_total' => $invoice->netTotal(), 'balance' => $invoice->balance(),
-                ],
-            ],
-            'club' => $tenant->only('name', 'legal_name', 'phone', 'address') + ['logo_url' => $tenant->logoUrl(), 'vat_number' => $tenant->setting('vat_number')],
-        ]);
+        return Papers::for('credit_note', $creditNote)->page($request->boolean('print', true));
     }
 }

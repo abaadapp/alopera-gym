@@ -3,6 +3,7 @@
 namespace App\Modules\Finance\Services;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Papers\PaperIssuer;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
@@ -91,6 +92,8 @@ final class InvoiceService
                 'total' => Money::fromMinor($total),
                 'paid_total' => '0',
                 'currency' => $tenant->currency,
+                // The club as it is today, printed on this invoice from now on (PaperIssuer).
+                'issuer' => PaperIssuer::stamp($tenant),
                 'notes' => $options['notes'] ?? null,
                 'public_token' => Str::random(48),
                 'created_by' => Auth::guard('web')->id(),

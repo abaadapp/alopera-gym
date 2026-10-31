@@ -2,8 +2,8 @@
 
 namespace App\Modules\Inventory\Http\Controllers;
 
+use App\Core\Papers\Papers;
 use App\Core\Tenancy\BranchContext;
-use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Finance\Models\Payment;
@@ -15,6 +15,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -90,23 +91,20 @@ class SalesController extends Controller
     }
 
     /** A sale's printable receipt: for whoever sells or follows sales. */
-    public function receipt(Request $request, Sale $sale, TenantContext $tenants, PosDevices $devices): Response
+    /**
+     * The sale's receipt: the thermal strip at the width of the printer here (this browser's device), else of the
+     * device it was sold on, else the club's template setting; ?face=sheet gives the A4/A5 invoice instead.
+     */
+    public function receipt(Request $request, Sale $sale, PosDevices $devices): HttpResponse
     {
         abort_unless($request->user()->canAny(['pos.sell', 'sales.view', 'orders.manage']), 403);
         $this->ensureBranch($request->user(), $sale);
-        $sale->load(['items.addons', 'cashier:id,name', 'customer', 'invoice:id,number,tax_rate,tax_total,paid_total']);
-        $tenant = $tenants->require();
+        if ($request->string('face')->toString() === 'sheet') {
+            return Papers::for('sale', $sale)->page($request->boolean('print', true));
+        }
+        $width = ($devices->current($request) ?? $sale->posDevice)?->loadMissing('peripherals')->printer()?->paper_width;
 
-        return Inertia::render('Sales/Receipt', [
-            'sale' => $this->row($sale) + [
-                'subtotal' => $sale->subtotal, 'discount' => $sale->discount, 'tax' => $sale->tax,
-                'invoice' => $sale->invoice?->number, 'phone' => $sale->customer_phone,
-                'items' => $sale->items->map(fn (SaleItem $i) => $i->summary()),
-            ],
-            'club' => ['name' => $tenant->name, 'phone' => $tenant->phone, 'logo' => $tenant->logoUrl(), 'currency' => $tenant->currency],
-            // The paper of the printer here (this browser's device), else of the device it was sold on; 80 mm otherwise.
-            'paper' => ($devices->current($request) ?? $sale->posDevice)?->loadMissing('peripherals')->printer()?->paper_width ?? 80,
-        ]);
+        return Papers::for('sale', $sale, null, 'strip', $width ? $width.'mm' : null)->page($request->boolean('print', true));
     }
 
     /** @return array<string, mixed> */

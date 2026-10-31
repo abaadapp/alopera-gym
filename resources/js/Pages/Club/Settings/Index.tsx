@@ -1,4 +1,4 @@
-import { BellRing, Building2, Clock, Database, FileClock, Landmark, MonitorSmartphone, ScrollText, ShoppingBag, SlidersHorizontal, UserCog, type LucideIcon } from 'lucide-react';
+import { BellRing, Building2, Clock, Database, FileClock, FileText, Landmark, MonitorSmartphone, ScrollText, ShoppingBag, SlidersHorizontal, UserCog, type LucideIcon } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { NavCard, PageHeader } from '@/Components/ui';
 import { useCan, useShared } from '@/hooks/useShared';
@@ -34,6 +34,7 @@ const SECTIONS: { title: string; items: Entry[] }[] = [
         items: [
             { title: 'إعدادات المبيعات والمتجر', description: 'متجر الموقع، والدفع عند الاستلام أو عبر Paymob، ومهلة الدفع الإلكتروني', route: 'club.settings.sales', permission: 'settings.manage', icon: ShoppingBag, module: 'sales' },
             { title: 'أجهزة نقاط البيع', description: 'أجهزة البيع في كل فرع وتفعيلها، والطابعات والملحقات، والحساب البنكي لجهاز البطاقات', route: 'club.settings.pos-devices', permission: 'pos_devices.manage', icon: MonitorSmartphone, module: 'sales' },
+            { title: 'قوالب الأوراق', description: 'شكل الفواتير والسندات والإيصالات وكشوف الرواتب المطبوعة: الشعار والتذييل والمقاس والحقول، بمعاينة حية', route: 'club.settings.papers', permission: 'papers.manage', icon: FileText },
             { title: 'تنبيهات المستندات', description: 'متى يُنبَّه قبل انتهاء المستندات، وإرسال التنبيه عبر واتساب', route: 'club.settings.documents', permission: 'documents.manage', icon: FileClock },
         ],
     },

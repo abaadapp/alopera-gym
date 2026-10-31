@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Core\Auth\PermissionRegistry;
 use App\Core\Auth\SystemRoles;
 use App\Core\Tenancy\TenantScope;
 use App\Modules\Gym\Models\Trainer;
@@ -27,7 +28,7 @@ class User extends Authenticatable
     use HasFactory, Notifiable;
 
     /** Club membership and role are always assigned explicitly, never mass-assigned from a request. */
-    protected $guarded = ['id', 'is_platform_admin', 'tenant_id', 'role_id'];
+    protected $guarded = ['id', 'is_platform_admin', 'tenant_id', 'role_id', 'custom_permissions'];
 
     protected $attributes = ['is_active' => true, 'is_platform_admin' => false, 'locale' => 'ar'];
 
@@ -45,6 +46,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_platform_admin' => 'boolean',
             'is_active' => 'boolean',
+            'custom_permissions' => 'array',
         ];
     }
 
@@ -104,7 +106,18 @@ class User extends Authenticatable
             return $this->permissionCache = [];
         }
 
+        // A list set for this person replaces the role's (the owner role always keeps everything).
+        if (is_array($this->custom_permissions) && ! $this->isOwner()) {
+            return $this->permissionCache = PermissionRegistry::sanitize($this->custom_permissions);
+        }
+
         return $this->permissionCache = $this->role->expandedPermissions();
+    }
+
+    /** Does this person have a list of their own instead of their role's? */
+    public function hasOwnPermissions(): bool
+    {
+        return is_array($this->custom_permissions) && ! $this->isOwner();
     }
 
     public function hasPermission(string $permission): bool
