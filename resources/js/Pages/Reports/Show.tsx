@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { Building2, CalendarRange, Info } from 'lucide-react';
+import { Info } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import ExportMenu from '@/Components/Reports/ExportMenu';
 import { DuesBody, FinanceBody, MovementBody, StatementsBody, type Dues, type Movement, type PeriodReport, type Statements } from '@/Components/Reports/Finance';
@@ -9,7 +9,7 @@ import { PayoutsBody, PayrollBody, type Payouts, type Payroll } from '@/Componen
 import { DocumentsBody, RenewalsBody, type Documents, type Renewals } from '@/Components/Reports/Documents';
 import { BranchesBody, SalesBody, type Branches, type Sales } from '@/Components/Reports/Sales';
 import { TablesBody, type Tables } from '@/Components/Reports/Tables';
-import { Button, Card, Checkbox, Input, Notice, PageHeader, Select, BackLink } from '@/Components/ui';
+import { BackLink, Button, Card, Checkbox, Input, Notice, PageHeader, Select, Tabs } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 import { date } from '@/lib/format';
 
@@ -19,6 +19,7 @@ interface Props {
     /** Which report (not `key`: React keeps that name for itself). */
     kind: string;
     title: string;
+    description: string;
     /** «period»: dates and a comparison; «snapshot»: how things stand today. */
     mode: 'period' | 'snapshot';
     compare: boolean;
@@ -51,7 +52,7 @@ function Chip({ on, onClick, children, small }: { on: boolean; onClick: () => vo
             type="button"
             onClick={onClick}
             aria-pressed={on}
-            className={cn('rounded-full font-medium transition-colors', small ? 'h-8 px-3 text-[12px]' : 'h-9 px-4 text-[13px]', on ? 'bg-[#111] text-white' : 'border border-line bg-white text-[#6b7280] hover:border-[#d4d4d4] hover:text-[#111]')}
+            className={cn('rounded-full border font-medium transition-colors', small ? 'px-3 py-1 text-[12px]' : 'px-4 py-1.5 text-[13px]', on ? 'border-[#111] bg-[#111] text-white' : 'border-[#e5e7eb] bg-white text-[#4b5563] hover:border-[#d1d5db]')}
         >
             {children}
         </button>
@@ -63,7 +64,17 @@ function Chip({ on, onClick, children, small }: { on: boolean; onClick: () => vo
  * its own choices), the branch, the report's own filters — then its figures, charts and tables, and its export
  * for exactly what is on screen. Everything is in the address, so a report can be shared as a link.
  */
-export default function ReportShow({ kind, title, mode, compare, filters, branchFilter, canFinancial, canExport, data }: Props) {
+/** A filter of the filter card: a 12px caption over its 40px field. */
+function Captioned({ label, children }: { label: string; children: ReactNode }) {
+    return (
+        <label className="flex min-w-[10rem] flex-1 flex-col gap-1 sm:max-w-[16rem]">
+            <span className="text-[12px] text-[#6b7280]">{label}</span>
+            {children}
+        </label>
+    );
+}
+
+export default function ReportShow({ kind, title, description, mode, compare, filters, branchFilter, canFinancial, canExport, data }: Props) {
     const { url } = usePage();
     const query = Object.fromEntries(new URLSearchParams(url.split('?')[1] ?? '')) as Record<string, string>;
     const [from, setFrom] = useState(filters.from);
@@ -91,63 +102,61 @@ export default function ReportShow({ kind, title, mode, compare, filters, branch
     return (
         <ClubLayout title={title}>
             <PageHeader
-                back={<BackLink href={route('club.reports.index')}>التقارير</BackLink>}
+                back={<BackLink href={route('club.reports.index')}>كل التقارير</BackLink>}
                 title={title}
-                subtitle={<>{subtitle}{branchFilter && <> · {branchFilter.name}</>}</>}
+                subtitle={description}
                 actions={<ExportMenu href={canExport ? route('club.reports.export', kind) : null} params={exportParams} title={title} size="md" />}
             />
 
-            <Card className="mb-6">
-                {mode === 'period' && (
-                    <div className="flex flex-wrap items-end justify-between gap-4">
-                        <div className="flex flex-wrap gap-2" role="group" aria-label="الفترة">
-                            {presets.map((p) => <Chip key={p.key} on={filters.preset === p.key} onClick={() => go({ preset: p.key, from: null, to: null })}>{p.label}</Chip>)}
-                        </div>
-                        <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); go({ preset: null, from, to }); }}>
-                            <CalendarRange className="size-4 text-muted" />
-                            <Input type="date" className="w-40" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="من" />
-                            <span className="text-muted">—</span>
-                            <Input type="date" className="w-40" value={to} onChange={(e) => setTo(e.target.value)} aria-label="إلى" />
-                            <Button type="submit" variant="secondary">عرض</Button>
+            {mode === 'period' && (
+                <Tabs
+                    className="mb-4"
+                    tabs={presets.map((p) => ({ key: p.key, label: p.label }))}
+                    value={filters.preset}
+                    onChange={(key) => go({ preset: key, from: null, to: null })}
+                    trailing={
+                        <form className="flex items-center gap-2 py-1.5" onSubmit={(e) => { e.preventDefault(); go({ preset: null, from, to }); }}>
+                            <Input type="date" className="h-8 w-[8.5rem] text-[13px]" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="من" />
+                            <span className="text-[#9ca3af]">—</span>
+                            <Input type="date" className="h-8 w-[8.5rem] text-[13px]" value={to} onChange={(e) => setTo(e.target.value)} aria-label="إلى" />
+                            <Button type="submit" variant="outline" size="sm">عرض</Button>
                         </form>
-                    </div>
-                )}
+                    }
+                />
+            )}
 
-                <ReportFilters kind={kind} data={data} option={option} go={go} branch={branchFilter && (
-                    branchFilter.choices.length > 0 ? (
-                        <label className="flex items-center gap-2 text-[13px] text-muted">
-                            <Building2 className="size-4" />
-                            <span className="sr-only">الفرع</span>
-                            <Select className="h-9 w-48 py-1 text-[13px]" value={filters.branch ?? 'all'} onChange={(e) => go({ branch: e.target.value })} aria-label="الفرع">
-                                <option value="all">كل الفروع</option>
-                                {branchFilter.choices.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                            </Select>
-                        </label>
-                    ) : (
-                        <span className="flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[13px] text-muted"><Building2 className="size-4" /> {branchFilter.name}</span>
-                    )
-                )} first={mode === 'snapshot'} />
+            <ReportFilters kind={kind} data={data} option={option} go={go} branch={branchFilter && (
+                branchFilter.choices.length > 0 ? (
+                    <Captioned label="الفرع">
+                        <Select value={filters.branch ?? 'all'} onChange={(e) => go({ branch: e.target.value })}>
+                            <option value="all">كل الفروع</option>
+                            {branchFilter.choices.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                        </Select>
+                    </Captioned>
+                ) : (
+                    <Captioned label="الفرع"><span className="flex h-10 items-center rounded-[10px] border border-line bg-[#fafafa] px-3 text-sm text-[#4b4b4b]">{branchFilter.name}</span></Captioned>
+                )
+            )} compareRow={mode === 'period' && compare ? (
+                <div className="flex basis-full flex-wrap items-center gap-2">
+                    <span className="text-[12px] text-[#6b7280]">قارن مع:</span>
+                    {compareModes.map((m) => (
+                        <Chip key={m.key} small on={customCompare ? m.key === 'custom' : filters.compare === m.key}
+                            onClick={() => (m.key === 'custom' ? setCustomCompare(true) : (setCustomCompare(false), go({ compare: m.key === 'previous' ? null : m.key, compare_from: null, compare_to: null })))}>
+                            {m.label}
+                        </Chip>
+                    ))}
+                    {customCompare && (
+                        <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); go({ compare: 'custom', compare_from: compareFrom, compare_to: compareTo }); }}>
+                            <Input type="date" className="h-8 w-[8.5rem] text-[13px]" value={compareFrom} onChange={(e) => setCompareFrom(e.target.value)} aria-label="مقارنة من" />
+                            <span className="text-[#9ca3af]">—</span>
+                            <Input type="date" className="h-8 w-[8.5rem] text-[13px]" value={compareTo} onChange={(e) => setCompareTo(e.target.value)} aria-label="مقارنة إلى" />
+                            <Button type="submit" variant="outline" size="sm">قارن</Button>
+                        </form>
+                    )}
+                </div>
+            ) : null} />
 
-                {mode === 'period' && compare && (
-                    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
-                        <span className="text-[13px] text-muted">قارن مع:</span>
-                        {compareModes.map((m) => (
-                            <Chip key={m.key} small on={customCompare ? m.key === 'custom' : filters.compare === m.key}
-                                onClick={() => (m.key === 'custom' ? setCustomCompare(true) : (setCustomCompare(false), go({ compare: m.key === 'previous' ? null : m.key, compare_from: null, compare_to: null })))}>
-                                {m.label}
-                            </Chip>
-                        ))}
-                        {customCompare && (
-                            <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); go({ compare: 'custom', compare_from: compareFrom, compare_to: compareTo }); }}>
-                                <Input type="date" className="w-40" value={compareFrom} onChange={(e) => setCompareFrom(e.target.value)} aria-label="مقارنة من" />
-                                <span className="text-muted">—</span>
-                                <Input type="date" className="w-40" value={compareTo} onChange={(e) => setCompareTo(e.target.value)} aria-label="مقارنة إلى" />
-                                <Button type="submit" variant="secondary" size="sm">قارن</Button>
-                            </form>
-                        )}
-                    </div>
-                )}
-            </Card>
+            <p className="mb-3 text-[12px] text-[#9ca3af]">{subtitle}{branchFilter && <> · {branchFilter.name}</>}</p>
 
             {data.empty && (
                 <Notice tone="gray" icon={<Info />} className="mb-4">
@@ -161,7 +170,7 @@ export default function ReportShow({ kind, title, mode, compare, filters, branch
 }
 
 /** The report's own filters, with the branch, in one row of the filter card. */
-function ReportFilters({ kind, data, option, go, branch, first }: { kind: string; data: Data; option: (k: string) => unknown; go: (p: Record<string, string | null>) => void; branch: ReactNode; first: boolean }) {
+function ReportFilters({ kind, data, option, go, branch, compareRow }: { kind: string; data: Data; option: (k: string) => unknown; go: (p: Record<string, string | null>) => void; branch: ReactNode; compareRow: ReactNode }) {
     let own: ReactNode = null;
     if (kind === 'statements') {
         const view = (data as unknown as Statements).view;
@@ -170,15 +179,17 @@ function ReportFilters({ kind, data, option, go, branch, first }: { kind: string
         const d = data as unknown as Movement;
         own = (
             <>
-                <Select className="h-9 w-56 py-1 text-[13px]" value={d.options.account_id ?? ''} onChange={(e) => go({ account_id: e.target.value || null })} aria-label="الحساب">
-                    <option value="">كل الحسابات</option>
-                    {d.accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </Select>
+                <Captioned label="الحساب">
+                    <Select value={d.options.account_id ?? ''} onChange={(e) => go({ account_id: e.target.value || null })}>
+                        <option value="">الكل</option>
+                        {d.accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </Select>
+                </Captioned>
                 {[['', 'الكل'], ['in', 'داخل'], ['out', 'خارج']].map(([k, t]) => <Chip key={k} small on={(d.options.direction ?? '') === k} onClick={() => go({ direction: k || null })}>{t}</Chip>)}
             </>
         );
     } else if (kind === 'dues') {
-        own = <Checkbox label="المتأخرة فقط" checked={Boolean(option('overdue'))} onChange={(e) => go({ overdue: e.target.checked ? '1' : null })} />;
+        own = <Checkbox className="h-10 text-[13px]" label="المتأخرة فقط" checked={Boolean(option('overdue'))} onChange={(e) => go({ overdue: e.target.checked ? '1' : null })} />;
     } else if (kind === 'expiring') {
         own = (
             <>
@@ -191,34 +202,46 @@ function ReportFilters({ kind, data, option, go, branch, first }: { kind: string
     } else if (kind === 'staff-attendance') {
         const d = data as unknown as StaffAttendance;
         own = (
-            <Select className="h-9 w-56 py-1 text-[13px]" value={d.options.user_id ?? ''} onChange={(e) => go({ user_id: e.target.value || null })} aria-label="الموظف">
-                <option value="">كل الموظفين</option>
-                {d.staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </Select>
+            <Captioned label="الموظف">
+                <Select value={d.options.user_id ?? ''} onChange={(e) => go({ user_id: e.target.value || null })}>
+                    <option value="">الكل</option>
+                    {d.staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
+            </Captioned>
         );
     } else if (kind === 'stock-movements') {
         const d = data as unknown as Tables;
         own = (
-            <Select className="h-9 w-56 py-1 text-[13px]" value={String(d.options.type ?? '')} onChange={(e) => go({ type: e.target.value || null })} aria-label="نوع الحركة">
-                <option value="">كل أنواع الحركة</option>
-                {Object.entries((d.options.types ?? {}) as Record<string, string>).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </Select>
+            <Captioned label="نوع الحركة">
+                <Select value={String(d.options.type ?? '')} onChange={(e) => go({ type: e.target.value || null })}>
+                    <option value="">الكل</option>
+                    {Object.entries((d.options.types ?? {}) as Record<string, string>).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </Select>
+            </Captioned>
         );
     } else if (kind === 'documents') {
         const d = data as unknown as Documents;
         own = (
             <>
                 {[['', 'كل السارية'], ['expiring', 'قريبة الانتهاء'], ['expired', 'منتهية'], ['none', 'بلا تاريخ انتهاء']].map(([k, t]) => <Chip key={k} small on={(d.options.state ?? '') === k} onClick={() => go({ state: k || null })}>{t}</Chip>)}
-                <Select className="h-9 w-48 py-1 text-[13px]" value={d.options.type ?? ''} onChange={(e) => go({ type: e.target.value || null })} aria-label="نوع المستند">
-                    <option value="">كل الأنواع</option>
-                    {d.types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </Select>
+                <Captioned label="نوع المستند">
+                    <Select value={d.options.type ?? ''} onChange={(e) => go({ type: e.target.value || null })}>
+                        <option value="">الكل</option>
+                        {d.types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </Select>
+                </Captioned>
             </>
         );
     }
 
-    if (!own && !branch) return null;
-    return <div className={cn('flex flex-wrap items-center gap-2', !first && 'mt-4 border-t border-line pt-4')}>{branch}{branch && own && <span className="mx-1 hidden h-5 w-px bg-line sm:block" />}{own}</div>;
+    if (!own && !branch && !compareRow) return null;
+    return (
+        <Card padded={false} className="mb-6 flex flex-wrap items-end gap-3 p-4">
+            {branch}
+            {own && <div className="flex flex-wrap items-end gap-2">{own}</div>}
+            {compareRow}
+        </Card>
+    );
 }
 
 function Body({ kind, data, canFinancial, to }: { kind: string; data: Data; canFinancial: boolean; to: string }) {

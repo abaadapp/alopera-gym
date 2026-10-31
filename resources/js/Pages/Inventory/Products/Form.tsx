@@ -314,7 +314,7 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
 
                     <Card className="mt-6 flex flex-col-reverse gap-3 p-4 sm:flex-row sm:justify-end">
                         <Button variant="outline" href={route('club.products.index')} className="sm:w-32">إلغاء</Button>
-                        <Button type="submit" loading={form.processing} className="sm:w-40">{product ? 'حفظ التعديلات' : 'إضافة المنتج'}</Button>
+                        <Button type="submit" icon={<Check />} loading={form.processing} className="sm:w-40">{product ? 'حفظ التغييرات' : 'حفظ المنتج'}</Button>
                     </Card>
                 </form>
             </div>
@@ -330,7 +330,7 @@ function SwitchRow({ checked, onChange, label, hint }: { checked: boolean; onCha
         <div className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
             <div>
                 <p className="text-sm font-medium text-ink">{label}</p>
-                <p className="mt-0.5 text-[12px] leading-5 text-muted">{hint}</p>
+                <p className="mt-0.5 text-[12px] leading-5 text-[#9ca3af]">{hint}</p>
             </div>
             <Switch checked={checked} onChange={onChange} label={label} />
         </div>

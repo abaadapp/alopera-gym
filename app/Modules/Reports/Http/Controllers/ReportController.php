@@ -47,6 +47,7 @@ class ReportController extends Controller
         return Inertia::render('Reports/Show', [
             'kind' => $report,
             'title' => $entry['title'],
+            'description' => $entry['desc'],
             'mode' => $entry['mode'],
             'compare' => $entry['compare'],
             'filters' => $filters->toArray(),

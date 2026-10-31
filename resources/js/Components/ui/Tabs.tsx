@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn';
  * A row of tabs under a line: 14px medium labels, 16px apart, the current one underlined. A tab may carry a count (grey,
  * after the label) or a status dot in its badge's colour, so a row of state tabs reads like the badges under it.
  */
-export default function Tabs<T extends string>({ tabs, value, onChange, className }: { tabs: { key: T; label: ReactNode; count?: number | null; dot?: string }[]; value: T; onChange: (key: T) => void; className?: string }) {
+export default function Tabs<T extends string>({ tabs, value, onChange, className, trailing }: { tabs: { key: T; label: ReactNode; count?: number | null; dot?: string }[]; value: T; onChange: (key: T) => void; className?: string; trailing?: ReactNode }) {
     return (
         <div role="tablist" className={cn('-mx-1 flex items-center gap-1 overflow-x-auto border-b border-line px-1', className)}>
             {tabs.map((tab) => (
@@ -25,6 +25,8 @@ export default function Tabs<T extends string>({ tabs, value, onChange, classNam
                     {tab.count != null && <span className="text-[12px] text-[#9ca3af] num">{tab.count}</span>}
                 </button>
             ))}
+            {/* Whatever sits at the far end of the row (a date range beside period tabs). */}
+            {trailing && <div className="ms-auto shrink-0 ps-4">{trailing}</div>}
         </div>
     );
 }

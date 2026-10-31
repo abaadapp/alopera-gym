@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import { Link } from '@inertiajs/react';
 import { ArrowDownRight, ArrowUpRight, Building2, ChevronRight } from 'lucide-react';
 import { useShared } from '@/hooks/useShared';
@@ -6,11 +6,20 @@ import SectionTabs from '@/Components/SectionTabs';
 import { cn } from '@/lib/cn';
 import { useAdmin } from './AdminScope';
 
+const Flat = createContext(false);
+
+/** Inside a card that already frames them (a profile's tab panel), cards are drawn as plain sections. */
+export function FlatCards({ children }: { children: ReactNode }) {
+    return <Flat.Provider value={true}>{children}</Flat.Provider>;
+}
+
 /**
  * The content card: white, 16px corners, a hairline edge and the faintest shadow; 20px inside. `fill` makes it take
  * the height of its row as a column, so a CardFooter sits at the same height in every card of the row.
  */
 export function Card({ children, className, padded = true, fill = false }: { children: ReactNode; className?: string; padded?: boolean; fill?: boolean }) {
+    const flat = useContext(Flat);
+    if (flat) return <div className={cn('min-w-0', fill && 'flex h-full flex-col', className)}>{children}</div>;
     return <div className={cn('card', padded && 'p-5', fill && 'flex h-full flex-col', className)}>{children}</div>;
 }
 

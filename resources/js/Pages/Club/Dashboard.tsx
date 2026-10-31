@@ -1,7 +1,8 @@
+import type { ReactNode } from 'react';
 import { Link } from '@inertiajs/react';
-import { CalendarClock, CalendarX, CreditCard, FileClock, Landmark, LogIn, PackageX, Snowflake, UserPlus, Users, Wallet } from 'lucide-react';
+import { ArrowLeft, CalendarClock, CalendarX, CreditCard, FileClock, Landmark, LogIn, PackageX, Snowflake, UserPlus, Users, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, BarTrend, Card, CardHeader, EmptyState, ItemCard, Notice, PageHeader, StatCard } from '@/Components/ui';
+import { AreaChart, Badge, Button, Card, CardHeader, PageHeader, StatCard } from '@/Components/ui';
 import DashboardTiles, { type TilePreferences } from '@/Components/DashboardTiles';
 import { useCurrency } from '@/hooks/useShared';
 import { date, money, number, time, dayCount } from '@/lib/format';
@@ -41,65 +42,31 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
                 }}
             />
 
-            {documents && (documents.alerts.length > 0 || documents.expired > 0) && (
-                <Card className="mt-4">
-                    <CardHeader
-                        title={<span className="flex items-center gap-2"><FileClock className="size-4" /> تنبيهات المستندات</span>}
-                        subtitle={`${number(documents.expiring)} قريب الانتهاء · ${number(documents.expired)} منتهٍ`}
-                        actions={<Link href={route('club.business-documents.index', { view: documents.expired ? 'expired' : 'expiring' })} className="text-[13px] text-muted hover:text-ink">قسم المستندات</Link>}
-                        className="mb-2"
-                    />
-                    <ul className="divide-y divide-line">
-                        {documents.alerts.map((a) => (
-                            <li key={a.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                                <span className="truncate font-medium">{a.name}</span>
-                                <span className="flex shrink-0 items-center gap-2">
-                                    <span className="text-xs text-muted num">{date(a.expiry_date)}</span>
-                                    {a.days_left !== null && a.days_left < 0 ? <Badge tone="red">منتهٍ</Badge> : <Badge tone="amber">{a.days_left === 0 ? 'ينتهي اليوم' : `بعد ${dayCount(a.days_left ?? 0)}`}</Badge>}
-                                </span>
-                            </li>
-                        ))}
-                    </ul>
-                </Card>
-            )}
-
-            {(Number(kpis.pending_transfers) > 0 || Number(kpis.low_stock) > 0) && (
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    {Number(kpis.pending_transfers) > 0 && (
-                        <Notice tone="amber" icon={<Landmark />} href={route('club.payments.index', { status: 'pending' })}>
-                            {number(kpis.pending_transfers)} تحويل بنكي بانتظار التأكيد
-                        </Notice>
-                    )}
-                    {Number(kpis.low_stock) > 0 && (
-                        <Notice tone="red" icon={<PackageX />} href={route('club.products.index', { low: 1 })}>
-                            {number(kpis.low_stock)} منتج وصل لحد إعادة الطلب
-                        </Notice>
-                    )}
-                </div>
-            )}
-
-            <div className="mt-6 grid gap-6 lg:grid-cols-3">
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
                 {financial && (
                     <Card className="lg:col-span-2">
                         <CardHeader title="التحصيل خلال آخر 30 يومًا" subtitle="صافي الدفعات المكتملة بعد المردودات" />
-                        <BarTrend data={revenue_trend.map((d) => ({ label: d.date.slice(5), value: d.amount }))} valueLabel={(v) => money(v, currency)} />
+                        <AreaChart data={revenue_trend.map((d) => ({ label: d.date.slice(5), value: d.amount }))} valueLabel={(v) => money(v, currency)} />
                     </Card>
                 )}
                 <Card className={financial ? '' : 'lg:col-span-3'}>
-                    <CardHeader title="حصص اليوم" actions={<Link href={route('club.sessions.index')} className="text-sm text-brand">الكل</Link>} />
+                    <CardHeader title="حصص اليوم" actions={<AllLink href={route('club.sessions.index')} />} />
                     {today_sessions.length === 0 ? (
-                        <EmptyState title="لا حصص اليوم" />
+                        <p className="py-6 text-center text-[13px] text-[#9ca3af]">لا حصص اليوم</p>
                     ) : (
-                        <ul className="space-y-2">
+                        <ul className="flex flex-col gap-3">
                             {today_sessions.map((s) => (
                                 <li key={s.id}>
-                                    <ItemCard
-                                        href={route('club.sessions.show', s.id)}
-                                        accent={s.color}
-                                        title={s.program}
-                                        meta={`${time(s.time)} · ${s.trainer ?? '—'}`}
-                                        trailing={<Badge tone={s.booked >= s.capacity ? 'red' : 'brand'}>{s.booked >= s.capacity ? 'مكتملة' : <span className="num">{s.booked}/{s.capacity}</span>}</Badge>}
-                                    />
+                                    <Link href={route('club.sessions.show', s.id)} className="flex items-center justify-between gap-3 rounded-[10px] transition-colors hover:bg-[#fafafa]">
+                                        <span className="flex min-w-0 items-center gap-2.5">
+                                            <span className="h-8 w-1 shrink-0 rounded-full" style={{ background: s.color }} />
+                                            <span className="min-w-0">
+                                                <span className="block truncate text-[13px] text-[#111]">{s.program}</span>
+                                                <span className="block text-[11px] text-[#9ca3af]"><span className="num">{time(s.time)}</span> · {s.trainer ?? '—'}</span>
+                                            </span>
+                                        </span>
+                                        <span className="shrink-0 text-[12px] tabular-nums text-[#6b7280]">{s.booked >= s.capacity ? <Badge tone="red">مكتملة</Badge> : <span className="num">{s.booked}/{s.capacity}</span>}</span>
+                                    </Link>
                                 </li>
                             ))}
                         </ul>
@@ -107,32 +74,79 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
                 </Card>
             </div>
 
-            <Card className="mt-6" padded={false}>
-                <div className="p-5 pb-0">
-                    <CardHeader title="عضويات قريبة من الانتهاء" subtitle="تواصل معهم للتجديد" />
-                </div>
-                {expiring.length === 0 ? (
-                    <EmptyState title="لا توجد عضويات تنتهي خلال أسبوع" />
-                ) : (
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <Card className="lg:col-span-2" padded={false}>
+                    <div className="p-5 pb-0">
+                        <CardHeader title="عضويات قريبة من الانتهاء" subtitle="تواصل معهم للتجديد" actions={<AllLink href={route('club.memberships.index', { filter: 'expiring' })} />} />
+                    </div>
                     <div className="overflow-x-auto">
                         <table className="table-base">
                             <thead>
                                 <tr><th>العضو</th><th>الباقة</th><th>تنتهي في</th><th>المتبقي</th></tr>
                             </thead>
                             <tbody>
-                                {expiring.map((m) => (
+                                {expiring.length === 0 ? (
+                                    <tr><td colSpan={4} className="px-4 py-14 text-center text-sm whitespace-normal text-[#9ca3af]">لا توجد عضويات تنتهي خلال أسبوع</td></tr>
+                                ) : expiring.map((m) => (
                                     <tr key={m.id}>
-                                        <td><Link href={route('club.members.show', m.member_id)} className="font-medium hover:text-brand">{m.member}</Link></td>
+                                        <td><Link href={route('club.members.show', m.member_id)} className="font-medium text-[#111] hover:underline">{m.member}</Link></td>
                                         <td>{m.plan}</td>
-                                        <td>{date(m.ends_on)}</td>
+                                        <td className="num text-[#6b7280]">{date(m.ends_on)}</td>
                                         <td><Badge tone={m.days_left <= 2 ? 'red' : 'amber'}><span className="num">{dayCount(m.days_left)}</span></Badge></td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
-                )}
-            </Card>
+                </Card>
+
+                <div className="flex flex-col gap-4">
+                    {documents && (
+                        <Card>
+                            <CardHeader title="تنبيهات المستندات" subtitle={`${number(documents.expiring)} قريب الانتهاء · ${number(documents.expired)} منتهٍ`} actions={<AllLink href={route('club.business-documents.index', { view: documents.expired ? 'expired' : 'expiring' })} />} />
+                            {documents.alerts.length === 0 ? (
+                                <p className="py-6 text-center text-[13px] text-[#9ca3af]">لا مستندات تنتهي قريبًا</p>
+                            ) : (
+                                <ul className="flex flex-col gap-3">
+                                    {documents.alerts.map((a) => (
+                                        <li key={a.id} className="flex items-center justify-between gap-3">
+                                            <span className="min-w-0">
+                                                <span className="block truncate text-[13px] text-[#111]">{a.name}</span>
+                                                <span className="block text-[11px] text-[#9ca3af] num">{date(a.expiry_date)}</span>
+                                            </span>
+                                            {a.days_left !== null && a.days_left < 0 ? <Badge tone="red">منتهٍ</Badge> : <Badge tone="amber">{a.days_left === 0 ? 'ينتهي اليوم' : `بعد ${dayCount(a.days_left ?? 0)}`}</Badge>}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </Card>
+                    )}
+                    <Card>
+                        <CardHeader title="يحتاج متابعة" />
+                        <ul className="flex flex-col gap-3">
+                            <FollowUp icon={<Landmark />} label="تحويلات بنكية بانتظار التأكيد" value={Number(kpis.pending_transfers)} href={route('club.payments.index', { status: 'pending' })} />
+                            <FollowUp icon={<PackageX />} label="منتجات وصلت لحد إعادة الطلب" value={Number(kpis.low_stock)} href={route('club.products.index', { low: 1 })} />
+                            <FollowUp icon={<FileClock />} label="فواتير متأخرة" value={Number(kpis.overdue_invoices)} href={route('club.invoices.index', { state: 'overdue' })} />
+                        </ul>
+                    </Card>
+                </div>
+            </div>
         </ClubLayout>
     );
+}
+
+/** A card's way to its full list: «الكل» with a leading arrow. */
+function AllLink({ href }: { href: string }) {
+    return <Button variant="ghost" size="sm" href={href}>الكل <ArrowLeft /></Button>;
+}
+
+/** A count that needs someone's attention; a link while there is something to see, a quiet line otherwise. */
+function FollowUp({ icon, label, value, href }: { icon: ReactNode; label: string; value: number; href: string }) {
+    const row = (
+        <span className="flex items-center justify-between gap-3">
+            <span className="flex min-w-0 items-center gap-2.5 text-[13px] text-[#111] [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-[#9ca3af]">{icon}<span className="truncate">{label}</span></span>
+            <span className={value > 0 ? 'shrink-0 text-[12px] font-semibold tabular-nums text-[#b91c1c]' : 'shrink-0 text-[12px] tabular-nums text-[#9ca3af]'}><span className="num">{number(value)}</span></span>
+        </span>
+    );
+    return <li>{value > 0 ? <Link href={href} className="block rounded-[8px] hover:bg-[#fafafa]">{row}</Link> : row}</li>;
 }

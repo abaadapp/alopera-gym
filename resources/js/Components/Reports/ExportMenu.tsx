@@ -5,8 +5,8 @@ import { Dropdown, DropdownItem, DropdownLabel } from '@/Components/ui/Dropdown'
 import { cn } from '@/lib/cn';
 
 const FORMATS = [
-    { key: 'xlsx', label: 'Excel (.xlsx)', icon: FileSpreadsheet },
-    { key: 'csv', label: 'CSV (.csv)', icon: FileText },
+    { key: 'xlsx', label: 'تصدير كملف إكسل', icon: FileSpreadsheet },
+    { key: 'csv', label: 'تصدير كملف CSV', icon: FileText },
 ] as const;
 
 /**
@@ -19,7 +19,8 @@ const FORMATS = [
  */
 export default function ExportMenu({ href, params, title, scope, size = 'sm' }: { href: string | null; params?: Record<string, string>; title: string; scope?: string; size?: 'sm' | 'md' }) {
     const [busy, setBusy] = useState(false);
-    const box = cn('inline-flex items-center gap-1.5 rounded-[10px] border border-line bg-white font-medium text-[#111] transition-colors', size === 'sm' ? 'h-8 px-2.5 text-[12px]' : 'h-9 px-3 text-[13px]');
+    // Beside the page's other header buttons it is one of them: 40px, outlined, «تصدير» with the download mark.
+    const box = cn('inline-flex items-center rounded-[10px] border border-[#dcdcdc] bg-white font-medium text-[#111] transition-colors', size === 'sm' ? 'h-8 gap-1.5 px-2.5 text-[12px] [&_svg]:size-3.5' : 'h-10 gap-2 px-4 text-sm [&_svg]:size-[18px]');
 
     if (!href) {
         return (
@@ -66,12 +67,12 @@ export default function ExportMenu({ href, params, title, scope, size = 'sm' }: 
     return (
         <Dropdown
             label={`تصدير ${title}`}
-            panelClassName="min-w-[13rem]"
+            panelClassName="w-56"
             trigger={({ open }) => (
-                <span className={cn(box, open ? 'border-[#d4d4d4] bg-[#fafafa]' : 'hover:border-[#d4d4d4] hover:bg-[#fafafa]')}>
-                    {busy ? <LoaderCircle className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                <span className={cn(box, open ? 'bg-[#fafafa]' : 'hover:bg-[#fafafa]')}>
+                    {busy ? <LoaderCircle className="animate-spin" /> : <Download />}
                     تصدير
-                    <ChevronDown className={cn('size-3.5 text-[#9ca3af] transition-transform', open && 'rotate-180')} />
+                    {size === 'sm' && <ChevronDown className={cn('text-[#9ca3af] transition-transform', open && 'rotate-180')} />}
                 </span>
             )}
         >

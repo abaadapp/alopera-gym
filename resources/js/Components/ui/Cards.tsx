@@ -158,3 +158,20 @@ export function Notice({ tone = 'amber', icon, href, onClick, className, childre
     if (onClick) return <button type="button" onClick={onClick} className={cls}>{icon}<span className="min-w-0 flex-1">{children}</span></button>;
     return <div className={cls}>{icon}<div className="min-w-0 flex-1">{children}</div></div>;
 }
+
+/** A section of a full-page form: an 18px icon in a 36px grey square, a bold title and a grey hint, then its fields. */
+export function FormSection({ icon: Icon, title, hint, children, locked }: { icon: LucideIcon; title: string; hint: string; children: ReactNode; locked?: ReactNode }) {
+    return (
+        <div className="card min-w-0 p-6">
+            <div className="mb-5 flex items-start gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[#f3f4f6] text-ink"><Icon className="size-[18px]" /></span>
+                <div className="min-w-0">
+                    <h3 className="font-bold text-ink">{title}</h3>
+                    <p className="mt-0.5 text-[12px] text-[#9ca3af]">{hint}</p>
+                </div>
+            </div>
+            {locked ? <p className="rounded-[10px] bg-[#fffbeb] px-3 py-2 text-[12px] leading-relaxed text-[#b45309]">{locked}</p> : children}
+        </div>
+    );
+}
+

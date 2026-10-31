@@ -3,9 +3,10 @@ import {
     ArrowDownLeft, ArrowUpCircle, ArrowUpRight, Ban, BarChart3, Briefcase, CalendarCheck, CalendarDays, CalendarX, Clock, Copy, DoorOpen, Dumbbell, FileMinus, Fingerprint,
     History, LogIn, Percent, Receipt, RefreshCw, Scale, ShoppingBag, Snowflake, Ticket, TrendingDown, Undo2, UserCheck, UserPlus, UserRound, Users, Wallet, XCircle, type LucideIcon,
 } from 'lucide-react';
-import { Card, CardHeader, EmptyState, StatCard } from '@/Components/ui';
+import { Card, CardHeader, StatCard } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { money, number } from '@/lib/format';
+import { cn } from '@/lib/cn';
 
 export type Metric = { current: number | string; previous: number | string; change: number | null };
 export type Tone = 'brand' | 'green' | 'amber' | 'red' | 'gray' | 'blue' | 'violet';
@@ -66,8 +67,14 @@ export function TableCard({ title, subtitle, head, empty, className, actions, fo
     title: string; subtitle?: string; head: ReactNode[]; empty: string; className?: string; actions?: ReactNode; footer?: ReactNode; children: ReactNode[];
 }) {
     return (
-        <Card padded={false} className={className}>
-            <div className="p-5 pb-2"><CardHeader title={title} subtitle={subtitle} actions={actions} className="mb-0" /></div>
+        <Card padded={false} className={cn('overflow-hidden', className)}>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
+                <div className="min-w-0">
+                    <h3 className="font-bold text-[#111]">{title}</h3>
+                    {subtitle && <p className="mt-0.5 text-[13px] text-[#6b7280]">{subtitle}</p>}
+                </div>
+                {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+            </div>
             {children.length ? (
                 <div className="overflow-x-auto">
                     <table className="table-base">
@@ -76,7 +83,7 @@ export function TableCard({ title, subtitle, head, empty, className, actions, fo
                     </table>
                 </div>
             ) : (
-                <EmptyState title={empty} />
+                <p className="px-4 py-14 text-center text-sm text-[#9ca3af]">{empty}</p>
             )}
             {footer}
         </Card>
@@ -88,7 +95,7 @@ export function ChartCard({ title, className, empty = 'لا بيانات', has, 
     return (
         <Card className={className}>
             <CardHeader title={title} />
-            {has ? children : <EmptyState title={empty} />}
+            {has ? children : <p className="py-12 text-center text-sm text-[#9ca3af]">{empty}</p>}
         </Card>
     );
 }

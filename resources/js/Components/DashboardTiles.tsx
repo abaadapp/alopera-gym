@@ -61,22 +61,27 @@ export default function DashboardTiles({ tiles, preferences }: { tiles: Record<s
                     <div className="me-auto flex flex-wrap items-center gap-1.5">
                         {away.length === 0 ? (
                             <span className="text-[12px] text-[#9ca3af]">كل البطاقات ظاهرة. أخفِ ما لا تحتاجه، أو غيّر ترتيبه بالأسهم.</span>
-                        ) : away.map((k) => (
-                            <button key={k} type="button" onClick={() => setHidden(hidden.filter((h) => h !== k))}
-                                className="inline-flex items-center gap-1 rounded-full border border-dashed border-[#d1d5db] px-2.5 py-1 text-[12px] text-[#6b7280] transition-colors hover:border-[#111] hover:text-[#111]">
-                                <Plus className="size-3" /> {tiles[k]!.label}
-                            </button>
-                        ))}
+                        ) : (
+                            <>
+                                <span className="text-[12px] text-[#9ca3af]">أضف:</span>
+                                {away.map((k) => (
+                                    <button key={k} type="button" onClick={() => setHidden(hidden.filter((h) => h !== k))}
+                                        className="inline-flex items-center gap-1 rounded-full bg-[#f2f2f0] px-2.5 py-1 text-[12px] text-[#6b7280] transition-colors hover:bg-[#e8e8e6]">
+                                        <Plus className="size-3" /> {tiles[k]!.label}
+                                    </button>
+                                ))}
+                            </>
+                        )}
                     </div>
                 )}
                 {editing ? (
                     <>
-                        <Button size="sm" variant="ghost" icon={<RotateCcw className="size-3.5" />} onClick={reset}>الافتراضي</Button>
-                        <Button size="sm" variant="ghost" icon={<X className="size-3.5" />} onClick={cancel}>إلغاء</Button>
-                        <Button size="sm" icon={<Check className="size-3.5" />} loading={saving} onClick={save}>حفظ</Button>
+                        <Button size="sm" variant="outline" icon={<RotateCcw />} onClick={reset}>إعادة الافتراضي</Button>
+                        <Button size="sm" variant="ghost" icon={<X />} onClick={cancel}>إلغاء</Button>
+                        <Button size="sm" icon={<Check />} loading={saving} onClick={save}>تم</Button>
                     </>
                 ) : (
-                    <Button size="sm" variant="ghost" icon={<SlidersHorizontal className="size-3.5" />} onClick={() => setEditing(true)}>تخصيص البطاقات</Button>
+                    <Button size="sm" variant="outline" icon={<SlidersHorizontal />} onClick={() => setEditing(true)}>تخصيص</Button>
                 )}
             </div>
 
@@ -94,7 +99,7 @@ export default function DashboardTiles({ tiles, preferences }: { tiles: Record<s
                     </div>
                 ))}
             </StatGrid>
-            {shown.length === 0 && <p className="rounded-[16px] border border-dashed border-[#d1d5db] p-6 text-center text-sm text-[#6b7280]">أخفيت كل البطاقات. أعد ما تحتاجه من «تخصيص البطاقات».</p>}
+            {shown.length === 0 && <p className="rounded-[14px] border border-dashed border-[#e8e8e8] py-10 text-center text-sm text-[#9ca3af]">أخفيت كل البطاقات. أعد ما تحتاجه من «تخصيص».</p>}
         </div>
     );
 }

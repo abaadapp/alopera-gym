@@ -1,12 +1,13 @@
-import { Link, useForm } from '@inertiajs/react';
+import { Link, router, useForm } from '@inertiajs/react';
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import QRCode from 'react-qr-code';
 import {
-    ArrowRight, CalendarPlus, CreditCard, Download, FileText, KeyRound, MessageCircle, Pencil, Phone, Plus, QrCode, RefreshCw,
-    Send, Snowflake, Trash2, UserRound, Wallet, Repeat, Play, Ban, Fingerprint,
+    CalendarPlus, CreditCard, Download, FileText, HeartPulse, KeyRound, MessageCircle, MoreVertical, Pencil, Phone, Plus, QrCode, RefreshCw,
+    Send, ShieldCheck, Snowflake, Trash2, UserRound, Wallet, Repeat, Play, Ban, Fingerprint,
 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, CardHeader, ChoiceCard, ConfirmAction, EmptyState, Field, Input, Modal, Select, Stat, Tabs, Textarea } from '@/Components/ui';
+import { BackLink, Badge, Button, Card, CardHeader, ChoiceCard, ConfirmAction, EmptyState, Field, FlatCards, Input, Modal, PageHeader, Select, StatCard, StatGrid, Tabs, Textarea } from '@/Components/ui';
+import { Dropdown, DropdownItem, DropdownSeparator } from '@/Components/ui/Dropdown';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, money, whatsappUrl, dayCount } from '@/lib/format';
 import { bookingStatus, checkinReason, invoiceStatus, invoiceType, label, memberStatus, membershipKind, membershipStatus, messageStatus, paymentMethod, paymentStatus } from '@/lib/labels';
@@ -108,7 +109,7 @@ interface Props {
     onlinePayments: boolean;
 }
 
-type TabKey = 'overview' | 'memberships' | 'finance' | 'attendance' | 'pt' | 'documents' | 'crm' | 'whatsapp' | 'access';
+type TabKey = 'memberships' | 'finance' | 'attendance' | 'pt' | 'documents' | 'crm' | 'whatsapp' | 'access';
 
 /* ───────────────────────── helpers ───────────────────────── */
 
@@ -144,17 +145,15 @@ function kb(size: number): string {
     return size > 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(size / 1024))} KB`;
 }
 
-function Info({ label: l, children }: { label: string; children: ReactNode }) {
-    return <Stat label={l} value={children} />;
-}
-
 /* ───────────────────────── page ───────────────────────── */
 
 export default function MemberShow(props: Props) {
     const { member, memberships } = props;
     const can = useCan();
     const currency = useCurrency();
-    const [tab, setTab] = useState<TabKey>('overview');
+    const [tab, setTab] = useState<TabKey>('memberships');
+    const [deleting, setDeleting] = useState(false);
+    const [busy, setBusy] = useState(false);
     const [sellOpen, setSellOpen] = useState(false);
     const [qrOpen, setQrOpen] = useState(false);
     const [portalOpen, setPortalOpen] = useState(false);
@@ -167,7 +166,6 @@ export default function MemberShow(props: Props) {
 
     const tabs = useMemo(() => {
         const list: { key: TabKey; label: string; count?: number | null }[] = [
-            { key: 'overview', label: 'نظرة عامة' },
             { key: 'memberships', label: 'العضويات', count: memberships.length },
         ];
         if (can('invoices.view')) list.push({ key: 'finance', label: 'الفواتير والدفعات', count: props.invoices.length });
@@ -180,87 +178,118 @@ export default function MemberShow(props: Props) {
         return list;
     }, [can, memberships.length, props]);
 
+    const deleteMember = () => router.delete(route('club.members.destroy', member.id), { onStart: () => setBusy(true), onFinish: () => { setBusy(false); setDeleting(false); } });
+    const contact: [string, ReactNode][] = [
+        ['الهاتف', <a href={`tel:+${member.phone}`} className="num hover:underline">{member.phone_display}</a>],
+        ['هاتف إضافي', member.phone_alt ? <span className="num">{member.phone_alt}</span> : '—'],
+        ['البريد', member.email ? <span dir="ltr">{member.email}</span> : '—'],
+        ['العنوان', member.address ?? '—'],
+        ['الفرع', member.branch ?? '—'],
+        ['تاريخ الميلاد', date(member.date_of_birth)],
+        ['الرقم المدني', member.national_id ? <span className="num">{member.national_id}</span> : '—'],
+        ['الجنسية', member.nationality ?? '—'],
+        ['مصدر التسجيل', member.source ? (SOURCES[member.source] ?? member.source) : '—'],
+    ];
+
     return (
         <ClubLayout title={member.full_name}>
-            <Link href={route('club.members.index')} className="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-brand">
-                <ArrowRight className="size-4" /> الأعضاء
-            </Link>
-
-            {/* Header card */}
-            <Card className="mb-6">
-                <div className="flex flex-col gap-5 md:flex-row md:items-center">
-                    <div className="flex flex-1 items-center gap-4">
-                        {member.photo_url ? (
-                            <img src={member.photo_url} alt="" className="size-20 rounded-2xl object-cover" />
-                        ) : (
-                            <span className="grid size-20 place-items-center rounded-2xl bg-brand-50 text-brand"><UserRound className="size-8" /></span>
+            <PageHeader
+                back={<BackLink href={route('club.members.index')}>الأعضاء</BackLink>}
+                title="ملف العضو"
+                subtitle={<><span className="num">{member.member_no}</span> · <span className="num">{member.phone_display}</span>{member.joined_on && <> · عضو منذ {date(member.joined_on)}</>}</>}
+                actions={
+                    <>
+                        <Button variant="outline" href={whatsappUrl(member.phone)} external icon={<MessageCircle />}>واتساب</Button>
+                        {can('memberships.sell') && member.status !== 'blocked' && (
+                            <Button icon={<CalendarPlus />} onClick={() => setSellOpen(true)}>{memberships.length > 0 ? 'تجديد / بيع عضوية' : 'بيع عضوية'}</Button>
                         )}
-                        <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <h1 className="text-2xl font-semibold">{member.full_name}</h1>
-                                {member.status !== 'active' && <Badge tone={personTone}>{personLabel}</Badge>}
-                            </div>
-                            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
-                                <span className="num">{member.member_no}</span>
-                                <a href={`tel:+${member.phone}`} className="inline-flex items-center gap-1 hover:text-brand"><Phone className="size-3.5" /><span className="num">{member.phone_display}</span></a>
-                                {member.joined_on && <span>منذ {date(member.joined_on)}</span>}
-                            </p>
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                                <Badge tone={statusTone}>{statusLabel}</Badge>
-                                {current && (
-                                    <span className="text-sm text-ink/80">
-                                        {current.plan} · حتى {date(current.ends_on)} (<span className="num">{dayCount(current.days_left)}</span>)
-                                        {current.sessions_left !== null && <> · <span className="num">{current.sessions_left}</span> حصة متبقية</>}
-                                    </span>
+                        {(member.qr_token || can('members.manage') || can('members.delete')) && (
+                            <Dropdown label="المزيد" panelClassName="w-52" trigger={() => <span className="grid size-10 place-items-center rounded-[10px] border border-[#dcdcdc] bg-white text-[#111] hover:bg-[#fafafa]"><MoreVertical className="size-[18px]" /></span>}>
+                                {(close) => (
+                                    <>
+                                        {member.qr_token && <DropdownItem onClick={() => { close(); setQrOpen(true); }}><QrCode className="text-[#6b7280]" /> رمز الدخول QR</DropdownItem>}
+                                        {can('members.manage') && (
+                                            <>
+                                                <DropdownItem onClick={() => { close(); setPortalOpen(true); }}><KeyRound className="text-[#6b7280]" /> {member.has_portal_access ? 'كلمة مرور البوابة' : 'تفعيل بوابة العضو'}</DropdownItem>
+                                                <DropdownItem href={route('club.members.edit', member.id)}><Pencil className="text-[#6b7280]" /> تعديل البيانات</DropdownItem>
+                                            </>
+                                        )}
+                                        {can('members.delete') && (
+                                            <>
+                                                <DropdownSeparator />
+                                                <DropdownItem destructive onClick={() => { close(); setDeleting(true); }}><Trash2 /> حذف العضو</DropdownItem>
+                                            </>
+                                        )}
+                                    </>
                                 )}
-                                {hasPending && <Badge tone="amber">طلب بانتظار الدفع</Badge>}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-col gap-3 md:items-end">
-                        {can('invoices.view') && (
-                            <div className={`rounded-xl px-4 py-2 text-sm ${Number(member.balance) > 0 ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                                الرصيد المستحق: <span className="font-semibold num">{money(member.balance, currency)}</span>
-                            </div>
+                            </Dropdown>
                         )}
-                        <div className="flex flex-wrap gap-2">
-                            {can('memberships.sell') && member.status !== 'blocked' && (
-                                <Button size="sm" icon={<CalendarPlus className="size-4" />} onClick={() => setSellOpen(true)}>
-                                    {memberships.length > 0 ? 'تجديد / بيع عضوية' : 'بيع عضوية'}
-                                </Button>
-                            )}
-                            <Button size="sm" variant="outline" href={whatsappUrl(member.phone)} external icon={<MessageCircle className="size-4" />}>واتساب</Button>
-                            {member.qr_token && <Button size="sm" variant="outline" icon={<QrCode className="size-4" />} onClick={() => setQrOpen(true)}>QR</Button>}
-                            {can('members.manage') && (
-                                <>
-                                    <Button size="sm" variant="outline" icon={<KeyRound className="size-4" />} onClick={() => setPortalOpen(true)}>
-                                        {member.has_portal_access ? 'كلمة مرور البوابة' : 'تفعيل البوابة'}
-                                    </Button>
-                                    <Button size="sm" variant="outline" href={route('club.members.edit', member.id)} icon={<Pencil className="size-4" />}>تعديل</Button>
-                                </>
-                            )}
-                            {can('members.delete') && (
-                                <ConfirmAction url={route('club.members.destroy', member.id)} method="delete" title="حذف العضو" message="سيتم حذف ملف العضو. لا يمكن حذف عضو لديه عضوية سارية." confirmLabel="حذف" icon={<Trash2 className="size-4" />}>
-                                    حذف
-                                </ConfirmAction>
-                            )}
+                    </>
+                }
+            />
+
+            <StatGrid className="mb-6">
+                <StatCard label="العضوية الحالية" value={current ? dayCount(current.days_left) : '—'} hint={current ? `${current.plan} · حتى ${date(current.ends_on)}` : hasPending ? 'طلب بانتظار الدفع' : 'لا عضوية سارية'} icon={<CalendarPlus />} tone={current ? 'green' : 'gray'} />
+                {can('invoices.view') ? (
+                    <StatCard label="الرصيد المستحق" value={money(member.balance, currency)} icon={<Wallet />} tone={Number(member.balance) > 0 ? 'red' : 'green'} />
+                ) : (
+                    <StatCard label="الحالة" value={personLabel} icon={<UserRound />} tone={personTone === 'green' ? 'green' : 'gray'} />
+                )}
+                <StatCard label="الحصص المتبقية" value={current?.sessions_left ?? (current ? 'غير محدودة' : '—')} icon={<Repeat />} tone="blue" />
+                <StatCard label="آخر دخول" value={member.last_check_in_at ?? '—'} icon={<Fingerprint />} tone="violet" />
+            </StatGrid>
+
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                <div className="min-w-0 space-y-6">
+                    <Card padded={false} className="p-6 text-center">
+                        {member.photo_url ? (
+                            <img src={member.photo_url} alt="" className="mx-auto size-24 rounded-full object-cover ring-4 ring-[#f5f3ff]" />
+                        ) : (
+                            <span className="mx-auto grid size-24 place-items-center rounded-full bg-[#f5f3ff] text-[28px] font-bold text-[#6d28d9]">{member.full_name.trim()[0]}</span>
+                        )}
+                        <p className="mt-4 text-[17px] font-bold text-[#111]">{member.full_name}</p>
+                        <p className="mt-1 font-mono text-[12px] text-[#9ca3af]">{member.member_no}</p>
+                        <div className="mt-2 flex flex-wrap justify-center gap-2">
+                            <Badge tone={statusTone}>{statusLabel}</Badge>
+                            {member.status !== 'active' && <Badge tone={personTone}>{personLabel}</Badge>}
+                            {hasPending && <Badge tone="amber">طلب بانتظار الدفع</Badge>}
                         </div>
-                    </div>
+                    </Card>
+                    <FactCard icon={<Phone />} title="بيانات الاتصال" rows={contact} />
+                    <FactCard icon={<HeartPulse />} title="الطوارئ والصحة" rows={[
+                        ['جهة الطوارئ', member.emergency_contact_name ?? '—'],
+                        ['هاتف الطوارئ', member.emergency_contact_phone ? <span className="num">{member.emergency_contact_phone}</span> : '—'],
+                        ['ملاحظات صحية', member.health_notes ? <span className="whitespace-pre-line text-[#b91c1c]">{member.health_notes}</span> : '—'],
+                    ]} />
+                    <FactCard icon={<ShieldCheck />} title="الموافقات والبوابة" rows={[
+                        ['رسائل الخدمة (واتساب)', <Badge tone={member.whatsapp_opt_in ? 'green' : 'gray'}>{member.whatsapp_opt_in ? 'موافق' : 'غير موافق'}</Badge>],
+                        ['الرسائل التسويقية', <Badge tone={member.marketing_opt_in ? 'green' : 'gray'}>{member.marketing_opt_in ? 'موافق' : 'غير موافق'}</Badge>],
+                        ['بوابة العضو', <Badge tone={member.has_portal_access ? 'green' : 'amber'}>{member.has_portal_access ? 'مفعّلة' : 'غير مفعّلة'}</Badge>],
+                    ]} />
+                    {(member.goals || member.notes) && (
+                        <Card padded={false} className="space-y-3 p-6">
+                            {member.goals && <Note title="الأهداف">{member.goals}</Note>}
+                            {member.notes && <Note title="ملاحظات داخلية">{member.notes}</Note>}
+                        </Card>
+                    )}
                 </div>
-            </Card>
 
-            <Tabs tabs={tabs} value={tab} onChange={setTab} className="mb-6" />
-
-            {tab === 'overview' && <OverviewTab member={member} />}
-            {tab === 'memberships' && <MembershipsTab {...props} onSell={() => setSellOpen(true)} />}
-            {tab === 'finance' && <FinanceTab {...props} />}
-            {tab === 'attendance' && <AttendanceTab {...props} />}
-            {tab === 'pt' && <PtTab {...props} />}
-            {tab === 'documents' && <DocumentsTab {...props} />}
-            {tab === 'crm' && <CrmTab {...props} />}
-            {tab === 'whatsapp' && <WhatsAppTab {...props} />}
-            {tab === 'access' && <AccessTab {...props} />}
+                <Card padded={false} className="min-w-0 overflow-hidden lg:col-span-2">
+                    <div className="px-5"><Tabs tabs={tabs} value={tab} onChange={setTab} /></div>
+                    <div className="p-5">
+                        <FlatCards>
+                            {tab === 'memberships' && <MembershipsTab {...props} onSell={() => setSellOpen(true)} />}
+                            {tab === 'finance' && <FinanceTab {...props} />}
+                            {tab === 'attendance' && <AttendanceTab {...props} />}
+                            {tab === 'pt' && <PtTab {...props} />}
+                            {tab === 'documents' && <DocumentsTab {...props} />}
+                            {tab === 'crm' && <CrmTab {...props} />}
+                            {tab === 'whatsapp' && <WhatsAppTab {...props} />}
+                            {tab === 'access' && <AccessTab {...props} />}
+                        </FlatCards>
+                    </div>
+                </Card>
+            </div>
 
             <SellModal open={sellOpen} onClose={() => setSellOpen(false)} member={member} current={current} plans={props.plans} hasMemberships={memberships.length > 0} />
 
@@ -284,60 +313,39 @@ export default function MemberShow(props: Props) {
                 )}
             </Modal>
 
+            <Modal open={deleting} onClose={() => setDeleting(false)} size="xs" title="حذف العضو" footer={<><Button variant="outline" onClick={() => setDeleting(false)} disabled={busy}>إلغاء</Button><Button variant="danger" loading={busy} onClick={deleteMember}>حذف</Button></>}>
+                <p className="text-sm text-[#4b4b4b]">سيُحذف ملف {member.full_name}. لا يمكن حذف عضو لديه عضوية سارية.</p>
+            </Modal>
+
             <PortalPasswordModal open={portalOpen} onClose={() => setPortalOpen(false)} memberId={member.id} hasAccess={member.has_portal_access} />
         </ClubLayout>
     );
 }
 
-/* ───────────────────────── overview ───────────────────────── */
+/* ───────────────────────── profile column ───────────────────────── */
 
-function OverviewTab({ member }: { member: MemberDetail }) {
+/** A card of facts in the profile column: a titled list of label and value rows. */
+function FactCard({ icon, title, rows }: { icon: ReactNode; title: string; rows: [string, ReactNode][] }) {
     return (
-        <div className="grid gap-6 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-                <CardHeader title="البيانات الشخصية" />
-                <dl className="grid gap-4 sm:grid-cols-3">
-                    <Info label="البريد الإلكتروني">{member.email ? <span dir="ltr">{member.email}</span> : '—'}</Info>
-                    <Info label="هاتف إضافي">{member.phone_alt ? <span className="num">{member.phone_alt}</span> : '—'}</Info>
-                    <Info label="تاريخ الميلاد">{date(member.date_of_birth)}</Info>
-                    <Info label="الرقم المدني">{member.national_id ? <span className="num">{member.national_id}</span> : '—'}</Info>
-                    <Info label="الجنسية">{member.nationality ?? '—'}</Info>
-                    <Info label="الفرع">{member.branch ?? '—'}</Info>
-                    <Info label="العنوان">{member.address ?? '—'}</Info>
-                    <Info label="مصدر التسجيل">{member.source ? (SOURCES[member.source] ?? member.source) : '—'}</Info>
-                    <Info label="آخر دخول">{member.last_check_in_at ?? '—'}</Info>
-                </dl>
-                {member.goals && (
-                    <div className="mt-5 rounded-xl bg-brand-50/60 p-4 text-sm">
-                        <p className="mb-1 text-xs font-semibold text-brand-700">الأهداف</p>
-                        <p className="whitespace-pre-line">{member.goals}</p>
-                    </div>
-                )}
-                {member.notes && (
-                    <div className="mt-3 rounded-xl bg-canvas p-4 text-sm">
-                        <p className="mb-1 text-xs font-semibold text-muted">ملاحظات داخلية</p>
-                        <p className="whitespace-pre-line">{member.notes}</p>
-                    </div>
-                )}
-            </Card>
-            <div className="space-y-6">
-                <Card>
-                    <CardHeader title="الطوارئ والصحة" />
-                    <dl className="space-y-3">
-                        <Info label="جهة اتصال الطوارئ">{member.emergency_contact_name ?? '—'}</Info>
-                        <Info label="هاتف الطوارئ">{member.emergency_contact_phone ? <span className="num">{member.emergency_contact_phone}</span> : '—'}</Info>
-                        <Info label="ملاحظات صحية">{member.health_notes ? <span className="whitespace-pre-line text-red-700">{member.health_notes}</span> : '—'}</Info>
-                    </dl>
-                </Card>
-                <Card>
-                    <CardHeader title="الموافقات والبوابة" />
-                    <ul className="space-y-2 text-sm">
-                        <li className="flex justify-between"><span>رسائل الخدمة (واتساب)</span><Badge tone={member.whatsapp_opt_in ? 'green' : 'gray'}>{member.whatsapp_opt_in ? 'موافق' : 'غير موافق'}</Badge></li>
-                        <li className="flex justify-between"><span>الرسائل التسويقية</span><Badge tone={member.marketing_opt_in ? 'green' : 'gray'}>{member.marketing_opt_in ? 'موافق' : 'غير موافق'}</Badge></li>
-                        <li className="flex justify-between"><span>بوابة العضو</span><Badge tone={member.has_portal_access ? 'green' : 'amber'}>{member.has_portal_access ? 'مفعّلة' : 'غير مفعّلة'}</Badge></li>
-                    </ul>
-                </Card>
-            </div>
+        <Card padded={false} className="p-6">
+            <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-[#111] [&_svg]:size-4 [&_svg]:text-[#6d28d9]">{icon}{title}</h3>
+            <ul className="space-y-3 text-sm">
+                {rows.map(([label, value]) => (
+                    <li key={label} className="flex items-center justify-between gap-3">
+                        <span className="shrink-0 text-[#6b7280]">{label}</span>
+                        <span className="min-w-0 truncate text-end text-[#111]">{value}</span>
+                    </li>
+                ))}
+            </ul>
+        </Card>
+    );
+}
+
+function Note({ title, children }: { title: string; children: ReactNode }) {
+    return (
+        <div className="rounded-[10px] bg-[#fafafa] p-3 text-start text-[13px]">
+            <p className="mb-1 text-[12px] font-semibold text-[#6b7280]">{title}</p>
+            <p className="whitespace-pre-line text-[#111]">{children}</p>
         </div>
     );
 }

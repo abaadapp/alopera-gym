@@ -14,20 +14,7 @@ export function Initials({ name, size = 'md' }: { name: string; size?: 'md' | 'l
 }
 
 /** One section of the employee form: an icon, a title and what it covers, then its fields. */
-export function FormSection({ icon: Icon, title, hint, children, locked }: { icon: LucideIcon; title: string; hint: string; children: ReactNode; locked?: ReactNode }) {
-    return (
-        <div className="card p-6">
-            <div className="mb-5 flex items-start gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[#f3f4f6] text-ink"><Icon className="size-[18px]" /></span>
-                <div className="min-w-0">
-                    <h3 className="font-bold text-ink">{title}</h3>
-                    <p className="mt-0.5 text-[12px] text-[#9ca3af]">{hint}</p>
-                </div>
-            </div>
-            {locked ? <p className="rounded-[10px] bg-[#fffbeb] px-3 py-2 text-[12px] leading-relaxed text-[#b45309]">{locked}</p> : children}
-        </div>
-    );
-}
+export { FormSection } from '@/Components/ui';
 
 /** Label/value lines in a profile card. */
 export function FactList({ facts }: { facts: { label: string; value: ReactNode; ltr?: boolean }[] }) {
