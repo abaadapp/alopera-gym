@@ -1,8 +1,8 @@
 import type { FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
-import ClubLayout from '@/Layouts/ClubLayout';
-import SettingsBack from '@/Components/SettingsBack';
-import { Badge, Button, Card, CardHeader, Field, Input, PageHeader, Textarea, Toggle } from '@/Components/ui';
+import { CreditCard, Store } from 'lucide-react';
+import { PageActions, SettingsScreen, SettingsSection } from '@/Components/Settings';
+import { Badge, Field, Input, Textarea, Toggle } from '@/Components/ui';
 
 interface Settings {
     shop_enabled: boolean;
@@ -20,22 +20,19 @@ export default function SalesSettings({ settings, paymobReady }: { settings: Set
     };
 
     return (
-        <ClubLayout title="إعدادات المبيعات والمتجر">
-            <PageHeader back={<SettingsBack />} title="إعدادات المبيعات والمتجر" subtitle="متجر الموقع الإلكتروني وطرق دفع الطلبات. المنتجات نفسها تُدار من قسم المبيعات." />
+        <SettingsScreen title="إعدادات المبيعات والمتجر">
 
-            <form onSubmit={submit} className="grid gap-4 lg:grid-cols-2">
-                <Card>
-                    <CardHeader title="متجر الموقع" subtitle="يظهر في موقع النادي ما دام فيه منتج واحد على الأقل مختار للعرض" />
+            <form onSubmit={submit} className="space-y-6">
+                <SettingsSection icon={Store} title="متجر الموقع" description="يظهر في موقع النادي ما دام فيه منتج واحد على الأقل مختار للعرض">
                     <div className="space-y-4">
                         <Toggle checked={form.data.shop_enabled} onChange={(v) => form.setData('shop_enabled', v)} label="إظهار المتجر في موقع النادي" hint="عند إيقافه يختفي المتجر والسلة من الموقع، وتبقى الطلبات السابقة في اللوحة" />
                         <Field label="تعليمات الاستلام (اختياري)" hint="تظهر للعميل في السلة وصفحة الطلب، مثل مكان الاستلام وأوقاته" error={form.errors.pickup_note}>
                             <Textarea rows={3} maxLength={300} value={form.data.pickup_note} onChange={(e) => form.setData('pickup_note', e.target.value)} />
                         </Field>
                     </div>
-                </Card>
+                </SettingsSection>
 
-                <Card>
-                    <CardHeader title="دفع طلبات الموقع" subtitle="تظهر للعميل الطرق المتاحة فعلًا فقط" />
+                <SettingsSection icon={CreditCard} title="دفع طلبات الموقع" description="تظهر للعميل الطرق المتاحة فعلًا فقط">
                     <div className="space-y-4">
                         <Toggle checked={form.data.pickup_enabled} onChange={(v) => form.setData('pickup_enabled', v)} label="الدفع عند الاستلام في النادي" hint="يُحصَّل المبلغ نقدًا أو بالبطاقة عند تسليم الطلب" />
                         <div>
@@ -48,10 +45,10 @@ export default function SalesSettings({ settings, paymobReady }: { settings: Set
                             <Input type="number" min={10} max={1440} dir="ltr" value={form.data.payment_window_minutes} onChange={(e) => form.setData('payment_window_minutes', Number(e.target.value))} />
                         </Field>
                     </div>
-                </Card>
+                </SettingsSection>
 
-                <div className="lg:col-span-2"><Button type="submit" loading={form.processing}>حفظ الإعدادات</Button></div>
+                <PageActions processing={form.processing} note="متجر الموقع الإلكتروني وطرق دفع الطلبات. المنتجات نفسها تُدار من قسم المبيعات." />
             </form>
-        </ClubLayout>
+        </SettingsScreen>
     );
 }

@@ -64,17 +64,17 @@ export default function ConfirmAction({
                 open={open}
                 onClose={() => setOpen(false)}
                 title={title}
-                size="sm"
+                size="xs"
                 footer={
                     <>
-                        <Button variant="ghost" onClick={() => setOpen(false)}>تراجع</Button>
+                        <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
                         <Button variant={tone === 'danger' ? 'danger' : 'primary'} loading={busy} disabled={!!reason && text.trim() === ''} onClick={submit}>
                             {confirmLabel}
                         </Button>
                     </>
                 }
             >
-                {message && <p className="text-sm text-muted">{message}</p>}
+                {message && <p className="text-sm text-[#4b4b4b]">{message}</p>}
                 {reason && (
                     <Field label={reason} error={error} className="mt-3" required>
                         <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} autoFocus />

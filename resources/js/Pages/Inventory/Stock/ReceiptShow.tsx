@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link, router } from '@inertiajs/react';
-import { ArrowRight, Check, Printer, X } from 'lucide-react';
+import { Check, Printer, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, Notice, PageHeader } from '@/Components/ui';
+import { Button, Card, Notice, PageHeader, BackLink } from '@/Components/ui';
 import { Pill, RECEIPT_LABELS, ReasonDialog } from '@/Components/Inventory/parts';
 import { useCurrency } from '@/hooks/useShared';
 import { money, number } from '@/lib/format';
@@ -23,7 +23,7 @@ export default function ReceiptShow({ receipt, can }: { receipt: Receipt; can: {
     return (
         <ClubLayout title={`إشعار الاستلام ${receipt.number}`}>
             <PageHeader
-                back={<Link href={route('club.inventory.receipts')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> إشعارات الاستلام</Link>}
+                back={<BackLink href={route('club.inventory.receipts')}>إشعارات الاستلام</BackLink>}
                 title={<span className="num">إشعار الاستلام {receipt.number}</span>}
                 subtitle={`${receipt.supplier} · ${receipt.branch} · استلمه ${receipt.by ?? '—'} في ${receipt.received_on}${receipt.approver ? ` · اعتمده ${receipt.approver}` : ''}`}
                 actions={<>

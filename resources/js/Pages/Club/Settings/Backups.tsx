@@ -1,9 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import { AlertTriangle, Database, Download, RotateCcw, Upload } from 'lucide-react';
-import ClubLayout from '@/Layouts/ClubLayout';
-import SettingsBack from '@/Components/SettingsBack';
-import { Button, Card, CardHeader, EmptyState, Field, Input, PageHeader } from '@/Components/ui';
+import { SettingsScreen, SettingsTitle } from '@/Components/Settings';
+import { Button, Card, CardHeader, EmptyState, Field, Input } from '@/Components/ui';
 import { useShared } from '@/hooks/useShared';
 import { number } from '@/lib/format';
 
@@ -34,12 +33,8 @@ export default function Backups({ backups }: { backups: Backup[] }) {
     };
 
     return (
-        <ClubLayout title="النسخ الاحتياطي">
-            <PageHeader back={<SettingsBack />}
-                title="النسخ الاحتياطي والاستعادة"
-                subtitle="نسخة تلقائية يومية الساعة 3 فجرًا (آخر 14 نسخة)، ويمكنك إنشاء نسخة يدويًا في أي وقت"
-                actions={<Button onClick={create} loading={creating} icon={<Database className="size-4" />}>إنشاء نسخة الآن</Button>}
-            />
+        <SettingsScreen title="النسخ الاحتياطي" width="full">
+            <SettingsTitle title="النسخ الاحتياطي والاستعادة" description="نسخة تلقائية يومية الساعة 3 فجرًا (آخر 14 نسخة)، ويمكنك إنشاء نسخة يدويًا في أي وقت" actions={<Button onClick={create} loading={creating} icon={<Database className="size-4" />}>إنشاء نسخة الآن</Button>} />
 
             <div className="grid gap-6 lg:grid-cols-3">
                 <Card padded={false} className="lg:col-span-2">
@@ -92,6 +87,6 @@ export default function Backups({ backups }: { backups: Backup[] }) {
                     </form>
                 </Card>
             </div>
-        </ClubLayout>
+        </SettingsScreen>
     );
 }

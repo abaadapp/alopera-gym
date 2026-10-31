@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link, router } from '@inertiajs/react';
-import { ArrowRight, Check, CreditCard, Download, Printer, RotateCcw, X } from 'lucide-react';
+import { Check, CreditCard, Download, Printer, RotateCcw, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, CardHeader, Notice, PageHeader } from '@/Components/ui';
+import { Button, Card, CardHeader, Notice, PageHeader, BackLink } from '@/Components/ui';
 import { Pill, ReasonDialog } from '@/Components/Inventory/parts';
 import PayBill from '@/Components/Inventory/PayBill';
 import { useCurrency } from '@/hooks/useShared';
@@ -27,7 +27,7 @@ export default function BillShow({ bill, accounts, can }: { bill: Bill; accounts
     return (
         <ClubLayout title={`سند المورد ${bill.reference}`}>
             <PageHeader
-                back={<Link href={route('club.purchases.bills')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> سندات الموردين</Link>}
+                back={<BackLink href={route('club.purchases.bills')}>سندات الموردين</BackLink>}
                 title={<span className="num">{bill.reference}</span>}
                 subtitle={`${bill.supplier} · ${bill.number} · صدر ${bill.issue_date}${bill.due_date ? ` · يستحق ${bill.due_date}` : ''}`}
                 actions={<>

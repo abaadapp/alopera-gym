@@ -1,9 +1,8 @@
 import { Fragment, useState, type FormEvent } from 'react';
 import { router } from '@inertiajs/react';
 import { ChevronDown, ScrollText } from 'lucide-react';
-import ClubLayout from '@/Layouts/ClubLayout';
-import SettingsBack from '@/Components/SettingsBack';
-import { Badge, Button, Card, EmptyState, Input, PageHeader, Pagination } from '@/Components/ui';
+import { SettingsScreen, SettingsTitle } from '@/Components/Settings';
+import { Badge, Button, Card, EmptyState, Input, Pagination } from '@/Components/ui';
 import type { Paginated } from '@/types';
 
 interface Log {
@@ -44,8 +43,8 @@ export default function Audit({ logs, filters }: { logs: Paginated<Log>; filters
     };
 
     return (
-        <ClubLayout title="سجل العمليات">
-            <PageHeader back={<SettingsBack />} title="سجل العمليات الحساسة" subtitle="من فعل ماذا ومتى — سجل غير قابل للتعديل أو الحذف" />
+        <SettingsScreen title="سجل العمليات" width="full">
+            <SettingsTitle title="سجل العمليات الحساسة" description="من فعل ماذا ومتى — سجل غير قابل للتعديل أو الحذف" />
 
             <Card padded={false}>
                 <div className="space-y-3 p-4">
@@ -108,7 +107,7 @@ export default function Audit({ logs, filters }: { logs: Paginated<Log>; filters
                 )}
                 <Pagination data={logs} />
             </Card>
-        </ClubLayout>
+        </SettingsScreen>
     );
 }
 

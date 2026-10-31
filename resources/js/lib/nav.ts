@@ -1,6 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
-import { BarChart3, Blocks, Boxes, Briefcase, ClipboardList, DoorOpen, Dumbbell, FolderOpen, Globe, LayoutGrid, MessageCircle, Package, ScanLine, Settings, ShoppingBag, Ticket, Users, Wallet } from 'lucide-react';
+import { BarChart3, Blocks, Boxes, Briefcase, ClipboardList, DoorOpen, Dumbbell, FileText, FolderOpen, Globe, LayoutGrid, MessageCircle, Package, ScanLine, Settings, ShoppingBag, Ticket, Users, Wallet } from 'lucide-react';
 import { useCan, useShared } from '@/hooks/useShared';
 
 /**
@@ -22,6 +22,11 @@ const REPORT_PERMISSIONS = ['reports.view', 'reports.financial', 'accounting.vie
 /** Settings screens live behind the settings hub; none of them appears in the main menu. */
 const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'accounting.manage', 'documents.manage', 'pos_devices.manage', 'papers.manage'];
 
+/*
+ * The groups follow the reference panel's rhythm, split by thin rules: the day (dashboard, reception); the members
+ * and what they hold; selling (products, sales, customer invoices, purchases); money and people (finance, payroll,
+ * business documents); stock; reports; WhatsApp; the website; and, at the foot, integrations and settings.
+ */
 export const NAV: NavGroup[] = [
     {
         sections: [
@@ -88,40 +93,36 @@ export const NAV: NavGroup[] = [
                 ],
             },
             {
-                label: 'المخزون',
-                icon: Boxes,
-                // Stock per branch and its documents; exports and stock reports are on the reports page.
-                tabs: [
-                    { label: 'المخزون', route: 'club.inventory.index', permission: 'inventory.view' },
-                    { label: 'الجرد الفعلي', route: 'club.inventory.counts', permission: 'inventory.view', match: 'club.inventory.counts.*' },
-                    { label: 'سجل المخزون', route: 'club.inventory.movements', permission: 'inventory.view' },
-                    { label: 'إشعارات استلام البضاعة', route: 'club.inventory.receipts', permission: 'purchases.view', match: 'club.inventory.receipts.*' },
-                    { label: 'نقل المخزون بين الفروع', route: 'club.inventory.transfers', permission: 'inventory.view', match: 'club.inventory.transfers.*', multiBranch: true },
-                    { label: 'طلبات تزويد الفروع', route: 'club.inventory.supply', permission: 'inventory.view', match: 'club.inventory.supply.*', multiBranch: true },
-                ],
+                // One entry of its own, not a tab of finance: one place to issue, read and collect a customer's invoice.
+                label: 'فواتير العملاء',
+                icon: FileText,
+                tabs: [{ label: 'فواتير العملاء', route: 'club.invoices.index', permission: 'invoices.view', match: ['club.invoices.*', 'club.credit-notes.*'] }],
             },
             {
                 label: 'المشتريات',
                 icon: ClipboardList,
                 tabs: [
                     { label: 'قائمة المشتريات', route: 'club.purchases.register', permission: 'purchases.view' },
-                    { label: 'أوامر الشراء', route: 'club.purchases.index', permission: 'purchases.view', match: ['club.purchases.show', 'club.purchases.create', 'club.purchases.edit', 'club.purchases.print'] },
                     { label: 'سندات الموردين', route: 'club.purchases.bills', permission: 'purchases.view', match: 'club.purchases.bills.*' },
+                    { label: 'أوامر الشراء', route: 'club.purchases.index', permission: 'purchases.view', match: ['club.purchases.show', 'club.purchases.create', 'club.purchases.edit', 'club.purchases.print'] },
                     { label: 'الموردون', route: 'club.purchases.suppliers', permission: 'suppliers.view', match: 'club.purchases.suppliers.*' },
                 ],
             },
+        ],
+    },
+    {
+        sections: [
             {
                 label: 'المالية',
                 icon: Wallet,
                 tabs: [
                     { label: 'الملخص المالي', route: 'club.finance.summary', permission: 'accounting.view' },
-                    { label: 'الحسابات البنكية', route: 'club.finance.banks', permission: 'accounting.view' },
-                    { label: 'فواتير العملاء', route: 'club.invoices.index', permission: 'invoices.view', match: ['club.invoices.*', 'club.credit-notes.*'] },
                     { label: 'المدفوعات والتحصيل', route: 'club.payments.index', permission: 'invoices.view', match: 'club.payments.*' },
                     { label: 'المستحقات', route: 'club.dues', permission: 'dues.view' },
                     { label: 'المصروفات', route: 'club.expenses.index', permission: 'expenses.manage', match: 'club.expenses.*' },
-                    { label: 'شجرة الحسابات', route: 'club.finance.accounts', permission: 'accounting.view' },
+                    { label: 'الحسابات البنكية', route: 'club.finance.banks', permission: 'accounting.view' },
                     { label: 'القيود اليومية', route: 'club.finance.journal', permission: 'accounting.view' },
+                    { label: 'شجرة الحسابات', route: 'club.finance.accounts', permission: 'accounting.view' },
                 ],
             },
             {
@@ -153,6 +154,35 @@ export const NAV: NavGroup[] = [
     {
         sections: [
             {
+                label: 'المخزون',
+                icon: Boxes,
+                // Stock per branch and its documents; exports and stock reports are on the reports page.
+                tabs: [
+                    { label: 'المخزون', route: 'club.inventory.index', permission: 'inventory.view' },
+                    { label: 'الجرد الفعلي', route: 'club.inventory.counts', permission: 'inventory.view', match: 'club.inventory.counts.*' },
+                    { label: 'سجل المخزون', route: 'club.inventory.movements', permission: 'inventory.view' },
+                    { label: 'إشعارات استلام البضاعة', route: 'club.inventory.receipts', permission: 'purchases.view', match: 'club.inventory.receipts.*' },
+                    { label: 'نقل المخزون بين الفروع', route: 'club.inventory.transfers', permission: 'inventory.view', match: 'club.inventory.transfers.*', multiBranch: true },
+                    { label: 'طلبات تزويد الفروع', route: 'club.inventory.supply', permission: 'inventory.view', match: 'club.inventory.supply.*', multiBranch: true },
+                ],
+            },
+        ],
+    },
+    {
+        sections: [
+            {
+                label: 'التقارير',
+                icon: BarChart3,
+                // The one place for reports: every report in categories; each card opens its page (club.reports.show) or
+                // exports it. The sections keep their working screens and have no report tabs of their own.
+                // Any one report's permission opens the page (App\Modules\Reports\Services\ReportCatalog::PERMISSIONS).
+                tabs: [{ label: 'التقارير', route: 'club.reports.index', permission: REPORT_PERMISSIONS, match: 'club.reports.*' }],
+            },
+        ],
+    },
+    {
+        sections: [
+            {
                 label: 'محادثات واتساب',
                 icon: MessageCircle,
                 tabs: [
@@ -163,14 +193,10 @@ export const NAV: NavGroup[] = [
                     { label: 'سجل الرسائل', route: 'club.messages.index', permission: 'whatsapp.inbox' },
                 ],
             },
-            {
-                label: 'التقارير',
-                icon: BarChart3,
-                // The one place for reports: every report in categories; each card opens its page (club.reports.show) or
-                // exports it. The sections keep their working screens and have no report tabs of their own.
-                // Any one report's permission opens the page (App\Modules\Reports\Services\ReportCatalog::PERMISSIONS).
-                tabs: [{ label: 'التقارير', route: 'club.reports.index', permission: REPORT_PERMISSIONS, match: 'club.reports.*' }],
-            },
+        ],
+    },
+    {
+        sections: [
             {
                 label: 'الموقع الإلكتروني',
                 icon: Globe,

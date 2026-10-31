@@ -24,6 +24,8 @@ Route::post('/sales/{sale}/void', [PosController::class, 'void'])->whereNumber('
 Route::middleware('can:pos.sell')->group(function () {
     Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
     Route::post('/pos/checkout', [PosController::class, 'checkout'])->middleware('throttle:30,1')->name('pos.checkout');
+    Route::get('/pos/receipts', [PosController::class, 'receipts'])->name('pos.receipts');
+    Route::get('/pos/members/{member}', [PosController::class, 'member'])->whereNumber('member')->middleware('can:members.view')->name('pos.member');
     // This browser as a point-of-sale device: paired with a one-time code, or activated by a device manager.
     Route::get('/pos/device', [PosDeviceSetupController::class, 'show'])->name('pos.device');
     Route::post('/pos/device/pair', [PosDeviceSetupController::class, 'pair'])->middleware('throttle:pos-pairing')->name('pos.device.pair');

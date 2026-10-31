@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from '@inertiajs/react';
-import { ArrowDownRight, ArrowUpRight, Building2 } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Building2, ChevronRight } from 'lucide-react';
 import { useShared } from '@/hooks/useShared';
 import SectionTabs from '@/Components/SectionTabs';
 import { cn } from '@/lib/cn';
@@ -49,17 +49,27 @@ function BranchNote() {
     );
 }
 
+/** The way back from a detail, form or report page to its list: a quiet 13px link above the page header. */
+export function BackLink({ href, children }: { href: string; children: ReactNode }) {
+    return (
+        <Link href={href} className="mb-3 inline-flex items-center gap-1 text-[13px] font-medium text-[#6b7280] transition-colors hover:text-[#111]">
+            <ChevronRight className="size-4 ltr:rotate-180" />
+            {children}
+        </Link>
+    );
+}
+
 /** A page's title, description and actions; on a page that is one tab of a section, the section's tabs follow. */
 export function PageHeader({ title, subtitle, actions, back }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; back?: ReactNode }) {
     return (
-        <div className="mb-6">
-            <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="mb-5">
+            {back}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                    {back}
                     <h1 className="truncate text-[22px] font-bold tracking-tight text-ink">{title}</h1>
                     {subtitle && <p className="mt-0.5 text-[13px] text-muted">{subtitle}</p>}
                 </div>
-                {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+                {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
             </div>
             <BranchNote />
             <SectionTabs className="mt-5" />
@@ -86,7 +96,7 @@ export function Badge({ children, tone = 'gray', className }: { children: ReactN
 
 /* Stat tiles take the status colours: a pale fill with a deeper icon. */
 export const statTones = {
-    brand: 'bg-brand-50 text-brand-700',
+    brand: 'bg-[#f5f3ff] text-[#6d28d9]',
     green: 'bg-[#ecfdf5] text-[#047857]',
     amber: 'bg-[#fffbeb] text-[#d97706]',
     red: 'bg-[#fef2f2] text-[#b91c1c]',
@@ -156,8 +166,19 @@ export function StatCard({ label, value, hint, icon, tone = 'brand', href, trend
 }
 
 export function EmptyState({ icon, title, description, action }: { icon?: ReactNode; title: ReactNode; description?: ReactNode; action?: ReactNode }) {
-    // In a control panel the empty state is quiet grey; the club's colour stays for what needs attention.
+    // In the panel an empty state is quiet: a bare grey icon over a medium line, or just a grey line when that is all.
     const admin = useAdmin();
+    if (admin) {
+        if (!icon && !description && !action) return <p className="px-4 py-12 text-center text-sm text-[#9ca3af]">{title}</p>;
+        return (
+            <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
+                {icon && <div className="mx-auto mb-3 text-[#d1d5db] [&_svg]:size-8">{icon}</div>}
+                <p className="font-medium text-[#374151]">{title}</p>
+                {description && <p className="mt-1 max-w-sm text-[13px] text-[#9ca3af]">{description}</p>}
+                {action && <div className="mt-4">{action}</div>}
+            </div>
+        );
+    }
     return (
         <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
             {icon && <div className={cn('mb-3 grid size-14 place-items-center rounded-2xl [&_svg]:size-6', admin ? 'bg-[#f2f2f0] text-[#4b4b4b]' : 'bg-brand-50 text-brand')}>{icon}</div>}

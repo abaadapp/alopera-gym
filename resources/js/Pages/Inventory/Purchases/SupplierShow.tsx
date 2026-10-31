@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { Link, router } from '@inertiajs/react';
-import { ArrowRight, Banknote, CalendarClock, CalendarDays, ClipboardList, FilePlus2, History, Mail, MapPin, MoreVertical, Pencil, Phone, Receipt, ShoppingCart, Trash2, UserRound, Wallet } from 'lucide-react';
+import { Banknote, CalendarClock, CalendarDays, ClipboardList, FilePlus2, History, Mail, MapPin, MoreVertical, Pencil, Phone, Receipt, ShoppingCart, Trash2, UserRound, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, Modal, PageHeader, StatCard, Tabs } from '@/Components/ui';
+import { Badge, Button, Card, Modal, PageHeader, StatCard, Tabs, BackLink } from '@/Components/ui';
 import { Dropdown, DropdownItem, DropdownSeparator } from '@/Components/ui/Dropdown';
 import { BILL_STATES, ORDER_TONES, Pill } from '@/Components/Inventory/parts';
 import { useCurrency } from '@/hooks/useShared';
@@ -55,7 +55,7 @@ export default function SupplierShow({ supplier, may, orders = [], bills = [], p
     return (
         <ClubLayout title={supplier.name}>
             <PageHeader
-                back={<Link href={route('club.purchases.suppliers')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> الموردون</Link>}
+                back={<BackLink href={route('club.purchases.suppliers')}>الموردون</BackLink>}
                 title="ملف المورّد"
                 subtitle="بياناته وأوامر الشراء والسندات والمدفوعات وما بقي له."
                 actions={<>

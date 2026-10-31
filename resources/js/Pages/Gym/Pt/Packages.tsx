@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useForm } from '@inertiajs/react';
-import { ArrowRight, Package, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useForm } from '@inertiajs/react';
+import { Package, Pencil, Plus, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
+import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle, BackLink } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { money } from '@/lib/format';
 import type { Option } from '@/types';
@@ -63,7 +63,7 @@ export default function PtPackages({ packages, trainers }: { packages: PtPackage
     return (
         <ClubLayout title="باقات التدريب الشخصي">
             <PageHeader
-                back={<Link href={route('club.pt.index')} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-brand"><ArrowRight className="size-4" /> التدريب الشخصي</Link>}
+                back={<BackLink href={route('club.pt.index')}>التدريب الشخصي</BackLink>}
                 title="باقات التدريب الشخصي"
                 subtitle="عدد الجلسات والسعر ومدة الصلاحية — تظهر في صفحة الأسعار على الموقع إن كانت عامة"
                 actions={<Button icon={<Plus className="size-4" />} onClick={() => openForm(null)}>باقة جديدة</Button>}

@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\PaymentService;
+use App\Modules\Inventory\Services\PosDevices;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -79,12 +80,19 @@ class PaymentController extends Controller
         return back()->with('success', 'تم رفض التحويل.');
     }
 
-    /** سند القبض: the receipt paper (A4/A5, or the thermal strip with ?face=strip). Only a completed payment has one. */
-    public function receipt(Request $request, Payment $payment): HttpResponse
+    /**
+     * سند القبض: the receipt paper (A4/A5, or the thermal strip with ?face=strip — at the width of the printer of this
+     * point-of-sale device, 58 or 80 mm, when it has one). Only a completed payment has one.
+     */
+    public function receipt(Request $request, Payment $payment, PosDevices $devices): HttpResponse
     {
         abort_if($payment->status !== Payment::COMPLETED, 404);
+        // Whoever reads invoices; and a point-of-sale clerk, for a payment taken at the point of sale.
+        abort_unless($request->user()->can('invoices.view') || ($request->user()->can('pos.sell') && str_starts_with((string) $payment->notes, 'نقطة البيع')), 403);
+        $strip = $request->string('face')->toString() === 'strip';
+        $width = $strip ? $devices->current($request)?->loadMissing('peripherals')->printer()?->paper_width : null;
 
-        return Papers::for('receipt', $payment, null, $request->string('face')->toString() === 'strip' ? 'strip' : 'sheet')->page($request->boolean('print', true));
+        return Papers::for('receipt', $payment, null, $strip ? 'strip' : 'sheet', $width ? $width.'mm' : null)->page($request->boolean('print', true));
     }
 
     public function proof(Payment $payment): StreamedResponse

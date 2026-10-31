@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link, router, useForm } from '@inertiajs/react';
-import { ArrowRight, Check, History, ImagePlus, Plus, Puzzle, Scale, Star, Trash2, X } from 'lucide-react';
+import { router, useForm } from '@inertiajs/react';
+import { Check, History, ImagePlus, Plus, Puzzle, Scale, Star, Trash2, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, Field, Input, PageHeader, Select, Switch, Tabs, Textarea } from '@/Components/ui';
+import { Badge, Button, Card, Field, Input, PageHeader, Select, Switch, Tabs, Textarea, BackLink } from '@/Components/ui';
 import { AdjustModal, MovementsModal } from '@/Components/Products/Stock';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
@@ -107,7 +107,7 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
         <ClubLayout title={product ? `تعديل ${product.name}` : 'إضافة منتج'}>
             <div className="mx-auto max-w-4xl">
                 <PageHeader
-                    back={<Link href={route('club.products.index')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> المنتجات</Link>}
+                    back={<BackLink href={route('club.products.index')}>المنتجات</BackLink>}
                     title={product ? product.name : 'إضافة منتج'}
                     subtitle={product ? 'عدّل بيانات المنتج وسعره ومخزونه وصوره وإضافاته' : 'منتج جديد يظهر في نقطة البيع، وفي متجر الموقع إن اخترت ذلك'}
                     actions={product && (

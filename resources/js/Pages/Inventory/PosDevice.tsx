@@ -1,8 +1,8 @@
 import { type FormEvent } from 'react';
-import { Link, useForm } from '@inertiajs/react';
-import { ArrowRight, CheckCircle2, KeyRound, MonitorSmartphone } from 'lucide-react';
+import { useForm } from '@inertiajs/react';
+import { CheckCircle2, KeyRound, MonitorSmartphone } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, CardHeader, Field, Input, PageHeader, Select } from '@/Components/ui';
+import { Button, Card, CardHeader, Field, Input, PageHeader, Select, BackLink } from '@/Components/ui';
 
 /**
  * On the device: which point-of-sale device this browser is, pairing it with a one-time code from Settings, or —
@@ -17,7 +17,7 @@ export default function PosDevice({ device, canActivate, branches }: { device: {
     return (
         <ClubLayout title="جهاز نقطة البيع">
             <div className="mx-auto max-w-2xl">
-                <PageHeader back={<Link href={route('club.pos.index')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> نقطة البيع</Link>} title="جهاز نقطة البيع" subtitle="يُربط هذا المتصفح بنقطة بيع لفرع، فتُسجَّل عليها المبيعات ويُخصم مخزون فرعها" />
+                <PageHeader back={<BackLink href={route('club.pos.index')}>نقطة البيع</BackLink>} title="جهاز نقطة البيع" subtitle="يُربط هذا المتصفح بنقطة بيع لفرع، فتُسجَّل عليها المبيعات ويُخصم مخزون فرعها" />
                 {device ? (
                     <Card className="mb-4">
                         <div className="flex items-center gap-4">

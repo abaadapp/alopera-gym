@@ -3,6 +3,16 @@
 @source '../views/**/*.blade.php';
 @source '../js/**/*.tsx';
 
+/* Tablets and phones (a coarse pointer): bigger tap targets — touch:h-11 and friends. */
+@custom-variant touch {
+    @media (pointer: coarse) {
+        @slot;
+    }
+    [data-touch] & {
+        @slot;
+    }
+}
+
 /*
  * The club's brand colour (tenants.primary_color) is written into --brand by
  * the root Blade view; every tint is derived from it so a club's branding
@@ -34,21 +44,89 @@
 }
 
 /*
- * Control panels (AdminScope): a neutral palette in place of the brand-tinted one — grey lines and canvas,
- * near-black text. The club's colour stays the accent (primary buttons, the current menu item, active tabs).
- * The public website, the portal, the sign-in pages and the marketing page are outside the scope.
+ * The panel and the point of sale (AdminScope): one neutral palette — grey lines and canvas, near-black text,
+ * and near-black as the accent too (primary buttons, toggles, checkboxes, active tabs and chips, links). The
+ * brand tints resolve to greys here, so a screen written with brand-* classes looks the same as one written
+ * with greys. The club's own colour stays on its website, member portal and sign-in pages (outside the scope).
  */
 .admin-ui {
+    --brand: #111111;
+    --brand-soft: #e8e8e8;
+    --color-brand: #111111;
+    --color-brand-soft: #e8e8e8;
+    --color-brand-50: #f7f7f5;
+    --color-brand-100: #f2f2f0;
+    --color-brand-200: #e8e8e6;
+    --color-brand-300: #d4d4d4;
+    --color-brand-600: #2a2a2a;
+    --color-brand-700: #111111;
+    --color-brand-900: #000000;
     --color-ink: #111111;
     --color-muted: #6b7280;
     --color-line: #e8e8e8;
     --color-canvas: #f7f8f9;
     color: var(--color-ink);
     letter-spacing: -0.011em;
+    font-feature-settings: normal;
+    text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+}
+/* One typeface in the panel: headings in the text face, drawn a little tighter. */
+.admin-ui :is(h1, h2, h3, .font-display) {
+    font-family: var(--font-sans);
+    letter-spacing: -0.021em;
 }
 body:has(.admin-ui) {
     background-color: #f7f8f9;
+}
+html:has(.admin-ui) {
+    scrollbar-gutter: stable;
+    overscroll-behavior-y: none;
+}
+.admin-ui ::-webkit-scrollbar,
+html:has(.admin-ui)::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.admin-ui ::-webkit-scrollbar-track,
+html:has(.admin-ui)::-webkit-scrollbar-track {
+    background: transparent;
+}
+.admin-ui ::-webkit-scrollbar-thumb,
+html:has(.admin-ui)::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: #d8d8d4;
+}
+.admin-ui ::-webkit-scrollbar-thumb:hover,
+html:has(.admin-ui)::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+/* A keyboard focus everyone can see, on whatever has no ring of its own (a component's own ring wins). */
+@layer base {
+    .admin-ui :is(button, a, [role='button'], [tabindex]):focus-visible {
+        outline: 2px solid rgba(17, 17, 17, 0.35);
+        outline-offset: 2px;
+    }
+}
+/* A page opens with a short rise into place. */
+@keyframes ui-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }
 
 /* Menus of the panel's top bar (Components/ui/Dropdown): a short fade and scale in. */
@@ -130,11 +208,35 @@ h1, h2, h3, .font-display {
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
     }
     .admin-ui .input {
-        @apply rounded-[10px];
+        @apply rounded-[10px] px-3;
+    }
+    /* Fields stand 40px high, level with the buttons beside them (44px on a touch screen). */
+    .admin-ui input.input:not([type='file'], [type='checkbox'], [type='radio']),
+    .admin-ui select.input {
+        height: 2.5rem;
+        padding-block: 0;
+    }
+    @media (pointer: coarse) {
+        .admin-ui input.input:not([type='file'], [type='checkbox'], [type='radio']),
+        .admin-ui select.input {
+            height: 2.75rem;
+            font-size: 16px;
+        }
+    }
+    .admin-ui .input::placeholder {
+        color: #9ca3af;
     }
     .admin-ui .input:focus {
         border-color: #d1d5db;
         box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
+    }
+    .admin-ui .input:disabled {
+        background-color: #fafafa;
+        opacity: 0.6;
+    }
+    .admin-ui .label {
+        font-size: 13px;
+        color: #4b4b4b;
     }
     .admin-ui .table-base tbody tr:hover {
         background-color: #fafafa;

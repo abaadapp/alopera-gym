@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { Link, router, usePage } from '@inertiajs/react';
-import { ArrowRight, Building2, CalendarRange, Info } from 'lucide-react';
+import { router, usePage } from '@inertiajs/react';
+import { Building2, CalendarRange, Info } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import ExportMenu from '@/Components/Reports/ExportMenu';
 import { DuesBody, FinanceBody, MovementBody, StatementsBody, type Dues, type Movement, type PeriodReport, type Statements } from '@/Components/Reports/Finance';
@@ -9,7 +9,7 @@ import { PayoutsBody, PayrollBody, type Payouts, type Payroll } from '@/Componen
 import { DocumentsBody, RenewalsBody, type Documents, type Renewals } from '@/Components/Reports/Documents';
 import { BranchesBody, SalesBody, type Branches, type Sales } from '@/Components/Reports/Sales';
 import { TablesBody, type Tables } from '@/Components/Reports/Tables';
-import { Button, Card, Checkbox, Input, Notice, PageHeader, Select } from '@/Components/ui';
+import { Button, Card, Checkbox, Input, Notice, PageHeader, Select, BackLink } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 import { date } from '@/lib/format';
 
@@ -91,7 +91,7 @@ export default function ReportShow({ kind, title, mode, compare, filters, branch
     return (
         <ClubLayout title={title}>
             <PageHeader
-                back={<Link href={route('club.reports.index')} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-ink"><ArrowRight className="size-4" /> التقارير</Link>}
+                back={<BackLink href={route('club.reports.index')}>التقارير</BackLink>}
                 title={title}
                 subtitle={<>{subtitle}{branchFilter && <> · {branchFilter.name}</>}</>}
                 actions={<ExportMenu href={canExport ? route('club.reports.export', kind) : null} params={exportParams} title={title} size="md" />}

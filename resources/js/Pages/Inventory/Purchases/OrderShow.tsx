@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link, router, useForm } from '@inertiajs/react';
-import { ArrowRight, Check, FileText, PackageCheck, Pencil, Printer, X } from 'lucide-react';
+import { Check, FileText, PackageCheck, Pencil, Printer, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, CardHeader, Checkbox, Field, Input, Modal, Notice, PageHeader } from '@/Components/ui';
+import { Button, Card, CardHeader, Checkbox, Field, Input, Modal, Notice, PageHeader, BackLink } from '@/Components/ui';
 import { BILL_STATES, clientKey, ORDER_TONES, Pill, RECEIPT_LABELS, ReasonDialog } from '@/Components/Inventory/parts';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
@@ -30,7 +30,7 @@ export default function OrderShow({ order, can }: { order: Order; can: { approve
     return (
         <ClubLayout title={`أمر الشراء ${order.number}`}>
             <PageHeader
-                back={<Link href={route('club.purchases.index')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> أوامر الشراء</Link>}
+                back={<BackLink href={route('club.purchases.index')}>أوامر الشراء</BackLink>}
                 title={<span className="num">أمر الشراء {order.number}</span>}
                 subtitle={`${order.supplier?.name ?? ''} · يُستلم في ${order.branch ?? '—'} · بتاريخ ${order.order_date}${order.expected_on ? ` · متوقع ${order.expected_on}` : ''}`}
                 actions={<>

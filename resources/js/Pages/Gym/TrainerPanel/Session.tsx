@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Link, router } from '@inertiajs/react';
-import { ArrowRight, Check, Phone, UserRound, Users, X } from 'lucide-react';
+import { router } from '@inertiajs/react';
+import { Check, Phone, UserRound, Users, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Card, EmptyState, Notice } from '@/Components/ui';
+import { BackLink, Badge, Card, EmptyState, Notice } from '@/Components/ui';
 import { dayName, phone as fmtPhone, time } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
@@ -37,7 +37,7 @@ export default function TrainerSession({ session, bookings }: { session: Session
 
     return (
         <ClubLayout title={session.program ?? 'الحصة'}>
-            <Link href={route('club.trainer')} className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-brand"><ArrowRight className="size-4" /> حصصي</Link>
+            <BackLink href={route('club.trainer')}>حصصي</BackLink>
 
             <div className="mb-5 overflow-hidden rounded-3xl p-5 text-white" style={{ background: `linear-gradient(135deg, ${session.color ?? 'var(--brand)'}, ${session.color ?? 'var(--brand)'}cc)` }}>
                 <p className="font-display text-2xl font-semibold">{session.program}</p>

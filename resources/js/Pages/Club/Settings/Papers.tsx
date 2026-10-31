@@ -1,8 +1,7 @@
 import { Link } from '@inertiajs/react';
 import { ChevronLeft, FileText } from 'lucide-react';
-import ClubLayout from '@/Layouts/ClubLayout';
-import SettingsBack from '@/Components/SettingsBack';
-import { Badge, PageHeader } from '@/Components/ui';
+import { SettingsScreen, SettingsTitle } from '@/Components/Settings';
+import { Badge } from '@/Components/ui';
 import { cardHover } from '@/Components/ui/Card';
 import { cn } from '@/lib/cn';
 
@@ -13,8 +12,8 @@ export default function Papers({ papers }: { papers: PaperCard[] }) {
     const sections = [...new Set(papers.map((p) => p.section))];
 
     return (
-        <ClubLayout title="قوالب الأوراق">
-            <PageHeader back={<SettingsBack />} title="قوالب الأوراق" subtitle="لكل ورقة يطبعها النادي قالب يُضبط وحده — اختر ورقة لتفتح محرّرها ومعاينتها الحية." />
+        <SettingsScreen title="قوالب الأوراق" width="full">
+            <SettingsTitle title="قوالب الأوراق" description="لكل ورقة يطبعها النادي قالب يُضبط وحده — اختر ورقة لتفتح محرّرها ومعاينتها الحية." />
             <div className="space-y-6">
                 {sections.map((section) => (
                     <section key={section}>
@@ -38,6 +37,6 @@ export default function Papers({ papers }: { papers: PaperCard[] }) {
                 ))}
             </div>
             <p className="mt-6 text-[12px] text-muted">قوالب رسائل واتساب في «التطبيقات التكاملية»، ومستندات النشاط (السجلات والتراخيص) في قسم «المستندات» — لا علاقة لها بقوالب الطباعة هنا.</p>
-        </ClubLayout>
+        </SettingsScreen>
     );
 }

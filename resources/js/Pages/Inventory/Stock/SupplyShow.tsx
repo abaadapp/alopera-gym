@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link, router } from '@inertiajs/react';
-import { ArrowRight, Check, X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, CardHeader, Field, Input, Notice, PageHeader, Select } from '@/Components/ui';
+import { Button, Card, CardHeader, Field, Input, Notice, PageHeader, Select, BackLink } from '@/Components/ui';
 import { Pill, ReasonDialog, SUPPLY_LABELS } from '@/Components/Inventory/parts';
 import { number } from '@/lib/format';
 
@@ -32,7 +32,7 @@ export default function SupplyShow({ request, branches, suppliers, canReview }: 
     return (
         <ClubLayout title={`طلب التزويد ${request.number}`}>
             <PageHeader
-                back={<Link href={route('club.inventory.supply')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> طلبات التزويد</Link>}
+                back={<BackLink href={route('club.inventory.supply')}>طلبات التزويد</BackLink>}
                 title={<span className="num">طلب التزويد {request.number}</span>}
                 subtitle={`${request.branch} · طلبه ${request.by ?? '—'} في ${request.at}${request.needed_by ? ` · مطلوب قبل ${request.needed_by}` : ''}${request.reviewer ? ` · راجعه ${request.reviewer}` : ''}`}
                 actions={<Pill tone={SUPPLY_LABELS[request.progress]?.[1] ?? 'gray'}>{SUPPLY_LABELS[request.progress]?.[0]}</Pill>}

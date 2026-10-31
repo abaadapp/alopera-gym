@@ -1,9 +1,8 @@
 import { useMemo, type FormEvent, type ReactNode } from 'react';
 import { useForm } from '@inertiajs/react';
-import { ImagePlus } from 'lucide-react';
-import ClubLayout from '@/Layouts/ClubLayout';
-import SettingsBack from '@/Components/SettingsBack';
-import { Button, Card, CardHeader, Field, Input, PageHeader, Textarea, Toggle } from '@/Components/ui';
+import { Building2, CalendarClock, Globe, ImageIcon, Palette, Receipt } from 'lucide-react';
+import { PageActions, SettingsScreen, SettingsSection } from '@/Components/Settings';
+import { Field, Input, Textarea, Toggle } from '@/Components/ui';
 
 interface Club {
     name: string;
@@ -101,13 +100,9 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
     };
 
     return (
-        <ClubLayout title="إعدادات النادي">
-            <PageHeader back={<SettingsBack />} title="إعدادات النادي" subtitle="الهوية وبيانات التواصل وقواعد العمل التي يطبقها النظام تلقائيًا" />
-
+        <SettingsScreen title="إعدادات النادي">
             <form onSubmit={submit} className="space-y-6">
-                <div className="grid gap-6 lg:grid-cols-3">
-                    <Card className="lg:col-span-2">
-                        <CardHeader title="بيانات النادي" />
+                    <SettingsSection icon={Building2} title="بيانات النادي" description="الاسم وبيانات التواصل التي تظهر في الفواتير والموقع">
                         <div className="grid gap-4 sm:grid-cols-2">
                             <Field label="اسم النادي" error={errors.name} required>
                                 <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} />
@@ -134,22 +129,21 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
                                 <Input dir="ltr" inputMode="decimal" value={form.data.longitude} onChange={(e) => form.setData('longitude', e.target.value)} placeholder="58.3829" />
                             </Field>
                         </div>
-                        {club.domain && <p className="mt-4 text-xs text-muted">نطاق الموقع: <span dir="ltr" className="font-medium text-ink">{club.domain}</span> (يُضبط مع إعداد الخادم)</p>}
-                    </Card>
+                        {club.domain && <p className="mt-4 text-[12px] text-[#9ca3af]">نطاق الموقع: <span dir="ltr" className="font-medium text-ink">{club.domain}</span> (يُضبط مع إعداد الخادم)</p>}
+                    </SettingsSection>
 
-                    <Card>
-                        <CardHeader title="الهوية البصرية" subtitle="تنعكس على اللوحة والموقع وبوابة الأعضاء" />
-                        <div className="flex items-center gap-3">
-                            <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-2xl border border-dashed border-line bg-canvas">
-                                {logoPreview ? <img src={logoPreview} alt="" className="h-full w-full object-cover" /> : <ImagePlus className="size-5 text-muted" />}
+                    <SettingsSection icon={Palette} title="الهوية البصرية" description="الشعار والألوان على الموقع وبوابة الأعضاء والأوراق المطبوعة">
+                        <div className="flex flex-wrap items-start gap-5">
+                            <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-[14px] border border-[#e8e8e8] bg-[#fafafa]">
+                                {logoPreview ? <img src={logoPreview} alt="" className="h-full w-full object-cover" /> : <ImageIcon className="size-8 text-[#d1d5db]" />}
                             </div>
-                            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-brand-50">
-                                <ImagePlus className="size-3.5" /> تغيير الشعار
-                                <input type="file" accept="image/*" className="hidden" onChange={(e) => form.setData('logo', e.target.files?.[0] ?? null)} />
-                            </label>
+                            <div className="min-w-0 flex-1">
+                                <Field label="شعار النادي" error={errors.logo} hint="صورة مربعة PNG أو JPG، حتى 4 ميغابايت">
+                                    <input type="file" accept="image/*" className="input h-auto py-2 file:me-3 file:rounded-lg file:border-0 file:bg-[#111] file:px-4 file:py-2 file:text-white" onChange={(e) => form.setData('logo', e.target.files?.[0] ?? null)} />
+                                </Field>
+                            </div>
                         </div>
-                        {errors.logo && <p className="mt-1 text-xs text-red-600">{errors.logo}</p>}
-                        <div className="mt-4 grid grid-cols-2 gap-3">
+                        <div className="mt-5 grid grid-cols-2 gap-3">
                             <ColorField label="اللون الأساسي" value={form.data.primary_color} onChange={(v) => form.setData('primary_color', v)} error={errors.primary_color} />
                             <ColorField label="اللون الثانوي" value={form.data.secondary_color} onChange={(v) => form.setData('secondary_color', v)} error={errors.secondary_color} />
                         </div>
@@ -160,12 +154,9 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
                                 <span className="rounded-full border px-3 py-1 text-xs" style={{ borderColor: form.data.primary_color, color: form.data.primary_color }}>الباقات</span>
                             </div>
                         </div>
-                    </Card>
-                </div>
+                    </SettingsSection>
 
-                <div className="grid gap-6 lg:grid-cols-2">
-                    <Card>
-                        <CardHeader title="الحجوزات والحضور" />
+                    <SettingsSection icon={CalendarClock} title="الحجوزات والحضور" description="قواعد يطبقها النظام تلقائيًا على الحجز والدخول والغياب">
                         <div className="grid gap-4 sm:grid-cols-2">
                             <NumberField label="نافذة الحجز (أيام)" hint="أقصى مدة مسبقة للحجز من البوابة" value={form.data.rules.booking_window_days} onChange={(v) => setRule('booking_window_days', v)} error={errors['rules.booking_window_days']} min={1} max={90} />
                             <NumberField label="مهلة إلغاء الحجز (ساعات)" hint="قبل موعد الحصة؛ بعدها لا تُسترد الحصة" value={form.data.rules.booking_cancel_cutoff_hours} onChange={(v) => setRule('booking_cancel_cutoff_hours', v)} error={errors['rules.booking_cancel_cutoff_hours']} min={0} max={72} />
@@ -177,11 +168,9 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
                             <Toggle checked={form.data.rules.auto_mark_no_show} onChange={(v) => setRule('auto_mark_no_show', v)} label="تسجيل الغياب تلقائيًا" hint="بعد انتهاء الحصة لمن لم يُسجَّل حضوره" />
                             <Toggle checked={form.data.rules.block_access_with_dues} onChange={(v) => setRule('block_access_with_dues', v)} label="منع الدخول عند وجود مستحقات متأخرة" hint="حتى لو كانت العضوية سارية" />
                         </div>
-                    </Card>
+                    </SettingsSection>
 
-
-                    <Card>
-                        <CardHeader title="الفواتير والضريبة" />
+                    <SettingsSection icon={Receipt} title="الفواتير والضريبة" description="الضريبة والسجل التجاري ومهلة السداد وتذييل الفاتورة">
                         <div className="grid gap-4 sm:grid-cols-2">
                             <NumberField label="نسبة ضريبة القيمة المضافة %" value={form.data.rules.vat_rate} onChange={(v) => setRule('vat_rate', v)} error={errors['rules.vat_rate']} min={0} max={30} step={0.5} hint="0 لتعطيلها" />
                             <Field label="الرقم الضريبي" error={errors['rules.vat_number']}>
@@ -195,22 +184,18 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
                                 <Textarea rows={2} value={form.data.rules.invoice_footer ?? ''} onChange={(e) => setRule('invoice_footer', e.target.value)} maxLength={500} placeholder="شكرًا لاختيارك ناديّنا. المبالغ المدفوعة غير مستردة بعد تفعيل العضوية." />
                             </Field>
                         </div>
-                    </Card>
+                    </SettingsSection>
 
-                    <Card>
-                        <CardHeader title="الاشتراك أونلاين" />
+                    <SettingsSection icon={Globe} title="الاشتراك أونلاين" description="ما يستطيع العضو فعله من الموقع">
                         <div className="divide-y divide-line">
                             <Toggle checked={form.data.rules.member_signup_enabled} onChange={(v) => setRule('member_signup_enabled', v)} label="السماح بالتسجيل من الموقع" hint="اختيار الباقة وإنشاء حساب العضو" />
                             <Toggle checked={form.data.rules.allow_pay_at_reception} onChange={(v) => setRule('allow_pay_at_reception', v)} label="السماح بالدفع في الاستقبال" hint="تُفعّل العضوية بعد تسجيل الدفع من الاستقبال" />
                         </div>
-                    </Card>
-                </div>
+                    </SettingsSection>
 
-                <div className="sticky bottom-4 z-10 flex justify-end">
-                    <Button type="submit" size="lg" loading={form.processing} className="shadow-lg">حفظ الإعدادات</Button>
-                </div>
+                <PageActions processing={form.processing} note="تُطبَّق القواعد على العمليات الجديدة من لحظة الحفظ." />
             </form>
-        </ClubLayout>
+        </SettingsScreen>
     );
 }
 

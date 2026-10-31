@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { toast } from 'sonner';
-import { AlertTriangle, ArrowRight, Banknote, Check, Clock, Copy, CreditCard, ExternalLink, FileDown, MessageCircle, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
+import { AlertTriangle, Banknote, Check, Clock, Copy, CreditCard, ExternalLink, FileDown, MessageCircle, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PaperPanel, { DocumentMeta, LtrDates, PaperAside, type PaperData } from '@/Components/Papers/PaperPanel';
-import { Badge, Button, Card, ChoiceCard, ConfirmAction, Field, Input, Modal, Notice, PageHeader, Select, Textarea } from '@/Components/ui';
+import { Badge, Button, Card, ChoiceCard, ConfirmAction, Field, Input, Modal, Notice, PageHeader, Select, Textarea, BackLink } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, dayCount, money } from '@/lib/format';
@@ -135,7 +135,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
     return (
         <ClubLayout title={`فاتورة ${invoice.number}`}>
             <PageHeader
-                back={<Link href={route('club.invoices.index')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> فواتير العملاء</Link>}
+                back={<BackLink href={route('club.invoices.index')}>فواتير العملاء</BackLink>}
                 title={<span className="num">{invoice.number}</span>}
                 subtitle={`${invoice.customer_name} — ${INVOICE_STATES[invoice.state]?.[0] ?? statusLabel} · ${invoiceType[invoice.type] ?? invoice.type}`}
                 actions={

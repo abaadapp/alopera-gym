@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { toast } from 'sonner';
-import { ArrowRight, Briefcase, CalendarClock, Check, Clock, Contact, Copy, FileText, KeyRound, Lock, Pencil, Plus, Printer, ShieldCheck, Wallet } from 'lucide-react';
+import { Briefcase, CalendarClock, Check, Clock, Contact, Copy, FileText, KeyRound, Lock, Pencil, Plus, Printer, ShieldCheck, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Modal, Notice, PageHeader, Select, StatCard, Tabs, Toggle } from '@/Components/ui';
+import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Modal, Notice, PageHeader, Select, StatCard, Tabs, Toggle, BackLink } from '@/Components/ui';
 import { FactList, Initials } from '@/Components/Payroll/parts';
 import { useCurrency, useShared } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
@@ -66,7 +66,7 @@ export default function EmployeeShow({ employee, account, stats, attendance, pay
     return (
         <ClubLayout title={employee.name}>
             <PageHeader
-                back={<Link href={route('club.employees.index')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> الموظفون</Link>}
+                back={<BackLink href={route('club.employees.index')}>الموظفون</BackLink>}
                 title="ملف الموظف"
                 subtitle="بيانات الموظف ووظيفته وحضوره ودخوله وصلاحياته"
                 actions={(can.manage || can.compensation) && <Button href={route('club.employees.edit', employee.id)} icon={<Pencil className="size-4" />}>تعديل</Button>}

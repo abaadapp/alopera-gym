@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
-import { ArrowRight, Check, ChevronLeft, Lock, Monitor, RefreshCw, RotateCcw, Save, Smartphone, Undo2 } from 'lucide-react';
+import { Check, ChevronLeft, Lock, Monitor, RefreshCw, RotateCcw, Save, Smartphone, Undo2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PaperFrame from '@/Components/Papers/PaperFrame';
 import { postJson } from '@/lib/http';
-import { Button, Card, CardHeader, ConfirmAction, Field, Input, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
+import { Button, Card, CardHeader, ConfirmAction, Field, Input, PageHeader, Select, Textarea, Toggle, BackLink } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 
 type Values = Record<string, string | boolean>;
@@ -67,7 +67,7 @@ export default function PaperEditor({ paper, others, brand }: { paper: Paper; ot
     return (
         <ClubLayout title={`قالب ${paper.label}`}>
             <PageHeader
-                back={<Link href={route('club.settings.papers')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> قوالب الأوراق</Link>}
+                back={<BackLink href={route('club.settings.papers')}>قوالب الأوراق</BackLink>}
                 title={paper.label}
                 subtitle={paper.desc}
                 actions={<>

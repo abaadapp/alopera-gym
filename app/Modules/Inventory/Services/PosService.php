@@ -95,7 +95,8 @@ final class PosService
             $invoice = $this->invoices->issue($member, $invoiceLines, ['type' => 'pos', 'branch_id' => $branchId], $customerName ?: 'عميل نقدي');
             if ($invoice->isOpen()) {
                 $reference = $method === 'card' && $cardReference ? $cardReference : $sale->number;
-                $this->payments->record($invoice, $invoice->balance(), $method === 'card' ? 'card' : 'cash', ['reference' => $reference, 'branch_id' => $branchId]);
+                // Marked as taken at the point of sale (and on which device), for the till's receipts of the day.
+                $this->payments->record($invoice, $invoice->balance(), $method === 'card' ? 'card' : 'cash', ['reference' => $reference, 'branch_id' => $branchId, 'notes' => 'نقطة البيع'.($device ? ': '.$device->name : '')]);
             }
 
             $sale->forceFill(['invoice_id' => $invoice->id, 'tax' => $invoice->tax_total, 'total' => $invoice->total])->save();

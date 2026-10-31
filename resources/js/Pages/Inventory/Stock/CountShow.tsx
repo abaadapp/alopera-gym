@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Link, router } from '@inertiajs/react';
-import { ArrowRight, Check, Save, X } from 'lucide-react';
+import { router } from '@inertiajs/react';
+import { Check, Save, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, ConfirmAction, Input, PageHeader, Select } from '@/Components/ui';
+import { Button, Card, ConfirmAction, Input, PageHeader, Select, BackLink } from '@/Components/ui';
 import { COUNT_LABELS, Pill } from '@/Components/Inventory/parts';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
@@ -28,7 +28,7 @@ export default function CountShow({ count, reasons }: { count: Count; reasons: R
     return (
         <ClubLayout title={`الجرد ${count.number}`}>
             <PageHeader
-                back={<Link href={route('club.inventory.counts')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> الجرد الفعلي</Link>}
+                back={<BackLink href={route('club.inventory.counts')}>الجرد الفعلي</BackLink>}
                 title={<span className="num">الجرد {count.number}</span>}
                 subtitle={`${count.branch} · بدأه ${count.by ?? '—'} في ${count.at}${count.approver ? ` · اعتمده ${count.approver} في ${count.approved_at}` : ''}`}
                 actions={<Pill tone={COUNT_LABELS[count.status]?.[1] ?? 'gray'}>{COUNT_LABELS[count.status]?.[0]}</Pill>}

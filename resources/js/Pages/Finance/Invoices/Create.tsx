@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, useForm } from '@inertiajs/react';
-import { ArrowRight, Plus, Send, Trash2, UserRound, X } from 'lucide-react';
+import { useForm } from '@inertiajs/react';
+import { Plus, Send, Trash2, UserRound, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, Field, Input, MemberPicker, PageHeader, Textarea, type MemberHit } from '@/Components/ui';
+import { Button, Card, Field, Input, MemberPicker, PageHeader, Textarea, type MemberHit, BackLink } from '@/Components/ui';
 import PaperFrame from '@/Components/Papers/PaperFrame';
 import { useCurrency } from '@/hooks/useShared';
 import { money } from '@/lib/format';
@@ -77,7 +77,7 @@ export default function InvoiceCreate() {
     return (
         <ClubLayout title="إنشاء فاتورة">
             <PageHeader
-                back={<Link href={route('club.invoices.index')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> فواتير العملاء</Link>}
+                back={<BackLink href={route('club.invoices.index')}>فواتير العملاء</BackLink>}
                 title="إنشاء فاتورة"
                 subtitle="فاتورة يدوية لخدمة أو بند خارج العضويات والمبيعات — تُرقَّم عند الإصدار."
                 actions={<>

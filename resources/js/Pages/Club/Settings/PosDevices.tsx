@@ -1,9 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import { AlertTriangle, Ban, KeyRound, Monitor, MonitorSmartphone, Pencil, Plug, Plus, Printer, Trash2 } from 'lucide-react';
-import ClubLayout from '@/Layouts/ClubLayout';
-import SettingsBack from '@/Components/SettingsBack';
-import { Badge, Button, Card, Checkbox, EmptyState, Field, Input, Modal, Notice, PageHeader, Select, Toggle } from '@/Components/ui';
+import { SettingsScreen, SettingsTitle } from '@/Components/Settings';
+import { Badge, Button, Card, Checkbox, EmptyState, Field, Input, Modal, Notice, Select, Toggle } from '@/Components/ui';
 import { DropdownItem, DropdownSeparator } from '@/Components/ui/Dropdown';
 import { ConfirmDelete, RowMenu } from '@/Components/Products/parts';
 import { cn } from '@/lib/cn';
@@ -41,8 +40,8 @@ export default function PosDevices({ devices, code, branches, accounts, policy, 
     const current = hardware ? devices.find((d) => d.id === hardware.id) ?? null : null;
 
     return (
-        <ClubLayout title="أجهزة نقاط البيع">
-            <PageHeader back={<SettingsBack />} title="أجهزة نقاط البيع" subtitle="كل جهاز مربوط بفرع ويُعرَف بهوية مستقلة؛ منفصلة عن أجهزة البصمة وبوابات الدخول" actions={<Button icon={<Plus />} onClick={() => setAdding(true)}>إضافة جهاز</Button>} />
+        <SettingsScreen title="أجهزة نقاط البيع" width="full">
+            <SettingsTitle title="أجهزة نقاط البيع" description="كل جهاز مربوط بفرع ويُعرَف بهوية مستقلة؛ منفصلة عن أجهزة البصمة وبوابات الدخول" actions={<Button icon={<Plus />} onClick={() => setAdding(true)}>إضافة جهاز</Button>} />
 
             {code && shown && (
                 <Card className="mb-4 border-[#111]/20">
@@ -112,7 +111,7 @@ export default function PosDevices({ devices, code, branches, accounts, policy, 
             {editing && <DeviceDialog device={editing} branches={branches} accounts={accounts} onClose={() => setEditing(null)} />}
             {current && <PeripheralsDialog device={current} types={types} drivable={drivable} connections={connections} onClose={() => setHardware(null)} />}
             <ConfirmDelete target={deleting} url={deleting && route('club.settings.pos-devices.destroy', deleting.id)} title={`حذف «${deleting?.name}»`} message="جهاز لم تُسجَّل عليه أي عملية بيع؛ يُحذف سجله وملحقاته." onClose={() => setDeleting(null)} />
-        </ClubLayout>
+        </SettingsScreen>
     );
 }
 

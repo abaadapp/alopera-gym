@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Link, router } from '@inertiajs/react';
-import { ArrowLeft, ArrowRight, Check, PackageCheck, Send, X } from 'lucide-react';
+import { router } from '@inertiajs/react';
+import { ArrowLeft, Check, PackageCheck, Send, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, CardHeader, Field, Input, Modal, Notice, PageHeader, Select, Textarea } from '@/Components/ui';
+import { Button, Card, CardHeader, Field, Input, Modal, Notice, PageHeader, Select, Textarea, BackLink } from '@/Components/ui';
 import { Pill, ReasonDialog, Steps, TRANSFER_TONES } from '@/Components/Inventory/parts';
 import { cn } from '@/lib/cn';
 import { number } from '@/lib/format';
@@ -27,7 +27,7 @@ export default function TransferShow({ transfer, can }: { transfer: Transfer; ca
     return (
         <ClubLayout title={`النقل ${transfer.number}`}>
             <PageHeader
-                back={<Link href={route('club.inventory.transfers')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> نقل المخزون</Link>}
+                back={<BackLink href={route('club.inventory.transfers')}>نقل المخزون</BackLink>}
                 title={<span className="inline-flex items-center gap-2"><span className="num">{transfer.number}</span><span className="text-[15px] font-medium text-[#6b7280]">{transfer.from} <ArrowLeft className="inline size-4" /> {transfer.to}</span></span>}
                 actions={<Pill tone={TRANSFER_TONES[s] ?? 'gray'}>{transfer.status_label}</Pill>}
             />

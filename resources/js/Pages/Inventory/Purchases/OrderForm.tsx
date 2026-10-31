@@ -1,8 +1,8 @@
 import { useMemo, type FormEvent } from 'react';
-import { Link, useForm } from '@inertiajs/react';
-import { ArrowRight, Plus, Trash2 } from 'lucide-react';
+import { useForm } from '@inertiajs/react';
+import { Plus, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, Field, Input, PageHeader, Select, Textarea } from '@/Components/ui';
+import { Button, Card, Field, Input, PageHeader, Select, Textarea, BackLink } from '@/Components/ui';
 import { clientKey } from '@/Components/Inventory/parts';
 import { useCurrency } from '@/hooks/useShared';
 import { money, number } from '@/lib/format';
@@ -67,7 +67,7 @@ export default function OrderForm({ order, lines, suppliers, products, branches,
     return (
         <ClubLayout title={order ? `تعديل ${order.number}` : 'أمر شراء جديد'}>
             <div className="mx-auto max-w-5xl">
-                <PageHeader back={<Link href={route('club.purchases.index')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> أوامر الشراء</Link>} title={order ? <span className="num">تعديل {order.number}</span> : 'أمر شراء جديد'} subtitle="يُحفظ مسودة حتى يُعتمد ويُرسل للمورد؛ لا يغيّر المخزون ولا يسجل دفعًا" />
+                <PageHeader back={<BackLink href={route('club.purchases.index')}>أوامر الشراء</BackLink>} title={order ? <span className="num">تعديل {order.number}</span> : 'أمر شراء جديد'} subtitle="يُحفظ مسودة حتى يُعتمد ويُرسل للمورد؛ لا يغيّر المخزون ولا يسجل دفعًا" />
                 <form onSubmit={submit(false)} className="space-y-6">
                     <Card className="p-6">
                         <h3 className="mb-4 font-bold text-ink">المورد والتسليم</h3>

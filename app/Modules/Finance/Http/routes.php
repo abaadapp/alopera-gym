@@ -26,7 +26,7 @@ Route::get('/payments', [PaymentController::class, 'index'])->middleware('can:in
 Route::post('/invoices/{invoice}/payments', [PaymentController::class, 'store'])->middleware('can:payments.record')->name('payments.store');
 Route::post('/payments/{payment}/confirm', [PaymentController::class, 'confirm'])->middleware('can:payments.confirm')->name('payments.confirm');
 Route::post('/payments/{payment}/reject', [PaymentController::class, 'reject'])->middleware('can:payments.confirm')->name('payments.reject');
-Route::get('/payments/{payment}/receipt', [PaymentController::class, 'receipt'])->middleware(['can:invoices.view', 'can:papers.print'])->name('payments.receipt');
+Route::get('/payments/{payment}/receipt', [PaymentController::class, 'receipt'])->middleware('can:papers.print')->name('payments.receipt');
 Route::get('/payments/{payment}/proof', [PaymentController::class, 'proof'])->middleware('can:invoices.view')->name('payments.proof');
 
 Route::get('/dues', DuesController::class)->middleware('can:dues.view')->name('dues');

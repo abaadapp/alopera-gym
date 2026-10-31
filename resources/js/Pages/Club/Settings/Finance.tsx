@@ -1,8 +1,8 @@
 import type { FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
-import ClubLayout from '@/Layouts/ClubLayout';
-import SettingsBack from '@/Components/SettingsBack';
-import { Button, Card, CardHeader, Field, PageHeader, Select } from '@/Components/ui';
+import { Landmark, Wallet } from 'lucide-react';
+import { PageActions, SettingsScreen, SettingsSection } from '@/Components/Settings';
+import { Field, Select } from '@/Components/ui';
 
 interface Props {
     methods: Record<string, string>;
@@ -27,24 +27,21 @@ export default function FinanceSettings({ methods, receipt, spending, accounts, 
     );
 
     return (
-        <ClubLayout title="الإعدادات المالية">
-            <PageHeader back={<SettingsBack />} title="الإعدادات المالية" subtitle="إلى أي حساب يذهب كل تحصيل، ومن أي حساب يخرج كل مصروف — حسب طريقة الدفع. تُطبَّق على العمليات الجديدة." />
-            <form onSubmit={submit} className="grid gap-4 lg:grid-cols-2">
-                <Card>
-                    <CardHeader title="التحصيل من الأعضاء" subtitle="البطاقات وPaymob تنتظر في حسابات التسوية حتى تصل البنك" />
+        <SettingsScreen title="الإعدادات المالية">
+            <form onSubmit={submit} className="space-y-6">
+                <SettingsSection icon={Wallet} title="التحصيل من الأعضاء" description="البطاقات وPaymob تنتظر في حسابات التسوية حتى تصل البنك">
                     <div className="space-y-4">
                         {Object.entries(methods).map(([method, label]) => <Field key={method} label={label}>{select('receipt', method)}</Field>)}
                     </div>
-                </Card>
-                <Card>
-                    <CardHeader title="دفع المصروفات" subtitle="من الصندوق أو حساب بنكي فقط" />
+                </SettingsSection>
+                <SettingsSection icon={Landmark} title="دفع المصروفات" description="من الصندوق أو حساب بنكي فقط">
                     <div className="space-y-4">
                         {Object.entries(methods).filter(([m]) => m !== 'paymob').map(([method, label]) => <Field key={method} label={label}>{select('spending', method)}</Field>)}
                     </div>
                     <p className="mt-4 text-[12px] text-muted">نسبة ضريبة القيمة المضافة على الفواتير: {vatRate}% — تُعدَّل من إعدادات النادي.</p>
-                </Card>
-                <div className="lg:col-span-2"><Button type="submit" loading={form.processing}>حفظ الإعدادات</Button></div>
+                </SettingsSection>
+                <PageActions processing={form.processing} note="إلى أي حساب يذهب كل تحصيل، ومن أي حساب يخرج كل مصروف — حسب طريقة الدفع. تُطبَّق على العمليات الجديدة." />
             </form>
-        </ClubLayout>
+        </SettingsScreen>
     );
 }

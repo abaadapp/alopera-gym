@@ -1,7 +1,7 @@
-import { Link } from '@inertiajs/react';
-import { ArrowRight, CheckCheck, Eye, Send, Users, XCircle } from 'lucide-react';
+
+import { CheckCheck, Eye, Send, Users, XCircle } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Card, CardHeader, ConfirmAction, EmptyState, PageHeader, StatCard } from '@/Components/ui';
+import { Badge, Card, CardHeader, ConfirmAction, EmptyState, PageHeader, StatCard, BackLink } from '@/Components/ui';
 import { number } from '@/lib/format';
 import { label, messageStatus } from '@/lib/labels';
 import { CAMPAIGN_STATUS, type Audience } from './Index';
@@ -45,7 +45,7 @@ export default function CampaignShow({ campaign, messages }: Props) {
     return (
         <ClubLayout title={campaign.name}>
             <PageHeader
-                back={<Link href={route('club.campaigns.index')} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-brand"><ArrowRight className="size-4" /> الحملات</Link>}
+                back={<BackLink href={route('club.campaigns.index')}>الحملات</BackLink>}
                 title={campaign.name}
                 subtitle={<span className="inline-flex items-center gap-2"><Badge tone={tone}>{st}</Badge>{campaign.scheduled_at && <span>موعد الإرسال <span className="num">{campaign.scheduled_at}</span></span>}</span>}
                 actions={

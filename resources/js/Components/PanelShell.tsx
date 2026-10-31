@@ -80,7 +80,7 @@ export default function PanelShell({ identity, groups, topbar, children }: {
             <div className="lg:ms-64">
                 {topbar(() => setOpen(true))}
 
-                <main className="mx-auto w-full max-w-[1600px] p-4 lg:p-6">{children}</main>
+                <main className="mx-auto w-full max-w-[1600px] animate-[ui-in_0.28s_cubic-bezier(0.22,1,0.36,1)] p-4 lg:p-6">{children}</main>
             </div>
             <Flash />
         </AdminScope>

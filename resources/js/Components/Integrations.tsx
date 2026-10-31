@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { Link, router, useForm } from '@inertiajs/react';
-import { ArrowRight, Check, CircleCheck, CircleDashed, Copy, CreditCard, Fingerprint, MessageCircle, Plug, PowerOff, Wrench, XCircle, type LucideIcon } from 'lucide-react';
-import { Badge, Button, Field, Input, Select, Toggle } from '@/Components/ui';
+import { router, useForm } from '@inertiajs/react';
+import { Check, CircleCheck, CircleDashed, Copy, CreditCard, Fingerprint, MessageCircle, Plug, PowerOff, Wrench, XCircle, type LucideIcon } from 'lucide-react';
+import { BackLink, Badge, Button, Field, Input, Select, Toggle } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 
 /** The four states of an integration, as the server decides them (App\Modules\Integrations\Services\IntegrationHub). */
@@ -70,9 +70,7 @@ export function IntegrationCard({ service, name, subtitle, site, line, status, a
 /** The way back to the integrations page, above each service's settings. */
 export function IntegrationBack() {
     return (
-        <Link href={route('club.integrations.index')} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
-            <ArrowRight className="size-4" /> التطبيقات التكاملية
-        </Link>
+        <BackLink href={route('club.integrations.index')}>التطبيقات التكاملية</BackLink>
     );
 }
 

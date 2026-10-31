@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link, router, useForm } from '@inertiajs/react';
-import { ArrowRight, Ban, Check, Clock, MapPin, Pencil, Phone, UserCheck, UserRound, Users, UserX, X } from 'lucide-react';
+import { Ban, Check, Clock, MapPin, Pencil, Phone, UserCheck, UserRound, Users, UserX, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, MemberPicker, Modal, PageHeader, Select, Stat } from '@/Components/ui';
+import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, MemberPicker, Modal, PageHeader, Select, Stat, BackLink } from '@/Components/ui';
 import { useCan } from '@/hooks/useShared';
 import { dayName, phone as fmtPhone, time } from '@/lib/format';
 import { bookingStatus, label, sessionStatus } from '@/lib/labels';
@@ -75,7 +75,7 @@ export default function SessionShow({ session, bookings, trainers }: { session: 
     return (
         <ClubLayout title={session.program ?? 'حصة'}>
             <PageHeader
-                back={<Link href={route('club.sessions.index', { week: session.date })} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-brand"><ArrowRight className="size-4" /> الحصص</Link>}
+                back={<BackLink href={route('club.sessions.index', { week: session.date })}>الحصص</BackLink>}
                 title={<span className="flex items-center gap-3"><span className="h-8 w-1.5 rounded-full" style={{ background: session.color ?? 'var(--brand)' }} />{session.program}</span>}
                 subtitle={`${dayName(session.date)} · ${time(session.time)} – ${time(session.end_time)}`}
                 actions={

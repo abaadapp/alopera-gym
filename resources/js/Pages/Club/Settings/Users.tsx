@@ -1,9 +1,8 @@
 import { useState, type FormEvent } from 'react';
-import { useForm } from '@inertiajs/react';
-import { Pencil, UserPlus, Users as UsersIcon } from 'lucide-react';
-import ClubLayout from '@/Layouts/ClubLayout';
-import SettingsBack from '@/Components/SettingsBack';
-import { Badge, Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Toggle } from '@/Components/ui';
+import { router, useForm } from '@inertiajs/react';
+import { Check, Plus, UserRound, UserX } from 'lucide-react';
+import { SettingsScreen } from '@/Components/Settings';
+import { Badge, Button, Card, DataTable, Field, Input, Modal, RowActions, Select, Toggle, type Column } from '@/Components/ui';
 import { useShared } from '@/hooks/useShared';
 import type { Option } from '@/types';
 
@@ -32,43 +31,64 @@ interface Props {
 export default function Users({ users, roles, branches }: Props) {
     const { auth } = useShared();
     const [editing, setEditing] = useState<StaffRow | 'new' | null>(null);
+    const [stopping, setStopping] = useState<StaffRow | null>(null);
+    const [busy, setBusy] = useState(false);
+    const me = (u: StaffRow) => u.id === auth?.user.id;
+
+    const columns: Column<StaffRow>[] = [
+        {
+            key: 'name',
+            header: 'الاسم',
+            cell: (u) => (
+                <div className="flex items-center gap-3">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-[#f2f2f0] text-[#4b4b4b]"><UserRound className="size-[18px]" /></span>
+                    <span className="min-w-0">
+                        <span className="block font-medium text-[#111]">{u.name}{me(u) && <span className="ms-1 text-[12px] font-normal text-[#9ca3af]">(أنت)</span>}</span>
+                        <span className="block text-[12px] text-[#9ca3af]" dir="ltr">{u.email}</span>
+                    </span>
+                </div>
+            ),
+        },
+        { key: 'role', header: 'الدور', cell: (u) => <><Badge tone={u.role_key === 'owner' ? 'brand' : 'gray'}>{u.role ?? '—'}</Badge>{u.own_permissions && <span className="ms-1.5 text-[12px] text-[#9ca3af]">صلاحيات مخصصة</span>}</> },
+        { key: 'branch', header: 'الفرع', cell: (u) => <span className="text-[#6b7280]">{u.branch ?? 'كل الفروع'}</span> },
+        { key: 'login', header: 'آخر دخول', cell: (u) => <span className="num text-[#6b7280]">{u.last_login_at ?? 'لم يسجّل بعد'}</span> },
+        { key: 'status', header: 'الحالة', cell: (u) => (u.is_active ? <Badge tone="green">نشط</Badge> : <Badge tone="red">موقوف</Badge>) },
+        {
+            key: 'actions',
+            header: <span className="sr-only">إجراءات</span>,
+            align: 'end',
+            cell: (u) =>
+                u.may_manage || me(u) ? (
+                    <RowActions
+                        label={u.name}
+                        edit={() => setEditing(u)}
+                        extra={u.is_active && u.may_manage && !me(u) ? [{ label: 'إيقاف الحساب', icon: <UserX />, danger: true, onSelect: () => setStopping(u) }] : []}
+                    />
+                ) : (
+                    <span className="text-[12px] text-[#9ca3af]" title="هذا الحساب يفتح ما لا تفتحه؛ يعدّله من يملك ذلك.">يفتح ما لا تفتحه</span>
+                ),
+        },
+    ];
+
+    const stop = () => stopping && router.delete(route('club.users.destroy', stopping.id), { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => { setBusy(false); setStopping(null); } });
 
     return (
-        <ClubLayout title="المستخدمون">
-            <PageHeader back={<SettingsBack />} title="مستخدمو اللوحة" subtitle="حسابات الموظفين وأدوارهم. الصلاحيات تُطبّق على الخادم وليس على الواجهة فقط." actions={<Button icon={<UserPlus className="size-4" />} onClick={() => setEditing('new')}>مستخدم جديد</Button>} />
-            <Card padded={false}>
-                {users.length === 0 ? (
-                    <EmptyState icon={<UsersIcon className="size-6" />} title="لا توجد حسابات" />
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="table-base">
-                            <thead><tr><th>الاسم</th><th>البريد</th><th>الدور</th><th>الفرع</th><th>آخر دخول</th><th>الحالة</th><th /></tr></thead>
-                            <tbody>
-                                {users.map((u) => (
-                                    <tr key={u.id} className={u.is_active ? '' : 'opacity-60'}>
-                                        <td className="font-medium">{u.name}{u.id === auth?.user.id && <span className="ms-1 text-xs text-muted">(أنت)</span>}</td>
-                                        <td className="text-xs" dir="ltr">{u.email}</td>
-                                        <td><Badge tone={u.role_key === 'owner' ? 'brand' : 'gray'}>{u.role ?? '—'}</Badge>{u.own_permissions && <span className="ms-1 text-[11px] text-muted">صلاحيات مخصصة</span>}</td>
-                                        <td className="text-xs">{u.branch ?? 'كل الفروع'}</td>
-                                        <td className="text-xs text-muted num">{u.last_login_at ?? 'لم يسجّل بعد'}</td>
-                                        <td>{u.is_active ? <Badge tone="green">نشط</Badge> : <Badge tone="red">موقوف</Badge>}</td>
-                                        <td>
-                                            <div className="flex justify-end gap-1">
-                                                {(u.may_manage || u.id === auth?.user.id) ? <Button size="sm" variant="ghost" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(u)}>تعديل</Button> : <span className="text-[11px] text-muted" title="هذا الحساب يفتح ما لا تفتحه؛ يعدّله من يملك ذلك.">يفتح ما لا تفتحه</span>}
-                                                {u.is_active && u.may_manage && u.id !== auth?.user.id && (
-                                                    <ConfirmAction url={route('club.users.destroy', u.id)} method="delete" title="إيقاف الحساب" message={`إيقاف حساب ${u.name}؟ لن يتمكن من الدخول.`} variant="ghost">إيقاف</ConfirmAction>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+        <SettingsScreen title="المستخدمون" width="full">
+            <Card padded={false} className="overflow-hidden">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e8e8e8] px-5 pb-4 pt-5">
+                    <div>
+                        <h2 className="text-[17px] font-bold text-[#111]">مستخدمو اللوحة</h2>
+                        <p className="mt-0.5 text-[13px] text-[#6b7280]">حسابات الموظفين وأدوارهم. الصلاحيات تُطبَّق على الخادم وليس على الواجهة فقط.</p>
                     </div>
-                )}
+                    <Button icon={<Plus />} onClick={() => setEditing('new')}>إضافة</Button>
+                </div>
+                <DataTable rows={users} columns={columns} rowKey={(u) => u.id} params={{}} empty="لا توجد حسابات" />
             </Card>
             {editing && <UserModal user={editing === 'new' ? null : editing} roles={roles} branches={branches} onClose={() => setEditing(null)} />}
-        </ClubLayout>
+            <Modal open={stopping !== null} onClose={() => setStopping(null)} size="xs" title="إيقاف الحساب" footer={<><Button variant="outline" onClick={() => setStopping(null)} disabled={busy}>إلغاء</Button><Button variant="danger" loading={busy} onClick={stop}>إيقاف</Button></>}>
+                <p className="text-sm text-[#4b4b4b]">إيقاف حساب {stopping?.name}؟ لن يتمكن من الدخول، ويبقى سجله كما هو.</p>
+            </Modal>
+        </SettingsScreen>
     );
 }
 
@@ -91,7 +111,7 @@ function UserModal({ user, roles, branches, onClose }: { user: StaffRow | null; 
     };
 
     return (
-        <Modal open onClose={onClose} title={user ? `تعديل: ${user.name}` : 'مستخدم جديد'} footer={<><Button variant="ghost" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
+        <Modal open onClose={onClose} title={user ? `تعديل: ${user.name}` : 'مستخدم جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button icon={<Check />} onClick={submit} loading={form.processing}>حفظ</Button></>}>
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
                 <Field label="الاسم" error={form.errors.name} required className="sm:col-span-2">
                     <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} />
@@ -116,7 +136,7 @@ function UserModal({ user, roles, branches, onClose }: { user: StaffRow | null; 
                     <Input type="password" dir="ltr" autoComplete="new-password" value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} />
                 </Field>
                 {user && <Toggle checked={form.data.is_active} onChange={(v) => form.setData('is_active', v)} label="الحساب نشط" />}
-                <p className="text-xs text-muted sm:col-span-2">لربط حساب مدرب بملفه في الجدول، اختر الحساب من صفحة فريق التدريب.</p>
+                <p className="text-[12px] text-[#9ca3af] sm:col-span-2">لربط حساب مدرب بملفه في الجدول، اختر الحساب من صفحة فريق التدريب.</p>
             </form>
         </Modal>
     );

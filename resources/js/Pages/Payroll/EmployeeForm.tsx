@@ -1,8 +1,8 @@
 import type { FormEvent } from 'react';
-import { Link, useForm } from '@inertiajs/react';
-import { ArrowRight, Check, KeyRound, Plus, Trash2, UserRound, Wallet } from 'lucide-react';
+import { useForm } from '@inertiajs/react';
+import { Check, KeyRound, Plus, Trash2, UserRound, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Field, Input, PageHeader, Select, Textarea } from '@/Components/ui';
+import { Button, Field, Input, PageHeader, Select, Textarea, BackLink } from '@/Components/ui';
 import { FormSection, Initials } from '@/Components/Payroll/parts';
 import { cn } from '@/lib/cn';
 import type { Allowance, Can, EmployeeRow } from './Employees';
@@ -59,7 +59,7 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
     return (
         <ClubLayout title={editing ? `تعديل ${employee.name}` : 'إضافة موظف'}>
             <PageHeader
-                back={<Link href={editing ? route('club.employees.show', employee.id) : route('club.employees.index')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> {editing ? 'ملف الموظف' : 'الموظفون'}</Link>}
+                back={<BackLink href={editing ? route('club.employees.show', employee.id) : route('club.employees.index')}>{editing ? 'ملف الموظف' : 'الموظفون'}</BackLink>}
                 title={editing ? 'تعديل ملف الموظف' : 'إضافة موظف'}
                 subtitle={editing ? 'تعديل بيانات الموظف ووظيفته وراتبه حسب صلاحياتك' : 'أضف موظفًا جديدًا وحدّد وظيفته وفرعه، وافتح له حساب دخول إن احتاج'}
             />
