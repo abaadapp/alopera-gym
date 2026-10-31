@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { router } from '@inertiajs/react';
+import { CalendarRange } from 'lucide-react';
 import { Button, Input, Tabs } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 
@@ -18,7 +19,6 @@ const RANGES: { key: Range; label: string }[] = [
     { key: 'month', label: 'الشهر' },
     { key: 'year', label: 'السنة' },
     { key: 'all', label: 'الكل' },
-    { key: 'custom', label: 'مخصص' },
 ];
 
 type Params = Record<string, string | number | boolean | null | undefined>;
@@ -31,23 +31,44 @@ export function periodParams(period: Period): Record<string, string> {
 }
 
 /**
- * The period of a screen, the same on every screen that has one: today, the week, the month, the year, all of it, or
- * dates of one's own — underline tabs; «مخصص» shows the from–to dates at the row's far end (under the row on a phone).
+ * The period of a screen, the same on every screen that has one, drawn as the reference's period tabs: today, the week,
+ * the month, the year, all of it — 14px underline tabs, the current one underlined in black. Dates of one's own are a
+ * button at the row's end, «اختيار فترة», that opens the from–to dates beside it; while they are in force no tab is
+ * current and the button shows them.
  *
- * The period lives in the address (?range=, and ?from&to for «مخصص»): it survives reload, back and a shared link, and
+ * The period lives in the address (?range=, and ?range=custom&from&to): it survives reload, back and a shared link, and
  * the server reads it for the list, its totals and its export alike. Changing it keeps the screen's other filters
  * (`params`) and starts the list from its first page. `ranges` drops periods a screen does not offer.
  */
 export default function PeriodTabs({ period, params = {}, ranges, only, className }: { period: Period; params?: Params; ranges?: Range[]; only?: string[]; className?: string }) {
     const [dates, setDates] = useState({ from: period.from ?? '', to: period.to ?? '' });
     const [picking, setPicking] = useState(false);
-    const root = useRef<HTMLDivElement>(null);
+    const box = useRef<HTMLDivElement>(null);
+    const button = useRef<HTMLButtonElement>(null);
 
-    // A new period from the server (a tab, back, forward): the dates follow it.
+    // A new period from the server (a tab, back, forward): the dates follow it and the picker closes.
     useEffect(() => {
         setDates({ from: period.from ?? '', to: period.to ?? '' });
         setPicking(false);
     }, [period.range, period.from, period.to]);
+
+    // The picker takes the focus on its first date; Escape or a click elsewhere closes it, the focus back on its button.
+    useEffect(() => {
+        if (!picking) return;
+        box.current?.querySelector<HTMLInputElement>('input[type="date"]')?.focus();
+        const onDown = (e: PointerEvent) => !box.current?.contains(e.target as Node) && setPicking(false);
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            setPicking(false);
+            button.current?.focus();
+        };
+        document.addEventListener('pointerdown', onDown);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('pointerdown', onDown);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [picking]);
 
     const go = (next: Params) => {
         const query: Record<string, string> = {};
@@ -64,35 +85,51 @@ export default function PeriodTabs({ period, params = {}, ranges, only, classNam
     };
 
     const tabs = RANGES.filter((r) => !ranges || ranges.includes(r.key));
-    const current: Range = picking ? 'custom' : period.range;
-    // The dates share a phone's width; beside the tabs they are 8.5rem each.
-    const form = (
-        <form onSubmit={submit} className="flex items-center gap-2 py-1.5">
-            <Input type="date" className="h-8 min-w-0 flex-1 text-[13px] md:w-[8.5rem] md:flex-none" value={dates.from} max={dates.to || undefined} onChange={(e) => setDates({ ...dates, from: e.target.value })} aria-label="من تاريخ" />
-            <span className="text-[#9ca3af]">—</span>
-            <Input type="date" className="h-8 min-w-0 flex-1 text-[13px] md:w-[8.5rem] md:flex-none" value={dates.to} min={dates.from || undefined} onChange={(e) => setDates({ ...dates, to: e.target.value })} aria-label="إلى تاريخ" />
-            <Button type="submit" variant="outline" size="sm" className="shrink-0" disabled={!dates.from && !dates.to}>عرض</Button>
-        </form>
+    const custom = period.range === 'custom';
+    const day = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '…');
+    const picker = (!ranges || ranges.includes('custom')) && (
+        <div ref={box} className="relative py-1.5">
+            <button
+                ref={button}
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={picking}
+                aria-label={custom ? `الفترة من ${period.from ?? '…'} إلى ${period.to ?? '…'} — اختيار فترة` : 'اختيار فترة'}
+                title={custom ? `${period.from ?? '…'} – ${period.to ?? '…'}` : undefined}
+                onClick={() => setPicking((v) => !v)}
+                className={cn(
+                    'inline-flex h-8 items-center gap-1.5 rounded-[10px] border px-2.5 text-[13px] font-medium transition-colors [&_svg]:size-4 [&_svg]:shrink-0',
+                    custom ? 'border-[#111] bg-[#111] text-white' : 'border-line bg-white text-[#4b4b4b] hover:bg-[#fafafa] hover:text-ink',
+                )}
+            >
+                <CalendarRange />
+                {custom ? <span className="num" dir="ltr">{day(period.from)} – {day(period.to)}</span> : <span className="hidden sm:inline">اختيار فترة</span>}
+            </button>
+            {picking && (
+                <form role="dialog" aria-label="اختيار فترة" onSubmit={submit} className="absolute end-0 top-full z-40 mt-1 w-[min(17rem,calc(100vw-2rem))] animate-[menu-in_.14s_ease-out] rounded-[12px] border border-[#e8e8e8] bg-white p-3 shadow-[0_8px_30px_rgba(0,0,0,0.10)]">
+                    <div className="grid gap-2">
+                        <label className="block text-[12px] text-[#6b7280]">
+                            من
+                            <Input type="date" className="mt-1 h-9 text-[13px]" value={dates.from} max={dates.to || undefined} onChange={(e) => setDates({ ...dates, from: e.target.value })} aria-label="من تاريخ" />
+                        </label>
+                        <label className="block text-[12px] text-[#6b7280]">
+                            إلى
+                            <Input type="date" className="mt-1 h-9 text-[13px]" value={dates.to} min={dates.from || undefined} onChange={(e) => setDates({ ...dates, to: e.target.value })} aria-label="إلى تاريخ" />
+                        </label>
+                    </div>
+                    <div className="mt-3 flex justify-end gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => { setPicking(false); button.current?.focus(); }}>إلغاء</Button>
+                        <Button type="submit" size="sm" disabled={!dates.from && !dates.to}>عرض</Button>
+                    </div>
+                </form>
+            )}
+        </div>
     );
 
     return (
-        <div ref={root} className={cn('mb-4', className)}>
-            <Tabs
-                tabs={tabs}
-                value={current}
-                onChange={(key) => {
-                    if (key === 'custom') {
-                        setPicking(true);
-                        // The from-date that is on screen (beside the tabs, or under them on a phone).
-                        window.setTimeout(() => [...(root.current?.querySelectorAll<HTMLInputElement>('input[type="date"]') ?? [])].find((el) => el.offsetParent !== null)?.focus(), 0);
-                        return;
-                    }
-                    go({ range: key });
-                }}
-                dense
-                trailing={current === 'custom' && <div className="hidden md:block">{form}</div>}
-            />
-            {current === 'custom' && <div className="md:hidden">{form}</div>}
+        <div className={cn('mb-4', className)}>
+            {/* Dates of one's own leave every tab unmarked: the button at the end says what is shown. */}
+            <Tabs tabs={tabs} value={(custom ? '' : period.range) as Range} onChange={(key) => go({ range: key })} dense trailing={picker} />
         </div>
     );
 }

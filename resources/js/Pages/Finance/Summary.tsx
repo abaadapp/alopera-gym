@@ -30,14 +30,15 @@ export default function FinanceSummary({ summary, accounts, overdue, unpaidSalar
         <ClubLayout title="الملخص المالي">
             <PageHeader title="الملخص المالي" subtitle={period.from ? `أين أموال النادي الآن، وما له وما عليه، ونتيجة الفترة من ${date(period.from)} إلى ${date(period.to ?? '')}` : 'أين أموال النادي الآن، وما له وما عليه، ونتيجة كل الفترات'} />
 
+            {/* The one period bar, at the top under the title. */}
+            <PeriodTabs period={period} />
+
             <div className="mb-6 grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="الصندوق" value={m(summary.cash)} icon={<Banknote className="size-5" />} tone="green" href={route('club.finance.banks')} />
                 <StatCard label="الحسابات البنكية" value={m(summary.banks)} icon={<Landmark className="size-5" />} tone="blue" href={route('club.finance.banks')} />
                 <StatCard label="بطاقات وPaymob قيد التسوية" value={m(summary.clearing)} hint="تصل إلى البنك عند التسوية" icon={<CreditCard className="size-5" />} tone="violet" />
                 <StatCard label="ذمم الأعضاء" value={m(summary.receivable)} hint={overdue.count ? `${overdue.count} فاتورة متأخرة بـ ${m(overdue.amount)}` : 'لا فواتير متأخرة'} icon={<Users className="size-5" />} tone={overdue.count ? 'amber' : 'gray'} href={route('club.dues')} />
             </div>
-
-            <PeriodTabs period={period} />
 
             <div className="mb-6 grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="الإيرادات" value={m(summary.revenue)} icon={<TrendingUp className="size-5" />} tone="green" />
