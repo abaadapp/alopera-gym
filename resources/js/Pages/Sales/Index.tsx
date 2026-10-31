@@ -7,6 +7,7 @@ import ExportMenu from '@/Components/Reports/ExportMenu';
 import { SALE_STATES, SourceBadge, StateBadge, VoidDialog, type SaleRow } from '@/Components/Sales/parts';
 import { Badge, Button, Card, DataTable, PageHeader, RowActions, type Column, type PageMeta, type TableFilter } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
+import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
 import type { Paginated } from '@/types';
 
@@ -33,19 +34,35 @@ export default function SalesIndex({ sales, period, filters, totals, options, ca
     const listParams = { ...filters, ...periodParams(period) };
     const exportParams = Object.fromEntries(Object.entries(listParams).filter(([k, v]) => v && !['sort', 'dir', 'page'].includes(k))) as Record<string, string>;
 
+    // The list says «عند الاستلام»: the column is the payment's.
+    const method = (s: SaleRow) => (s.payment_method === 'pickup' ? 'عند الاستلام' : s.method_label);
+    const voided = (s: SaleRow) => s.state === 'voided' || s.state === 'cancelled';
+    const unpaid = (s: SaleRow) => !s.paid && s.status === 'pending';
+    const actions = (s: SaleRow) => (
+        <RowActions
+            label={s.number}
+            extra={[
+                ...(mayPrint ? [{ label: 'طباعة الإيصال', icon: <Printer />, href: route('club.sales.receipt', s.id), external: true }] : []),
+                ...(allowed.refund && s.status === 'completed' ? [{ label: 'إلغاء البيع ورد المبلغ', icon: <Undo2 />, danger: true, onSelect: () => setVoiding(s) }] : []),
+            ]}
+        />
+    );
+
+    // On a laptop's 1280px every column of the reference but the products and the payment, which come in at 1440px and
+    // 1536px (the payment sits under the total until then); numbers stay on one line.
     const columns: Column<SaleRow>[] = [
-        { key: 'number', header: 'الرقم', cell: (s) => <Link href={route('club.sales.show', s.id)} className="font-medium text-ink hover:underline num">{s.number}</Link> },
+        { key: 'number', header: 'الرقم', cell: (s) => <Link href={route('club.sales.show', s.id)} className="whitespace-nowrap font-medium text-ink hover:underline num">{s.number}</Link> },
         {
             key: 'customer',
             header: 'العميل',
             cell: (s) => (
-                <div className="max-w-40">
-                    <div className="truncate text-ink">{s.buyer}</div>
+                <div className="max-w-36">
+                    <div className="truncate text-ink" title={s.buyer}>{s.buyer}</div>
                     {s.phone && <div className="text-[11px] text-[#9ca3af] num" dir="ltr">+{s.phone}</div>}
                 </div>
             ),
         },
-        ...(allowed.websiteOnly ? [] : [{ key: 'source', header: 'المصدر', cell: (s: SaleRow) => <SourceBadge source={s.source} label={s.source_label} /> }]),
+        ...(allowed.websiteOnly ? [] : [{ key: 'source', header: 'المصدر', cell: (s: SaleRow) => <SourceBadge source={s.source} label={s.source_label} short /> }]),
         // A website order has no seller: its source says where it came from. The branch, in a club with several, under it.
         {
             key: 'employee',
@@ -60,6 +77,7 @@ export default function SalesIndex({ sales, period, filters, totals, options, ca
         {
             key: 'items',
             header: 'المنتجات',
+            className: 'hidden min-[1440px]:table-cell',
             cell: (s) => (
                 <div className="max-w-28">
                     <div className="whitespace-nowrap tabular-nums">{number(s.items_count ?? 0)} منتج</div>
@@ -70,21 +88,22 @@ export default function SalesIndex({ sales, period, filters, totals, options, ca
         {
             key: 'total',
             header: 'الإجمالي',
-            align: 'end',
             cell: (s) => (
                 <div className="whitespace-nowrap">
-                    <span className={s.state === 'voided' || s.state === 'cancelled' ? 'tabular-nums text-[#9ca3af] line-through' : 'tabular-nums font-medium'}>{money(s.total, currency)}</span>
+                    <span className={voided(s) ? 'tabular-nums text-[#9ca3af] line-through' : 'tabular-nums font-medium'}>{money(s.total, currency)}</span>
                     {Number(s.discount) > 0 && <div className="text-[11px] text-[#9ca3af]">خصم {money(s.discount, currency)}</div>}
+                    <div className={cn('text-[11px] 2xl:hidden', unpaid(s) ? 'text-[#b45309]' : 'text-[#9ca3af]')}>{unpaid(s) ? `${method(s)} · غير مدفوع` : method(s)}</div>
                 </div>
             ),
         },
         {
             key: 'payment',
             header: 'الدفع',
+            className: 'hidden 2xl:table-cell',
             cell: (s) => (
                 <>
-                    <Badge tone="gray">{s.method_label}</Badge>
-                    {!s.paid && s.status === 'pending' && <div className="mt-1 text-[11px] text-[#b45309]">غير مدفوع</div>}
+                    <Badge tone="gray">{method(s)}</Badge>
+                    {unpaid(s) && <div className="mt-1 text-[11px] text-[#b45309]">غير مدفوع</div>}
                 </>
             ),
         },
@@ -95,19 +114,45 @@ export default function SalesIndex({ sales, period, filters, totals, options, ca
             header: <span className="sr-only">إجراءات</span>,
             align: 'end',
             cell: (s) => (
-                <div className="flex items-center justify-end gap-1">
+                <div className="flex items-center justify-end gap-0.5">
                     <Button variant="ghost" size="sm" href={route('club.sales.show', s.id)} icon={<Eye />} aria-label={`عرض ${s.number}`}>عرض</Button>
-                    <RowActions
-                        label={s.number}
-                        extra={[
-                            ...(mayPrint ? [{ label: 'طباعة الإيصال', icon: <Printer />, href: route('club.sales.receipt', s.id), external: true }] : []),
-                            ...(allowed.refund && s.status === 'completed' ? [{ label: 'إلغاء البيع ورد المبلغ', icon: <Undo2 />, danger: true, onSelect: () => setVoiding(s) }] : []),
-                        ]}
-                    />
+                    {actions(s)}
                 </div>
             ),
         },
     ];
+
+    // Below 1280px each sale is a card: number and state, the buyer, the total with its payment; then where it came from,
+    // who sold it, what was in it and when. The whole card opens the sale.
+    const card = (s: SaleRow) => (
+        <div className="relative px-4 py-3.5 transition-colors hover:bg-[#fafafa]">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <Link href={route('club.sales.show', s.id)} className="whitespace-nowrap font-medium text-ink num after:absolute after:inset-0" aria-label={`عرض ${s.number}`}>{s.number}</Link>
+                        <StateBadge sale={s} />
+                    </div>
+                    <div className="mt-1 truncate text-[13px] text-[#4b4b4b]">
+                        {s.buyer}
+                        {s.phone && <span className="text-[#9ca3af]"> · <span className="num" dir="ltr">+{s.phone}</span></span>}
+                    </div>
+                </div>
+                <div className="shrink-0 text-end">
+                    <div className={voided(s) ? 'whitespace-nowrap tabular-nums text-[#9ca3af] line-through' : 'whitespace-nowrap font-semibold tabular-nums text-ink'}>{money(s.total, currency)}</div>
+                    <div className={cn('text-[12px]', unpaid(s) ? 'text-[#b45309]' : 'text-[#9ca3af]')}>{unpaid(s) ? `${method(s)} · غير مدفوع` : method(s)}</div>
+                </div>
+            </div>
+            <div className="mt-2.5 flex items-center gap-2">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] text-[#6b7280]">
+                    {!allowed.websiteOnly && <SourceBadge source={s.source} label={s.source_label} short />}
+                    {(s.cashier || (branches && s.branch)) && <span>{[s.cashier, branches ? s.branch : null].filter(Boolean).join(' — ')}</span>}
+                    <span className="min-w-0 max-w-full truncate">{number(s.items_count ?? 0)} منتج{s.items_preview ? `: ${s.items_preview}` : ''}</span>
+                    <span className="whitespace-nowrap num" dir="ltr">{s.at}</span>
+                </div>
+                <div className="relative z-10 -my-1 shrink-0">{actions(s)}</div>
+            </div>
+        </div>
+    );
 
     const tableFilters: TableFilter[] = [
         {
@@ -143,6 +188,7 @@ export default function SalesIndex({ sales, period, filters, totals, options, ca
                     className="[&_td]:px-3 [&_th]:px-3"
                     rows={sales.data}
                     columns={columns}
+                    card={card}
                     rowKey={(s) => s.id}
                     params={listParams}
                     pagination={sales as PageMeta}

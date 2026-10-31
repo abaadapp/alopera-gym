@@ -48,12 +48,12 @@ export function StateBadge({ sale }: { sale: Pick<SaleRow, 'state' | 'state_labe
     return <Badge tone={SALE_STATES[sale.state]?.tone ?? 'gray'}>{sale.state_label}</Badge>;
 }
 
-/** Where the sale came from: the website in violet, the till in grey. */
-export function SourceBadge({ source, label }: { source: string; label: string }) {
+/** Where the sale came from: the website in violet, the till in grey. `short` (a list's column) says «الموقع». */
+export function SourceBadge({ source, label, short = false }: { source: string; label: string; short?: boolean }) {
     return (
         <Badge tone={source === 'website' ? 'violet' : 'gray'}>
             {source === 'website' ? <Globe /> : <Store />}
-            {label}
+            {short && source === 'website' ? 'الموقع' : label}
         </Badge>
     );
 }
