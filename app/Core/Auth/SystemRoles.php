@@ -63,7 +63,7 @@ final class SystemRoles
                     'expenses.manage', 'dues.view',
                     'accounting.view', 'accounting.manage',
                     'employees.view', 'payroll.salaries', 'payroll.prepare', 'payroll.edit', 'payroll.pay', 'payroll.payslips', 'payroll.reports',
-                    'sales.view', 'sales.refund', 'products.manage', 'suppliers.manage', 'purchases.manage', 'pos.sell',
+                    'sales.view', 'sales.refund', 'products.manage', 'suppliers.view', 'suppliers.create', 'suppliers.manage', 'purchases.manage', 'pos.sell',
                     'inventory.view', 'purchases.view', 'purchases.pay',
                     'reports.view', 'reports.financial', 'reports.export',
                 ],

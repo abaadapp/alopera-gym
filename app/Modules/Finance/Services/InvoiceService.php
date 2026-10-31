@@ -12,8 +12,10 @@ use App\Modules\Finance\Contracts\Billable;
 use App\Modules\Finance\Events\InvoicePaid;
 use App\Modules\Finance\Events\InvoiceVoided;
 use App\Modules\Finance\Models\Invoice;
+use App\Modules\Finance\Models\InvoiceItem;
 use App\Modules\Finance\Models\Payment;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -27,95 +29,108 @@ final class InvoiceService
     ) {}
 
     /**
-     * Issue an invoice.
+     * Issue an invoice: the draft below, numbered and saved with its lines; one with nothing to collect is paid at once.
      *
      * @param  list<array{description: string, quantity?: int|float|string, unit_price: string|int|float, discount?: string|int|float|null, itemable?: Model|null}>  $lines
      * @param  array{type?: string, branch_id?: int|null, due_date?: string|null, notes?: string|null, tax_rate?: float|int|null, issue_date?: string|null}  $options
      */
     public function issue(?Billable $billable, array $lines, array $options = [], ?string $customerName = null): Invoice
     {
-        if ($lines === []) {
-            throw new BusinessRuleException('invoice.empty', 'لا يمكن إصدار فاتورة بدون بنود.');
-        }
+        $invoice = $this->draft($billable, $lines, $options, $customerName);
 
-        $tenant = $this->tenants->require();
-
-        return DB::transaction(function () use ($billable, $lines, $options, $customerName, $tenant) {
-            $subtotal = 0;
-            $discount = 0;
-            $prepared = [];
-
-            foreach ($lines as $line) {
-                $qty = (float) ($line['quantity'] ?? 1);
-                $gross = Money::toMinor(Money::mul($line['unit_price'], $qty));
-                $lineDiscount = Money::toMinor($line['discount'] ?? 0);
-
-                if ($qty <= 0 || $gross < 0 || $lineDiscount < 0 || $lineDiscount > $gross) {
-                    throw new BusinessRuleException('invoice.line', 'بند غير صالح في الفاتورة.');
-                }
-
-                $subtotal += $gross;
-                $discount += $lineDiscount;
-                $prepared[] = [
-                    'description' => Str::limit($line['description'], 250),
-                    'quantity' => $qty,
-                    'unit_price' => Money::normalize($line['unit_price']),
-                    'discount' => Money::fromMinor($lineDiscount),
-                    'line_total' => Money::fromMinor($gross - $lineDiscount),
-                    'itemable' => $line['itemable'] ?? null,
-                ];
-            }
-
-            $taxRate = (float) ($options['tax_rate'] ?? $tenant->setting('vat_rate', 0));
-            $taxable = $subtotal - $discount;
-            $tax = (int) round($taxable * $taxRate / 100);
-            $total = $taxable + $tax;
-            $issueDate = CarbonImmutable::parse($options['issue_date'] ?? today());
-            $dueDays = (int) $tenant->setting('invoice_due_days', 0);
-
-            $invoice = Invoice::create([
-                'branch_id' => $options['branch_id'] ?? null,
+        return DB::transaction(function () use ($invoice) {
+            $items = $invoice->getRelation('items');
+            $invoice->unsetRelation('items');
+            $invoice->fill([
                 'number' => NumberSequence::next('invoice'),
-                'billable_type' => $billable instanceof Model ? $billable->getMorphClass() : null,
-                'billable_id' => $billable instanceof Model ? $billable->getKey() : null,
-                'customer_name' => $billable?->billingName() ?? ($customerName ?: 'عميل نقدي'),
-                'customer_phone' => $billable?->billingPhone(),
-                'customer_email' => $billable?->billingEmail(),
-                'type' => $options['type'] ?? 'other',
-                'status' => Invoice::ISSUED,
-                'issue_date' => $issueDate,
-                'due_date' => $options['due_date'] ?? $issueDate->addDays($dueDays),
-                'subtotal' => Money::fromMinor($subtotal),
-                'discount_total' => Money::fromMinor($discount),
-                'tax_rate' => $taxRate,
-                'tax_total' => Money::fromMinor($tax),
-                'total' => Money::fromMinor($total),
-                'paid_total' => '0',
-                'currency' => $tenant->currency,
-                // The club as it is today, printed on this invoice from now on (PaperIssuer).
-                'issuer' => PaperIssuer::stamp($tenant),
-                'notes' => $options['notes'] ?? null,
                 'public_token' => Str::random(48),
                 'created_by' => Auth::guard('web')->id(),
-            ]);
-
-            foreach ($prepared as $line) {
-                $itemable = $line['itemable'];
-                unset($line['itemable']);
-                $invoice->items()->create($line + [
-                    'itemable_type' => $itemable?->getMorphClass(),
-                    'itemable_id' => $itemable?->getKey(),
-                ]);
-            }
+            ])->save();
+            $invoice->items()->saveMany($items);
 
             // Nothing to collect (fully discounted, upgrade credit covers it): it is paid on issue.
-            if ($total === 0) {
+            if (Money::isZero($invoice->total)) {
                 $invoice->forceFill(['status' => Invoice::PAID, 'paid_at' => now()])->save();
                 InvoicePaid::dispatch($invoice);
             }
 
             return $invoice;
         });
+    }
+
+    /**
+     * The invoice as it would be issued — each line's total, the discounts, the tax and the total worked out, the club
+     * stamped as it is today — but not numbered and not saved. Issuing saves exactly this; the invoice form's live
+     * paper is drawn from it, so what is previewed is what is issued.
+     *
+     * @param  list<array{description: string, quantity?: int|float|string, unit_price: string|int|float, discount?: string|int|float|null, itemable?: Model|null}>  $lines
+     * @param  array{type?: string, branch_id?: int|null, due_date?: string|null, notes?: string|null, tax_rate?: float|int|null, issue_date?: string|null}  $options
+     */
+    public function draft(?Billable $billable, array $lines, array $options = [], ?string $customerName = null): Invoice
+    {
+        if ($lines === []) {
+            throw new BusinessRuleException('invoice.empty', 'لا يمكن إصدار فاتورة بدون بنود.');
+        }
+
+        $tenant = $this->tenants->require();
+        $subtotal = 0;
+        $discount = 0;
+        $items = [];
+
+        foreach ($lines as $line) {
+            $qty = (float) ($line['quantity'] ?? 1);
+            $gross = Money::toMinor(Money::mul($line['unit_price'], $qty));
+            $lineDiscount = Money::toMinor($line['discount'] ?? 0);
+
+            if ($qty <= 0 || $gross < 0 || $lineDiscount < 0 || $lineDiscount > $gross) {
+                throw new BusinessRuleException('invoice.line', 'بند غير صالح في الفاتورة.');
+            }
+
+            $subtotal += $gross;
+            $discount += $lineDiscount;
+            $itemable = $line['itemable'] ?? null;
+            $items[] = new InvoiceItem([
+                'description' => Str::limit($line['description'], 250),
+                'quantity' => $qty,
+                'unit_price' => Money::normalize($line['unit_price']),
+                'discount' => Money::fromMinor($lineDiscount),
+                'line_total' => Money::fromMinor($gross - $lineDiscount),
+                'itemable_type' => $itemable?->getMorphClass(),
+                'itemable_id' => $itemable?->getKey(),
+            ]);
+        }
+
+        $taxRate = (float) ($options['tax_rate'] ?? $tenant->setting('vat_rate', 0));
+        $taxable = $subtotal - $discount;
+        $tax = (int) round($taxable * $taxRate / 100);
+        $total = $taxable + $tax;
+        $issueDate = CarbonImmutable::parse($options['issue_date'] ?? today());
+        $dueDays = (int) $tenant->setting('invoice_due_days', 0);
+
+        $invoice = new Invoice([
+            'branch_id' => $options['branch_id'] ?? null,
+            'billable_type' => $billable instanceof Model ? $billable->getMorphClass() : null,
+            'billable_id' => $billable instanceof Model ? $billable->getKey() : null,
+            'customer_name' => $billable?->billingName() ?? ($customerName ?: 'عميل نقدي'),
+            'customer_phone' => $billable?->billingPhone(),
+            'customer_email' => $billable?->billingEmail(),
+            'type' => $options['type'] ?? 'other',
+            'status' => Invoice::ISSUED,
+            'issue_date' => $issueDate,
+            'due_date' => $options['due_date'] ?? $issueDate->addDays($dueDays),
+            'subtotal' => Money::fromMinor($subtotal),
+            'discount_total' => Money::fromMinor($discount),
+            'tax_rate' => $taxRate,
+            'tax_total' => Money::fromMinor($tax),
+            'total' => Money::fromMinor($total),
+            'paid_total' => '0',
+            'currency' => $tenant->currency,
+            // The club as it is today, printed on this invoice from now on (PaperIssuer).
+            'issuer' => PaperIssuer::stamp($tenant),
+            'notes' => $options['notes'] ?? null,
+        ]);
+
+        return $invoice->setRelation('items', new Collection($items));
     }
 
     public function void(Invoice $invoice, string $reason): Invoice

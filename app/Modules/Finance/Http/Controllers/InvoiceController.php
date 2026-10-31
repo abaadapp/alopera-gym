@@ -14,6 +14,8 @@ use App\Modules\Messaging\Services\MemberNotifier;
 use App\Modules\Messaging\Services\WhatsAppService;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Services\OnlinePaymentService;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -22,19 +24,37 @@ use Inertia\Response;
 
 class InvoiceController extends Controller
 {
+    /** The list's tabs: how much of an invoice is paid, and whether it is past due (late wins: it is what to chase). */
+    public const STATES = ['unpaid' => 'غير مدفوعة', 'partial' => 'مدفوعة جزئيًا', 'paid' => 'مدفوعة', 'overdue' => 'متأخرة'];
+
+    /** The document itself, beside its payment: in force, voided, or cancelled in full by a credit note. */
+    public const DOCUMENT_STATUSES = ['active' => 'سارية', 'void' => 'ملغاة', 'credited' => 'ملغاة بإشعار دائن'];
+
     public function index(Request $request): Response
     {
+        $perPage = in_array($request->integer('per_page'), [20, 50, 100], true) ? $request->integer('per_page') : 20;
         $invoices = BranchContext::scope(Invoice::query())
+            ->when($request->string('state')->toString(), fn ($q, $s) => match ($s) {
+                'unpaid' => $q->where('status', Invoice::ISSUED)->where(fn ($w) => $w->whereNull('due_date')->orWhere('due_date', '>=', today())),
+                'partial' => $q->where('status', Invoice::PARTIALLY_PAID)->where(fn ($w) => $w->whereNull('due_date')->orWhere('due_date', '>=', today())),
+                'paid' => $q->where('status', Invoice::PAID),
+                'overdue' => $q->overdue(),
+                default => $q,
+            })
+            // The document status — and the older links (open, overdue, a raw status) that pointed here before the tabs.
             ->when($request->string('status')->toString(), fn ($q, $s) => match ($s) {
+                'active' => $q->whereNotIn('status', [Invoice::VOID, Invoice::CREDITED]),
                 'open' => $q->open(),
                 'overdue' => $q->overdue(),
                 default => $q->where('status', $s),
             })
             ->when($request->string('type')->toString(), fn ($q, $t) => $q->where('type', $t))
-            ->when($request->string('q')->toString(), fn ($q, $term) => $q->where(fn ($w) => $w->where('number', 'ilike', "%{$term}%")->orWhere('customer_name', 'ilike', "%{$term}%")->orWhere('customer_phone', 'like', '%'.preg_replace('/\D/', '', $term).'%')))
+            ->when($request->string('q')->toString(), fn ($q, $term) => $q->where(fn ($w) => $w->where('number', 'ilike', "%{$term}%")->orWhere('customer_name', 'ilike', "%{$term}%")->when(preg_replace('/\D/', '', $term), fn ($x, $digits) => $x->orWhere('customer_phone', 'like', "%{$digits}%"))))
             ->when($request->date('from'), fn ($q, $d) => $q->where('issue_date', '>=', $d))
             ->when($request->date('to'), fn ($q, $d) => $q->where('issue_date', '<=', $d))
-            ->latest('id')->paginate(25)->withQueryString()
+            ->when($request->date('due_from'), fn ($q, $d) => $q->where('due_date', '>=', $d))
+            ->when($request->date('due_to'), fn ($q, $d) => $q->where('due_date', '<=', $d))
+            ->latest('id')->paginate($perPage)->withQueryString()
             ->through(fn (Invoice $i) => self::row($i));
 
         // What is owed across the branch in view: still open, past due, due within a week, and owed back to customers.
@@ -50,7 +70,9 @@ class InvoiceController extends Controller
         return Inertia::render('Finance/Invoices/Index', [
             'invoices' => $invoices,
             'totals' => collect(['receivable', 'overdue', 'due_soon', 'refund_due'])->mapWithKeys(fn ($k) => [$k => Money::normalize($totals->{$k} ?? 0)]),
-            'filters' => $request->only('status', 'type', 'q', 'from', 'to'),
+            'filters' => $request->only('state', 'status', 'type', 'q', 'from', 'to', 'due_from', 'due_to', 'per_page'),
+            'states' => self::STATES,
+            'statuses' => self::DOCUMENT_STATUSES,
         ]);
     }
 
@@ -65,7 +87,20 @@ class InvoiceController extends Controller
             'due_date' => $i->due_date?->toDateString(),
             'overdue' => $i->isOverdue(),
             'days_overdue' => $i->daysOverdue(),
+            'state' => self::state($i),
         ];
+    }
+
+    /** One word for the list: the document's own status when voided or credited, else how much is paid — late first. */
+    public static function state(Invoice $i): string
+    {
+        return match (true) {
+            in_array($i->status, [Invoice::VOID, Invoice::CREDITED, Invoice::DRAFT], true) => $i->status,
+            $i->status === Invoice::PAID => 'paid',
+            $i->isOverdue() => 'overdue',
+            $i->status === Invoice::PARTIALLY_PAID => 'partial',
+            default => 'unpaid',
+        };
     }
 
     public function create(): Response
@@ -92,6 +127,49 @@ class InvoiceController extends Controller
         $invoice = $service->issue($member, $data['lines'], ['type' => 'other', 'branch_id' => app(BranchContext::class)->assign(), 'due_date' => $data['due_date'] ?? null, 'notes' => $data['notes'] ?? null], $data['customer_name'] ?? null);
 
         return redirect()->route('club.invoices.show', $invoice)->with('success', 'تم إصدار الفاتورة '.$invoice->number);
+    }
+
+    /**
+     * The manual invoice's paper as the form stands: the service's draft (the same arithmetic issuing will save) drawn by
+     * the invoice paper's own builder and view. Nothing is numbered or saved; an unfinished line is left out.
+     */
+    public function preview(Request $request, InvoiceService $service): JsonResponse
+    {
+        $data = $request->validate([
+            'member_id' => ['nullable', TenantRule::exists('gym_members')],
+            'customer_name' => ['nullable', 'string', 'max:160'],
+            'due_date' => ['nullable', 'date'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'lines' => ['nullable', 'array', 'max:50'],
+            'lines.*.description' => ['nullable', 'string', 'max:250'],
+            'lines.*.quantity' => ['nullable', 'numeric', 'min:0', 'max:10000'],
+            'lines.*.unit_price' => ['nullable', 'numeric', 'min:0', 'max:99999'],
+            'lines.*.discount' => ['nullable', 'numeric', 'min:0'],
+        ]);
+        $lines = collect($data['lines'] ?? [])
+            ->filter(fn ($l) => filled($l['description'] ?? null) && (float) ($l['quantity'] ?? 0) > 0)
+            ->map(fn ($l) => [
+                'description' => $l['description'],
+                'quantity' => $l['quantity'],
+                'unit_price' => $l['unit_price'] ?? 0,
+                // A discount typed larger than its line would be refused on issue; the preview shows it at most whole.
+                'discount' => min((float) ($l['discount'] ?? 0), (float) Money::mul($l['unit_price'] ?? 0, (float) $l['quantity'])),
+            ])->values()->all();
+        if ($lines === []) {
+            return response()->json(['html' => null, 'size' => null, 'totals' => null]);
+        }
+
+        $member = isset($data['member_id']) ? Member::find($data['member_id']) : null;
+        $draft = $service->draft($member, $lines, ['type' => 'other', 'branch_id' => app(BranchContext::class)->assign(), 'due_date' => $data['due_date'] ?? null, 'notes' => $data['notes'] ?? null], $data['customer_name'] ?? null);
+        $draft->number = 'مسودة';
+        $draft->setRelation('payments', new EloquentCollection)->setRelation('branch', null)->setRelation('creator', $request->user());
+        $paper = Papers::for('invoice', $draft);
+
+        return response()->json([
+            'html' => $paper->html(),
+            'size' => $paper->size,
+            'totals' => $draft->only('subtotal', 'discount_total', 'tax_rate', 'tax_total', 'total'),
+        ]);
     }
 
     public function show(Request $request, Invoice $invoice, OnlinePaymentService $online): Response

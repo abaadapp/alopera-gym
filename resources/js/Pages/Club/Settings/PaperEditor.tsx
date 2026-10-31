@@ -3,6 +3,7 @@ import { Link, useForm } from '@inertiajs/react';
 import { ArrowRight, Check, ChevronLeft, Lock, Monitor, RefreshCw, RotateCcw, Save, Smartphone, Undo2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PaperFrame from '@/Components/Papers/PaperFrame';
+import { postJson } from '@/lib/http';
 import { Button, Card, CardHeader, ConfirmAction, Field, Input, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 
@@ -14,12 +15,6 @@ type Paper = {
     fonts: Record<string, string>; langs: Record<string, string>; papers: string[]; strips: string[];
     values: Values; defaults: Values;
 };
-
-/** The XSRF cookie Laravel sets, sent back as a header on the preview request. */
-function xsrf(): string {
-    const hit = document.cookie.split('; ').find((c) => c.startsWith('XSRF-TOKEN='));
-    return hit ? decodeURIComponent(hit.split('=')[1]) : '';
-}
 
 /**
  * The editor of one paper: the settings beside a preview drawn on the server by the same builder and view that print
@@ -42,12 +37,7 @@ export default function PaperEditor({ paper, others, brand }: { paper: Paper; ot
         const mine = ++ticket.current;
         setDrawing(true);
         try {
-            const res = await fetch(route('club.settings.papers.preview', paper.key), {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-XSRF-TOKEN': xsrf() },
-                body: JSON.stringify({ ...form.data, face }),
-            });
+            const res = await postJson(route('club.settings.papers.preview', paper.key), { ...form.data, face });
             const body = await res.json();
             if (mine === ticket.current && res.ok) {
                 setHtml(body.html ?? '');

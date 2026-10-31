@@ -29,7 +29,8 @@ export default function OrderForm({ order, lines, suppliers, products, branches,
     const blank: Item = { product_id: '', quantity: '1', unit_cost: '', unit: '', unit_factor: '1' };
     const start = (order?.items ?? lines).map((i) => ({ product_id: String(i.product_id), quantity: String(Number(i.quantity)), unit_cost: String(i.unit_cost), unit: i.unit ?? '', unit_factor: String(Number(i.unit_factor ?? 1)) }));
     const form = useForm({
-        supplier_id: order ? String(order.supplier_id) : '',
+        // A new order opened from a supplier's file (?supplier=) starts with that supplier.
+        supplier_id: order ? String(order.supplier_id) : (suppliers.find((x) => String(x.id) === new URLSearchParams(window.location.search).get('supplier'))?.id.toString() ?? ''),
         branch_id: String(order?.branch_id ?? defaultBranch ?? branches[0]?.id ?? ''),
         order_date: order?.order_date ?? new Date().toISOString().slice(0, 10),
         expected_on: order?.expected_on ?? '',

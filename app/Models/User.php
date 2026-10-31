@@ -145,6 +145,24 @@ class User extends Authenticatable
             return $definitions[$key]['home'];
         }
 
-        return $this->hasPermission('dashboard.view') ? 'club.dashboard' : 'club.reception';
+        // A custom role: the first of these screens it may open, else the account page (every user may open it).
+        foreach (self::LANDINGS as $permission => $route) {
+            if ($this->hasPermission($permission)) {
+                return $route;
+            }
+        }
+
+        return 'club.account.show';
     }
+
+    /** Where a custom role lands after login, in order: the first permission it holds decides. */
+    private const LANDINGS = [
+        'dashboard.view' => 'club.dashboard',
+        'checkin.perform' => 'club.reception',
+        'members.view' => 'club.members.index',
+        'invoices.view' => 'club.invoices.index',
+        'purchases.view' => 'club.purchases.register',
+        'suppliers.view' => 'club.purchases.suppliers',
+        'employees.view' => 'club.employees.index',
+    ];
 }

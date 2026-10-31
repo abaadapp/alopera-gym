@@ -180,8 +180,8 @@ export function ConfirmDelete({ target, url, title, message, onClose }: { target
     const confirm = () => router.delete(url, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => { setBusy(false); onClose(); } });
 
     return (
-        <Modal open onClose={onClose} size="sm" title={title} footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button variant="danger" loading={busy} onClick={confirm}>حذف</Button></>}>
-            <p className="text-sm leading-7 text-[#4b4b4b]">{message}</p>
+        <Modal open onClose={onClose} size="xs" title={title} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button variant="danger" loading={busy} onClick={confirm}>حذف</Button></>}>
+            <p className="text-sm text-[#4b4b4b]">{message}</p>
         </Modal>
     );
 }

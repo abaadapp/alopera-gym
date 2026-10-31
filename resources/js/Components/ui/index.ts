@@ -5,6 +5,8 @@ export { Card, CardFooter, CardHeader, PageHeader, Badge, StatCard, StatGrid, Tr
 export { SummaryCard, SummaryRow, NavCard, ReportCard, ItemCard, ChoiceCard, choiceClass, Notice } from './Cards';
 export { default as Modal } from './Modal';
 export { default as Tabs } from './Tabs';
+export { default as DataTable, type Column, type TableFilter, type TableSort, type PageMeta } from './DataTable';
+export { default as RowActions, type RowAction } from './RowActions';
 export { default as Pagination } from './Pagination';
 export { default as ConfirmAction } from './ConfirmAction';
 export { default as Flash } from './Flash';

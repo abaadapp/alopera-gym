@@ -75,10 +75,13 @@ Route::prefix('purchases')->name('purchases.')->group(function () {
         Route::post('/payments/{supplierPayment}/reverse', [SupplierBillController::class, 'reversePayment'])->whereNumber('supplierPayment')->name('payments.reverse');
     });
 
-    Route::middleware('can:suppliers.manage')->group(function () {
+    // Suppliers: seeing them (their purchases and dues need purchases.view as well), adding them, and editing them.
+    Route::middleware('can:suppliers.view')->group(function () {
         Route::get('/suppliers', [SupplierController::class, 'index'])->name('suppliers');
         Route::get('/suppliers/{supplier}', [SupplierController::class, 'show'])->whereNumber('supplier')->name('suppliers.show');
-        Route::post('/suppliers', [SupplierController::class, 'store'])->name('suppliers.store');
+    });
+    Route::post('/suppliers', [SupplierController::class, 'store'])->middleware('can:suppliers.create')->name('suppliers.store');
+    Route::middleware('can:suppliers.manage')->group(function () {
         Route::put('/suppliers/{supplier}', [SupplierController::class, 'update'])->whereNumber('supplier')->name('suppliers.update');
         Route::delete('/suppliers/{supplier}', [SupplierController::class, 'destroy'])->whereNumber('supplier')->name('suppliers.destroy');
     });

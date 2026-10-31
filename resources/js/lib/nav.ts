@@ -107,7 +107,7 @@ export const NAV: NavGroup[] = [
                     { label: 'قائمة المشتريات', route: 'club.purchases.register', permission: 'purchases.view' },
                     { label: 'أوامر الشراء', route: 'club.purchases.index', permission: 'purchases.view', match: ['club.purchases.show', 'club.purchases.create', 'club.purchases.edit', 'club.purchases.print'] },
                     { label: 'سندات الموردين', route: 'club.purchases.bills', permission: 'purchases.view', match: 'club.purchases.bills.*' },
-                    { label: 'الموردون', route: 'club.purchases.suppliers', permission: 'suppliers.manage', match: 'club.purchases.suppliers.*' },
+                    { label: 'الموردون', route: 'club.purchases.suppliers', permission: 'suppliers.view', match: 'club.purchases.suppliers.*' },
                 ],
             },
             {
@@ -116,7 +116,7 @@ export const NAV: NavGroup[] = [
                 tabs: [
                     { label: 'الملخص المالي', route: 'club.finance.summary', permission: 'accounting.view' },
                     { label: 'الحسابات البنكية', route: 'club.finance.banks', permission: 'accounting.view' },
-                    { label: 'الفواتير', route: 'club.invoices.index', permission: 'invoices.view', match: ['club.invoices.*', 'club.credit-notes.*'] },
+                    { label: 'فواتير العملاء', route: 'club.invoices.index', permission: 'invoices.view', match: ['club.invoices.*', 'club.credit-notes.*'] },
                     { label: 'المدفوعات والتحصيل', route: 'club.payments.index', permission: 'invoices.view', match: 'club.payments.*' },
                     { label: 'المستحقات', route: 'club.dues', permission: 'dues.view' },
                     { label: 'المصروفات', route: 'club.expenses.index', permission: 'expenses.manage', match: 'club.expenses.*' },

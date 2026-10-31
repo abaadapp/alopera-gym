@@ -95,7 +95,9 @@ final class PermissionRegistry
             'purchases.approve' => 'اعتماد أوامر الشراء وسندات الاستلام وسندات الموردين',
             'purchases.receive' => 'استلام البضاعة',
             'purchases.pay' => 'سداد الموردين',
-            'suppliers.manage' => 'الموردون',
+            'suppliers.view' => 'عرض الموردين وملفاتهم',
+            'suppliers.create' => 'إضافة الموردين',
+            'suppliers.manage' => 'تعديل الموردين وإيقافهم وحذفهم',
         ]],
         'documents' => ['label' => 'مستندات النشاط', 'permissions' => [
             'documents.view' => 'عرض المستندات (العامة، والسرية المسندة إليه)',

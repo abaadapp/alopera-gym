@@ -6,7 +6,7 @@ import { Button, Card, Checkbox, EmptyState, Field, Input, Modal, Notice, PageHe
 import { Toolbar, ToolbarSearch, visit } from '@/Components/Products/parts';
 import { BILL_STATES, Pill, ReasonDialog } from '@/Components/Inventory/parts';
 import PayBill from '@/Components/Inventory/PayBill';
-import { useCurrency } from '@/hooks/useShared';
+import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
 import type { Paginated } from '@/types';
@@ -31,6 +31,7 @@ export const billState = (b: Pick<BillRow, 'status' | 'state'>) => BILL_STATES[b
 
 /** سندات الموردين: supplier invoices, approved into a debt to the supplier, and paid from a cash box or bank. */
 export default function Bills({ bills, summary, filters, suppliers, orders, accounts, taxRate, preselect, can }: Props) {
+    const mayOpenSuppliers = useCan();
     const currency = useCurrency();
     const [creating, setCreating] = useState(Boolean(preselect));
     const [paying, setPaying] = useState<BillRow | null>(null);
@@ -60,7 +61,7 @@ export default function Bills({ bills, summary, filters, suppliers, orders, acco
                     </Select>
                 </Toolbar>
                 {bills.data.length === 0 ? (
-                    <EmptyState icon={<FileText className="size-6" />} title={suppliers.length === 0 ? 'أضف موردًا أولًا' : 'لا توجد سندات'} description="سجّل فاتورة المورد عند وصولها، واربطها بأمر الشراء إن وُجد حتى لا يُحتسب الشراء مرتين." action={suppliers.length === 0 ? <Button size="sm" href={route('club.purchases.suppliers')}>الموردون</Button> : undefined} />
+                    <EmptyState icon={<FileText className="size-6" />} title={suppliers.length === 0 ? 'أضف موردًا أولًا' : 'لا توجد سندات'} description="سجّل فاتورة المورد عند وصولها، واربطها بأمر الشراء إن وُجد حتى لا يُحتسب الشراء مرتين." action={suppliers.length === 0 && mayOpenSuppliers('suppliers.view') ? <Button size="sm" href={route('club.purchases.suppliers')}>الموردون</Button> : undefined} />
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="table-base">

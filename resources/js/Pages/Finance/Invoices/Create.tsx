@@ -1,10 +1,12 @@
-import { useForm } from '@inertiajs/react';
-import type { FormEvent } from 'react';
-import { ArrowRight, Plus, Trash2, UserRound, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { Link, useForm } from '@inertiajs/react';
+import { ArrowRight, Plus, Send, Trash2, UserRound, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Card, CardHeader, Field, Input, MemberPicker, PageHeader, Textarea, type MemberHit } from '@/Components/ui';
+import { Button, Card, Field, Input, MemberPicker, PageHeader, Textarea, type MemberHit } from '@/Components/ui';
+import PaperFrame from '@/Components/Papers/PaperFrame';
 import { useCurrency } from '@/hooks/useShared';
 import { money } from '@/lib/format';
+import { postJson } from '@/lib/http';
 
 interface Line {
     description: string;
@@ -13,8 +15,16 @@ interface Line {
     discount: string;
 }
 
+type Totals = { subtotal: string; discount_total: string; tax_rate: string; tax_total: string; total: string };
+
 const emptyLine = (): Line => ({ description: '', quantity: '1', unit_price: '', discount: '' });
 
+/**
+ * إنشاء فاتورة — a manual invoice for a service or item outside memberships and sales. The details on one side and,
+ * beside them, the invoice paper as it will be issued, redrawn by the server as the form changes (the same arithmetic
+ * and the same paper; nothing is saved until «إصدار الفاتورة»). The buttons sit in the header so they stay in sight
+ * however long the invoice grows.
+ */
 export default function InvoiceCreate() {
     const currency = useCurrency();
     const form = useForm<{
@@ -25,123 +35,137 @@ export default function InvoiceCreate() {
         notes: string;
         lines: Line[];
     }>({ member_id: null, member_label: '', customer_name: '', due_date: '', notes: '', lines: [emptyLine()] });
+    const [paper, setPaper] = useState<{ html: string; size: string } | null>(null);
+    const [totals, setTotals] = useState<Totals | null>(null);
+    const ticket = useRef(0);
 
-    const lineTotal = (l: Line) => Math.max(0, Number(l.quantity || 0) * Number(l.unit_price || 0) - Number(l.discount || 0));
-    const total = form.data.lines.reduce((sum, l) => sum + lineTotal(l), 0);
+    const payload = useCallback(() => ({
+        member_id: form.data.member_id,
+        customer_name: form.data.member_id ? null : form.data.customer_name || null,
+        due_date: form.data.due_date || null,
+        notes: form.data.notes || null,
+        lines: form.data.lines.map((l) => ({ description: l.description, quantity: l.quantity || 0, unit_price: l.unit_price || 0, discount: l.discount || 0 })),
+    }), [form.data]);
 
-    const setLine = (index: number, patch: Partial<Line>) =>
-        form.setData('lines', form.data.lines.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+    // Redraw the paper a moment after typing stops; an answer to an older request is dropped.
+    useEffect(() => {
+        const id = window.setTimeout(async () => {
+            const mine = ++ticket.current;
+            try {
+                const res = await postJson(route('club.invoices.preview'), payload());
+                const body = await res.json();
+                if (mine !== ticket.current || !res.ok) return;
+                setPaper(body.html ? { html: body.html, size: body.size } : null);
+                setTotals(body.totals);
+            } catch {
+                // offline or refused: the form still issues; the preview waits for the next change
+            }
+        }, 350);
+        return () => window.clearTimeout(id);
+    }, [payload]);
 
-    const pickMember = (m: MemberHit) => {
-        form.setData((d) => ({ ...d, member_id: m.id, member_label: `${m.full_name} · ${m.member_no}`, customer_name: '' }));
-    };
+    const setLine = (index: number, patch: Partial<Line>) => form.setData('lines', form.data.lines.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+    const pickMember = (m: MemberHit) => form.setData((d) => ({ ...d, member_id: m.id, member_label: `${m.full_name} · ${m.member_no}`, customer_name: '' }));
+    const lineError = (i: number, field: string) => (form.errors as Record<string, string>)[`lines.${i}.${field}`];
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        form.transform((d) => ({
-            member_id: d.member_id,
-            customer_name: d.member_id ? null : d.customer_name,
-            due_date: d.due_date || null,
-            notes: d.notes || null,
-            lines: d.lines.map((l) => ({ description: l.description, quantity: l.quantity, unit_price: l.unit_price, discount: l.discount || 0 })),
-        }));
+        form.transform(() => ({ ...payload(), lines: form.data.lines.map((l) => ({ description: l.description, quantity: l.quantity, unit_price: l.unit_price, discount: l.discount || 0 })) }));
         form.post(route('club.invoices.store'));
     };
 
-    const lineError = (i: number, field: string) => (form.errors as Record<string, string>)[`lines.${i}.${field}`];
-
     return (
-        <ClubLayout title="فاتورة يدوية">
+        <ClubLayout title="إنشاء فاتورة">
             <PageHeader
-                title="فاتورة يدوية"
-                subtitle="لخدمات أو بنود خارج العضويات"
-                back={<a href={route('club.invoices.index')} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-brand"><ArrowRight className="size-4" /> الفواتير</a>}
+                back={<Link href={route('club.invoices.index')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> فواتير العملاء</Link>}
+                title="إنشاء فاتورة"
+                subtitle="فاتورة يدوية لخدمة أو بند خارج العضويات والمبيعات — تُرقَّم عند الإصدار."
+                actions={<>
+                    <span className="rounded-full bg-[#eff6ff] px-3 py-1 text-[12px] font-medium text-[#1d4ed8]">مسودة</span>
+                    <Button variant="outline" href={route('club.invoices.index')} disabled={form.processing}>إلغاء</Button>
+                    <Button type="submit" form="invoice-form" icon={<Send />} loading={form.processing}>إصدار الفاتورة</Button>
+                </>}
             />
 
-            <form onSubmit={submit} className="grid gap-6 lg:grid-cols-3">
-                <div className="space-y-6 lg:col-span-2">
-                    <Card>
-                        <CardHeader title="العميل" subtitle="اختر عضوًا أو اكتب اسم عميل نقدي" />
-                        {form.data.member_id ? (
-                            <div className="flex items-center justify-between gap-3 rounded-[12px] border border-line bg-[#fafafa] px-4 py-3">
-                                <span className="flex items-center gap-2 text-sm font-medium"><UserRound className="size-4 text-[#6b7280]" /> {form.data.member_label}</span>
-                                <button type="button" className="text-muted hover:text-ink" onClick={() => form.setData((d) => ({ ...d, member_id: null, member_label: '' }))} aria-label="إزالة">
-                                    <X className="size-4" />
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="grid gap-4 sm:grid-cols-2">
-                                <Field label="عضو" error={form.errors.member_id}>
-                                    <MemberPicker onSelect={pickMember} />
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+                <form id="invoice-form" onSubmit={submit} className="min-w-0 space-y-4">
+                    <Card className="p-5">
+                        <h2 className="mb-4 text-[15px] font-bold text-ink">معلومات الفاتورة</h2>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            {form.data.member_id ? (
+                                <Field label="العضو" className="sm:col-span-2">
+                                    <div className="flex items-center justify-between gap-3 rounded-[10px] border border-line bg-[#fafafa] px-3 py-2.5">
+                                        <span className="flex items-center gap-2 text-sm font-medium"><UserRound className="size-4 text-[#6b7280]" /> {form.data.member_label}</span>
+                                        <button type="button" className="text-muted hover:text-ink" onClick={() => form.setData((d) => ({ ...d, member_id: null, member_label: '' }))} aria-label="إزالة العضو"><X className="size-4" /></button>
+                                    </div>
                                 </Field>
-                                <Field label="أو اسم العميل" error={form.errors.customer_name}>
-                                    <Input value={form.data.customer_name} onChange={(e) => form.setData('customer_name', e.target.value)} placeholder="عميل نقدي" />
-                                </Field>
-                            </div>
-                        )}
+                            ) : (
+                                <>
+                                    <Field label="عضو" error={form.errors.member_id}><MemberPicker onSelect={pickMember} /></Field>
+                                    <Field label="أو اسم العميل" error={form.errors.customer_name}><Input value={form.data.customer_name} onChange={(e) => form.setData('customer_name', e.target.value)} placeholder="عميل نقدي" maxLength={160} /></Field>
+                                </>
+                            )}
+                            <Field label="تاريخ الاستحقاق" error={form.errors.due_date} hint="اتركه فارغًا لاستخدام مدة السداد في إعدادات النادي"><Input type="date" value={form.data.due_date} onChange={(e) => form.setData('due_date', e.target.value)} /></Field>
+                        </div>
                     </Card>
 
-                    <Card>
-                        <CardHeader
-                            title="البنود"
-                            actions={<Button type="button" variant="secondary" size="sm" icon={<Plus className="size-4" />} onClick={() => form.setData('lines', [...form.data.lines, emptyLine()])}>بند</Button>}
-                        />
-                        {form.errors.lines && <p className="mb-3 text-sm text-red-600">{form.errors.lines}</p>}
+                    <Card className="p-5">
+                        <div className="mb-4 flex items-center gap-2">
+                            <h2 className="me-auto text-[15px] font-bold text-ink">الأصناف</h2>
+                            <Button type="button" variant="outline" size="sm" icon={<Plus />} onClick={() => form.setData('lines', [...form.data.lines, emptyLine()])} disabled={form.data.lines.length >= 50}>بند</Button>
+                        </div>
+                        {form.errors.lines && <p className="mb-3 text-[13px] text-[#b91c1c]">{form.errors.lines}</p>}
                         <div className="space-y-3">
                             {form.data.lines.map((line, i) => (
-                                <div key={i} className="grid gap-3 rounded-xl border border-line p-3 sm:grid-cols-12">
-                                    <Field className="sm:col-span-5" label={i === 0 ? 'الوصف' : undefined} error={lineError(i, 'description')}>
-                                        <Input value={line.description} onChange={(e) => setLine(i, { description: e.target.value })} required />
-                                    </Field>
-                                    <Field className="sm:col-span-2" label={i === 0 ? 'الكمية' : undefined} error={lineError(i, 'quantity')}>
-                                        <Input type="number" min="0.001" step="0.001" dir="ltr" value={line.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} required />
-                                    </Field>
-                                    <Field className="sm:col-span-2" label={i === 0 ? 'سعر الوحدة' : undefined} error={lineError(i, 'unit_price')}>
-                                        <Input type="number" min="0" step="0.001" dir="ltr" value={line.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value })} required />
-                                    </Field>
-                                    <Field className="sm:col-span-2" label={i === 0 ? 'خصم' : undefined} error={lineError(i, 'discount')}>
-                                        <Input type="number" min="0" step="0.001" dir="ltr" value={line.discount} onChange={(e) => setLine(i, { discount: e.target.value })} />
-                                    </Field>
-                                    <div className="flex items-end justify-between gap-2 sm:col-span-1 sm:flex-col sm:items-center sm:justify-end">
-                                        <span className="text-xs text-muted num sm:hidden">{money(lineTotal(line), currency)}</span>
-                                        <button
-                                            type="button"
-                                            disabled={form.data.lines.length === 1}
-                                            onClick={() => form.setData('lines', form.data.lines.filter((_, x) => x !== i))}
-                                            className="grid size-10 place-items-center rounded-xl text-muted hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
-                                            aria-label="حذف البند"
-                                        >
-                                            <Trash2 className="size-4" />
-                                        </button>
+                                <div key={i} className="grid gap-3 rounded-[12px] border border-line p-3 sm:grid-cols-12">
+                                    <Field className="sm:col-span-5" label="البيان" error={lineError(i, 'description')}><Input value={line.description} onChange={(e) => setLine(i, { description: e.target.value })} maxLength={250} required /></Field>
+                                    <Field className="sm:col-span-2" label="الكمية" error={lineError(i, 'quantity')}><Input type="number" min="0.001" step="0.001" dir="ltr" value={line.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} required /></Field>
+                                    <Field className="sm:col-span-2" label="سعر الوحدة" error={lineError(i, 'unit_price')}><Input type="number" min="0" step="0.001" dir="ltr" value={line.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value })} required /></Field>
+                                    <Field className="sm:col-span-2" label="الخصم" error={lineError(i, 'discount')}><Input type="number" min="0" step="0.001" dir="ltr" value={line.discount} onChange={(e) => setLine(i, { discount: e.target.value })} /></Field>
+                                    <div className="flex items-end justify-end sm:col-span-1">
+                                        <button type="button" disabled={form.data.lines.length === 1} onClick={() => form.setData('lines', form.data.lines.filter((_, x) => x !== i))} className="grid size-10 place-items-center rounded-[10px] text-[#6b7280] transition-colors hover:bg-[#fef2f2] hover:text-[#b91c1c] disabled:opacity-30" aria-label="حذف البند"><Trash2 className="size-4" /></button>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     </Card>
-                </div>
 
-                <div className="space-y-6">
-                    <Card>
-                        <CardHeader title="التفاصيل" />
-                        <div className="space-y-4">
-                            <Field label="تاريخ الاستحقاق" error={form.errors.due_date} hint="اتركه فارغًا لاستخدام إعداد النادي">
-                                <Input type="date" value={form.data.due_date} onChange={(e) => form.setData('due_date', e.target.value)} />
-                            </Field>
-                            <Field label="ملاحظات" error={form.errors.notes}>
-                                <Textarea rows={3} value={form.data.notes} onChange={(e) => form.setData('notes', e.target.value)} />
-                            </Field>
-                        </div>
+                    <Card className="p-5">
+                        <h2 className="mb-4 text-[15px] font-bold text-ink">ملخص الفاتورة</h2>
+                        <dl className="space-y-1.5 text-[13px]">
+                            <SumRow label="المجموع الفرعي" value={money(totals?.subtotal ?? 0, currency)} />
+                            {Number(totals?.discount_total ?? 0) > 0 && <SumRow label="الخصم" value={`− ${money(totals!.discount_total, currency)}`} />}
+                            {Number(totals?.tax_total ?? 0) > 0 && <SumRow label={`ضريبة القيمة المضافة (${Number(totals!.tax_rate)}%)`} value={money(totals!.tax_total, currency)} />}
+                            <SumRow label="الإجمالي" value={money(totals?.total ?? 0, currency)} strong />
+                        </dl>
+                        <p className="mt-3 text-[12px] text-[#9ca3af]">تُحسب الضريبة حسب إعدادات النادي، كما ستُصدر.</p>
                     </Card>
-                    <Card className="bg-brand-50/50">
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm text-muted">الإجمالي قبل الضريبة</span>
-                            <span className="text-xl font-semibold num">{money(total, currency)}</span>
-                        </div>
-                        <p className="mt-1 text-xs text-muted">تُضاف ضريبة القيمة المضافة حسب إعدادات النادي عند الإصدار.</p>
-                        <Button type="submit" className="mt-4 w-full" loading={form.processing}>إصدار الفاتورة</Button>
+
+                    <Card className="p-5">
+                        <h2 className="mb-1 text-[15px] font-bold text-ink">ملاحظة للعميل</h2>
+                        <p className="mb-3 text-[12px] text-[#9ca3af]">تُطبع على الفاتورة.</p>
+                        <Field error={form.errors.notes}><Textarea rows={3} value={form.data.notes} onChange={(e) => form.setData('notes', e.target.value)} maxLength={1000} /></Field>
                     </Card>
+                </form>
+
+                <div className="min-w-0 space-y-2 xl:sticky xl:top-4 xl:self-start">
+                    <h2 className="text-[15px] font-bold text-ink">معاينة الفاتورة</h2>
+                    {paper ? (
+                        <PaperFrame html={paper.html} paper={paper.size} height="min(80svh, 1000px)" title="معاينة الفاتورة" />
+                    ) : (
+                        <div className="grid h-64 place-items-center rounded-2xl border border-dashed border-line bg-white px-6 text-center text-[13px] text-[#9ca3af]">اكتب بندًا لتظهر الفاتورة كما ستُصدر.</div>
+                    )}
                 </div>
-            </form>
+            </div>
         </ClubLayout>
+    );
+}
+
+function SumRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+    return (
+        <div className={strong ? 'flex justify-between gap-4 border-t border-line pt-2 font-bold' : 'flex justify-between gap-4'}>
+            <dt className="text-[#71717a]">{label}</dt>
+            <dd className="num">{value}</dd>
+        </div>
     );
 }

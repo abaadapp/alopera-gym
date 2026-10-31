@@ -80,7 +80,8 @@ const tones = {
 export function Badge({ children, tone = 'gray', className }: { children: ReactNode; tone?: keyof typeof tones; className?: string }) {
     // In a control panel the neutral badge is grey, not warm stone.
     const admin = useAdmin();
-    return <span className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap', admin && '[&_svg]:size-3.5 [&_svg]:shrink-0', admin && tone === 'gray' ? 'bg-[#f2f2f0] text-[#4b4b4b]' : tones[tone], className)}>{children}</span>;
+    // In a control panel the status colours are the stat tiles' (green success, amber warning, red danger, blue info).
+    return <span className={cn('inline-flex items-center rounded-full font-medium whitespace-nowrap', admin ? 'gap-1.5 px-2.5 py-1 text-[12px] [&_svg]:size-3.5 [&_svg]:shrink-0' : 'gap-1 px-2.5 py-0.5 text-xs', admin ? statTones[tone] : tones[tone], className)}>{children}</span>;
 }
 
 /* Stat tiles take the status colours: a pale fill with a deeper icon. */

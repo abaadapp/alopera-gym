@@ -1,14 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { toast } from 'sonner';
-import { AlertTriangle, ArrowRight, Banknote, Check, Clock, Copy, CreditCard, ExternalLink, FileDown, FileMinus, MessageCircle, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Banknote, Check, Clock, Copy, CreditCard, ExternalLink, FileDown, MessageCircle, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PaperPanel, { DocumentMeta, LtrDates, PaperAside, type PaperData } from '@/Components/Papers/PaperPanel';
-import { Badge, Button, Card, CardHeader, ChoiceCard, ConfirmAction, EmptyState, Field, Input, Modal, Notice, PageHeader, Select, Stat, Textarea } from '@/Components/ui';
+import { Badge, Button, Card, ChoiceCard, ConfirmAction, Field, Input, Modal, Notice, PageHeader, Select, Textarea } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, dayCount, money } from '@/lib/format';
 import { invoiceStatus, invoiceType, label, paymentMethod, paymentStatus } from '@/lib/labels';
+import { INVOICE_STATES } from './Index';
 
 interface Item {
     id: number;
@@ -69,6 +70,7 @@ interface Invoice {
     due_date: string | null;
     overdue: boolean;
     days_overdue: number;
+    state: string;
     notes: string | null;
     void_reason: string | null;
     creator: string | null;
@@ -116,6 +118,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
     const canCredit = can('invoices.credit') && invoice.status !== 'void' && Number(invoice.net_total) > 0;
     const [statusLabel, statusTone] = label(invoiceStatus, invoice.status);
     const isOpen = invoice.status === 'issued' || invoice.status === 'partially_paid';
+    const discounted = invoice.items.some((i) => Number(i.discount) > 0);
     const overdueBadge = invoice.overdue && <Badge tone="red">متأخرة {dayCount(invoice.days_overdue)}</Badge>;
     const canVoid = can('invoices.void') && invoice.status !== 'void' && Number(invoice.paid_total) === 0
         && !invoice.payments.some((p) => p.status === 'pending');
@@ -132,15 +135,20 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
     return (
         <ClubLayout title={`فاتورة ${invoice.number}`}>
             <PageHeader
-                back={<Link href={route('club.invoices.index')} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-brand"><ArrowRight className="size-4" /> الفواتير</Link>}
-                title={<span className="flex flex-wrap items-center gap-3"><span className="num">{invoice.number}</span><Badge tone={statusTone}>{statusLabel}</Badge>{overdueBadge}</span>}
-                subtitle={`${invoiceType[invoice.type] ?? invoice.type} · صدرت ${date(invoice.issue_date)}${invoice.creator ? ` بواسطة ${invoice.creator}` : ''}`}
+                back={<Link href={route('club.invoices.index')} className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-ink"><ArrowRight className="size-4" /> فواتير العملاء</Link>}
+                title={<span className="num">{invoice.number}</span>}
+                subtitle={`${invoice.customer_name} — ${INVOICE_STATES[invoice.state]?.[0] ?? statusLabel} · ${invoiceType[invoice.type] ?? invoice.type}`}
                 actions={
                     <>
-                        <Button variant="outline" href={route('club.invoices.print', invoice.id)} external icon={<Printer className="size-4" />}>طباعة</Button>
-                        {isOpen && can('payments.record') && (
-                            <Button icon={<Wallet className="size-4" />} onClick={() => setPayOpen(true)}>تسجيل دفعة</Button>
+                        {isOpen && can('payments.record') && <Button icon={<Wallet />} onClick={() => setPayOpen(true)}>تسجيل دفعة</Button>}
+                        {canCredit && <Button variant="outline" icon={<Undo2 />} onClick={() => setCreditOpen(true)}>إشعار دائن</Button>}
+                        {can('whatsapp.send') && invoice.billable_type === 'member' && isOpen && whatsappEnabled && (
+                            <ConfirmAction url={route('club.invoices.send', invoice.id)} title="إرسال عبر واتساب" message="ستُرسل الفاتورة ورابط الدفع للعضو بقالب «إرسال الفاتورة» المعتمد." confirmLabel="إرسال" tone="primary" variant="outline" size="md" icon={<MessageCircle />}>
+                                إرسال عبر واتساب
+                            </ConfirmAction>
                         )}
+                        {/* On a narrow screen the paper sits under the details: a way to it from the top. */}
+                        <Button variant="outline" className="xl:hidden" href={route('club.invoices.print', invoice.id)} external icon={<Printer />}>طباعة</Button>
                     </>
                 }
             />
@@ -176,198 +184,147 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                         invoice.notes ? { label: 'ملاحظات تُطبع', value: invoice.notes, wide: true } : null,
                     ]} />
 
-                    <Card padded={false}>
-                        <div className="p-5 pb-3"><CardHeader title="البنود" className="mb-0" /></div>
+                    <Card className="p-4">
+                        <h2 className="mb-3 font-bold text-ink">البنود</h2>
                         <div className="overflow-x-auto">
-                            <table className="table-base">
-                                <thead>
-                                    <tr><th>البيان</th><th>الكمية</th><th>السعر</th><th>الخصم</th><th>الإجمالي</th></tr>
+                            <table className="w-full min-w-[520px] text-[13px]">
+                                <thead className="text-[12px] text-[#71717a]">
+                                    <tr>
+                                        <th className="p-2 text-start font-medium">البيان</th>
+                                        <th className="p-2 text-end font-medium">الكمية</th>
+                                        <th className="p-2 text-end font-medium">السعر</th>
+                                        {discounted && <th className="p-2 text-end font-medium">الخصم</th>}
+                                        <th className="p-2 text-end font-medium">الإجمالي</th>
+                                    </tr>
                                 </thead>
                                 <tbody>
                                     {invoice.items.map((item) => (
-                                        <tr key={item.id}>
-                                            <td className="font-medium"><LtrDates text={item.description} /></td>
-                                            <td className="num">{Number(item.quantity)}</td>
-                                            <td className="num">{money(item.unit_price, currency)}</td>
-                                            <td className="num text-muted">{Number(item.discount) > 0 ? money(item.discount, currency) : '—'}</td>
-                                            <td className="num font-medium">{money(item.line_total, currency)}</td>
+                                        <tr key={item.id} className="border-t border-line">
+                                            <td className="p-2"><LtrDates text={item.description} /></td>
+                                            <td className="p-2 text-end tabular-nums">{Number(item.quantity)}</td>
+                                            <td className="p-2 text-end tabular-nums">{money(item.unit_price, currency)}</td>
+                                            {discounted && <td className="p-2 text-end tabular-nums text-[#6b7280]">{Number(item.discount) > 0 ? `− ${money(item.discount, currency)}` : '—'}</td>}
+                                            <td className="p-2 text-end font-semibold tabular-nums">{money(item.line_total, currency)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
-                        <div className="flex justify-end p-5">
-                            <dl className="w-full max-w-xs space-y-2 border-t border-line pt-4 text-sm">
-                                <Row label="المجموع" value={money(invoice.subtotal, currency)} />
-                                {Number(invoice.discount_total) > 0 && <Row label="الخصومات" value={`- ${money(invoice.discount_total, currency)}`} />}
-                                {Number(invoice.tax_total) > 0 && <Row label={`ضريبة القيمة المضافة (${Number(invoice.tax_rate)}%)`} value={money(invoice.tax_total, currency)} />}
-                                <Row label="الإجمالي" value={money(invoice.total, currency)} strong />
-                                {Number(invoice.credited_total) > 0 && (
-                                    <>
-                                        <Row label="إشعارات دائنة" value={`- ${money(invoice.credited_total, currency)}`} />
-                                        <Row label="صافي الفاتورة" value={money(invoice.net_total, currency)} strong />
-                                    </>
-                                )}
-                                <Row label="المدفوع" value={money(invoice.paid_total, currency)} />
-                                {invoice.status !== 'void' && <Row label="المتبقي" value={money(invoice.balance, currency)} strong tone={Number(invoice.balance) > 0 ? 'text-red-600' : 'text-emerald-600'} />}
-                                {Number(invoice.refund_due) > 0 && <Row label="مستحق ردّه للعميل" value={money(invoice.refund_due, currency)} tone="text-amber-700" />}
-                            </dl>
-                        </div>
+                        <dl className="mt-4 ms-auto max-w-xs space-y-1.5 border-t border-line pt-4 text-[13px]">
+                            <Row label="المجموع الفرعي" value={money(invoice.subtotal, currency)} />
+                            {Number(invoice.discount_total) > 0 && <Row label="الخصم" value={`− ${money(invoice.discount_total, currency)}`} />}
+                            {Number(invoice.tax_total) > 0 && <Row label={`ضريبة القيمة المضافة (${Number(invoice.tax_rate)}%)`} value={money(invoice.tax_total, currency)} />}
+                            <Row label="الإجمالي" value={money(invoice.total, currency)} strong />
+                            {Number(invoice.credited_total) > 0 && (
+                                <>
+                                    <Row label="الإشعارات الدائنة" value={`− ${money(invoice.credited_total, currency)}`} />
+                                    <Row label="صافي الفاتورة" value={money(invoice.net_total, currency)} strong />
+                                </>
+                            )}
+                            <Row label="المدفوع" value={money(invoice.paid_total, currency)} />
+                            {invoice.status !== 'void' && <Row label="المتبقي" value={money(invoice.balance, currency)} strong />}
+                            {Number(invoice.refund_due) > 0 && <Row label="مستحق ردّه للعميل" value={money(invoice.refund_due, currency)} />}
+                        </dl>
                     </Card>
 
-                    <Card padded={false}>
-                        <div className="p-5 pb-3">
-                            <CardHeader title="الدفعات والإيصالات" className="mb-0" />
-                        </div>
-                        {invoice.payments.length === 0 ? (
-                            <EmptyState icon={<Receipt className="size-6" />} title="لا توجد دفعات بعد" />
-                        ) : (
-                            <ul className="divide-y divide-line">
-                                {invoice.payments.map((p) => {
-                                    const [pLabel, pTone] = label(paymentStatus, p.status);
-                                    return (
-                                        <li key={p.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
-                                            <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', p.kind === 'refund' ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700')}>
-                                                {p.kind === 'refund' ? <Undo2 className="size-4" /> : p.method === 'card' || p.method === 'paymob' ? <CreditCard className="size-4" /> : <Banknote className="size-4" />}
-                                            </span>
-                                            <div className="min-w-0 flex-1">
-                                                <p className="text-sm font-medium">
-                                                    {p.kind === 'refund' ? 'رد مبلغ' : paymentMethod[p.method] ?? p.method}
-                                                    <span className={cn('ms-2 inline-block num', p.kind === 'refund' && 'text-red-600')}>{p.kind === 'refund' ? '- ' : ''}{money(p.amount, currency)}</span>
-                                                </p>
-                                                <p className="text-xs text-muted">
-                                                    {p.paid_at ?? '—'}
-                                                    {p.receipt_number && <> · إيصال <span className="num">{p.receipt_number}</span></>}
-                                                    {p.reference && <> · مرجع <span className="num">{p.reference}</span></>}
-                                                    {p.receiver && <> · {p.receiver}</>}
-                                                </p>
-                                                {p.notes && <p className="mt-0.5 text-xs text-muted">{p.notes}</p>}
-                                                {p.rejection_reason && <p className="mt-0.5 text-xs text-red-600">سبب الرفض: {p.rejection_reason}</p>}
-                                            </div>
-                                            <Badge tone={pTone}>{pLabel}</Badge>
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {p.has_proof && (
-                                                    <Button variant="ghost" size="sm" href={route('club.payments.proof', p.id)} external icon={<FileDown className="size-3.5" />}>الإثبات</Button>
-                                                )}
-                                                {p.status === 'completed' && (
-                                                    <Button variant="ghost" size="sm" href={route('club.payments.receipt', p.id)} external icon={<Receipt className="size-3.5" />}>الإيصال</Button>
-                                                )}
+                    {invoice.payments.length > 0 && (
+                        <Card className="p-4">
+                            <h3 className="mb-2 text-[13px] font-bold">التحصيلات</h3>
+                            {invoice.payments.map((p) => {
+                                const [pLabel, pTone] = label(paymentStatus, p.status);
+                                const title = <>{p.receipt_number ?? (p.kind === 'refund' ? 'رد مبلغ' : 'دفعة')} — {p.kind === 'refund' ? 'رد مبلغ' : paymentMethod[p.method] ?? p.method}</>;
+                                return (
+                                    <div key={p.id} className="border-t border-line py-2 text-[13px]">
+                                        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                                            {p.status === 'completed'
+                                                ? <a href={route('club.payments.receipt', p.id)} target="_blank" rel="noreferrer" className="min-w-0 truncate text-[#1d4ed8] hover:underline">{title}</a>
+                                                : <span className="min-w-0 truncate">{title}</span>}
+                                            <span dir="ltr" className="text-[#6b7280] num">{p.paid_at ?? '—'}</span>
+                                            {p.status !== 'completed' && <Badge tone={pTone}>{pLabel}</Badge>}
+                                            <span className={cn('tabular-nums', p.kind === 'refund' && 'text-[#b91c1c]')}>{p.kind === 'refund' ? '− ' : ''}{money(p.amount, currency)}</span>
+                                        </div>
+                                        {(p.reference || p.receiver || p.notes) && <p className="mt-0.5 text-[12px] text-[#9ca3af]">{[p.reference && `مرجع ${p.reference}`, p.receiver, p.notes].filter(Boolean).join(' · ')}</p>}
+                                        {p.rejection_reason && <p className="mt-0.5 text-[12px] text-[#b91c1c]">سبب الرفض: {p.rejection_reason}</p>}
+                                        {(p.has_proof || (p.status === 'pending' && can('payments.confirm'))) && (
+                                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                                {p.has_proof && <Button variant="ghost" size="sm" href={route('club.payments.proof', p.id)} external icon={<FileDown />}>الإثبات</Button>}
                                                 {p.status === 'pending' && can('payments.confirm') && (
                                                     <>
-                                                        <ConfirmAction url={route('club.payments.confirm', p.id)} title="تأكيد التحويل" message="تأكد من وصول المبلغ في كشف الحساب. سيُطبَّق على الفاتورة وتُفعَّل العضوية إن اكتمل السداد." confirmLabel="تأكيد الاستلام" tone="primary" variant="success" icon={<Check className="size-3.5" />}>
-                                                            تأكيد
-                                                        </ConfirmAction>
-                                                        <ConfirmAction url={route('club.payments.reject', p.id)} title="رفض التحويل" reason="سبب الرفض" confirmLabel="رفض" icon={<X className="size-3.5" />}>
-                                                            رفض
-                                                        </ConfirmAction>
+                                                        <ConfirmAction url={route('club.payments.confirm', p.id)} title="تأكيد التحويل" message="تأكد من وصول المبلغ في كشف الحساب. سيُطبَّق على الفاتورة وتُفعَّل العضوية إن اكتمل السداد." confirmLabel="تأكيد الاستلام" tone="primary" variant="success" icon={<Check />}>تأكيد</ConfirmAction>
+                                                        <ConfirmAction url={route('club.payments.reject', p.id)} title="رفض التحويل" reason="سبب الرفض" confirmLabel="رفض" icon={<X />}>رفض</ConfirmAction>
                                                     </>
                                                 )}
                                             </div>
-                                        </li>
-                                    );
-                                })}
-                            </ul>
-                        )}
-                    </Card>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </Card>
+                    )}
 
                     {invoice.credit_notes.length > 0 && (
-                        <Card padded={false}>
-                            <div className="p-5 pb-3">
-                                <CardHeader title="الإشعارات الدائنة" subtitle="تخفّض صافي الفاتورة دون تعديلها؛ رد المال خطوة منفصلة" className="mb-0" />
-                            </div>
-                            <ul className="divide-y divide-line">
-                                {invoice.credit_notes.map((n) => (
-                                    <li key={n.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
-                                        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-700"><FileMinus className="size-4" /></span>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="text-sm font-medium">
-                                                <span className="num">{n.number}</span>
-                                                <span className="ms-2 inline-block num text-amber-700">- {money(n.amount, currency)}</span>
-                                            </p>
-                                            <p className="text-xs text-muted">{n.issued_at}{n.creator && <> · {n.creator}</>} · {n.reason}</p>
-                                            {Number(n.refunded_total) > 0 && <p className="mt-0.5 text-xs text-emerald-700">رُدّ للعميل: <span className="num">{money(n.refunded_total, currency)}</span></p>}
-                                        </div>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            <Button variant="ghost" size="sm" href={route('club.credit-notes.print', n.id)} external icon={<Printer className="size-3.5" />}>طباعة</Button>
-                                            {Number(n.refundable) > 0 && Number(invoice.refund_due) > 0 && can('payments.refund') && (
-                                                <Button variant="outline" size="sm" icon={<Undo2 className="size-3.5" />} onClick={() => setRefundNote(n)}>رد المبلغ</Button>
-                                            )}
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
+                        <Card className="p-4">
+                            <h3 className="mb-2 text-[13px] font-bold">إشعارات دائنة</h3>
+                            {invoice.credit_notes.map((n) => (
+                                <div key={n.id} className="border-t border-line py-2 text-[13px]">
+                                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                                        <a href={route('club.credit-notes.print', n.id)} target="_blank" rel="noreferrer" className="min-w-0 truncate text-[#1d4ed8] hover:underline"><span className="num">{n.number}</span>{n.reason ? ` — ${n.reason}` : ''}</a>
+                                        <span dir="ltr" className="text-[#6b7280] num">{n.issued_at}</span>
+                                        <span className="tabular-nums">− {money(n.amount, currency)}</span>
+                                    </div>
+                                    {Number(n.refunded_total) > 0 && <p className="mt-0.5 text-[12px] text-[#047857]">رُدّ للعميل: <span className="num">{money(n.refunded_total, currency)}</span></p>}
+                                    {Number(n.refundable) > 0 && Number(invoice.refund_due) > 0 && can('payments.refund') && (
+                                        <Button variant="outline" size="sm" className="mt-1.5" icon={<Undo2 />} onClick={() => setRefundNote(n)}>رد المبلغ</Button>
+                                    )}
+                                </div>
+                            ))}
                         </Card>
                     )}
 
-                    {canCredit && (
-                        <Card>
-                            <CardHeader title="استرداد أو تخفيض" subtitle="إشعار دائن مرقّم يخفّض صافي الفاتورة مع إبقاء الفاتورة الأصلية كما هي." />
-                            <Button variant="outline" icon={<FileMinus className="size-4" />} onClick={() => setCreditOpen(true)}>إصدار إشعار دائن</Button>
-                        </Card>
-                    )}
-
-                    <Card>
-                        <CardHeader title="المشاركة والدفع الإلكتروني" />
-                        <div className="space-y-3 text-sm">
+                    <Card className="p-4">
+                        <h2 className="mb-3 font-bold text-ink">المشاركة والدفع الإلكتروني</h2>
+                        <div className="space-y-3 text-[13px]">
                             {invoice.pay_link && (
                                 <div>
-                                    <p className="mb-1 text-xs text-muted">رابط الدفع</p>
+                                    <p className="mb-1 text-[12px] text-[#6b7280]">رابط الدفع</p>
                                     {onlinePayments ? (
                                         <div className="flex gap-2">
                                             <Input readOnly dir="ltr" value={invoice.pay_link} className="text-xs" onFocus={(e) => e.currentTarget.select()} />
-                                            <Button type="button" variant="outline" onClick={() => copy(invoice.pay_link!)} icon={<Copy className="size-4" />} aria-label="نسخ" />
+                                            <Button type="button" variant="outline" onClick={() => copy(invoice.pay_link!)} icon={<Copy />} aria-label="نسخ" />
                                         </div>
                                     ) : (
-                                        <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">الدفع الإلكتروني غير مفعّل. فعّل Paymob من الإعدادات ← الربط.</p>
+                                        <p className="rounded-[12px] bg-[#fffbeb] px-3 py-2 text-[12px] text-[#92400e]">الدفع الإلكتروني غير مفعّل. فعّل Paymob من الإعدادات ← الربط.</p>
                                     )}
                                 </div>
                             )}
                             <div className="flex flex-wrap gap-2">
-                                <Button variant="outline" size="sm" href={invoice.public_link} external icon={<ExternalLink className="size-3.5" />}>عرض نسخة العضو</Button>
-                                <Button variant="ghost" size="sm" onClick={() => copy(invoice.public_link)} icon={<Copy className="size-3.5" />}>نسخ الرابط</Button>
+                                <Button variant="outline" size="sm" href={invoice.public_link} external icon={<ExternalLink />}>عرض نسخة العضو</Button>
+                                <Button variant="ghost" size="sm" onClick={() => copy(invoice.public_link)} icon={<Copy />}>نسخ الرابط</Button>
                             </div>
-                            {can('whatsapp.send') && invoice.billable_type === 'member' && isOpen && (
-                                whatsappEnabled ? (
-                                    <ConfirmAction url={route('club.invoices.send', invoice.id)} title="إرسال عبر واتساب" message="ستُرسل الفاتورة ورابط الدفع للعضو بقالب «إرسال الفاتورة» المعتمد." confirmLabel="إرسال" tone="primary" variant="secondary" size="md" icon={<MessageCircle className="size-4" />}>
-                                        إرسال عبر واتساب
-                                    </ConfirmAction>
-                                ) : (
-                                    <p className="text-xs text-muted">واتساب غير مفعّل لهذا النادي.</p>
-                                )
-                            )}
+                            {can('whatsapp.send') && invoice.billable_type === 'member' && isOpen && !whatsappEnabled && <p className="text-[12px] text-[#9ca3af]">واتساب غير مفعّل لهذا النادي.</p>}
                         </div>
                     </Card>
 
                     {intents.length > 0 && (
-                        <Card>
-                            <CardHeader title="محاولات الدفع الإلكتروني" subtitle="تُؤكَّد الدفعة فقط بإشعار موقَّع من البوابة" />
-                            <ul className="space-y-2">
-                                {intents.map((it) => {
-                                    const [tone, text] = intentStatus[it.status] ?? ['gray', it.status];
-                                    return (
-                                        <li key={it.id} className="rounded-xl border border-line p-3 text-xs">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="font-medium num">{money(it.amount, currency)}</span>
-                                                <Badge tone={tone}>{text}</Badge>
-                                            </div>
-                                            <p className="mt-1 text-muted">{it.created_at} · {channelLabel[it.channel] ?? it.channel}</p>
-                                            <p className="mt-0.5 text-muted num" dir="ltr">{it.reference}</p>
-                                            {it.failure_reason && <p className="mt-0.5 text-red-600">{it.failure_reason}</p>}
-                                        </li>
-                                    );
-                                })}
-                            </ul>
+                        <Card className="p-4">
+                            <h2 className="mb-1 font-bold text-ink">محاولات الدفع الإلكتروني</h2>
+                            <p className="mb-3 text-[12px] text-[#9ca3af]">تُؤكَّد الدفعة فقط بإشعار موقَّع من البوابة.</p>
+                            {intents.map((it) => {
+                                const [tone, text] = intentStatus[it.status] ?? ['gray', it.status];
+                                return (
+                                    <div key={it.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line py-2 text-[13px]">
+                                        <span dir="ltr" className="min-w-0 truncate text-[#6b7280] num">{it.reference}</span>
+                                        <span className="text-[#6b7280]">{it.created_at} · {channelLabel[it.channel] ?? it.channel}</span>
+                                        <Badge tone={tone}>{text}</Badge>
+                                        <span className="tabular-nums">{money(it.amount, currency)}</span>
+                                        {it.failure_reason && <p className="w-full text-[12px] text-[#b91c1c]">{it.failure_reason}</p>}
+                                    </div>
+                                );
+                            })}
                         </Card>
                     )}
 
-                    {canVoid && (
-                        <Card>
-                            <CardHeader title="إلغاء الفاتورة" subtitle="متاح عندما لا يبقى على الفاتورة مبلغ مدفوع (بعد رد أي دفعة). العضوية المرتبطة بانتظار الدفع تُلغى أيضًا." />
-                            <ConfirmAction url={route('club.invoices.void', invoice.id)} title={`إلغاء الفاتورة ${invoice.number}`} reason="سبب الإلغاء" confirmLabel="إلغاء الفاتورة" variant="danger" size="md">
-                                إلغاء الفاتورة
-                            </ConfirmAction>
-                        </Card>
-                    )}
+                    {canVoid && <VoidCard invoice={invoice} />}
                 </div>
 
                 <PaperAside className="xl:col-span-2">
@@ -382,12 +339,30 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
     );
 }
 
-function Row({ label, value, strong, tone }: { label: string; value: string; strong?: boolean; tone?: string }) {
+function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
     return (
-        <div className={cn('flex justify-between gap-4', strong && 'border-t border-line pt-2 font-semibold')}>
-            <dt className={strong ? 'text-ink' : 'text-muted'}>{label}</dt>
-            <dd className={cn('num', tone)}>{value}</dd>
+        <div className={cn('flex justify-between gap-4', strong && 'font-bold')}>
+            <dt className="text-[#71717a]">{label}</dt>
+            <dd className="num">{value}</dd>
         </div>
+    );
+}
+
+/** Cancelling: the reason, then the red button — open only while nothing is paid on it (refund first). */
+function VoidCard({ invoice }: { invoice: Invoice }) {
+    const form = useForm({ reason: '' });
+    return (
+        <Card className="p-4">
+            <form onSubmit={(e) => { e.preventDefault(); form.post(route('club.invoices.void', invoice.id), { preserveScroll: true }); }} className="flex flex-wrap items-end gap-2">
+                <label className="min-w-48 flex-1 text-[13px]">
+                    سبب الإلغاء
+                    <Input className="mt-1" value={form.data.reason} onChange={(e) => form.setData('reason', e.target.value)} maxLength={255} required />
+                    {form.errors.reason && <span className="mt-1 block text-[12px] text-[#b91c1c]">{form.errors.reason}</span>}
+                </label>
+                <Button type="submit" variant="danger" loading={form.processing}>إلغاء الفاتورة</Button>
+            </form>
+            <p className="mt-2 text-[12px] text-[#9ca3af]">العضوية المرتبطة بانتظار الدفع تُلغى أيضًا.</p>
+        </Card>
     );
 }
 
