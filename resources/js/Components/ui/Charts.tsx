@@ -12,7 +12,7 @@ const PAD = { top: 12, bottom: 26, start: 56, end: 8 };
  * point under the pointer (or the finger) read out in a line beneath. Drawn left to right in time order even on an
  * Arabic page (time axes read that way). Scrolls sideways on a narrow screen instead of squeezing its labels.
  */
-export function AreaChart({ data, height = 260, valueLabel = (v: number) => number(v, 3), hint = 'مرّر المؤشر على الرسم لقراءة كل نقطة', color = '#111111' }: {
+export function AreaChart({ data, height = 260, valueLabel = (v: number) => number(v, 3), hint = 'مرّر المؤشر على الرسم لقراءة كل نقطة', color = '#7c3aed' }: {
     data: { label: string; value: number }[];
     height?: number;
     valueLabel?: (v: number) => string;
@@ -82,7 +82,7 @@ export function AreaChart({ data, height = 260, valueLabel = (v: number) => numb
                     <path d={area} fill={`url(#${gradient})`} />
                     <path d={line} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-[chart-draw_0.7s_ease-out]" />
                     {data.map((d, i) => (i % step === 0 || i === hover) && (
-                        <text key={i} x={x(i)} y={height - 8} textAnchor="middle" className={i === hover ? 'fill-[#111] text-[10px] font-bold' : 'fill-[#9ca3af] text-[10px]'}>{d.label}</text>
+                        <text key={i} x={x(i)} y={height - 8} textAnchor="middle" className={i === hover ? 'text-[10px] font-bold' : 'fill-[#9ca3af] text-[10px]'} fill={i === hover ? color : undefined}>{d.label}</text>
                     ))}
                     {hover !== null && (
                         <g>
