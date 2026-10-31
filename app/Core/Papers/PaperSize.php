@@ -47,10 +47,22 @@ final class PaperSize
     }
 
     /**
+     * The viewport a phone lays the page out in. A sheet asks for its own width (A4 is 794 CSS pixels) so a phone
+     * shows the whole page scaled to its screen, as a document, instead of a corner of it with a sideways scroll; a
+     * strip is narrower than any phone and keeps the device width. Desktops and the panel's frame ignore it.
+     */
+    public static function viewport(string $key): string
+    {
+        $p = self::of($key);
+
+        return $p['strip'] ? 'width=device-width, initial-scale=1' : 'width='.(int) ceil($p['width'] / 25.4 * 96);
+    }
+
+    /**
      * The page box: @page for printing, and on screen a box of the paper's real size (210 mm wide for A4, margins
      * included as padding), so a preview shows exactly what will print.
      */
-    public static function css(string $key): string
+    public static function css(string $key, bool $pdf = false): string
     {
         $p = self::of($key);
         $mm = fn (float $v) => rtrim(rtrim(number_format($v, 2, '.', ''), '0'), '.').'mm';
@@ -59,9 +71,13 @@ final class PaperSize
         $inner = $p['height'] !== null ? 'min-height: '.$mm($p['height'] - $p['top'] - $p['bottom']).';' : '';
         $outer = $p['height'] !== null ? 'min-height: '.$mm($p['height']).';' : '';
 
+        // The PDF engine takes the page size and margins from its own settings; an @page rule there would also drop
+        // its running footer (club, number, page x / y).
+        $page = $pdf ? '' : "@page { {$size} margin: {$pad}; }";
+
         return <<<CSS
             @media print {
-                @page { {$size} margin: {$pad}; }
+                {$page}
                 html, body { margin: 0; padding: 0; }
                 .paper { width: auto; padding: 0; {$inner} }
             }

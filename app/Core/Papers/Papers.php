@@ -60,7 +60,8 @@ final class Papers
 
     /**
      * The editor's preview: the club's latest document of this type when the editor may see it, else a sample — drawn
-     * with the settings on screen, saved or not, through the same builder and view as the real thing.
+     * with the settings on screen, saved or not, through the same builder and view as the real thing. Payroll papers
+     * have no latest(): they always preview with the sample, so no one's salary shows on a settings screen.
      *
      * @param  array<string, mixed>|null  $override
      */

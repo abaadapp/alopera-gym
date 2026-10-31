@@ -13,7 +13,7 @@
 <style>
     @font-face { font-family: 'IBM Plex Sans Arabic'; font-weight: 400; src: url('{{ $fontBase }}/IBMPlexSansArabic-Regular.ttf') format('truetype'); }
     @font-face { font-family: 'IBM Plex Sans Arabic'; font-weight: 700; src: url('{{ $fontBase }}/IBMPlexSansArabic-Bold.ttf') format('truetype'); }
-    {!! \App\Core\Papers\PaperSize::css($size) !!}
+    {!! \App\Core\Papers\PaperSize::css($size, $pdf ?? false) !!}
     * { font-family: {!! $font !!}; box-sizing: border-box; }
     body { direction: rtl; text-align: right; color: {{ $tokens['text'] }}; background: #fff; font-size: {{ $pt($strip ? 9.5 : $S['base']) }}; line-height: 1.5; }
     .paper { display: flex; flex-direction: column; }
@@ -35,7 +35,6 @@
     table.fields { width: 100%; }
     table.fields td { border: none; padding: 0; text-align: right; line-height: {{ round($S['field_line'] / $S['base'], 3) }}; }
     table.fields td.gap-after { padding-bottom: {{ $fx($S['field_gap'] - $S['field_line']) }}; }
-    table.fields td.title-gap { padding-bottom: {{ $fx(18) }}; }
     table.end td { text-align: left; }
     table.split { width: 100%; table-layout: fixed; }
     table.split td { vertical-align: top; padding: 0; border: none; }
@@ -58,6 +57,8 @@
     table.totals { width: 100%; page-break-inside: avoid; }
     table.totals td { border: none; padding: {{ $fx(3) }} {{ $fx(6) }}; font-size: {{ $pt($S['base']) }}; vertical-align: top; text-align: right; }
     table.totals td.amt { text-align: left; }
+    /* The label and its English line one field step apart, as in the head, not a paragraph apart. */
+    table.totals td.lblcell { line-height: {{ round($S['field_line'] / $S['base'], 3) }}; }
     table.totals tr.grand td { font-weight: bold; }
     table.totals tr.grand td .lbl2 { font-weight: normal; }
     table.stack { width: 100%; margin-top: {{ $fx(12) }}; }

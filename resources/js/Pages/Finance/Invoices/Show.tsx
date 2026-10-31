@@ -1,13 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { toast } from 'sonner';
-import { ArrowRight, Banknote, Check, Copy, CreditCard, ExternalLink, FileDown, FileMinus, MessageCircle, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Banknote, Check, Clock, Copy, CreditCard, ExternalLink, FileDown, FileMinus, MessageCircle, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PaperPanel, { DocumentMeta, LtrDates, PaperAside, type PaperData } from '@/Components/Papers/PaperPanel';
 import { Badge, Button, Card, CardHeader, ChoiceCard, ConfirmAction, EmptyState, Field, Input, Modal, Notice, PageHeader, Select, Stat, Textarea } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
-import { date, money } from '@/lib/format';
+import { date, dayCount, money } from '@/lib/format';
 import { invoiceStatus, invoiceType, label, paymentMethod, paymentStatus } from '@/lib/labels';
 
 interface Item {
@@ -68,6 +68,7 @@ interface Invoice {
     issue_date: string;
     due_date: string | null;
     overdue: boolean;
+    days_overdue: number;
     notes: string | null;
     void_reason: string | null;
     creator: string | null;
@@ -115,6 +116,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
     const canCredit = can('invoices.credit') && invoice.status !== 'void' && Number(invoice.net_total) > 0;
     const [statusLabel, statusTone] = label(invoiceStatus, invoice.status);
     const isOpen = invoice.status === 'issued' || invoice.status === 'partially_paid';
+    const overdueBadge = invoice.overdue && <Badge tone="red">متأخرة {dayCount(invoice.days_overdue)}</Badge>;
     const canVoid = can('invoices.void') && invoice.status !== 'void' && Number(invoice.paid_total) === 0
         && !invoice.payments.some((p) => p.status === 'pending');
 
@@ -131,7 +133,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
         <ClubLayout title={`فاتورة ${invoice.number}`}>
             <PageHeader
                 back={<Link href={route('club.invoices.index')} className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-brand"><ArrowRight className="size-4" /> الفواتير</Link>}
-                title={<span className="flex flex-wrap items-center gap-3"><span className="num">{invoice.number}</span><Badge tone={statusTone}>{statusLabel}</Badge>{invoice.overdue && <Badge tone="red">متأخرة</Badge>}</span>}
+                title={<span className="flex flex-wrap items-center gap-3"><span className="num">{invoice.number}</span><Badge tone={statusTone}>{statusLabel}</Badge>{overdueBadge}</span>}
                 subtitle={`${invoiceType[invoice.type] ?? invoice.type} · صدرت ${date(invoice.issue_date)}${invoice.creator ? ` بواسطة ${invoice.creator}` : ''}`}
                 actions={
                     <>
@@ -143,6 +145,17 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                 }
             />
 
+            {invoice.overdue ? (
+                <Notice tone="red" icon={<AlertTriangle />} className="mb-6">
+                    متأخرة السداد منذ {dayCount(invoice.days_overdue)} — استحقت في <span className="num">{date(invoice.due_date)}</span>.{' '}
+                    {Number(invoice.paid_total) > 0 ? <>دُفع <b className="num">{money(invoice.paid_total, currency)}</b> من <span className="num">{money(invoice.net_total, currency)}</span>، والمتبقي <b className="num">{money(invoice.balance, currency)}</b>.</> : <>لم يُدفع منها شيء، والمتبقي <b className="num">{money(invoice.balance, currency)}</b>.</>}
+                </Notice>
+            ) : invoice.status === 'partially_paid' && (
+                <Notice tone="blue" icon={<Clock />} className="mb-6">
+                    مدفوعة جزئيًا — دُفع <b className="num">{money(invoice.paid_total, currency)}</b> من <span className="num">{money(invoice.net_total, currency)}</span>، والمتبقي <b className="num">{money(invoice.balance, currency)}</b>{invoice.due_date ? <> يستحق في <span className="num">{date(invoice.due_date)}</span></> : null}.
+                </Notice>
+            )}
+
             {invoice.status === 'void' && (
                 <Notice tone="red" className="mb-6">
                     هذه الفاتورة ملغاة{invoice.void_reason ? `: ${invoice.void_reason}` : '.'}
@@ -152,7 +165,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
                 <div className="min-w-0 space-y-4 xl:col-span-3">
                     <DocumentMeta cells={[
-                        { label: 'الحالة', value: <span className="flex flex-wrap items-center gap-1"><Badge tone={statusTone}>{statusLabel}</Badge>{invoice.overdue && <Badge tone="red">متأخرة</Badge>}</span> },
+                        { label: 'الحالة', value: <span className="flex flex-wrap items-center gap-1"><Badge tone={statusTone}>{statusLabel}</Badge>{overdueBadge}</span> },
                         { label: invoice.billable_type === 'member' ? 'العضو' : 'العميل', value: invoice.billable_type === 'member' && invoice.billable_id ? <Link href={route('club.members.show', invoice.billable_id)} className="font-medium hover:text-brand">{invoice.customer_name}</Link> : invoice.customer_name },
                         invoice.customer_phone ? { label: 'الهاتف', value: invoice.customer_phone, ltr: true } : null,
                         { label: 'نوع الفاتورة', value: invoiceType[invoice.type] ?? invoice.type },

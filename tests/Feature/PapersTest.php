@@ -2,10 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Core\Papers\PaperFormat;
 use App\Core\Papers\Papers;
 use App\Core\Papers\PaperTypes;
+use App\Models\Branch;
 use App\Models\Tenant;
+use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Finance\Models\Invoice;
+use App\Modules\Finance\Papers\InvoicePaper;
 use App\Modules\Finance\Services\CreditNoteService;
 use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Finance\Services\PaymentService;
@@ -14,9 +18,13 @@ use App\Modules\Gym\Services\MembershipService;
 use App\Modules\Gym\Services\PtService;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\ProductAddon;
+use App\Modules\Inventory\Models\PurchaseOrder;
 use App\Modules\Inventory\Models\Sale;
+use App\Modules\Inventory\Models\Supplier;
+use App\Modules\Inventory\Services\PurchaseService;
 use App\Modules\Inventory\Services\StockService;
 use App\Modules\Payroll\Models\Employee;
+use App\Modules\Payroll\Models\PayrollPayout;
 use App\Modules\Payroll\Models\PayrollRun;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\BuildsClubs;
@@ -160,6 +168,106 @@ class PapersTest extends TestCase
         // Restoring the defaults drops the club's settings for this paper only.
         $this->actingAs($owner)->delete(route('club.settings.papers.reset', 'invoice'))->assertSessionHasNoErrors();
         $this->assertSame('A4', PaperTypes::settings($club->fresh(), 'invoice')['paper']);
+    }
+
+    public function test_all_ten_papers_draw_the_preview_the_print_page_and_the_pdf_with_one_engine(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $invoice = $this->sellMembership($club);
+        $this->asTenant($club, function () use ($invoice) {
+            app(PaymentService::class)->record($invoice, '30', 'cash');
+            app(CreditNoteService::class)->issue($invoice->fresh(), '5', 'تسوية');
+        });
+        $this->sale($club);
+        [$supplier, $water, $branch] = $this->asTenant($club, fn () => [Supplier::create(['name' => 'Al Noor', 'payment_terms_days' => 30]), Product::create(['name' => 'Water', 'price' => 0.2]), Branch::create(['name' => 'فرع الخوض', 'is_active' => true])]);
+        $this->actingAs($owner)->post(route('club.purchases.store'), ['supplier_id' => $supplier->id, 'branch_id' => $branch->id, 'order_date' => now()->toDateString(), 'tax_rate' => 5, 'items' => [['product_id' => $water->id, 'quantity' => 5, 'unit_cost' => 4.8]]])->assertSessionHasNoErrors();
+        $order = $this->asTenant($club, fn () => PurchaseOrder::with('items')->sole());
+        $this->asTenant($club, fn () => app(PurchaseService::class)->approve($order));
+        $this->actingAs($owner)->post(route('club.purchases.receive', $order), ['lines' => [$order->items->first()->id => ['quantity' => 5]], 'received_on' => now()->toDateString(), 'approve' => true])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.purchases.bills.store'), ['supplier_id' => $supplier->id, 'purchase_order_id' => $order->id, 'reference' => 'A-1', 'issue_date' => now()->toDateString(), 'subtotal' => 24, 'tax' => 1.2, 'approve' => true])->assertSessionHasNoErrors();
+        $this->asTenant($club, fn () => Employee::create(['name' => 'سارة', 'basic_salary' => '400', 'status' => 'active']));
+        $this->actingAs($owner)->post(route('club.payroll.store'), ['month' => now()->format('Y-m')])->assertSessionHasNoErrors();
+        $run = $this->asTenant($club, fn () => PayrollRun::with('items')->sole());
+        $this->actingAs($owner)->post(route('club.payroll.approve', $run))->assertSessionHasNoErrors();
+        $bank = $this->asTenant($club, fn () => app(ChartOfAccounts::class)->account('bank'));
+        $this->actingAs($owner)->post(route('club.payroll.pay', $run), ['items' => [$run->items->first()->id], 'account_id' => $bank->id, 'paid_on' => today()->toDateString()])->assertSessionHasNoErrors();
+        $payroll = $this->asTenant($club, fn () => ['payslip' => $run->items->first(), 'payroll_sheet' => $run, 'payroll_payout' => PayrollPayout::sole()]);
+        $style = fn (string $html) => substr($html, strpos($html, '<style>'), strpos($html, '</style>') - strpos($html, '<style>'));
+
+        $this->assertCount(10, Papers::BUILDERS);
+        foreach (array_keys(Papers::BUILDERS) as $type) {
+            $builder = Papers::builder($type);
+            // Payroll papers preview with a sample (no salaries on a settings screen); the rest with the latest record.
+            $latest = $this->asTenant($club, fn () => $builder::latest($owner));
+            $record = $latest ?? $payroll[$type];
+            $values = ['header' => 'ترويسة '.$type, 'footer' => 'تذييل '.$type, 'font' => 'large'] + PaperTypes::settings($club->fresh(), $type);
+            $faces = isset($values['strip']) ? ['sheet', 'strip'] : ['sheet'];
+
+            foreach ($faces as $face) {
+                $preview = $this->actingAs($owner)->postJson(route('club.settings.papers.preview', $type), $values + ['face' => $face])->assertOk()->json('html');
+                $this->assertStringContainsString('تذييل '.$type, $preview, "$type $face: the preview draws the unsaved template");
+                $this->actingAs($owner)->put(route('club.settings.papers.update', $type), $values)->assertSessionHasNoErrors();
+                $printed = $this->actingAs($owner)->get(route('club.papers.show', ['type' => $type, 'id' => $record->id, 'face' => $face]))->assertOk()->getContent();
+                $this->assertStringContainsString('تذييل '.$type, $printed, "$type $face: the print page draws the saved template");
+                $latest !== null
+                    ? $this->assertSame($preview, $printed, "$type $face: the preview is the printed paper")
+                    : $this->assertSame($style($preview), $style($printed), "$type $face: the sample is drawn with the printed paper's own stylesheet");
+            }
+            $pdf = $this->actingAs($owner)->get(route('club.papers.pdf', ['type' => $type, 'id' => $record->id]))->assertOk()->assertHeader('Content-Type', 'application/pdf');
+            $this->assertStringStartsWith('%PDF', $pdf->getContent(), "$type: the PDF");
+        }
+    }
+
+    public function test_a_partly_paid_invoice_past_its_due_date_says_both_and_its_sums_do_not_move(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $invoice = $this->sellMembership($club);
+        $this->asTenant($club, function () use ($invoice) {
+            $invoice->forceFill(['due_date' => today()->subDays(3)])->save();
+            app(PaymentService::class)->record($invoice->fresh(), '30', 'cash');
+        });
+        $invoice = $this->asTenant($club, fn () => $invoice->fresh());
+        $this->assertSame([Invoice::PARTIALLY_PAID, '30.000', '45.000', true, 3], [$invoice->status, $invoice->paid_total, $invoice->balance(), $invoice->isOverdue(), $invoice->daysOverdue()]);
+
+        $this->actingAs($owner)->get(route('club.papers.show', ['type' => 'invoice', 'id' => $invoice->id]))->assertOk()
+            ->assertSee('مدفوعة جزئيًا · متأخرة السداد')->assertSee('الرصيد المستحق')->assertSee('45.000');
+        $this->actingAs($owner)->get(route('club.invoices.show', $invoice))->assertOk()->assertInertia(fn ($page) => $page
+            ->where('invoice.status', Invoice::PARTIALLY_PAID)->where('invoice.overdue', true)->where('invoice.days_overdue', 3)->where('invoice.balance', '45.000'));
+        $this->actingAs($owner)->get(route('club.invoices.index', ['status' => 'overdue']))->assertOk()->assertInertia(fn ($page) => $page
+            ->where('invoices.data.0.number', $invoice->number)->where('invoices.data.0.status', Invoice::PARTIALLY_PAID)->where('invoices.data.0.days_overdue', 3));
+        $this->actingAs($owner)->get(route('club.invoices.index', ['status' => 'partially_paid']))->assertInertia(fn ($page) => $page->where('invoices.data.0.number', $invoice->number));
+
+        // Each state on its own: not yet due, unpaid and late, paid — the stamp says what holds and nothing else.
+        $stamp = fn (array $state) => InvoicePaper::stamp((clone $invoice)->forceFill($state));
+        $this->assertSame('مدفوعة جزئيًا', $stamp(['due_date' => today()->addDays(4)]));
+        $this->assertSame('غير مدفوعة · متأخرة السداد', $stamp(['status' => Invoice::ISSUED, 'paid_total' => '0']));
+        $this->assertSame('', $stamp(['status' => Invoice::ISSUED, 'paid_total' => '0', 'due_date' => today()]));
+        $this->assertSame('مدفوعة', $stamp(['status' => Invoice::PAID]));
+    }
+
+    public function test_mixed_arabic_and_dates_keep_their_order_in_the_pdf_and_a_phone_sees_the_whole_page(): void
+    {
+        $this->assertSame(['ltr', 'rtl', 'rtl', 'ltr', 'rtl'], [PaperFormat::dir('Protein shake'), PaperFormat::dir('اشتراك (من 2026-10-30 إلى 2027-04-29)'), PaperFormat::dir('3 أيام'), PaperFormat::dir('2026-10-30 · RC-000058'), PaperFormat::dir('')]);
+
+        $club = $this->club();
+        $invoice = $this->sellMembership($club);
+        $sale = $this->sale($club);
+        [$page, $pdf, $strip] = $this->asTenant($club, function () use ($invoice, $sale) {
+            $paper = Papers::for('invoice', $invoice->fresh());
+
+            return [$paper->html(), $paper->html(pdf: true), Papers::for('sale', $sale, null, 'strip')->html()];
+        });
+        // The PDF engine reads dir="auto" as left to right: every line carries its own direction instead.
+        $this->assertStringNotContainsString('dir="auto"', $page.$pdf);
+        $this->assertStringContainsString('<td class="item" dir="rtl">', $pdf);
+        // The browser's print dialog gets @page; the PDF does not (it would drop the running footer with the page numbers).
+        $this->assertStringContainsString('@page { size: 210mm 297mm;', $page);
+        $this->assertStringNotContainsString('@page', $pdf);
+        // A phone lays an A4 sheet out at its own width and shows it whole; a strip keeps the device width.
+        $this->assertStringContainsString('<meta name="viewport" content="width=794">', $page);
+        $this->assertStringContainsString('<meta name="viewport" content="width=device-width, initial-scale=1">', $strip);
     }
 
     public function test_required_parts_have_no_switch_and_bad_values_are_refused(): void

@@ -142,6 +142,17 @@ class Invoice extends Model implements BranchOwned
         return in_array($this->status, self::OPEN_STATUSES, true);
     }
 
+    /** Still owed past its due date (unpaid or partly paid) — the same rule as scopeOverdue. */
+    public function isOverdue(): bool
+    {
+        return $this->isOpen() && $this->due_date !== null && $this->due_date->lt(today());
+    }
+
+    public function daysOverdue(): int
+    {
+        return $this->isOverdue() ? (int) $this->due_date->diffInDays(today()) : 0;
+    }
+
     public function isPaid(): bool
     {
         return $this->status === self::PAID;

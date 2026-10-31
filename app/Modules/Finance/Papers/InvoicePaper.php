@@ -135,17 +135,23 @@ final class InvoicePaper extends PaperBuilder
         ];
     }
 
-    /** What is stamped under the figure. A plain issued invoice carries no stamp: it is the normal state. */
+    /**
+     * What is stamped under the figure: how much of it is paid, then whether it is past due — both when both hold, so
+     * a partly paid invoice that is also late says so instead of one hiding the other. A plain issued invoice that is
+     * not yet due carries no stamp: it is the normal state.
+     */
     public static function stamp(Invoice $invoice): string
     {
-        return match (true) {
-            $invoice->status === Invoice::VOID => 'ملغاة',
-            $invoice->status === Invoice::CREDITED => 'أُلغيت قيمتها بإشعار دائن',
-            $invoice->status === Invoice::PAID => 'مدفوعة',
-            $invoice->isOpen() && $invoice->due_date !== null && $invoice->due_date->lt(today()) => 'متأخرة السداد',
-            $invoice->status === Invoice::PARTIALLY_PAID => 'مدفوعة جزئيًا',
+        $paid = match ($invoice->status) {
+            Invoice::VOID => 'ملغاة',
+            Invoice::CREDITED => 'أُلغيت قيمتها بإشعار دائن',
+            Invoice::PAID => 'مدفوعة',
+            Invoice::PARTIALLY_PAID => 'مدفوعة جزئيًا',
+            Invoice::ISSUED => $invoice->isOverdue() ? 'غير مدفوعة' : '',
             default => '',
         };
+
+        return implode(' · ', array_filter([$paid, $invoice->isOverdue() ? 'متأخرة السداد' : '']));
     }
 
     public static function sample(Tenant $tenant, array $tpl): array

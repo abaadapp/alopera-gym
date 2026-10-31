@@ -63,8 +63,8 @@ class InvoiceController extends Controller
             'refund_due' => $i->refundDue(),
             'issue_date' => $i->issue_date->toDateString(),
             'due_date' => $i->due_date?->toDateString(),
-            'overdue' => $i->isOpen() && $i->due_date && $i->due_date->lt(today()),
-            'days_overdue' => $i->isOpen() && $i->due_date && $i->due_date->lt(today()) ? (int) $i->due_date->diffInDays(today()) : 0,
+            'overdue' => $i->isOverdue(),
+            'days_overdue' => $i->daysOverdue(),
         ];
     }
 

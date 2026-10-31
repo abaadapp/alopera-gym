@@ -3,7 +3,7 @@
 
         ─────────────── a thin line in the club's colour ───────────────
         TITLE                 document fields               [logo]
-        Title (English)       (split in two above four)     Club name
+        Title (English)       (split in two above five)     Club name
         Party                                               contact lines
                                                             tax / CR numbers
                                                    THE FIGURE (amount that matters)
@@ -44,7 +44,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="{{ \App\Core\Papers\PaperSize::viewport($size) }}">
 <title>{{ $doc['title'] }} {{ $doc['number'] }}</title>
 @include('papers.partials.style')
 </head>
@@ -57,7 +57,7 @@
             <td style="width:27%">
                 <table class="fields">
                     <tr><td class="doctitle">{{ $title1 }}</td></tr>
-                    <tr><td class="doctitle2 title-gap">{{ $title2 !== '' ? $title2 : ' ' }}</td></tr>
+                    <tr><td class="doctitle2">{{ $title2 !== '' ? $title2 : ' ' }}</td></tr>
                 </table>
                 @foreach ($parties as $party)
                     @php([$p1, $p2] = $cap($party['caption']))
@@ -97,7 +97,7 @@
                     @if ($sub !== '')<tr><td class="lbl2">{{ $sub }}</td></tr>@endif
                     @if ($header !== '')<tr><td class="lbl2">{{ $header }}</td></tr>@endif
                     @foreach ($contact as $line)
-                        <tr><td class="{{ $loop->last ? 'gap-after' : '' }}" dir="auto">{{ $line }}</td></tr>
+                        <tr><td class="{{ $loop->last ? 'gap-after' : '' }}" dir="{{ \App\Core\Papers\PaperFormat::dir($line) }}">{{ $line }}</td></tr>
                     @endforeach
                 </table>
                 @include('papers.partials.fields', ['fields' => $proof, 'end' => true])
@@ -134,9 +134,9 @@
                     <tr>
                         @foreach ($table['columns'] as $i => $col)
                             @if ($i === 0)
-                                <td class="item" dir="auto">{{ \App\Core\Papers\PaperFormat::bidi($row[$col['key']] ?? '') }}
+                                <td class="item" dir="{{ \App\Core\Papers\PaperFormat::dir($row[$col['key']] ?? '') }}">{{ \App\Core\Papers\PaperFormat::bidi($row[$col['key']] ?? '') }}
                                     @foreach (array_filter($row['notes'] ?? []) as $note)
-                                        <div class="note" dir="auto">{{ \App\Core\Papers\PaperFormat::bidi($note) }}</div>
+                                        <div class="note" dir="{{ \App\Core\Papers\PaperFormat::dir($note) }}">{{ \App\Core\Papers\PaperFormat::bidi($note) }}</div>
                                     @endforeach
                                 </td>
                             @else
@@ -166,9 +166,9 @@
             @foreach ($totals as $row)
                 @php([$t1, $t2] = $cap($row['label']))
                 <tr class="{{ ($row['grand'] ?? false) ? 'grand' : '' }}">
-                    <td style="width:50%"></td>
-                    <td style="width:26%"><span class="lbl">{{ $t1 }}</span>@if ($t2 === '' && filled($row['hint'] ?? null)) <span class="lbl2" dir="ltr">{{ $row['hint'] }}</span>@endif
-                        @if ($t2 !== '')<br><span class="lbl2">{{ $t2 }}@if (filled($row['hint'] ?? null)) <span dir="ltr">{{ $row['hint'] }}</span>@endif</span>@endif</td>
+                    <td style="width:58%"></td>
+                    <td style="width:18%" class="lblcell"><span class="lbl">{{ $t1 }}</span>@if (filled($row['hint'] ?? null)) <span class="lbl2" dir="ltr">{{ $row['hint'] }}</span>@endif
+                        @if ($t2 !== '')<br><span class="lbl2">{{ $t2 }}</span>@endif</td>
                     <td style="width:24%" class="amt"><span dir="ltr">{{ $row['value'] }}</span>@if (filled($row['currency'] ?? null)) {{ $row['currency'] }}@endif</td>
                 </tr>
             @endforeach
@@ -179,16 +179,17 @@
         <table class="stack">
             @foreach ($panels as $panel)
                 @php([$n1, $n2] = $cap($panel['caption']))
-                <tr><td class="cap"><span class="lbl">{{ $n1 }}</span>@if ($n2 !== '') <span class="lbl2">{{ $n2 }}</span>@endif</td></tr>
+                <tr><td class="cap lbl">{{ $n1 }}</td></tr>
+                @if ($n2 !== '')<tr><td class="cap lbl2">{{ $n2 }}</td></tr>@endif
                 <tr><td>
                     @if (filled($panel['text'] ?? null))
-                        <div dir="auto" style="white-space:pre-line">{{ \App\Core\Papers\PaperFormat::bidi($panel['text']) }}</div>
+                        <div dir="{{ \App\Core\Papers\PaperFormat::dir($panel['text']) }}" style="white-space:pre-line">{{ \App\Core\Papers\PaperFormat::bidi($panel['text']) }}</div>
                     @endif
                     @if (count($panel['rows'] ?? []) > 0)
                         <table class="rows" width="100%">
                             @foreach ($panel['rows'] as $r)
                                 <tr>
-                                    <td class="lbl2" style="width:70%">{{ $r['label'] }}@if (filled($r['sub'] ?? null))<div dir="ltr" style="text-align:right">{{ $r['sub'] }}</div>@endif</td>
+                                    <td class="lbl2" style="width:70%">{{ $r['label'] }}@if (filled($r['sub'] ?? null))<div style="text-align:right"><span dir="{{ \App\Core\Papers\PaperFormat::dir($r['sub']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['sub']) }}</span></div>@endif</td>
                                     <td class="amt" style="width:30%"><span dir="ltr" class="{{ ($r['strong'] ?? false) ? 'b' : '' }}">{{ $r['value'] }}</span></td>
                                 </tr>
                             @endforeach
