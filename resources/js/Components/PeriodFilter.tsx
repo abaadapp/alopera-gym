@@ -1,7 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { router } from '@inertiajs/react';
-import { CalendarRange } from 'lucide-react';
-import { Button, Input } from '@/Components/ui';
+import { Button, Input, Tabs } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -33,30 +32,29 @@ export default function PeriodFilter({ routeName, from, to, extra = {}, children
         e.preventDefault();
         go(range);
     };
-    const active = presets().find((p) => p.from === from && p.to === to)?.key;
+    const all = presets();
+    const active = all.find((p) => p.from === from && p.to === to)?.key ?? 'custom';
 
+    // The reference's period row: underline tabs, the from–to dates at its far end; a page's own filter (a source) under it.
     return (
-        <div className={cn('card mb-6 flex flex-wrap items-center justify-between gap-3 p-4', className)}>
-            <div className="flex flex-wrap items-center gap-1.5">
-                {presets().map((p) => (
-                    <button
-                        key={p.key}
-                        type="button"
-                        onClick={() => go({ from: p.from, to: p.to })}
-                        className={cn('h-8 rounded-lg px-3 text-[13px] transition', active === p.key ? 'bg-[#f2f2f0] font-semibold text-ink' : 'text-muted hover:bg-ink/[0.045] hover:text-ink')}
-                    >
-                        {p.label}
-                    </button>
-                ))}
-                {children}
-            </div>
-            <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
-                <CalendarRange className="size-4 text-muted" />
-                <Input type="date" className="h-9 w-36 py-1.5" value={range.from} onChange={(e) => setRange({ ...range, from: e.target.value })} aria-label="من" />
-                <span className="text-muted">—</span>
-                <Input type="date" className="h-9 w-36 py-1.5" value={range.to} onChange={(e) => setRange({ ...range, to: e.target.value })} aria-label="إلى" />
-                <Button type="submit" variant="outline" size="sm">عرض</Button>
-            </form>
+        <div className={cn('mb-6', className)}>
+            <Tabs
+                tabs={all.map((p) => ({ key: p.key, label: p.label }))}
+                value={active}
+                onChange={(key) => {
+                    const p = all.find((x) => x.key === key);
+                    if (p) go({ from: p.from, to: p.to });
+                }}
+                trailing={
+                    <form onSubmit={submit} className="flex items-center gap-2 py-1.5">
+                        <Input type="date" className="h-8 w-[8.5rem] text-[13px]" value={range.from} onChange={(e) => setRange({ ...range, from: e.target.value })} aria-label="من" />
+                        <span className="text-[#9ca3af]">—</span>
+                        <Input type="date" className="h-8 w-[8.5rem] text-[13px]" value={range.to} onChange={(e) => setRange({ ...range, to: e.target.value })} aria-label="إلى" />
+                        <Button type="submit" variant="outline" size="sm">عرض</Button>
+                    </form>
+                }
+            />
+            {children && <div className="mt-3 flex flex-wrap items-center gap-2">{children}</div>}
         </div>
     );
 }

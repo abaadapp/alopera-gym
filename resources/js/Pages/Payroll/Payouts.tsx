@@ -3,7 +3,7 @@ import { useForm } from '@inertiajs/react';
 import { Banknote, Clock, Printer, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Modal, PageHeader, Select, StatCard } from '@/Components/ui';
-import { useCurrency } from '@/hooks/useShared';
+import { useCurrency, useCan } from '@/hooks/useShared';
 import { date, money } from '@/lib/format';
 import { RunList, type RunDetail, type RunSummary } from './Runs';
 
@@ -21,6 +21,7 @@ interface Props {
 }
 
 export default function PayrollPayouts({ runs, run, payouts, waiting, accounts, defaultAccount, can }: Props) {
+    const mayPrint = useCan()('papers.print');
     const currency = useCurrency();
     const m = (v: string | number) => money(v, currency);
     const unpaid = useMemo(() => run?.items.filter((i) => !i.paid_at) ?? [], [run]);
@@ -94,7 +95,7 @@ export default function PayrollPayouts({ runs, run, payouts, waiting, accounts, 
                                                         <td className="num">{p.items}</td>
                                                         <td className="text-muted">{p.reference ?? '—'}</td>
                                                         <td className="text-end font-medium num">{m(p.total)}</td>
-                                                        <td className="text-end"><a href={route('club.papers.show', { type: 'payroll_payout', id: p.id, print: 1 })} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] text-muted hover:bg-ink/[0.045] hover:text-ink" title="سند صرف الرواتب: الموظفون ومبالغهم"><Printer className="size-3.5" /> السند</a></td>
+                                                        <td className="text-end">{mayPrint && <a href={route('club.papers.show', { type: 'payroll_payout', id: p.id, print: 1 })} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] text-muted hover:bg-ink/[0.045] hover:text-ink" title="سند صرف الرواتب: الموظفون ومبالغهم"><Printer className="size-3.5" /> السند</a>}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>

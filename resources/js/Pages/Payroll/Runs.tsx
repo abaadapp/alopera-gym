@@ -3,7 +3,7 @@ import { Link, useForm } from '@inertiajs/react';
 import { Banknote, CheckCircle2, Download, FileText, MinusCircle, Pencil, Plus, Printer, Trash2, Wallet, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, StatCard } from '@/Components/ui';
-import { useCurrency } from '@/hooks/useShared';
+import { useCurrency, useCan } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, money, number } from '@/lib/format';
 
@@ -26,6 +26,7 @@ interface Props {
 }
 
 export default function PayrollRuns({ runs, run, months, can }: Props) {
+    const mayPrint = useCan()('papers.print');
     const currency = useCurrency();
     const m = (v: string) => money(v, currency);
     const [opening, setOpening] = useState(false);
@@ -58,7 +59,7 @@ export default function PayrollRuns({ runs, run, months, can }: Props) {
                                         <p className="mt-0.5 text-[13px] text-muted num">{run.number}{run.approved_at && ` · اعتمدها ${run.approver ?? ''} في ${date(run.approved_at)}`}</p>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
-                                        {can.payslips && <Button variant="outline" size="sm" href={route('club.payroll.print', run.id)} external icon={<Printer className="size-3.5" />}>طباعة الكشف</Button>}
+                                        {can.payslips && mayPrint && <Button variant="outline" size="sm" href={route('club.payroll.print', run.id)} external icon={<Printer className="size-3.5" />}>طباعة الكشف</Button>}
                                         {can.payslips && <Button variant="outline" size="sm" href={route('club.papers.pdf', { type: 'payroll_sheet', id: run.id, download: 1 })} external icon={<Download className="size-3.5" />}>PDF</Button>}
                                         {can.reports && <Button variant="outline" size="sm" href={route('club.payroll.export', { run: run.id, format: 'xlsx' })} external icon={<Download className="size-3.5" />}>Excel</Button>}
                                         {draft && can.edit && (

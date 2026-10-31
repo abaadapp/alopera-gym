@@ -5,7 +5,7 @@ import { Briefcase, CalendarClock, Check, Clock, Contact, Copy, FileText, KeyRou
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Modal, Notice, PageHeader, Select, StatCard, Tabs, Toggle, BackLink } from '@/Components/ui';
 import { FactList, Initials } from '@/Components/Payroll/parts';
-import { useCurrency, useShared } from '@/hooks/useShared';
+import { useCurrency, useShared, useCan } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, money, number, phone } from '@/lib/format';
 import { statusTone, type Can, type EmployeeRow } from './Employees';
@@ -49,6 +49,7 @@ const RUN: Record<string, string> = { draft: 'مسودة', approved: 'معتمد
 
 /** ملف الموظف: the employee's file — what the viewer may see of it, and the actions they may take. */
 export default function EmployeeShow({ employee, account, stats, attendance, payslips, history, permissions, access, confidential, can }: Props) {
+    const mayPrint = useCan()('papers.print');
     const currency = useCurrency();
     const { flash } = useShared();
     const [tab, setTab] = useState<'attendance' | 'payslips' | 'history' | 'permissions'>(can.attendance ? 'attendance' : can.payslips ? 'payslips' : 'history');
@@ -210,8 +211,8 @@ export default function EmployeeShow({ employee, account, stats, attendance, pay
                                                         <td className="num font-medium">{money(p.net, currency)}</td>
                                                         <td>{p.paid_on ? <Badge tone="green">صُرف {p.paid_on}</Badge> : <Badge tone={p.run_status === 'draft' ? 'gray' : 'blue'}>{RUN[p.run_status]}</Badge>}</td>
                                                         <td><div className="flex justify-end gap-1">
-                                                            <Button size="sm" variant="ghost" href={route('club.papers.show', { type: 'payslip', id: p.id, print: 1 })} external icon={<Printer className="size-3.5" />}>طباعة</Button>
-                                                            <Button size="sm" variant="ghost" href={route('club.papers.pdf', { type: 'payslip', id: p.id })} external>PDF</Button>
+                                                            {mayPrint && <Button size="sm" variant="ghost" href={route('club.papers.show', { type: 'payslip', id: p.id, print: 1 })} external icon={<Printer className="size-3.5" />}>طباعة</Button>}
+                                                            {mayPrint && <Button size="sm" variant="ghost" href={route('club.papers.pdf', { type: 'payslip', id: p.id })} external>PDF</Button>}
                                                         </div></td>
                                                     </tr>
                                                 ))}

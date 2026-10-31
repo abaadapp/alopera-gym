@@ -3,7 +3,7 @@ import { router, useForm } from '@inertiajs/react';
 import { Ban, CheckCheck, Globe, PackageCheck, Phone, Printer, Timer } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Pagination, SearchInput, Select, Tabs, Textarea } from '@/Components/ui';
-import { useCurrency } from '@/hooks/useShared';
+import { useCurrency, useCan } from '@/hooks/useShared';
 import { money, number } from '@/lib/format';
 import { saleStatusTone, type SaleRow } from '@/Pages/Inventory/Sales';
 import type { Paginated } from '@/types';
@@ -26,6 +26,7 @@ type Tab = 'open' | 'completed' | 'cancelled' | 'all';
 const stepTone = { new: 'amber', preparing: 'blue', ready: 'violet', delivered: 'green' } as const;
 
 export default function Orders({ orders, tab, counts, filters, can, printOrders = false }: { orders: Paginated<Order>; tab: Tab; counts: { open: number; new: number }; filters: { q?: string }; can: { refund: boolean }; printOrders?: boolean }) {
+    const mayPrint = useCan()('papers.print');
     const currency = useCurrency();
     const [delivering, setDelivering] = useState<Order | null>(null);
     const [cancelling, setCancelling] = useState<Order | null>(null);
@@ -97,7 +98,7 @@ export default function Orders({ orders, tab, counts, filters, can, printOrders 
                                                 {o.status === 'pending' && (o.step === 'new' || o.step === 'preparing') && <Button size="sm" variant="outline" icon={<PackageCheck />} onClick={() => advance(o, 'ready')}>جاهز للاستلام</Button>}
                                                 {o.status === 'pending' && <Button size="sm" icon={<CheckCheck />} onClick={() => setDelivering(o)}>تسليم</Button>}
                                                 {o.status === 'pending' && (!o.paid || can.refund) && <Button size="sm" variant="ghost" icon={<Ban />} onClick={() => setCancelling(o)}>إلغاء</Button>}
-                                                <Button size="sm" variant="ghost" href={route('club.sales.receipt', o.id)} external icon={<Printer />} aria-label={`إيصال ${o.number}`} title="الإيصال" />
+                                                {mayPrint && <Button size="sm" variant="ghost" href={route('club.sales.receipt', o.id)} external icon={<Printer />} aria-label={`إيصال ${o.number}`} title="الإيصال" />}
                                             </div>
                                         </td>
                                     </tr>

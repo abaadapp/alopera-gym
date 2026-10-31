@@ -83,7 +83,7 @@ final class SystemRoles
             self::CASHIER => [
                 'name' => 'موظف المبيعات ونقطة البيع',
                 'description' => 'البيع من نقطة البيع: المنتجات والعضويات وتجديدها والتدريب الشخصي، وطباعة الإيصالات.',
-                'permissions' => ['pos.sell', 'members.view', 'memberships.view', 'memberships.sell', 'pt.sell', 'papers.print'],
+                'permissions' => ['pos.sell', 'members.view', 'memberships.sell', 'pt.sell', 'papers.print'],
                 'home' => 'club.pos.index',
             ],
         ];

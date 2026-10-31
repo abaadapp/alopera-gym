@@ -13,6 +13,7 @@ interface Row { id: number; number: string; status: string; status_label: string
 
 /** أوامر الشراء: from draft to approved (sent to the supplier) to received, in part or in full. */
 export default function Orders({ orders, summary, reorder, filters, labels, branch }: { orders: Paginated<Row>; summary: { total: number; open: number; received: number; awaiting: number }; reorder: { id: number; name: string; stock_quantity: string; reorder_level: string; suggested: number }[]; filters: { status: string; q: string }; labels: Record<string, string>; branch: BranchFilterState }) {
+    const mayPrint = useCan()('papers.print');
     const currency = useCurrency();
     const can = useCan();
     const go = (change: Record<string, string>) => visit('club.purchases.index', { ...filters, branch: branch.locked ? undefined : branch.value }, change);
@@ -60,7 +61,7 @@ export default function Orders({ orders, summary, reorder, filters, labels, bran
                                         <td className="font-medium num">{money(o.total, currency)}</td>
                                         <td><Pill tone={ORDER_TONES[o.status] ?? 'gray'}>{o.status_label}</Pill></td>
                                         <td className="text-[13px] num">{o.expected_on ?? '—'}</td>
-                                        <td className="text-end"><Button size="sm" variant="ghost" icon={<Printer />} href={route('club.purchases.print', o.id)} external aria-label={`طباعة ${o.number}`} /></td>
+                                        <td className="text-end">{mayPrint && <Button size="sm" variant="ghost" icon={<Printer />} href={route('club.purchases.print', o.id)} external aria-label={`طباعة ${o.number}`} />}</td>
                                     </tr>
                                 ))}
                             </tbody>

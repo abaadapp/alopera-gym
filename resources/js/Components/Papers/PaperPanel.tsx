@@ -3,6 +3,7 @@ import { Download, Maximize2, Printer, X } from 'lucide-react';
 import { Button } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 import PaperFrame from './PaperFrame';
+import { useCan } from '@/hooks/useShared';
 
 export type PaperData = { html: string; size: string; type: string; filename: string };
 
@@ -18,6 +19,7 @@ export default function PaperPanel({ paper, printUrl, pdfUrl, heading = 'الو�
     note?: ReactNode;
     className?: string;
 }) {
+    const mayPrint = useCan()('papers.print');
     const [open, setOpen] = useState(false);
 
     return (
@@ -27,8 +29,9 @@ export default function PaperPanel({ paper, printUrl, pdfUrl, heading = 'الو�
                     <h2 className="text-[15px] font-semibold text-ink">{heading}</h2>
                     <div className="flex items-center gap-1.5">
                         <Button variant="outline" size="sm" icon={<Maximize2 className="size-3.5" />} onClick={() => setOpen(true)}><span className="max-sm:sr-only">تكبير</span></Button>
-                        <Button variant="outline" size="sm" href={pdfUrl + (pdfUrl.includes('?') ? '&' : '?') + 'download=1'} external icon={<Download className="size-3.5" />}><span className="max-sm:sr-only">PDF</span></Button>
-                        <Button variant="outline" size="sm" href={printUrl} external icon={<Printer className="size-3.5" />}><span className="max-sm:sr-only">طباعة</span></Button>
+                        {/* Printing and the PDF need «طباعة المستندات»; reading the paper here does not. */}
+                        {mayPrint && <Button variant="outline" size="sm" href={pdfUrl + (pdfUrl.includes('?') ? '&' : '?') + 'download=1'} external icon={<Download className="size-3.5" />}><span className="max-sm:sr-only">PDF</span></Button>}
+                        {mayPrint && <Button variant="outline" size="sm" href={printUrl} external icon={<Printer className="size-3.5" />}><span className="max-sm:sr-only">طباعة</span></Button>}
                     </div>
                 </div>
                 {note && <p className="border-b border-line bg-[#fafafa] px-4 py-2 text-[12px] leading-relaxed text-muted">{note}</p>}
@@ -40,7 +43,7 @@ export default function PaperPanel({ paper, printUrl, pdfUrl, heading = 'الو�
                         <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
                             <h2 className="text-[15px] font-semibold">{heading}</h2>
                             <div className="flex items-center gap-1.5">
-                                <Button variant="outline" size="sm" href={printUrl} external icon={<Printer className="size-3.5" />}>طباعة</Button>
+                                {mayPrint && <Button variant="outline" size="sm" href={printUrl} external icon={<Printer className="size-3.5" />}>طباعة</Button>}
                                 <Button variant="ghost" size="sm" icon={<X className="size-4" />} onClick={() => setOpen(false)} aria-label="إغلاق" />
                             </div>
                         </div>

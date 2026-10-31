@@ -4,7 +4,7 @@ import { Check, Printer, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Card, Notice, PageHeader, BackLink } from '@/Components/ui';
 import { Pill, RECEIPT_LABELS, ReasonDialog } from '@/Components/Inventory/parts';
-import { useCurrency } from '@/hooks/useShared';
+import { useCurrency, useCan } from '@/hooks/useShared';
 import { money, number } from '@/lib/format';
 
 interface Receipt {
@@ -17,6 +17,7 @@ const qty = (v: number | string) => number(v, Number(v) % 1 ? 3 : 0);
 
 /** A goods receipt note: what was still due, what arrived (and in stock units), the value; approved or rejected once. */
 export default function ReceiptShow({ receipt, can }: { receipt: Receipt; can: { approve: boolean } }) {
+    const mayPrint = useCan()('papers.print');
     const currency = useCurrency();
     const [rejecting, setRejecting] = useState(false);
 
@@ -28,7 +29,7 @@ export default function ReceiptShow({ receipt, can }: { receipt: Receipt; can: {
                 subtitle={`${receipt.supplier} · ${receipt.branch} · استلمه ${receipt.by ?? '—'} في ${receipt.received_on}${receipt.approver ? ` · اعتمده ${receipt.approver}` : ''}`}
                 actions={<>
                     <Pill tone={RECEIPT_LABELS[receipt.status][1]}>{RECEIPT_LABELS[receipt.status][0]}</Pill>
-                    <Button variant="outline" icon={<Printer />} href={route('club.papers.show', { type: 'goods_receipt', id: receipt.id, print: 1 })} external>طباعة السند</Button>
+                    {mayPrint && <Button variant="outline" icon={<Printer />} href={route('club.papers.show', { type: 'goods_receipt', id: receipt.id, print: 1 })} external>طباعة السند</Button>}
                     {receipt.status === 'pending' && can.approve && <><Button variant="outline" icon={<X />} onClick={() => setRejecting(true)}>رفض</Button><Button icon={<Check />} onClick={() => router.post(route('club.inventory.receipts.decide', { goodsReceipt: receipt.id, decision: 'approve' }), {}, { preserveScroll: true })}>اعتماد وإضافة للمخزون</Button></>}
                 </>}
             />

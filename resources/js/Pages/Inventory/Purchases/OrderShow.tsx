@@ -4,7 +4,7 @@ import { Check, FileText, PackageCheck, Pencil, Printer, X } from 'lucide-react'
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Card, CardHeader, Checkbox, Field, Input, Modal, Notice, PageHeader, BackLink } from '@/Components/ui';
 import { BILL_STATES, clientKey, ORDER_TONES, Pill, RECEIPT_LABELS, ReasonDialog } from '@/Components/Inventory/parts';
-import { useCurrency } from '@/hooks/useShared';
+import { useCurrency, useCan } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
 
@@ -22,6 +22,7 @@ const qty = (v: number | string) => number(v, Number(v) % 1 ? 3 : 0);
 
 /** A purchase order: its lines (ordered, received, waiting for approval, still to come), its receipts and bills, and the next step. */
 export default function OrderShow({ order, can }: { order: Order; can: { approve: boolean; receive: boolean; manage: boolean } }) {
+    const mayPrint = useCan()('papers.print');
     const currency = useCurrency();
     const [receiving, setReceiving] = useState(false);
     const [closing, setClosing] = useState<'cancel' | 'close' | null>(null);
@@ -35,7 +36,7 @@ export default function OrderShow({ order, can }: { order: Order; can: { approve
                 subtitle={`${order.supplier?.name ?? ''} · يُستلم في ${order.branch ?? '—'} · بتاريخ ${order.order_date}${order.expected_on ? ` · متوقع ${order.expected_on}` : ''}`}
                 actions={<>
                     <Pill tone={ORDER_TONES[s] ?? 'gray'}>{order.status_label}</Pill>
-                    <Button variant="outline" icon={<Printer />} href={route('club.purchases.print', order.id)} external>معاينة وطباعة</Button>
+                    {mayPrint && <Button variant="outline" icon={<Printer />} href={route('club.purchases.print', order.id)} external>معاينة وطباعة</Button>}
                     {s === 'draft' && can.manage && <Button variant="outline" icon={<Pencil />} href={route('club.purchases.edit', order.id)}>تعديل</Button>}
                     {s === 'draft' && can.approve && <Button icon={<Check />} onClick={() => router.post(route('club.purchases.approve', order.id), {}, { preserveScroll: true })}>اعتماد وإرسال</Button>}
                     {(s === 'ordered' || s === 'partial') && can.receive && <Button icon={<PackageCheck />} onClick={() => setReceiving(true)}>تسجيل استلام</Button>}

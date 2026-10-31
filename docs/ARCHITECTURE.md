@@ -5,13 +5,13 @@
 ```
 app/
 ├── Core/                 خدمات مشتركة (مرشحة للدمج مع أبعاد)
-│   ├── Tenancy/          TenantContext · TenantScope · BelongsToTenant · TenantRule
+│   ├── Tenancy/          TenantContext · TenantScope · BelongsToTenant · TenantRule · TenantProvisioner (إعداد النادي، gym:install)
 │   ├── Auth/             PermissionRegistry · SystemRoles
 │   ├── Audit/            AuditLogger · Auditable
 │   ├── Backup/           TenantTables · TenantBackupService
 │   ├── Export/           TableExporter (CSV/XLSX)
 │   └── Support/          Money · NumberSequence · Phone · ImageStore · BusinessRuleException · ModuleServiceProvider
-├── Models/               Tenant · User · Role · Branch · AuditLog · TenantIntegration · PlatformPlan · TenantSubscription · PlatformInvoice
+├── Models/               Tenant (النادي) · User · Role · Branch · AuditLog · TenantIntegration
 ├── Http/                 Middleware · Controllers (Auth, Club) · club-routes.php
 └── Modules/              وحدات مستقلة؛ لكل منها migrations ومسارات ومزوّد خدمة
     ├── Gym/              الأعضاء، العضويات، الباقات، البرامج، فريق التدريب، الجدول، الحصص، الحجوزات، PT، الدخول والأجهزة (ومشغّلاتها)
@@ -24,20 +24,24 @@ app/
     ├── Messaging/        واتساب: البوابة، القوالب، الإشعارات، الوارد، الحملات
     ├── Payments/         Paymob: نية الدفع، التوقيع، Webhook
     ├── Website/          الموقع، البوابة، روابط الدفع، CMS
-    ├── Reports/          المؤشرات والتقارير والتصدير
-    └── Platform/         خدمات المنصة: إنشاء الأندية، حدود الباقة، اشتراكات SaaS
+    └── Reports/          المؤشرات والتقارير والتصدير
 resources/js/
 ├── Components/ui/        مكونات الواجهة المشتركة (AdminScope يعطيها مظهر لوحات التحكم داخل اللوحات فقط)
-├── Components/           PanelShell (إطار لوحة النادي) · SectionTabs (تبويبات الأقسام) · PeriodFilter
+├── Components/           PanelShell (إطار اللوحة) · SectionTabs (تبويبات الأقسام) · Settings (أقسام الإعدادات) · PeriodFilter
 ├── lib/cart.ts           سلة متجر الموقع في المتصفح (معرّفات وكميات فقط؛ الخادم يتحقق من كل شيء)
 ├── lib/nav.ts            أقسام لوحة النادي وتبويباتها وصلاحياتها
-├── Layouts/              ClubLayout · PlatformLayout · SiteLayout · PortalLayout · AuthLayout
+├── Layouts/              ClubLayout (اللوحة) · PosLayout (نقطة البيع بملء الشاشة) · SiteLayout · PortalLayout · AuthLayout
 └── Pages/                82 صفحة Inertia مطابقة لمسارات المتحكمات
 ```
 
 جداول وحدة الجيم مسبوقة بـ `gym_` لتجنب التعارض مع جداول أي تطبيق مضيف عند الدمج مستقبلًا.
 
-## عزل الأندية (Multi-Tenancy)
+## نادٍ واحد، وعزل البيانات باقٍ
+
+النظام يدير نادي Alopera وحده: لا لوحة منصة، ولا باقات اشتراك، ولا إنشاء أندية من الواجهة (أُزيلت هذه الواجهات وخدماتها؛
+جداولها `platform_plans` و`tenant_subscriptions` و`platform_invoices` باقية ببياناتها دون استخدام، ولم تُحذف). أما طبقة
+`tenant_id` فأُبقيت عمدًا: كل استعلام يبقى مقيّدًا بالنادي ويفشل مغلقًا، ونقلها تغيير جذري في كل جدول لا يُنفَّذ دون نسخة
+احتياطية وخطة ترحيل (موثّق هنا ولم يُنفَّذ). الاختبارات تبني ناديًا ثانيًا لتثبت أن لا شيء يتسرّب بين سجلين.
 
 - قاعدة بيانات واحدة، و`tenant_id` على كل جدول يملكه النادي.
 - `TenantContext` (singleton محدود بالطلب/المهمة) يحمل النادي الحالي:
@@ -54,14 +58,13 @@ resources/js/
 
 `tests/Feature/TenantIsolationTest.php` يغطي ذلك، ويفشل إذا أضيف جدول فيه `tenant_id` دون تصنيفه للنسخ الاحتياطي.
 
-## SaaS: فصل اشتراك النادي عن اشتراكات المشتركات
+## نقطة البيع: سلة واحدة، كل بند عبر خدمته
 
-| | اشتراك النادي في المنصة | اشتراك المشتركة في النادي |
-|---|---|---|
-| الجداول | `platform_plans`، `tenant_subscriptions`، `platform_invoices` | `gym_membership_plans`، `gym_memberships`، `invoices`، `payments` |
-| من يديره | مدير المنصة | النادي |
-| الخدمة | `Platform\Services\SubscriptionService` | `Gym\Services\MembershipService` |
-| الأثر | تفعيل/إيقاف النادي، حدود الباقة (`PlanLimits`) | دخول المشتركة وحجوزاتها |
+`Inventory\Services\PosCheckout` يبيع سلة فيها منتجات وعضوية وباقة تدريب شخصي معًا، في معاملة واحدة: المنتجات عبر
+`PosService` (عملية بيع، خصم المخزون، فاتورة مدفوعة)، والعضوية عبر `MembershipService::renew` والباقة عبر `PtService::sell`
+(فاتورة لكل منها) ثم الدفع عبر `PaymentService`، فيُطلق `InvoicePaid` ويفعّلها `ActivatePaidItems` كما في الاستقبال. بالدفع عبر
+Paymob تبقى فاتورة العضوية مفتوحة برابط دفع ولا تُفعّل إلا بإشعار Paymob الموقّع. كل دفعة تحمل الموظف والفرع وملاحظة
+«نقطة البيع: الجهاز»، والسلة لها مفتاح يمنع البيع مرتين عند تكرار الطلب.
 
 ## دورة العضوية
 
@@ -115,7 +118,7 @@ pending ──دفع كامل──▶ scheduled ──تاريخ البداية
 
 - لكل نادٍ: `backup:tenants` يوميًا (أرشيف ZIP فيه البيانات والملفات، آخر 14 نسخة)، واستعادة من اللوحة بتأكيد كتابي
   ونسخة أمان قبلها، ورفض أي أرشيف لنادٍ آخر أو فيه صفوف لنادٍ آخر.
-- للمنصة كاملة: `scripts/backup-database.sh` (pg_dump إلى DigitalOcean Spaces) و`scripts/restore-drill.sh`.
+- لقاعدة البيانات كاملة: `scripts/backup-database.sh` (pg_dump إلى DigitalOcean Spaces) و`scripts/restore-drill.sh`.
 
 ## المهام المجدولة (`routes/console.php`)
 
@@ -125,8 +128,7 @@ pending ──دفع كامل──▶ scheduled ──تاريخ البداية
 | `gym:sessions` | كل ساعة | توليد الحصص من الجدول، إغلاق المنتهية وتسجيل الغياب |
 | `gym:send-reminders` | 10:00 | تذكير قبل الانتهاء ومتابعة بعد الانتهاء |
 | `messaging:dispatch-scheduled` | كل دقيقة | الرسائل والحملات المجدولة |
-| `platform:billing` | 01:00 | تجديد اشتراكات الأندية وإيقاف المتأخرة بعد مهلة السماح |
-| `backup:tenants` | 03:00 | نسخة لكل نادٍ |
+| `backup:tenants` | 03:00 | نسخة بيانات النادي |
 | `sales:expire-orders` | كل 5 دقائق | إلغاء طلبات الموقع غير المدفوعة بعد مهلة الدفع الإلكتروني وإعادة الكميات |
 | `documents:alerts` | 07:30 | تنبيهات انتهاء المستندات، مرة واحدة لكل موعد |
 | `notifications:sync` | كل ساعة | يضع في أجراس الموظفين ما زال مفتوحًا (تنبيهات المستندات، طلبات الموقع، الدفعات بانتظار التأكيد) وملخص العضويات المنتهية خلال أسبوع، ويحذف المقروء الأقدم من 90 يومًا |

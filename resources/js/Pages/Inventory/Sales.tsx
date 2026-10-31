@@ -40,6 +40,7 @@ export function SourceBadge({ source, label }: { source: string; label: string }
 }
 
 export default function Sales({ sales, filters, labels, can: allowed }: { sales: Paginated<SaleRow>; filters: Filters; labels: { sources: Record<string, string>; statuses: Record<string, string> }; can: { refund: boolean } }) {
+    const mayPrint = useCan()('papers.print');
     const can = useCan();
     const currency = useCurrency();
     const go = (next: Filters) => router.get(route('club.sales.index'), Object.fromEntries(Object.entries({ ...filters, ...next }).filter(([, v]) => v)), { preserveState: true, replace: true, preserveScroll: true });
@@ -96,7 +97,7 @@ export default function Sales({ sales, filters, labels, can: allowed }: { sales:
                                         <td><Badge tone={saleStatusTone[s.status]}>{s.status_label}</Badge></td>
                                         <td>
                                             <div className="flex items-center justify-end gap-1">
-                                                <Button variant="ghost" size="sm" href={route('club.sales.receipt', s.id)} external icon={<Printer />} aria-label={`إيصال ${s.number}`} title="الإيصال" />
+                                                {mayPrint && <Button variant="ghost" size="sm" href={route('club.sales.receipt', s.id)} external icon={<Printer />} aria-label={`إيصال ${s.number}`} title="الإيصال" />}
                                                 {s.status === 'completed' && allowed.refund && (
                                                     <ConfirmAction
                                                         url={route('club.pos.void', s.id)}

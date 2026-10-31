@@ -110,6 +110,7 @@ const intentStatus: Record<string, ['green' | 'amber' | 'red' | 'gray', string]>
 const channelLabel: Record<string, string> = { portal: 'البوابة', website: 'الموقع', whatsapp: 'رابط واتساب', reception: 'الاستقبال' };
 
 export default function InvoiceShow({ invoice, intents, onlinePayments, whatsappEnabled, paper }: Props) {
+    const mayPrint = useCan()('papers.print');
     const can = useCan();
     const currency = useCurrency() || invoice.currency;
     const [payOpen, setPayOpen] = useState(false);
@@ -148,7 +149,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                             </ConfirmAction>
                         )}
                         {/* On a narrow screen the paper sits under the details: a way to it from the top. */}
-                        <Button variant="outline" className="xl:hidden" href={route('club.invoices.print', invoice.id)} external icon={<Printer />}>طباعة</Button>
+                        {mayPrint && <Button variant="outline" className="xl:hidden" href={route('club.invoices.print', invoice.id)} external icon={<Printer />}>طباعة</Button>}
                     </>
                 }
             />

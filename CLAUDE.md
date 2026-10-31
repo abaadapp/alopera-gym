@@ -1,11 +1,12 @@
 # Alopera Gym — notes for coding agents
 
-Multi-tenant gym SaaS: Laravel 13 / PHP 8.4 / PostgreSQL 16 / Inertia 3 / React 19 / TypeScript / Tailwind 4.
+Management system for one gym (Alopera Gym) — owner panel, staff by permission, point of sale; no hosting-platform
+screens. Club tables stay tenant-scoped internally. Laravel 13 / PHP 8.4 / PostgreSQL 16 / Inertia 3 / React 19 / TypeScript / Tailwind 4.
 Read `docs/ARCHITECTURE.md` first.
 
 ## Rules that must not be broken
 - Every club-owned model uses `App\Core\Tenancy\BelongsToTenant`. The scope fails closed; never query club data
-  outside a tenant context except via `TenantContext::bypass()` in platform code.
+  outside a tenant context except via `TenantContext::bypass()` in console, webhook and device code.
 - New tables with `tenant_id` must be added to `App\Core\Backup\TenantTables` (a test enforces it).
 - Validation of ids from requests uses `TenantRule::exists()/unique()`, never plain `exists:`.
 - Routes in the club panel are protected with `can:<permission>`; new permissions go in `PermissionRegistry`.

@@ -5,7 +5,7 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Card, CardHeader, Notice, PageHeader, BackLink } from '@/Components/ui';
 import { Pill, ReasonDialog } from '@/Components/Inventory/parts';
 import PayBill from '@/Components/Inventory/PayBill';
-import { useCurrency } from '@/hooks/useShared';
+import { useCurrency, useCan } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money } from '@/lib/format';
 import { billState, type BillRow } from './Bills';
@@ -18,6 +18,7 @@ interface Bill extends BillRow {
 
 /** A supplier bill: its amounts, its order (ordered vs received vs billed), payments and what is still owed. */
 export default function BillShow({ bill, accounts, can }: { bill: Bill; accounts: { id: number; name: string; kind: string }[]; can: { approve: boolean; pay: boolean } }) {
+    const mayPrint = useCan()('papers.print');
     const currency = useCurrency();
     const [paying, setPaying] = useState(false);
     const [closing, setClosing] = useState<'reject' | 'void' | null>(null);
@@ -32,7 +33,7 @@ export default function BillShow({ bill, accounts, can }: { bill: Bill; accounts
                 subtitle={`${bill.supplier} · ${bill.number} · صدر ${bill.issue_date}${bill.due_date ? ` · يستحق ${bill.due_date}` : ''}`}
                 actions={<>
                     <Pill tone={tone}>{label}</Pill>
-                    <Button variant="outline" icon={<Printer />} href={route('club.papers.show', { type: 'supplier_bill', id: bill.id, print: 1 })} external>طباعة</Button>
+                    {mayPrint && <Button variant="outline" icon={<Printer />} href={route('club.papers.show', { type: 'supplier_bill', id: bill.id, print: 1 })} external>طباعة</Button>}
                     {bill.has_attachment && <Button variant="outline" icon={<Download />} href={route('club.purchases.bills.attachment', bill.id)} external>المرفق</Button>}
                     {bill.status === 'pending' && can.approve && <><Button variant="outline" icon={<X />} onClick={() => setClosing('reject')}>رفض</Button><Button icon={<Check />} onClick={() => router.post(route('club.purchases.bills.decide', { supplierBill: bill.id, decision: 'approve' }), {}, { preserveScroll: true })}>اعتماد</Button></>}
                     {bill.status === 'approved' && Number(bill.balance) > 0 && can.pay && <Button icon={<CreditCard />} onClick={() => setPaying(true)}>سداد</Button>}
