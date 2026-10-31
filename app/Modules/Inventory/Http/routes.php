@@ -11,12 +11,21 @@ use App\Modules\Inventory\Http\Controllers\SalesController;
 use App\Modules\Inventory\Http\Controllers\SalesSettingsController;
 use Illuminate\Support\Facades\Route;
 
-// Sales: the point of sale, sales from both sources and website orders (GYM_SALES_MODULE).
+// Sales: one list of the sales from both sources, each sale's page, and the point of sale (GYM_SALES_MODULE). The list
+// is for whoever follows sales or handles website orders (sales.records: either permission; orders only for the latter).
+Route::middleware('can:sales.records')->group(function () {
+    Route::get('/sales', [SalesController::class, 'index'])->name('sales.index');
+    Route::get('/sales/export', [SalesController::class, 'export'])->middleware('throttle:exports')->name('sales.export');
+    Route::get('/sales/{sale}', [SalesController::class, 'show'])->whereNumber('sale')->name('sales.show');
+    // The former addresses: the list's own, and the website orders' page (its steps are on each order's page now).
+    Route::get('/sales/list', [SalesController::class, 'legacyList']);
+    Route::get('/sales/orders', [SalesController::class, 'orders'])->name('sales.orders.index');
+});
 Route::middleware('can:sales.view')->group(function () {
-    Route::get('/sales', [SalesController::class, 'summary'])->name('sales.summary');
-    Route::get('/sales/list', [SalesController::class, 'index'])->name('sales.index');
+    // The summary moved to the sales report; its address and the report's old ones open it.
+    Route::get('/sales/summary', [SalesController::class, 'summary'])->name('sales.summary');
     Route::get('/sales/reports', [SalesController::class, 'reports'])->name('sales.reports');
-    Route::get('/sales/reports/export', [SalesController::class, 'export'])->middleware('throttle:exports')->name('sales.reports.export');
+    Route::get('/sales/reports/export', [SalesController::class, 'reportExport'])->middleware('throttle:exports')->name('sales.reports.export');
 });
 Route::get('/sales/{sale}/receipt', [SalesController::class, 'receipt'])->whereNumber('sale')->middleware('can:papers.print')->name('sales.receipt');
 Route::post('/sales/{sale}/void', [PosController::class, 'void'])->whereNumber('sale')->middleware(['can:sales.refund', 'throttle:20,1'])->name('pos.void');
@@ -47,8 +56,8 @@ Route::middleware('can:pos_devices.manage')->prefix('settings/pos-devices')->nam
     Route::get('/{device}/peripherals/{peripheral}/test', [PosDeviceController::class, 'testPrint'])->whereNumber(['device', 'peripheral'])->name('.peripherals.test');
 });
 
+// A website order's steps, from its page: preparing, ready, handed over (and paid), or cancelled.
 Route::middleware('can:orders.manage')->prefix('sales/orders')->name('sales.orders.')->group(function () {
-    Route::get('/', [OrderController::class, 'index'])->name('index');
     Route::post('/{sale}/status', [OrderController::class, 'status'])->whereNumber('sale')->name('status');
     Route::post('/{sale}/deliver', [OrderController::class, 'deliver'])->whereNumber('sale')->middleware('throttle:20,1')->name('deliver');
     Route::post('/{sale}/cancel', [OrderController::class, 'cancel'])->whereNumber('sale')->middleware('throttle:20,1')->name('cancel');

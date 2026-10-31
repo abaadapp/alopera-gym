@@ -54,7 +54,7 @@ final class StaffAlerts
     {
         $this->notifier->notify('orders.manage', 'order:'.$sale->id, 'order',
             'طلب جديد من الموقع '.$sale->number.($sale->customer_name ? ' — '.$sale->customer_name : ''),
-            route('club.sales.orders.index'),
+            route('club.sales.show', $sale),
             fn (User $u) => $this->branches->allows($u, $sale->owningBranchId()));
     }
 

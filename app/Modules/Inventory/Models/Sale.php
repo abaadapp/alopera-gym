@@ -5,6 +5,7 @@ namespace App\Modules\Inventory\Models;
 use App\Core\Tenancy\BelongsToTenant;
 use App\Core\Tenancy\BranchOwned;
 use App\Core\Tenancy\OwnedByBranch;
+use App\Models\Branch;
 use App\Models\User;
 use App\Modules\Finance\Models\Invoice;
 use Illuminate\Database\Eloquent\Model;
@@ -66,6 +67,11 @@ class Sale extends Model implements BranchOwned
     public function customer(): MorphTo
     {
         return $this->morphTo()->withTrashed();
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function cashier(): BelongsTo

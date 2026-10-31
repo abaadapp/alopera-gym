@@ -92,7 +92,9 @@ class SalesTest extends TestCase
         $reception = $this->staff($club, 'reception');
         $this->actingAs($reception)->post(route('club.pos.checkout'), $line)->assertSessionHasNoErrors();
         $this->actingAs($reception)->post(route('club.pos.checkout'), $line + ['discount' => 0.2])->assertSessionHasErrors('discount');
-        $this->actingAs($reception)->get(route('club.sales.index'))->assertForbidden();
+        // Reception hands website orders over but does not follow sales: the list shows it the orders only.
+        $this->actingAs($reception)->get(route('club.sales.index'))->assertOk()->assertInertia(fn ($page) => $page->where('can.websiteOnly', true)->has('sales.data', 0));
+        $this->actingAs($reception)->get(route('club.sales.summary'))->assertForbidden();
 
         $this->actingAs($this->staff($club, 'manager'))->post(route('club.pos.checkout'), $line + ['discount' => 0.2])->assertSessionHasNoErrors();
 
@@ -156,7 +158,9 @@ class SalesTest extends TestCase
         $this->get(route('site.shop.order', ['club' => $club->slug, 'token' => $sale->public_token]))->assertOk();
 
         $reception = $this->staff($club, 'reception');
-        $this->actingAs($reception)->get(route('club.sales.orders.index'))->assertOk()->assertInertia(fn ($page) => $page->has('orders.data', 1));
+        $this->actingAs($reception)->get(route('club.sales.orders.index'))->assertRedirect(route('club.sales.index', ['source' => 'website', 'status' => 'open']));
+        $this->actingAs($reception)->get(route('club.sales.index', ['source' => 'website', 'status' => 'open']))->assertOk()->assertInertia(fn ($page) => $page->has('sales.data', 1)->where('sales.data.0.state', 'new'));
+        $this->actingAs($reception)->get(route('club.sales.show', $sale))->assertOk()->assertInertia(fn ($page) => $page->component('Sales/Show')->where('can.orders', true));
         $this->actingAs($reception)->post(route('club.sales.orders.status', $sale), ['status' => 'ready'])->assertSessionHasNoErrors();
         $this->actingAs($reception)->post(route('club.sales.orders.deliver', $sale), [])->assertSessionHasErrors('method');
         $this->actingAs($reception)->post(route('club.sales.orders.deliver', $sale), ['method' => 'cash'])->assertSessionHasNoErrors();
@@ -270,7 +274,8 @@ class SalesTest extends TestCase
         $this->product($b, ['name' => 'B item']);
 
         $ownerB = $this->owner($b);
-        $this->actingAs($ownerB)->get(route('club.sales.orders.index'))->assertOk()->assertInertia(fn ($page) => $page->has('orders.data', 0));
+        $this->actingAs($ownerB)->get(route('club.sales.index'))->assertOk()->assertInertia(fn ($page) => $page->has('sales.data', 0));
+        $this->actingAs($ownerB)->get(route('club.sales.show', $order))->assertNotFound();
         $this->actingAs($ownerB)->post(route('club.sales.orders.deliver', $order), ['method' => 'cash'])->assertNotFound();
         $this->actingAs($ownerB)->get(route('club.sales.receipt', $order))->assertNotFound();
         $this->get(route('site.shop.order', ['club' => $b->slug, 'token' => $order->public_token]))->assertNotFound();
@@ -287,8 +292,14 @@ class SalesTest extends TestCase
             $this->actingAs($owner)->post(route('club.pos.checkout'), ['items' => [['product_id' => $bar->id, 'quantity' => $qty]], 'payment_method' => 'cash']);
             $this->order($club, $bar, $qty);
         }
-        foreach (['club.sales.summary', 'club.sales.index', 'club.pos.index', 'club.products.index', 'club.sales.orders.index', 'club.settings.sales', 'club.reports.show' => 'sales'] as $name => $param) {
+        foreach (['club.sales.index', 'club.pos.index', 'club.products.index', 'club.settings.sales', 'club.reports.show' => 'sales'] as $name => $param) {
             $this->actingAs($owner)->get(is_int($name) ? route($param) : route($name, $param))->assertOk();
+        }
+        // The summary and the old addresses open what replaced them.
+        $this->actingAs($owner)->get(route('club.sales.summary'))->assertRedirect(route('club.reports.show', ['report' => 'sales']));
+        $this->actingAs($owner)->get('/app/sales/list?source=pos')->assertRedirect(route('club.sales.index', ['source' => 'pos']));
+        foreach ($this->asTenant($club, fn () => Sale::pluck('id')) as $id) {
+            $this->actingAs($owner)->get(route('club.sales.show', $id))->assertOk();
         }
         // The sales report lives on the reports page; its file has the sales of both sources.
         $csv = $this->actingAs($owner)->get(route('club.reports.export', ['report' => 'sales', 'format' => 'csv']))->assertOk()->streamedContent();

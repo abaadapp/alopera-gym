@@ -78,7 +78,7 @@ final class PermissionRegistry
             'staff_attendance.manage' => 'تسجيل الحضور يدويًا وتصحيحه',
         ]],
         'sales' => ['label' => 'المبيعات والمتجر', 'permissions' => [
-            'sales.view' => 'ملخص المبيعات وعملياتها وتقاريرها',
+            'sales.view' => 'صفحة المبيعات وعملياتها وتقاريرها',
             'pos.sell' => 'البيع من نقطة البيع',
             'sales.discount' => 'تطبيق الخصومات عند البيع',
             'sales.refund' => 'إلغاء عمليات البيع ورد المبالغ',

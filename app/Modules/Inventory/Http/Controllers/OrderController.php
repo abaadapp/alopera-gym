@@ -4,61 +4,16 @@ namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Inventory\Models\Sale;
-use App\Modules\Inventory\Models\SaleItem;
 use App\Modules\Inventory\Services\OrderService;
-use App\Modules\Inventory\Services\PosDevices;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Inertia\Response;
 
-/** طلبات الموقع الإلكتروني: review, prepare, hand over or cancel orders placed on the club's website. */
+/** طلبات الموقع الإلكتروني: prepare, hand over or cancel an order placed on the club's website (from the sale's page). */
 class OrderController extends Controller
 {
     public const STEP_LABELS = ['new' => 'جديد', 'preparing' => 'قيد التجهيز', 'ready' => 'جاهز للاستلام', 'delivered' => 'تم التسليم'];
 
     public function __construct(private readonly OrderService $orders) {}
-
-    public function index(Request $request): Response
-    {
-        $tab = in_array($request->query('tab'), ['open', 'completed', 'cancelled', 'all'], true) ? $request->query('tab') : 'open';
-        $base = fn () => SalesController::scopedFor($request->user())->where('source', Sale::WEBSITE);
-
-        $orders = $base()->with(['items.addons', 'customer', 'cashier:id,name', 'deliveredBy:id,name', 'invoice:id,number,status,paid_total,total'])
-            ->when($tab === 'open', fn ($q) => $q->where('status', Sale::PENDING))
-            ->when($tab === 'completed', fn ($q) => $q->whereIn('status', [Sale::COMPLETED, Sale::VOIDED]))
-            ->when($tab === 'cancelled', fn ($q) => $q->where('status', Sale::CANCELLED))
-            ->when($request->string('q')->trim()->toString(), fn ($q, $t) => $q->where(fn ($w) => $w->where('number', 'ilike', "%{$t}%")->orWhere('customer_name', 'ilike', "%{$t}%")->orWhere('customer_phone', 'ilike', "%{$t}%")))
-            ->latest('id')->paginate(25)->withQueryString()
-            ->through(fn (Sale $s) => SalesController::row($s) + [
-                'phone' => $s->customer_phone,
-                'email' => $s->customer_email,
-                'notes' => $s->notes,
-                'step' => $s->fulfillment,
-                'step_label' => self::STEP_LABELS[$s->fulfillment] ?? null,
-                'reserved_until' => $s->reserved_until?->format('Y-m-d H:i'),
-                'delivered_at' => $s->delivered_at?->format('Y-m-d H:i'),
-                'delivered_by' => $s->deliveredBy?->name,
-                'cancel_reason' => $s->cancel_reason,
-                'invoice_number' => $s->invoice?->number,
-                'items' => $s->items->map(fn (SaleItem $i) => $i->summary()),
-            ]);
-
-        $printer = app(PosDevices::class)->current($request)?->load('peripherals')->printer();
-
-        return Inertia::render('Sales/Orders', [
-            // This device's printer prints an order when its preparation starts (set on the device's peripherals).
-            'printOrders' => (bool) ($printer?->print_website_orders ?? false),
-            'orders' => $orders,
-            'tab' => $tab,
-            'counts' => [
-                'open' => $base()->where('status', Sale::PENDING)->count(),
-                'new' => $base()->where('status', Sale::PENDING)->where('fulfillment', 'new')->count(),
-            ],
-            'filters' => $request->only('q'),
-            'can' => ['refund' => $request->user()->can('sales.refund')],
-        ]);
-    }
 
     public function status(Request $request, Sale $sale): RedirectResponse
     {

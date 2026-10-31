@@ -324,7 +324,7 @@ class ReportsCatalogTest extends TestCase
         $this->actingAs($owner)->get(route('club.reports.index', ['section' => 'classes', 'preset' => 'week']))->assertRedirect(route('club.reports.show', ['report' => 'classes', 'preset' => 'week']));
 
         // The working screens stay where they were.
-        foreach (['club.dues', 'club.payroll.index', 'club.payroll.payouts', 'club.checkins.index', 'club.staff-attendance.index', 'club.business-documents.renewals', 'club.sales.summary', 'club.finance.summary'] as $name) {
+        foreach (['club.dues', 'club.payroll.index', 'club.payroll.payouts', 'club.checkins.index', 'club.staff-attendance.index', 'club.business-documents.renewals', 'club.sales.index', 'club.finance.summary'] as $name) {
             $this->actingAs($owner)->get(route($name))->assertOk();
         }
 

@@ -129,6 +129,8 @@ class AppServiceProvider extends ServiceProvider
 
         // The reports page: for whoever may open at least one report (each report checks its own permissions).
         Gate::define('reports.any', fn (User $user) => app(ReportCatalog::class)->any($user));
+        // The sales list: for whoever follows sales or handles website orders (the latter sees the orders only).
+        Gate::define('sales.records', fn (User $user) => $user->canAny(['sales.view', 'orders.manage']));
     }
 
     private function registerRateLimiters(): void

@@ -76,7 +76,8 @@ class SearchController extends Controller
                 ->map(fn (Sale $s) => [
                     'label' => $s->number.($s->customer_name ? ' — '.$s->customer_name : ''),
                     'hint' => Money::normalize($s->total),
-                    'url' => $s->source === Sale::WEBSITE && $seesOrders ? route('club.sales.orders.index', ['tab' => 'all', 'q' => $s->number]) : route('club.sales.receipt', $s),
+                    // The sale's own page: its lines and receipt, and a website order's steps.
+                    'url' => route('club.sales.show', $s),
                 ])];
         }
 

@@ -10,8 +10,9 @@ import { useCan, useShared } from '@/hooks/useShared';
 
 /** A page of a section. `permission` may list several (any one is enough); `match` lists the route patterns
  *  of its detail pages, which keep the section lit; `params` marks a tab that is a view of a shared route;
- *  `multiBranch` shows a tab only in a club with more than one open branch. */
-export type NavTab = { label: string; route: string; params?: Record<string, string>; permission?: string | string[]; match?: string | string[]; roleKey?: string; multiBranch?: boolean };
+ *  `multiBranch` shows a tab only in a club with more than one open branch; `menuOnly` is where the menu leads whoever
+ *  lacks the section's other pages, never a tab of its own. */
+export type NavTab = { label: string; route: string; params?: Record<string, string>; permission?: string | string[]; match?: string | string[]; roleKey?: string; multiBranch?: boolean; menuOnly?: boolean };
 export type NavSection = { label: string; icon: LucideIcon; tabs: NavTab[]; match?: string[] };
 /** A run of sections between two thin separators; the `footer` group sits at the bottom of the menu. */
 export type NavGroup = { sections: NavSection[]; footer?: boolean };
@@ -84,12 +85,12 @@ export const NAV: NavGroup[] = [
             {
                 label: 'المبيعات',
                 icon: ShoppingBag,
-                // Selling and its records only: products are managed in their own section, reports on the reports page.
+                // One page: every sale from the till and the website (each with its own page, a website order's steps
+                // included); its figures are the sales report's. The point of sale opens from its header — or straight
+                // from the menu for whoever only sells.
                 tabs: [
-                    { label: 'ملخص المبيعات', route: 'club.sales.summary', permission: 'sales.view' },
-                    { label: 'نقطة البيع', route: 'club.pos.index', permission: 'pos.sell' },
-                    { label: 'عمليات البيع', route: 'club.sales.index', permission: 'sales.view' },
-                    { label: 'طلبات الموقع الإلكتروني', route: 'club.sales.orders.index', permission: 'orders.manage' },
+                    { label: 'المبيعات', route: 'club.sales.index', permission: ['sales.view', 'orders.manage'], match: 'club.sales.*' },
+                    { label: 'نقطة البيع', route: 'club.pos.index', permission: 'pos.sell', menuOnly: true },
                 ],
             },
             {
@@ -284,6 +285,6 @@ export function useNavigation() {
 export function useSectionTabs(): { tabs: NavTab[]; active: NavTab | undefined; query: URLSearchParams } {
     const { groups, query, onTab, visible } = useNavigation();
     const section = groups.flatMap((group) => group.sections).find((s) => s.tabs.some((tab) => route().current(tab.route)));
-    const tabs = section?.tabs ?? PAGE_GROUPS.map((g) => g.filter(visible)).find((g) => g.some((tab) => route().current(tab.route))) ?? [];
+    const tabs = section?.tabs.filter((tab) => !tab.menuOnly) ?? PAGE_GROUPS.map((g) => g.filter(visible)).find((g) => g.some((tab) => route().current(tab.route))) ?? [];
     return { tabs, active: tabs.find(onTab) ?? tabs.find((tab) => route().current(tab.route)), query };
 }

@@ -155,7 +155,7 @@ class PanelChromeTest extends TestCase
         $ids = $this->asTenant($club, fn () => StaffNotification::where('user_id', $owner->id)->orderBy('id')->pluck('id')->all());
         $this->assertCount(2, $ids);
 
-        $this->actingAs($owner)->get(route('club.notifications.open', $ids[0]))->assertRedirect(route('club.sales.orders.index'));
+        $this->actingAs($owner)->get(route('club.notifications.open', $ids[0]))->assertRedirect(route('club.sales.show', $this->asTenant($club, fn () => Sale::orderBy('id')->value('id'))));
         $this->assertSame(1, $this->props($owner, 'club.notifications.index')['unread']);
         $this->assertCount(1, $this->props($owner, 'club.notifications.index', ['view' => 'unread'])['list']['data']);
 
