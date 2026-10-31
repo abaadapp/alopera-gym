@@ -67,11 +67,11 @@ export default function ExpensesIndex({ expenses, total, categories, suppliers, 
                 }
             />
 
+            <PeriodTabs period={period} params={{ ...filters }} />
+
             <div className="mb-4 grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <StatCard label="إجمالي المصروفات (حسب المرشحات)" value={money(total, currency)} tone="red" icon={<Wallet className="size-5" />} />
             </div>
-
-            <PeriodTabs period={period} params={{ ...filters }} />
 
             <Card padded={false}>
                 <div className="flex flex-wrap items-end justify-between gap-3 p-4">

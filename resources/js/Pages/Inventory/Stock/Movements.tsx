@@ -45,13 +45,13 @@ export default function StockMovements({ rows, summary, filters, period, branch,
         <ClubLayout title="سجل المخزون">
             <PageHeader title="سجل المخزون" subtitle="كل حركة على المخزون ومستندها؛ لا تُعدّل الحركة المسجلة، ويُصحَّح الخطأ بتسوية عكسية" actions={can('inventory.adjust') && <Button icon={<SlidersHorizontal />} onClick={() => setAdjusting(true)}>تعديل مخزون</Button>} />
 
+            <PeriodTabs period={period} params={{ ...filters, branch: branch.locked ? undefined : branch.value }} />
+
             <div className="mb-4 grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-3">
                 <StatCard label="الحركات" value={number(summary.count)} icon={<History />} tone="gray" />
                 <StatCard label="قيمة التالف والفاقد" value={money(summary.losses, currency)} hint={`${number(summary.loss_count)} تسوية`} icon={<TrendingDown />} tone={summary.losses ? 'red' : 'gray'} href={route('club.inventory.movements', { type: 'adjustment' })} />
                 <StatCard label="زيادات الجرد والتصحيح" value={money(summary.gains, currency)} icon={<TrendingUp />} tone="green" />
             </div>
-
-            <PeriodTabs period={period} params={{ ...filters, branch: branch.locked ? undefined : branch.value }} />
 
             <Card padded={false} className="overflow-hidden">
                 <Toolbar>

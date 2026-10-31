@@ -32,7 +32,7 @@ export function periodParams(period: Period): Record<string, string> {
 
 /**
  * The period of a screen, the same on every screen that has one: today, the week, the month, the year, all of it, or
- * dates of one's own — underline tabs with the from–to dates at the row's far end (under the row on a phone).
+ * dates of one's own — underline tabs; «مخصص» shows the from–to dates at the row's far end (under the row on a phone).
  *
  * The period lives in the address (?range=, and ?from&to for «مخصص»): it survives reload, back and a shared link, and
  * the server reads it for the list, its totals and its export alike. Changing it keeps the screen's other filters
@@ -65,12 +65,13 @@ export default function PeriodTabs({ period, params = {}, ranges, only, classNam
 
     const tabs = RANGES.filter((r) => !ranges || ranges.includes(r.key));
     const current: Range = picking ? 'custom' : period.range;
+    // The dates share a phone's width; beside the tabs they are 8.5rem each.
     const form = (
         <form onSubmit={submit} className="flex items-center gap-2 py-1.5">
-            <Input type="date" className="h-8 w-[8.5rem] text-[13px]" value={dates.from} max={dates.to || undefined} onChange={(e) => setDates({ ...dates, from: e.target.value })} aria-label="من تاريخ" />
+            <Input type="date" className="h-8 min-w-0 flex-1 text-[13px] md:w-[8.5rem] md:flex-none" value={dates.from} max={dates.to || undefined} onChange={(e) => setDates({ ...dates, from: e.target.value })} aria-label="من تاريخ" />
             <span className="text-[#9ca3af]">—</span>
-            <Input type="date" className="h-8 w-[8.5rem] text-[13px]" value={dates.to} min={dates.from || undefined} onChange={(e) => setDates({ ...dates, to: e.target.value })} aria-label="إلى تاريخ" />
-            <Button type="submit" variant="outline" size="sm" disabled={!dates.from && !dates.to}>عرض</Button>
+            <Input type="date" className="h-8 min-w-0 flex-1 text-[13px] md:w-[8.5rem] md:flex-none" value={dates.to} min={dates.from || undefined} onChange={(e) => setDates({ ...dates, to: e.target.value })} aria-label="إلى تاريخ" />
+            <Button type="submit" variant="outline" size="sm" className="shrink-0" disabled={!dates.from && !dates.to}>عرض</Button>
         </form>
     );
 
@@ -88,9 +89,10 @@ export default function PeriodTabs({ period, params = {}, ranges, only, classNam
                     }
                     go({ range: key });
                 }}
-                trailing={<div className="hidden md:block">{form}</div>}
+                dense
+                trailing={current === 'custom' && <div className="hidden md:block">{form}</div>}
             />
-            <div className="md:hidden">{form}</div>
+            {current === 'custom' && <div className="md:hidden">{form}</div>}
         </div>
     );
 }

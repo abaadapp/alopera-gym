@@ -289,8 +289,8 @@ h1, h2, h3, .font-display {
     .admin-ui .table-base td.num {
         white-space: nowrap;
     }
-    /* Phones: rows stay one line high (numbers, phones and names never break) and the table scrolls
-       sideways inside its card. Cells sized with max-w-* hold free text and keep wrapping. */
+    /* Phones: rows stay one line high (numbers, phones and names never break); a table that then does not fit
+       its card is laid out as cards (below). Cells sized with max-w-* hold free text and keep wrapping. */
     @media (width < 48rem) {
         .table-base th,
         .table-base td {
@@ -303,6 +303,113 @@ h1, h2, h3, .font-display {
             @apply min-w-56 whitespace-normal;
         }
     }
+}
+
+/*
+ * A table too wide for its card (useStackedTables marks it): first its cells wrap, amounts excepted; if that is not
+ * enough, it is laid out as cards — each row a card, its first cell the title across it, the others in a grid under
+ * their column's name, the row's actions (the last cell, under no name) in the card's top corner. Unlayered, so it
+ * outranks the cells' own utilities (padding, alignment, nowrap, widths) in these layouts only.
+ */
+table.table-base[data-wrap] > * > tr > :is(td, th):not(.num) {
+    white-space: normal;
+}
+table.table-base[data-stacked],
+table.table-base[data-stacked] > tbody,
+table.table-base[data-stacked] > tfoot {
+    display: block;
+    width: 100%;
+}
+table.table-base[data-stacked] > thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+table.table-base[data-stacked] > * > tr {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.75rem), 1fr));
+    gap: 0.75rem 1.25rem;
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--color-line);
+}
+table.table-base[data-stacked] > tbody > tr:last-child {
+    border-bottom: 0;
+}
+table.table-base[data-stacked] > tfoot > tr {
+    border-top: 1px solid var(--color-line);
+    border-bottom: 0;
+    background: #fafafa;
+}
+table.table-base[data-stacked] > * > tr > :is(td, th) {
+    display: block;
+    min-width: 0;
+    max-width: none;
+    padding: 0;
+    border: 0;
+    text-align: start;
+}
+/* In a card nothing is cut or runs out of its box: badges, truncated names and long codes wrap. */
+table.table-base[data-stacked] > * > tr > :is(td, th),
+table.table-base[data-stacked] > * > tr > :is(td, th) * {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+table.table-base[data-stacked] > * > tr > :is(td, th):not([data-label='']):not(:first-child)::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.125rem;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #9ca3af;
+}
+table.table-base[data-stacked] > * > tr > :first-child,
+table.table-base[data-stacked] > * > tr > [data-label=''] {
+    grid-column: 1 / -1;
+}
+table.table-base[data-stacked] > tbody > tr > [data-label='']:last-child:not(:first-child) {
+    position: absolute;
+    top: 0.625rem;
+    left: 0.75rem;
+}
+table.table-base[data-stacked] > tbody > tr:has(> [data-label='']:last-child:not(:first-child)) > :first-child {
+    padding-left: 6.5rem;
+}
+/* A leading control under no name (a row's expander, its tick box) sits before the title; the cell after it is the title. */
+table.table-base[data-stacked] > tbody > tr > [data-label='']:first-child:not(:last-child) {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.875rem;
+}
+table.table-base[data-stacked] > * > tr > [data-label='']:first-child:not(:last-child) + :is(td, th) {
+    grid-column: 1 / -1;
+    padding-right: 2rem;
+}
+table.table-base[data-stacked] > * > tr > [data-label='']:first-child + :is(td, th)::before {
+    content: none;
+}
+table.table-base[data-stacked]:dir(ltr) > tbody > tr > [data-label='']:first-child:not(:last-child) {
+    right: auto;
+    left: 0.875rem;
+}
+table.table-base[data-stacked]:dir(ltr) > * > tr > [data-label='']:first-child:not(:last-child) + :is(td, th) {
+    padding-right: 0;
+    padding-left: 2rem;
+}
+/* Sides by the table's direction, not a cell's: a number laid out left-to-right still sits at the card's start. */
+table.table-base[data-stacked]:dir(rtl) > * > tr > :is(td, th) {
+    text-align: right;
+}
+table.table-base[data-stacked]:dir(ltr) > tbody > tr > [data-label='']:last-child:not(:first-child) {
+    right: 0.75rem;
+    left: auto;
+}
+table.table-base[data-stacked]:dir(ltr) > tbody > tr:has(> [data-label='']:last-child:not(:first-child)) > :first-child {
+    padding-right: 6.5rem;
+    padding-left: 0;
 }
 
 @media print {

@@ -259,7 +259,7 @@ export default function DevicesIntegration({ devices, status, events, simulation
                             <span className="font-mono text-xs" dir="ltr"> qr · card · fingerprint · pin · barcode</span>.
                         </li>
                         <li>
-                            فحص الاتصال: <span className="font-mono text-xs" dir="ltr">POST {apiBase}/heartbeat</span> — يظهر الجهاز «متصل» إذا اتصل خلال آخر {onlineMinutes} دقائق.
+                            فحص الاتصال: <span className="font-mono text-xs break-all" dir="ltr">POST {apiBase}/heartbeat</span> — يظهر الجهاز «متصل» إذا اتصل خلال آخر {onlineMinutes} دقائق.
                         </li>
                     </ol>
                     <p className="mt-4 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs leading-6 text-amber-800">

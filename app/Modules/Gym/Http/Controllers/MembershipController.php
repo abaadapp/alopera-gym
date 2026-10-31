@@ -54,7 +54,7 @@ class MembershipController extends Controller
             'memberships' => $query->paginate(25)->withQueryString()->through(fn (Membership $m) => GymPresenter::membership($m) + [
                 'member' => $m->member?->only('id', 'full_name', 'member_no', 'phone'),
             ]),
-            'counts' => BranchContext::scope(Membership::selectRaw('status, count(*) as total'))->groupBy('status')->pluck('total', 'status')
+            'counts' => BranchContext::scope(Membership::selectRaw('status, count(*) as how_many'))->groupBy('status')->pluck('how_many', 'status')
                 ->put('expiring', BranchContext::scope(Membership::expiringWithin(7))->count()),
             'plans' => MembershipPlan::orderBy('sort')->get(['id', 'name']),
             'filters' => ['filter' => $filter, 'plan_id' => $request->integer('plan_id') ?: null],

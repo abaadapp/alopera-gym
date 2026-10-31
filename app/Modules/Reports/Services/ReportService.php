@@ -192,7 +192,7 @@ final class ReportService
             ->selectRaw('type, count(*) as total')->groupBy('type')->pluck('total', 'type');
 
         $activated = $this->in(Membership::whereBetween('activated_at', [$from, $end]), $branch)
-            ->selectRaw('kind, count(*) as total')->groupBy('kind')->pluck('total', 'kind');
+            ->selectRaw('kind, count(*) as how_many')->groupBy('kind')->pluck('how_many', 'kind');
 
         $sessions = $this->in(ClassSession::whereBetween('starts_at', [$from, $end])->where('status', '!=', ClassSession::CANCELLED), $branch);
         $sessionCount = (clone $sessions)->count();

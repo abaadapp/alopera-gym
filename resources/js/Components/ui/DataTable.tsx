@@ -17,7 +17,9 @@ import { cn } from '@/lib/cn';
  *   rows (14px, 12px padding, a hairline between them)
  *   1–20 من 96                                                   [السابق] [التالي]
  *
- * It draws no card of its own: a page sets it on the canvas or inside a <Card padded={false}>.
+ * It draws no card of its own: a page sets it on the canvas or inside a <Card padded={false}>. With `card`, a phone, a
+ * tablet or a small laptop (below 1280px) gets the rows as that page's own cards instead of the table; otherwise a table too wide for
+ * the screen is laid out as cards by the panel (useStackedTables).
  */
 
 export interface Column<T> {
@@ -57,9 +59,10 @@ type Params = Record<string, string | number | null | undefined>;
 const ghost = 'inline-flex h-8 items-center gap-1.5 rounded-[10px] px-3 text-[13px] font-medium text-[#4b4b4b] transition-colors hover:bg-ink/[0.045] hover:text-ink [&_svg]:size-4 [&_svg]:shrink-0';
 const pageButton = 'inline-flex h-8 items-center rounded-[8px] border border-line px-3 text-[13px] text-ink transition-colors hover:bg-[#fafafa] disabled:pointer-events-none disabled:opacity-50';
 
-export default function DataTable<T>({ rows, columns, rowKey, params, pagination, search, filters = [], sorts = [], toolbar, empty = 'لا توجد بيانات بعد', className }: {
+export default function DataTable<T>({ rows, columns, card, rowKey, params, pagination, search, filters = [], sorts = [], toolbar, empty = 'لا توجد بيانات بعد', className }: {
     rows: T[];
     columns: Column<T>[];
+    card?: (row: T) => ReactNode;
     rowKey: (row: T) => string | number;
     params: Params;
     pagination?: PageMeta;
@@ -177,7 +180,17 @@ export default function DataTable<T>({ rows, columns, rowKey, params, pagination
                 />
             ))}
 
-            <div className="w-full overflow-x-auto">
+            {card && (
+                <ul className="divide-y divide-line xl:hidden">
+                    {rows.length === 0 ? (
+                        <li className="px-4 py-14 text-center text-sm text-[#9ca3af]">{filtering ? 'لا نتائج مطابقة للبحث أو التصفية' : empty}</li>
+                    ) : (
+                        rows.map((row) => <li key={rowKey(row)}>{card(row)}</li>)
+                    )}
+                </ul>
+            )}
+
+            <div className={cn('w-full overflow-x-auto', card && 'hidden xl:block')}>
                 <table className="table-base [&_tbody_tr:last-child_td]:border-0">
                     <thead>
                         <tr>

@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { AlertTriangle, Banknote, Check, Clock, Copy, CreditCard, ExternalLink, FileDown, MessageCircle, Paperclip, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PaperPanel, { DocumentMeta, LtrDates, PaperAside, type PaperData } from '@/Components/Papers/PaperPanel';
+import { clientKey } from '@/Components/Inventory/parts';
 import { Badge, Button, Card, ChoiceCard, ConfirmAction, Field, Input, Modal, Notice, PageHeader, Select, Textarea, BackLink, FileInput } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
@@ -190,7 +191,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                     <Card className="p-4">
                         <h2 className="mb-3 font-bold text-ink">البنود</h2>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[520px] text-[13px]">
+                            <table className="table-base text-[13px]">
                                 <thead className="text-[12px] text-[#71717a]">
                                     <tr>
                                         <th className="p-2 text-start font-medium">البيان</th>
@@ -396,17 +397,19 @@ const methods = [
 ] as const;
 
 function RecordPaymentModal({ open, onClose, invoice, currency }: { open: boolean; onClose: () => void; invoice: Invoice; currency: string }) {
-    const form = useForm<{ amount: string; method: string; reference: string; notes: string; proof: File | null }>({
+    const form = useForm<{ amount: string; method: string; reference: string; notes: string; proof: File | null; client_key: string }>({
         amount: invoice.balance,
         method: 'cash',
         reference: '',
         notes: '',
         proof: null,
+        client_key: '',
     });
 
     // The balance shrinks after each payment; reopening the modal must offer what is left now.
     useEffect(() => {
-        if (open) form.setData((d) => ({ ...d, amount: invoice.balance }));
+        // A new key each time it opens: the same form sent twice records one payment (SubmittedOnce).
+        if (open) form.setData((d) => ({ ...d, amount: invoice.balance, client_key: clientKey() }));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, invoice.balance]);
 

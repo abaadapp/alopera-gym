@@ -23,16 +23,19 @@ export function Dropdown({ trigger, children, label, hover = false, className, p
     const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
     // Opened by the pointer coming over it: the click that usually follows keeps it open instead of closing it.
     const byHover = useRef(false);
-    const close = () => setOpen(false);
+    const button = useRef<HTMLButtonElement>(null);
+    // An item chosen: the focus goes back to the trigger first, so a dialog the item opens returns it there too
+    // (the item itself is gone once the menu closes).
+    const close = () => {
+        button.current?.focus({ preventScroll: true });
+        setOpen(false);
+    };
 
     useEffect(() => {
         if (!open) return;
         const onDown = (e: PointerEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
         const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                setOpen(false);
-                box.current?.querySelector<HTMLElement>('[aria-haspopup]')?.focus();
-            }
+            if (e.key === 'Escape') close();
         };
         document.addEventListener('pointerdown', onDown);
         document.addEventListener('keydown', onKey);
@@ -69,7 +72,7 @@ export function Dropdown({ trigger, children, label, hover = false, className, p
 
     return (
         <div ref={box} className={cn('relative', className)} onMouseEnter={enter} onMouseLeave={leave}>
-            <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={label} onClick={toggle} className="block rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-[#111]/15">
+            <button ref={button} type="button" aria-haspopup="menu" aria-expanded={open} aria-label={label} onClick={toggle} className="block rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-[#111]/15">
                 {trigger({ open })}
             </button>
             {open && (

@@ -13,13 +13,14 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([t
 const SIZES = { xs: 'sm:max-w-sm', sm: 'sm:max-w-md', md: 'sm:max-w-lg', wide: 'sm:max-w-xl', lg: 'sm:max-w-2xl', xl: 'sm:max-w-4xl', full: 'sm:max-w-[min(1200px,calc(100vw-3rem))] h-[calc(100dvh-var(--kb,0px)-1.5rem)]' };
 
 /**
- * The one dialog of the system. In the panel: a white card centred on a dimmed, blurred page (a phone too, 12px from
- * its edges), 16px rounded with a hairline and a soft shadow; the title 17px semibold with an optional grey line under
- * it and the ✕ in the corner; the content 20px in; the buttons at the end, cancel first and the action last. It fades
- * and grows in. A long one scrolls inside its card — title and buttons stay put — and is never taller than the screen
- * (less the keyboard on a phone). Escape and the dimmed page close it; Tab stays inside it; the first field is
- * focused on opening and the button that opened it gets the focus back on closing; the page behind does not scroll.
- * Elsewhere (the member's pages) it rises from the bottom on a phone.
+ * The one dialog of the system. In the panel: a white card centred on a dimmed, blurred page (the whole width of a
+ * phone), 16px rounded with a hairline and a soft shadow; the title 17px semibold with an optional grey line under it
+ * and the ✕ in the corner; the content 20px in; the buttons at the end, cancel first and the action last. It fades and
+ * grows in. It is never taller than the screen (less the keyboard on a phone): a long one scrolls as a whole, title
+ * and buttons with it, as the reference's does; only the full-screen size keeps its title in place over a body that
+ * scrolls. Escape and the dimmed page close it; Tab stays inside it; the first field is focused on opening and the
+ * button that opened it gets the focus back on closing (the page itself when that button is gone, a deleted row's);
+ * the page behind does not scroll. Elsewhere (the member's pages) it rises from the bottom on a phone.
  */
 export default function Modal({ open, onClose, title, description, children, footer, size = 'md' }: { open: boolean; onClose: () => void; title: ReactNode; description?: ReactNode; children: ReactNode; footer?: ReactNode; size?: keyof typeof SIZES }) {
     const admin = useAdmin();
@@ -75,7 +76,7 @@ export default function Modal({ open, onClose, title, description, children, foo
             viewport?.removeEventListener('resize', fit);
             stack.splice(stack.indexOf(id), 1);
             if (stack.length === 0) document.body.style.overflow = '';
-            if (opener.current?.isConnected) opener.current.focus({ preventScroll: true });
+            (opener.current?.isConnected ? opener.current : document.querySelector<HTMLElement>('main[tabindex]'))?.focus({ preventScroll: true });
             opener.current = null;
         };
     }, [open, id]);
@@ -91,6 +92,8 @@ export default function Modal({ open, onClose, title, description, children, foo
     }, [open]);
 
     if (!open) return null;
+    // The panel's dialogs scroll as one card; the full-screen one and the member's sheet keep their title in place.
+    const whole = admin && size !== 'full';
 
     // Portalled out of the page, so it carries the control panel's look along (see AdminScope).
     return createPortal(
@@ -104,10 +107,10 @@ export default function Modal({ open, onClose, title, description, children, foo
                 aria-describedby={description ? `${id}-description` : undefined}
                 tabIndex={-1}
                 className={cn(
-                    'relative flex flex-col bg-white focus:outline-none',
+                    'relative bg-white focus:outline-none',
                     admin
-                        ? 'max-h-[calc(100dvh-var(--kb,0px)-1.5rem)] w-[calc(100%-1.5rem)] animate-[dialog-in_0.18s_cubic-bezier(0.22,1,0.36,1)] rounded-2xl border border-line shadow-[0_20px_60px_rgba(0,0,0,0.15)] sm:w-full'
-                        : 'max-h-[92vh] w-full rounded-t-3xl shadow-2xl sm:rounded-3xl',
+                        ? cn('max-h-[calc(100dvh-var(--kb,0px)-1.5rem)] w-full animate-[dialog-in_0.18s_cubic-bezier(0.22,1,0.36,1)] rounded-2xl border border-line shadow-[0_20px_60px_rgba(0,0,0,0.15)]', whole ? 'overflow-y-auto overscroll-contain' : 'flex flex-col')
+                        : 'flex max-h-[92vh] w-full flex-col rounded-t-3xl shadow-2xl sm:rounded-3xl',
                     SIZES[size],
                 )}
             >
@@ -132,7 +135,7 @@ export default function Modal({ open, onClose, title, description, children, foo
                         </button>
                     </div>
                 )}
-                <div data-modal-body className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain', admin ? cn('px-5', footer ? 'pb-1' : 'pb-5') : 'px-5 py-4')}>{children}</div>
+                <div data-modal-body className={cn(!whole && 'min-h-0 flex-1 overflow-y-auto overscroll-contain', admin ? cn('px-5', footer ? 'pb-1' : 'pb-5') : 'px-5 py-4')}>{children}</div>
                 {footer && <div className={cn('flex shrink-0 flex-wrap items-center justify-end gap-2', admin ? 'px-5 pt-3 pb-5' : 'border-t border-line px-5 py-3')}>{footer}</div>}
             </div>
         </div>,

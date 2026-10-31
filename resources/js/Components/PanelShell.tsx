@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
 import { AdminScope, Flash } from '@/Components/ui';
+import { useStackedTables } from '@/hooks/useStackedTables';
 import { cn } from '@/lib/cn';
 
 export type PanelLink = { label: string; href: string; icon: LucideIcon; active: boolean };
@@ -32,6 +33,8 @@ export default function PanelShell({ identity, groups, topbar, children }: {
     children: ReactNode;
 }) {
     const [open, setOpen] = useState(false);
+    const main = useRef<HTMLElement>(null);
+    useStackedTables(main);
 
     // Phones: Esc closes the drawer, and the page behind it does not scroll.
     useEffect(() => {
@@ -80,7 +83,7 @@ export default function PanelShell({ identity, groups, topbar, children }: {
             <div className="lg:ms-64">
                 {topbar(() => setOpen(true))}
 
-                <main className="mx-auto w-full max-w-[1600px] animate-[ui-in_0.28s_cubic-bezier(0.22,1,0.36,1)] p-4 lg:p-6">{children}</main>
+                <main ref={main} tabIndex={-1} className="mx-auto outline-none w-full max-w-[1600px] animate-[ui-in_0.28s_cubic-bezier(0.22,1,0.36,1)] p-4 lg:p-6">{children}</main>
             </div>
             <Flash />
         </AdminScope>
