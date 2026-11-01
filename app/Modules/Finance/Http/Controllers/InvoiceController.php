@@ -18,6 +18,8 @@ use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Finance\Services\ManualInvoices;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Inventory\Models\Product;
+use App\Modules\Inventory\Models\ProductAddon;
+use App\Modules\Inventory\Services\ProductAddons;
 use App\Modules\Inventory\Services\StockService;
 use App\Modules\Messaging\Services\MemberNotifier;
 use App\Modules\Messaging\Services\WhatsAppService;
@@ -148,7 +150,7 @@ class InvoiceController extends Controller
     /** A saved draft, reopened in the editor with its paper as it was left. */
     public function edit(Request $request, ManualInvoices $invoices, int $draft): Response
     {
-        $invoice = $this->draftOf($request, $draft)->load(['items.itemable', 'billable', 'attachments']);
+        $invoice = $this->draftOf($request, $draft)->load(['items' => fn ($q) => $q->orderBy('id'), 'items.itemable', 'billable', 'attachments']);
         $member = $invoice->billable instanceof Member ? $invoice->billable : null;
         $editor = $this->editor($request);
 
@@ -165,20 +167,30 @@ class InvoiceController extends Controller
             'notes' => (string) $invoice->notes,
             'internal_notes' => (string) $invoice->internal_notes,
             'paper_lang' => $invoice->paper_lang,
-            'lines' => $invoice->items->map(fn ($i) => [
+            // Each product line with the add-ons sold with it (how many per piece), as the editor chose them.
+            'lines' => $invoice->items->whereNull('parent_id')->values()->map(fn ($i) => [
                 'product_id' => $i->itemable instanceof Product ? (string) $i->itemable->id : '',
                 'description' => $i->description,
                 'quantity' => Money::normalize($i->quantity),
                 'unit_price' => Money::normalize($i->unit_price),
                 'discount' => Money::normalize($i->discount),
+                'addons' => $invoice->items->where('parent_id', $i->id)->values()->map(fn ($a) => [
+                    'id' => (int) $a->itemable_id,
+                    'qty' => max(1, (int) round((float) $a->quantity / max((float) $i->quantity, 0.001))),
+                    'name' => $a->itemable instanceof ProductAddon ? $a->itemable->name : ltrim(explode(' — ', $a->description)[0], '+ '),
+                    'price' => Money::normalize($a->unit_price),
+                ])->all(),
             ])->all(),
             'attachments' => $invoice->attachments->map(fn ($a) => $a->only('id', 'name', 'size') + ['url' => route('club.invoices.attachments.show', $a)])->all(),
             'updated_at' => $invoice->updated_at?->format('Y-m-d H:i'),
         ];
 
+        // The paper reads the form as the editor sends it: each add-on as its id and how many per piece.
+        $lines = collect($form['lines'])->map(fn ($l) => ['addons' => array_map(fn ($a) => ['addon_id' => $a['id'], 'quantity' => $a['qty']], $l['addons'])] + $l)->all();
+
         return Inertia::render('Finance/Invoices/Create', $editor + [
             'draft' => $form,
-            'paper' => $this->paper($request, $invoices, ['member_id' => $member?->id, 'paper_lang' => $form['paper_lang'] ?? $editor['paper_lang']] + $form),
+            'paper' => $this->paper($request, $invoices, ['member_id' => $member?->id, 'paper_lang' => $form['paper_lang'] ?? $editor['paper_lang'], 'lines' => $lines] + $form),
         ]);
     }
 
@@ -229,6 +241,7 @@ class InvoiceController extends Controller
                 'unit_price' => $l['unit_price'] ?? 0,
                 // A discount typed larger than its line would be refused on issue; the preview shows it at most whole.
                 'discount' => min((float) ($l['discount'] ?? 0), (float) Money::mul($l['unit_price'] ?? 0, (float) $l['quantity'])),
+                'addons' => $l['addons'] ?? [],
             ])->values()->all();
         $data['customer_mode'] ??= 'walk_in';
         $data['issue_date'] ??= today()->toDateString();
@@ -333,6 +346,10 @@ class InvoiceController extends Controller
             'lines.*.quantity' => [$preview ? 'nullable' : 'required', 'numeric', 'decimal:0,3', $preview ? 'min:0' : 'min:0.001', 'max:10000'],
             'lines.*.unit_price' => [$preview ? 'nullable' : 'required', 'numeric', 'decimal:0,3', 'min:0', 'max:99999'],
             'lines.*.discount' => ['nullable', 'numeric', 'decimal:0,3', 'min:0'],
+            // A catalogue product's add-ons: which, and how many per piece. Their prices and rules are the server's.
+            'lines.*.addons' => ['nullable', 'array', 'max:20'],
+            'lines.*.addons.*.addon_id' => ['required', 'integer', TenantRule::exists('product_addons')],
+            'lines.*.addons.*.quantity' => ['required', 'integer', 'min:1', 'max:99'],
             ...($preview ? [] : [
                 'client_key' => SubmittedOnce::RULE,
                 'attachments' => ['nullable', 'array', 'max:6'],
@@ -348,21 +365,42 @@ class InvoiceController extends Controller
         ];
     }
 
-    /** What the editor works with: the catalogue, the club's tax and terms, and what this user may do. */
+    /**
+     * What the editor works with: the catalogue and the add-ons that go with its products (those offered at the point
+     * of sale, with what the branch's shelf allows), the club's tax and terms, and what this user may do.
+     */
     private function editor(Request $request): array
     {
         $user = $request->user();
         $tenant = app(TenantContext::class)->require();
         $branch = app(BranchContext::class)->assign();
         $lang = (string) PaperTypes::settings($tenant, 'invoice')['lang'];
-        $stock = PermissionRegistry::moduleEnabled('sales') ? app(StockService::class)->quantities($branch) : [];
-        $products = PermissionRegistry::moduleEnabled('sales')
-            ? Product::where('is_active', true)->orderBy('name')->limit(501)->get(['id', 'name', 'sku', 'barcode', 'price', 'track_stock'])
+        $selling = PermissionRegistry::moduleEnabled('sales');
+        $stock = $selling ? app(StockService::class)->quantities($branch) : [];
+        $products = $selling
+            ? Product::where('is_active', true)->orderBy('name')->limit(501)->get(['id', 'name', 'sku', 'barcode', 'price', 'track_stock', 'product_category_id'])
+            : collect();
+        $addons = $selling
+            ? app(ProductAddons::class)->offered(ManualInvoices::ADDON_CHANNEL)->load(['products:products.id,products.name', 'categories:product_categories.id,product_categories.name'])
             : collect();
 
         return [
-            'products' => $products->take(500)->map(fn (Product $p) => $p->only('id', 'name', 'sku', 'barcode', 'price', 'track_stock') + ['stock' => $p->track_stock ? (float) ($stock[$p->id] ?? 0) : null])->values(),
+            'products' => $products->take(500)->map(fn (Product $p) => $p->only('id', 'name', 'sku', 'barcode', 'price', 'track_stock') + [
+                'stock' => $p->track_stock ? (float) ($stock[$p->id] ?? 0) : null,
+                'addons' => $addons->filter(fn (ProductAddon $a) => $a->fits($p))->pluck('id')->values(),
+            ])->values(),
             'catalog_truncated' => $products->count() > 500,
+            'addons' => $addons->map(fn (ProductAddon $a) => $a->only('id', 'name', 'description', 'price') + [
+                'max' => max(1, $a->max_quantity),
+                'available' => app(ProductAddons::class)->available($a, $stock),
+                // How many of it the branch's shelf allows (none: it uses no counted stock).
+                'left' => $a->stockProduct?->track_stock ? (int) floor(round(($stock[$a->stockProduct->id] ?? 0) / max((float) $a->stock_usage, 0.001), 3)) : null,
+                'scope' => match ($a->applies_to) {
+                    ProductAddon::ALL => 'مع كل المنتجات',
+                    ProductAddon::CATEGORIES => 'مع '.$a->categories->pluck('name')->join('، '),
+                    default => 'مع '.$a->products->pluck('name')->join('، '),
+                },
+            ])->values(),
             'tax_rate' => (float) $tenant->setting('vat_rate', 0),
             'due_days' => (int) $tenant->setting('invoice_due_days', 0),
             // The paper's face a new invoice starts with: the invoice template's.
@@ -394,7 +432,8 @@ class InvoiceController extends Controller
                 'internal_notes' => $invoice->internal_notes, 'payment_terms_days' => $invoice->payment_terms_days,
                 'attachments' => $invoice->attachments->map(fn ($a) => $a->only('id', 'name', 'size') + ['url' => route('club.invoices.attachments.show', $a)])->all(),
                 'paid_at' => $invoice->paid_at?->format('Y-m-d H:i'), 'tax_rate' => $invoice->tax_rate,
-                'items' => $invoice->items->map(fn ($i) => $i->only('id', 'description', 'quantity', 'unit_price', 'discount', 'line_total')),
+                // An add-on line is marked, under the product line it was sold with when the editor recorded it.
+                'items' => $invoice->items->map(fn ($i) => $i->only('id', 'parent_id', 'description', 'quantity', 'unit_price', 'discount', 'line_total') + ['addon' => $i->itemable_type === 'product_addon']),
                 'payments' => $invoice->payments->map(fn ($p) => $p->only('id', 'receipt_number', 'kind', 'method', 'status', 'amount', 'reference', 'notes', 'rejection_reason') + [
                     'paid_at' => $p->paid_at?->format('Y-m-d H:i'), 'receiver' => $p->receiver?->name, 'has_proof' => $p->proof_path !== null,
                 ]),

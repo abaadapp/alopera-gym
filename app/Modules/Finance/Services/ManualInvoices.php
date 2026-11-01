@@ -10,8 +10,10 @@ use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\InvoiceAttachment;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Inventory\Models\Product;
+use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Services\StockService;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -23,17 +25,24 @@ use Illuminate\Support\Str;
  *
  *   saveDraft  keeps the work as a draft: no number, nothing owed, no entry in the books, no stock taken, no payment.
  *   issue      issues it: numbered in sequence, owed, posted (by the ledger after commit); a product from the catalogue
- *              leaves the shelf of the invoice's branch; money taken now is recorded through PaymentService.
+ *              leaves the shelf of the invoice's branch, with whatever its add-ons use up; money taken now is recorded
+ *              through PaymentService.
+ *
+ * A catalogue product's line may carry add-ons, as at the point of sale: each is billed on a line of its own under the
+ * product's, priced from the database and checked as the point of sale checks it. A void puts back what they took.
  *
  * Issuing a saved draft issues a new invoice from it and removes the draft, its files moving to the invoice. Either
  * all of it happens or none (short stock, an amount larger than the invoice): one transaction.
  *
- * @phpstan-type Data array{customer_mode: string, member_id?: int|null, customer_name?: string|null, customer_phone?: string|null, customer_email?: string|null, issue_date: string, due_date?: string|null, payment_terms_days?: int|string|null, notes?: string|null, internal_notes?: string|null, paper_lang?: string|null, lines: list<array{product_id?: int|string|null, description: string, quantity: string|float, unit_price: string|float, discount?: string|float|null}>}
+ * @phpstan-type Data array{customer_mode: string, member_id?: int|null, customer_name?: string|null, customer_phone?: string|null, customer_email?: string|null, issue_date: string, due_date?: string|null, payment_terms_days?: int|string|null, notes?: string|null, internal_notes?: string|null, paper_lang?: string|null, lines: list<array{product_id?: int|string|null, description: string, quantity: string|float, unit_price: string|float, discount?: string|float|null, addons?: list<array{addon_id: int|string, quantity: int|string}>}>}
  */
 final class ManualInvoices
 {
     /** How money taken on issue may be paid; «credit» (آجل) leaves the whole amount owed. */
     public const METHODS = ['credit', 'cash', 'card', 'bank_transfer'];
+
+    /** Staff sell at the counter and on invoices alike: an invoice offers the add-ons offered at the point of sale. */
+    public const ADDON_CHANNEL = 'pos';
 
     public function __construct(
         private readonly InvoiceService $invoices,
@@ -64,7 +73,7 @@ final class ManualInvoices
                 $draft = (new Invoice)->fill($attributes + ['created_by' => Auth::guard('web')->id()]);
                 $draft->save();
             }
-            $draft->items()->saveMany($items);
+            InvoiceService::keepItems($draft, $items);
 
             $this->dropFiles($draft, $removeFiles);
             $this->keepFiles($draft, $files);
@@ -89,11 +98,17 @@ final class ManualInvoices
             [$member, $lines, $options, $name] = $this->parts($data, $draft);
             $invoice = $this->invoices->issue($member, $lines, $options, $name);
 
-            // Products from the catalogue leave the shelf of the invoice's branch (none: the main branch).
+            // Products from the catalogue leave the shelf of the invoice's branch (none: the main branch), and so does
+            // the stock their add-ons use up.
             foreach ($lines as $line) {
-                $product = $line['itemable'] ?? null;
-                if ($product instanceof Product && $product->track_stock) {
-                    $this->stock->move($product, -(float) $line['quantity'], 'invoice', $invoice, branchId: $invoice->branch_id);
+                $item = $line['itemable'] ?? null;
+                if ($item instanceof Product && $item->track_stock) {
+                    $this->stock->move($item, -(float) $line['quantity'], 'invoice', $invoice, branchId: $invoice->branch_id);
+                } elseif ($item instanceof ProductAddon && $item->stockProduct?->track_stock) {
+                    $used = round((float) $line['quantity'] * (float) $item->stock_usage, 3);
+                    if ($used > 0) {
+                        $this->stock->move($item->stockProduct, -$used, 'invoice', $invoice, 'إضافة «'.$item->name.'» مع «'.$lines[$line['parent']]['description'].'»', branchId: $invoice->branch_id);
+                    }
                 }
             }
 
@@ -139,10 +154,13 @@ final class ManualInvoices
         });
     }
 
-    /** The invoice as it would be issued, unsaved: the editor's live paper and its totals (before the first line too). */
+    /**
+     * The invoice as it would be issued, unsaved: the editor's live paper and its totals (before the first line too). An
+     * add-on that saving would refuse is left out of it, as an unfinished line is.
+     */
     public function preview(array $data): Invoice
     {
-        [$member, $lines, $options, $name] = $this->parts($data, null);
+        [$member, $lines, $options, $name] = $this->parts($data, null, strict: false);
 
         return $this->invoices->preview($member, $lines, $options, $name);
     }
@@ -157,12 +175,13 @@ final class ManualInvoices
 
     /**
      * The engine's arguments from the editor's form: who is billed (a member, a new customer typed in, or a walk-in),
-     * the lines — a catalogue product priced as the form says and linked to the product — and the options.
+     * the lines — a catalogue product priced as the form says and linked to the product, each of its add-ons on a line
+     * of its own under it — and the options.
      *
      * @param  Data  $data
      * @return array{0: Member|null, 1: list<array<string, mixed>>, 2: array<string, mixed>, 3: string|null}
      */
-    private function parts(array $data, ?Invoice $draft): array
+    private function parts(array $data, ?Invoice $draft, bool $strict = true): array
     {
         $mode = $data['customer_mode'] ?? 'walk_in';
         $member = $mode === 'member' && filled($data['member_id'] ?? null) ? Member::find($data['member_id']) : null;
@@ -170,14 +189,27 @@ final class ManualInvoices
             throw new BusinessRuleException('invoice.member', 'اختر العضو.', 'member_id');
         }
 
-        $products = Product::whereIn('id', collect($data['lines'])->pluck('product_id')->filter()->map(fn ($id) => (int) $id)->all())->get()->keyBy('id');
-        $lines = collect($data['lines'])->map(fn ($l) => [
-            'description' => trim((string) $l['description']),
-            'quantity' => $l['quantity'],
-            'unit_price' => $l['unit_price'],
-            'discount' => $l['discount'] ?? 0,
-            'itemable' => filled($l['product_id'] ?? null) ? $products->get((int) $l['product_id']) : null,
-        ])->values()->all();
+        $rows = collect($data['lines'])->values();
+        $products = Product::whereIn('id', $rows->pluck('product_id')->filter()->map(fn ($id) => (int) $id)->all())->get()->keyBy('id');
+        $wanted = $rows->flatMap(fn ($l) => array_column($l['addons'] ?? [], 'addon_id'))->map(fn ($id) => (int) $id)->unique()->values();
+        $addons = $wanted->isEmpty() ? collect() : ProductAddon::offered(self::ADDON_CHANNEL)->whereIn('id', $wanted)
+            ->with(['products:products.id', 'categories:product_categories.id', 'stockProduct'])->get()->keyBy('id');
+
+        $lines = [];
+        foreach ($rows as $i => $l) {
+            $product = filled($l['product_id'] ?? null) ? $products->get((int) $l['product_id']) : null;
+            $lines[] = [
+                'description' => trim((string) $l['description']),
+                'quantity' => $l['quantity'],
+                'unit_price' => $l['unit_price'],
+                'discount' => $l['discount'] ?? 0,
+                'itemable' => $product,
+            ];
+            $parent = array_key_last($lines);
+            foreach ($this->addonLines($product, $l, $addons, $strict, "lines.$i.addons") as $addon) {
+                $lines[] = $addon + ['parent' => $parent];
+            }
+        }
 
         $options = [
             'type' => 'other',
@@ -194,6 +226,52 @@ final class ManualInvoices
         $name = $member ? null : ($mode === 'new' ? ($data['customer_name'] ?? null) : (($data['customer_name'] ?? null) ?: 'عميل نقدي'));
 
         return [$member, $lines, $options, $name];
+    }
+
+    /**
+     * The add-ons chosen on a product line, each a line of its own: priced from the database and checked as the point of
+     * sale checks them — offered there, going with this product, once each, within its quantity per piece. Only which
+     * add-on and how many per piece come from the form; the line's quantity is that times the product's. Saving refuses
+     * what breaks a rule (named on the line); the preview leaves it out.
+     *
+     * @param  array<string, mixed>  $line  the form's line
+     * @param  Collection<int, ProductAddon>  $addons  the ones asked for that are offered, by id
+     * @return list<array<string, mixed>>
+     */
+    private function addonLines(?Product $product, array $line, Collection $addons, bool $strict, string $field): array
+    {
+        $lines = [];
+        $seen = [];
+        foreach ($line['addons'] ?? [] as $pick) {
+            $addon = $addons->get((int) $pick['addon_id']);
+            $count = (int) $pick['quantity'];
+            $refusal = match (true) {
+                ! $product => 'الإضافات تُختار مع صنف من الكتالوج.',
+                ! $addon => 'إحدى الإضافات المختارة لم تعد متاحة — احذفها من البند.',
+                ! $addon->fits($product) => '«'.$addon->name.'» لا تُباع مع «'.$product->name.'».',
+                isset($seen[$addon->id]) => '«'.$addon->name.'» مختارة مرتين على البند نفسه.',
+                $count < 1 || $count > max(1, $addon->max_quantity) => 'الحد المسموح من «'.$addon->name.'» هو '.max(1, $addon->max_quantity).' لكل قطعة.',
+                default => null,
+            };
+            if ($refusal !== null) {
+                if ($strict) {
+                    throw new BusinessRuleException('invoice.addon', $refusal, $field);
+                }
+
+                continue;
+            }
+
+            $seen[$addon->id] = true;
+            $lines[] = [
+                'description' => '+ '.$addon->name.' — '.trim((string) $line['description']),
+                'quantity' => round($count * (float) $line['quantity'], 3),
+                'unit_price' => $addon->price,
+                'discount' => 0,
+                'itemable' => $addon,
+            ];
+        }
+
+        return $lines;
     }
 
     /** @param  list<UploadedFile>  $files */

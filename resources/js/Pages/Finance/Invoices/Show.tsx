@@ -14,6 +14,10 @@ import { INVOICE_STATES } from './Index';
 
 interface Item {
     id: number;
+    /** The product line an add-on was sold with (an add-on billed from the invoice editor). */
+    parent_id: number | null;
+    /** An add-on's line: under its product, marked as one. */
+    addon: boolean;
     description: string;
     quantity: string;
     unit_price: string;
@@ -203,8 +207,11 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                                 </thead>
                                 <tbody>
                                     {invoice.items.map((item) => (
-                                        <tr key={item.id} className="border-t border-line">
-                                            <td className="p-2"><LtrDates text={item.description} /></td>
+                                        <tr key={item.id} className={cn('border-t border-line', item.addon && 'bg-[#faf9ff] text-[#4b4b4b]')}>
+                                            <td className={cn('p-2', item.addon && 'ps-6')}>
+                                                {item.addon && <span className="me-1.5 rounded-full bg-[#f5f3ff] px-1.5 py-0.5 text-[11px] font-medium text-[#6d28d9]">إضافة</span>}
+                                                <LtrDates text={item.description} />
+                                            </td>
                                             <td className="p-2 text-end tabular-nums">{Number(item.quantity)}</td>
                                             <td className="p-2 text-end tabular-nums">{money(item.unit_price, currency)}</td>
                                             {discounted && <td className="p-2 text-end tabular-nums text-[#6b7280]">{Number(item.discount) > 0 ? `− ${money(item.discount, currency)}` : '—'}</td>}

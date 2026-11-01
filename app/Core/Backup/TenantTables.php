@@ -58,5 +58,6 @@ final class TenantTables
         'gym_memberships' => 'previous_membership_id',
         'gym_accounts' => 'parent_id',
         'gym_journal_entries' => 'reverses_id',
+        'invoice_items' => 'parent_id',
     ];
 }

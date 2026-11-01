@@ -7,6 +7,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
+/**
+ * A line of an invoice. An add-on sold with a product on a manual invoice is a line of its own under that product's
+ * line (parent): its price, its quantity (per piece × the product's) and the add-on it was (itemable).
+ */
 class InvoiceItem extends Model
 {
     use BelongsToTenant;
@@ -31,5 +35,11 @@ class InvoiceItem extends Model
     public function itemable(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    /** The product line this add-on line was sold with (none: a line of its own). */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_id');
     }
 }

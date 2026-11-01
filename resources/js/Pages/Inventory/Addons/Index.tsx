@@ -173,7 +173,7 @@ export default function AddonsIndex({ addons, products, categories, filters }: P
                         <span className="flex flex-col items-center gap-3">
                             <span className="grid size-12 place-items-center rounded-full bg-[#f2f2f0] text-[#6b7280]"><Puzzle className="size-5" /></span>
                             <span className="text-sm font-medium text-ink">لا توجد إضافات بعد</span>
-                            <span className="max-w-sm text-[13px]">أنشئ إضافة واختر المنتجات التي تظهر معها؛ يختارها الموظف في نقطة البيع والعميل في متجر الموقع.</span>
+                            <span className="max-w-sm text-[13px]">أنشئ إضافة واختر المنتجات التي تظهر معها؛ يختارها الموظف في نقطة البيع وفواتير العملاء، والعميل في متجر الموقع.</span>
                             <Button size="sm" icon={<Plus />} onClick={() => setEditing('new')}>إضافة جديدة</Button>
                         </span>
                     }
@@ -316,7 +316,7 @@ function AddonDialog({ addon, products, categories, currency, onClose }: { addon
                 )}
                 {(form.errors.product_ids || form.errors.category_ids) && <p className="-mt-2 text-[12px] text-[#b91c1c]">{form.errors.product_ids || form.errors.category_ids}</p>}
 
-                <Ask label="أين تظهر؟" hint="يختارها الموظف عند بيع المنتج في نقطة البيع، والعميل في صفحة المنتج بمتجر الموقع.">
+                <Ask label="أين تظهر؟" hint="يختارها الموظف عند بيع المنتج في نقطة البيع وفي فاتورة العميل، والعميل في صفحة المنتج بمتجر الموقع.">
                     <div className="flex gap-2">
                         <Choice on={d.show_in_pos} onClick={() => form.setData('show_in_pos', !d.show_in_pos)}><Monitor /> نقطة البيع</Choice>
                         <Choice on={d.show_on_website} onClick={() => form.setData('show_on_website', !d.show_on_website)}><Globe /> متجر الموقع</Choice>

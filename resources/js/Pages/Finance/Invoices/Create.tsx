@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { router, useForm } from '@inertiajs/react';
-import { Info, Paperclip, Plus, RefreshCw, Save, Search, Send, Settings2, Trash2, UserPlus, UserRound, Users } from 'lucide-react';
+import { Check, Info, Paperclip, Plus, PlusCircle, RefreshCw, Save, Search, Send, Settings2, Trash2, UserPlus, UserRound, Users, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PaperFrame from '@/Components/Papers/PaperFrame';
 import { clientKey } from '@/Components/Inventory/parts';
+import { Stepper } from '@/Components/Products/parts';
 import { BackLink, Button, Card, Field, FileInput, Input, MemberPicker, Modal, PageHeader, Select, Textarea, type MemberHit } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
+import { lineTotal, type AddonOption, type ChosenAddon } from '@/lib/addons';
 import { currencyLabel, money } from '@/lib/format';
 import { postJson } from '@/lib/http';
 import { cn } from '@/lib/cn';
@@ -18,6 +20,21 @@ interface Product {
     price: string;
     track_stock: boolean;
     stock: number | null;
+    /** The add-ons that go with it (ids of Props.addons). */
+    addons: number[];
+}
+
+/** An add-on as the point of sale offers it: its rule (max per piece), what it goes with, and what the shelf allows. */
+interface Addon extends AddonOption {
+    /** How many of it the branch's stock allows (null: it uses no counted stock). */
+    left: number | null;
+    scope: string;
+}
+
+/** An add-on on a line: which, and how many per piece (a draft's carries its name and price, should it be withdrawn since). */
+interface LineAddon extends ChosenAddon {
+    name?: string;
+    price?: string;
 }
 
 interface Line {
@@ -26,7 +43,11 @@ interface Line {
     quantity: string;
     unit_price: string;
     discount: string;
+    addons: LineAddon[];
 }
+
+/** Where an add-on goes: on a line of the invoice, or with a catalogue product on a new line. */
+type Target = { line: number } | { product: Product };
 
 type Mode = 'member' | 'new' | 'walk_in';
 type Method = 'credit' | 'cash' | 'card' | 'bank_transfer';
@@ -54,6 +75,7 @@ interface Draft {
 interface Props {
     products: Product[];
     catalog_truncated: boolean;
+    addons: Addon[];
     tax_rate: number;
     due_days: number;
     today: string;
@@ -73,7 +95,11 @@ const CUSTOM = 'custom';
 const METHOD_LABEL: Record<Method, string> = { credit: 'آجل — لا يُقبض الآن', cash: 'مدفوع نقدًا', card: 'مدفوع بالبطاقة (جهاز الشبكة)', bank_transfer: 'تحويل بنكي' };
 const ACCEPT = '.jpg,.jpeg,.png,.pdf,.webp,.heic';
 const N = (v: string) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-const blank = (): Line => ({ product_id: '', description: '', quantity: '1', unit_price: '0', discount: '0' });
+const blank = (): Line => ({ product_id: '', description: '', quantity: '1', unit_price: '0', discount: '0', addons: [] });
+/** An add-on's count on a line: per piece × the pieces, to the thousandth as the server keeps it. */
+const units = (quantity: string | number, perPiece: number) => Math.round(N(String(quantity)) * perPiece * 1000) / 1000;
+/** As the server prices an add-on line: its price in baisa times the count, rounded. */
+const addonAmount = (price: string, count: number) => Math.round(Math.round(N(price) * 1000) * count) / 1000;
 /** A line's columns where it has a row of its own: number, description, quantity, price, discount, total, delete. */
 const LINE_GRID = 'grid gap-x-2 gap-y-2 @[42rem]:grid-cols-[1.25rem_minmax(0,1fr)_5.5rem_7.5rem_7rem_6.5rem_2.25rem]';
 
@@ -94,8 +120,12 @@ function addDays(from: string, days: number): string {
  *
  * The paper is there from the first moment, the whole sheet with nothing on it yet, and follows every change. Its face —
  * Arabic or English (left to right) — is chosen beside it and kept with the invoice, so it prints as it was previewed.
+ *
+ * A catalogue product takes its add-ons as at the point of sale (how many per piece, within each one's limit and what the
+ * shelf allows): chosen when the product is taken, from its line, or from «إضافة من الإضافات». Each is billed on a line
+ * of its own under the product's; the server prices them and checks they go with it.
  */
-export default function InvoiceCreate({ products, catalog_truncated, tax_rate, due_days, today, terms, paper_lang, methods, may, draft, paper: firstPaper }: Props) {
+export default function InvoiceCreate({ products, catalog_truncated, addons, tax_rate, due_days, today, terms, paper_lang, methods, may, draft, paper: firstPaper }: Props) {
     const currency = useCurrency();
     const symbol = currencyLabel(currency);
     const m = (v: string | number) => money(v, currency);
@@ -105,6 +135,8 @@ export default function InvoiceCreate({ products, catalog_truncated, tax_rate, d
     const [member, setMember] = useState<{ id: number; label: string; phone?: string; membership?: string | null } | null>(draft?.member ?? null);
     const [internal, setInternal] = useState(Boolean(draft?.internal_notes));
     const [picking, setPicking] = useState(false);
+    const [pickingAddon, setPickingAddon] = useState(false);
+    const [editing, setEditing] = useState<number | null>(null);
     const [discarding, setDiscarding] = useState(false);
     const [kept, setKept] = useState(draft?.attachments ?? []);
     const dueRef = useRef<HTMLInputElement>(null);
@@ -148,13 +180,23 @@ export default function InvoiceCreate({ products, catalog_truncated, tax_rate, d
     const lineGross = (l: Line) => Math.round(Math.round(N(l.unit_price) * 1000) * N(l.quantity));
     const lineNet = (l: Line) => Math.max(0, lineGross(l) - Math.round(N(l.discount) * 1000)) / 1000;
     const overDiscount = (l: Line) => Math.round(N(l.discount) * 1000) > lineGross(l);
-    const pickProduct = (p: Product) =>
+    const pickProduct = (p: Product, quantity = 1, chosen: ChosenAddon[] = []) =>
         setLines((prev) => {
-            const line: Line = { product_id: String(p.id), description: p.name, quantity: '1', unit_price: Number(p.price).toFixed(3), discount: '0' };
+            const line: Line = { product_id: String(p.id), description: p.name, quantity: String(quantity), unit_price: Number(p.price).toFixed(3), discount: '0', addons: chosen };
             const empty = prev.length === 1 && prev[0].description === '' && prev[0].product_id === '';
             return empty ? [line] : [...prev, line];
         });
     const productOf = (l: Line) => (l.product_id ? products.find((p) => String(p.id) === l.product_id) : undefined);
+
+    // ── Add-ons: those that go with a product, how many of one the other lines already use, and how many per piece the
+    // shelf still allows on a line (within the add-on's own limit). ──
+    const addonById = useMemo(() => new Map(addons.map((a) => [a.id, a])), [addons]);
+    const fitting = (p?: Product) => (p ? p.addons.flatMap((id) => addonById.get(id) ?? []) : []);
+    const usedBy = (id: number, except = -1) => lines.reduce((t, l, k) => (k === except ? t : t + l.addons.filter((a) => a.id === id).reduce((u, a) => u + units(l.quantity, a.qty), 0)), 0);
+    const perPiece = (a: Addon, quantity: number, except = -1) => (a.left === null ? a.max : Math.max(0, Math.min(a.max, Math.floor((a.left - usedBy(a.id, except)) / Math.max(quantity, 0.001) + 1e-9))));
+    const setAddon = (i: number, id: number, qty: number) =>
+        setLines((prev) => prev.map((l, k) => (k !== i ? l : { ...l, addons: qty <= 0 ? l.addons.filter((a) => a.id !== id) : l.addons.some((a) => a.id === id) ? l.addons.map((a) => (a.id === id ? { ...a, qty } : a)) : [...l.addons, { id, qty }] })));
+    const attach = (id: number, qty: number, target: Target) => ('line' in target ? setAddon(target.line, id, qty) : pickProduct(target.product, 1, [{ id, qty }]));
 
     // ── What the server is sent: who is billed, as the mode says, and the lines. ──
     const payload = useMemo(() => ({
@@ -169,7 +211,7 @@ export default function InvoiceCreate({ products, catalog_truncated, tax_rate, d
         notes: d.notes || null,
         internal_notes: internal ? d.internal_notes || null : null,
         paper_lang: lang,
-        lines: lines.map((l) => ({ product_id: l.product_id || null, description: l.description, quantity: l.quantity || 0, unit_price: l.unit_price || 0, discount: l.discount || 0 })),
+        lines: lines.map((l) => ({ product_id: l.product_id || null, description: l.description, quantity: l.quantity || 0, unit_price: l.unit_price || 0, discount: l.discount || 0, addons: l.product_id ? l.addons.map((a) => ({ addon_id: a.id, quantity: a.qty })) : [] })),
     }), [d.customer_mode, member, d.customer_name, d.customer_phone, d.customer_email, d.issue_date, d.due_date, d.payment_terms_days, d.notes, d.internal_notes, internal, lang, lines]);
 
     // ── The live paper and its totals: the server's first one, then redrawn a moment after typing stops (the same form
@@ -224,7 +266,7 @@ export default function InvoiceCreate({ products, catalog_truncated, tax_rate, d
         if (!list) return;
         form.setData('attachments', [...d.attachments, ...Array.from(list)].slice(0, Math.max(0, 6 - kept.length)));
     };
-    const lineError = (i: number) => ['description', 'quantity', 'unit_price', 'discount', 'product_id'].map((f) => errors[`lines.${i}.${f}`]).find(Boolean);
+    const lineError = (i: number) => ['description', 'quantity', 'unit_price', 'discount', 'product_id', 'addons'].map((f) => errors[`lines.${i}.${f}`]).find(Boolean) ?? Object.entries(errors).find(([k]) => k.startsWith(`lines.${i}.addons.`))?.[1];
 
     return (
         <ClubLayout title={draft ? 'مسودة فاتورة' : 'إنشاء فاتورة'}>
@@ -328,6 +370,7 @@ export default function InvoiceCreate({ products, catalog_truncated, tax_rate, d
                         <div className="mb-4 flex flex-wrap items-center gap-2">
                             <h2 className="me-auto text-[15px] font-bold text-ink">الأصناف</h2>
                             {products.length > 0 && <Button variant="outline" size="sm" icon={<Search />} onClick={() => setPicking(true)}>منتج من الكتالوج</Button>}
+                            {products.length > 0 && <Button variant="outline" size="sm" icon={<PlusCircle />} onClick={() => setPickingAddon(true)}>إضافة من الإضافات</Button>}
                             <Button size="sm" icon={<Plus />} onClick={() => setLines((p) => [...p, blank()])} disabled={lines.length >= 50}>إضافة صنف</Button>
                             <Button variant="outline" size="sm" className="text-[#b91c1c]" title="تفريغ كل البنود" aria-label="تفريغ كل البنود" icon={<Trash2 />} onClick={() => setLines([blank()])} />
                         </div>
@@ -346,6 +389,7 @@ export default function InvoiceCreate({ products, catalog_truncated, tax_rate, d
                             {lines.map((line, i) => {
                                 const product = productOf(line);
                                 const short = product?.track_stock && product.stock !== null && N(line.quantity) > product.stock;
+                                const offered = fitting(product);
                                 return (
                                     <div key={i} className={cn(LINE_GRID, 'grid-cols-[1.25rem_minmax(0,1fr)_2.25rem] items-start border-b border-line py-3 last:border-b-0')}>
                                         <span className="pt-2.5 text-[#9ca3af] num">{i + 1}</span>
@@ -367,6 +411,41 @@ export default function InvoiceCreate({ products, catalog_truncated, tax_rate, d
                                             <LineField label={`الخصم (${symbol})`}><Input dir="ltr" inputMode="decimal" value={line.discount} onChange={(e) => setLine(i, { discount: e.target.value })} aria-label={`خصم البند ${i + 1}`} /></LineField>
                                             <LineField label={`الإجمالي (${symbol})`}><span className="flex h-10 items-center font-semibold tabular-nums text-ink" aria-label={`إجمالي البند ${i + 1}`}>{lineNet(line).toFixed(3)}</span></LineField>
                                         </div>
+                                        {/* The product's add-ons, each billed on its own line under it: how many per piece. */}
+                                        {(line.addons.length > 0 || offered.length > 0) && (
+                                            <div className="col-[2/-1] space-y-1.5">
+                                                {line.addons.map((a) => {
+                                                    const option = addonById.get(a.id);
+                                                    const fits = option !== undefined && product !== undefined && product.addons.includes(a.id);
+                                                    const name = option?.name ?? a.name ?? 'إضافة';
+                                                    const count = units(line.quantity, a.qty);
+                                                    const short = fits && option.left !== null && count > option.left - usedBy(a.id, i);
+                                                    return (
+                                                        // Narrow: the name on its row, the count and the amount under it.
+                                                        <div key={a.id} className={cn('flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-[10px] border px-3 py-2', fits ? 'border-[#ede9fe] bg-[#faf9ff]' : 'border-[#fecaca] bg-[#fef2f2]')} data-testid="line-addon">
+                                                            <PlusCircle className="size-4 shrink-0 text-[#7c3aed]" />
+                                                            <div className="min-w-44 flex-1">
+                                                                <p className="truncate text-[13px] font-medium text-ink">{name}</p>
+                                                                <p className={cn('text-[11px]', fits && !short ? 'text-[#9ca3af]' : 'text-[#b91c1c]')}>
+                                                                    {fits ? <><span className="num">{m(option.price)}</span> للواحدة · <span className="num">{count}</span> مع الكمية{short && ' — المتوفر لا يكفي'}</> : 'لم تعد متاحة مع هذا الصنف — احذفها'}
+                                                                </p>
+                                                            </div>
+                                                            <div className="ms-auto flex items-center gap-3">
+                                                                {fits && <Stepper size="sm" value={a.qty} min={1} max={Math.min(option.max, Math.max(perPiece(option, N(line.quantity), i), a.qty))} label={`${name} لكل قطعة`} onChange={(v) => setAddon(i, a.id, v)} />}
+                                                                <span className="w-16 text-end text-[13px] font-semibold tabular-nums text-ink">{fits ? addonAmount(option.price, count).toFixed(3) : '—'}</span>
+                                                                <button type="button" className="grid size-7 place-items-center rounded-[8px] text-[#b91c1c] hover:bg-[#fee2e2]" aria-label={`حذف ${name} من البند ${i + 1}`} title="حذف الإضافة" onClick={() => setAddon(i, a.id, 0)}><X className="size-4" /></button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {offered.length > 0 && (
+                                                    <button type="button" onClick={() => setEditing(i)} className="flex items-center gap-1 text-[12px] font-medium text-[#6d28d9] hover:underline [&_svg]:size-3.5">
+                                                        <PlusCircle />
+                                                        {line.addons.length > 0 ? 'تعديل الإضافات' : <>إضافات متاحة (<span className="num">{offered.length}</span>)</>}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -526,7 +605,20 @@ export default function InvoiceCreate({ products, catalog_truncated, tax_rate, d
                 </div>
             </div>
 
-            <ProductDialog open={picking} onClose={() => setPicking(false)} products={products} truncated={catalog_truncated} picked={lines.map((l) => Number(l.product_id)).filter((n) => n > 0)} onPick={pickProduct} />
+            <ProductDialog open={picking} onClose={() => setPicking(false)} products={products} truncated={catalog_truncated} picked={lines.map((l) => Number(l.product_id)).filter((n) => n > 0)} addonsOf={fitting} room={(a, quantity) => perPiece(a, quantity)} onPick={pickProduct} />
+            <AddonsDialog open={pickingAddon} onClose={() => setPickingAddon(false)} addons={addons} products={products} lines={lines} productOf={productOf} room={perPiece} onAttach={attach} />
+            {editing !== null && lines[editing] && (
+                <LineAddonsDialog
+                    line={lines[editing]}
+                    options={fitting(productOf(lines[editing]))}
+                    room={(a) => perPiece(a, N(lines[editing].quantity), editing)}
+                    onClose={() => setEditing(null)}
+                    onSave={(chosen) => {
+                        setLines((prev) => prev.map((l, k) => (k === editing ? { ...l, addons: chosen } : l)));
+                        setEditing(null);
+                    }}
+                />
+            )}
 
             {draft && (
                 <Modal
@@ -572,12 +664,53 @@ function SumRow({ label, value, strong }: { label: string; value: string; strong
     );
 }
 
-/** منتج من الكتالوج: search by name, code or barcode; arrows and Enter pick; it stays open to add several lines. */
-function ProductDialog({ open, onClose, products, truncated, picked, onPick }: { open: boolean; onClose: () => void; products: Product[]; truncated: boolean; picked: number[]; onPick: (p: Product) => void }) {
+/**
+ * A product's add-ons as at the point of sale: how many of each per piece, within its limit and what the shelf allows
+ * (room). One that the shelf cannot give is shown, greyed, as out of stock.
+ */
+function AddonChoices({ options, chosen, onChange, room }: { options: Addon[]; chosen: Record<number, number>; onChange: (next: Record<number, number>) => void; room: (a: Addon) => number }) {
+    const currency = useCurrency();
+    return (
+        <div>
+            <p className="mb-2 text-[13px] font-semibold text-[#4b4b4b]">الإضافات <span className="font-normal text-[#9ca3af]">(لكل قطعة)</span></p>
+            <ul className="space-y-2" aria-label="الإضافات">
+                {options.map((a) => {
+                    const qty = chosen[a.id] ?? 0;
+                    const cap = Math.min(a.max, Math.max(room(a), qty));
+                    const out = cap < 1;
+                    return (
+                        <li key={a.id} className={cn('flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2', qty > 0 ? 'border-[#c4b5fd] bg-[#faf9ff]' : 'border-line', out && 'opacity-60')}>
+                            <div className="min-w-0">
+                                <p className="truncate text-[13px] font-medium text-ink">{a.name}<span className="ms-2 text-[12px] font-bold text-[#7c3aed]"><span className="num">+{money(a.price, currency)}</span></span></p>
+                                <p className="text-[11px] text-[#9ca3af]">
+                                    {out ? <span className="text-[#b91c1c]">نفدت من المخزون</span> : <>{a.max > 1 ? <>حتى <span className="num">{a.max}</span> لكل قطعة</> : 'واحدة لكل قطعة'}{a.left !== null && <> · المتوفر <span className="num">{a.left}</span></>}</>}
+                                    {a.description && <> · {a.description}</>}
+                                </p>
+                            </div>
+                            <Stepper size="sm" value={qty} min={0} max={cap} label={a.name} onChange={(v) => onChange({ ...chosen, [a.id]: v })} />
+                        </li>
+                    );
+                })}
+            </ul>
+        </div>
+    );
+}
+
+/** The chosen add-ons, in the order they are offered. */
+const chosenList = (options: Addon[], chosen: Record<number, number>): ChosenAddon[] => options.flatMap((a) => ((chosen[a.id] ?? 0) > 0 ? [{ id: a.id, qty: chosen[a.id] }] : []));
+
+/**
+ * منتج من الكتالوج: search by name, code or barcode; arrows and Enter pick; it stays open to add several lines. A product
+ * with add-ons opens them first — the pieces and how many of each add-on per piece — or is added without them.
+ */
+function ProductDialog({ open, onClose, products, truncated, picked, addonsOf, room, onPick }: { open: boolean; onClose: () => void; products: Product[]; truncated: boolean; picked: number[]; addonsOf: (p: Product) => Addon[]; room: (a: Addon, quantity: number) => number; onPick: (p: Product, quantity?: number, chosen?: ChosenAddon[]) => void }) {
     const currency = useCurrency();
     const [q, setQ] = useState('');
     const [active, setActive] = useState(0);
     const [added, setAdded] = useState(0);
+    const [choosing, setChoosing] = useState<Product | null>(null);
+    const [quantity, setQuantity] = useState(1);
+    const [chosen, setChosen] = useState<Record<number, number>>({});
     const list = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -585,6 +718,7 @@ function ProductDialog({ open, onClose, products, truncated, picked, onPick }: {
             setQ('');
             setActive(0);
             setAdded(0);
+            setChoosing(null);
         }
     }, [open]);
 
@@ -596,10 +730,19 @@ function ProductDialog({ open, onClose, products, truncated, picked, onPick }: {
         list.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
     }, [active]);
 
-    const take = (p: Product) => {
-        onPick(p);
+    const options = choosing ? addonsOf(choosing) : [];
+    const picks = chosenList(options, chosen);
+    const add = (p: Product, qty = 1, with_: ChosenAddon[] = []) => {
+        onPick(p, qty, with_);
         setAdded((n) => n + 1);
         setQ('');
+        setChoosing(null);
+    };
+    const take = (p: Product) => {
+        if (addonsOf(p).length === 0) return add(p);
+        setChoosing(p);
+        setQuantity(1);
+        setChosen({});
     };
     const onKey = (e: KeyboardEvent) => {
         if (shown.length === 0) return;
@@ -615,46 +758,274 @@ function ProductDialog({ open, onClose, products, truncated, picked, onPick }: {
         }
     };
 
+    // The pieces: as many as the shelf has left when the product is counted (one at least: a draft may wait for stock).
+    const pieces = choosing?.track_stock ? Math.max(1, Math.min(999, Math.floor(choosing.stock ?? 0))) : 999;
+
     return (
         <Modal
             open={open}
             onClose={onClose}
             size="wide"
-            title="منتج من الكتالوج"
-            description="ابحث بالاسم أو رمز الصنف أو الباركود — والنافذة تبقى مفتوحة لتضيف أكثر من بند."
-            footer={<>{added > 0 && <span className="me-auto text-[12px] text-[#047857]">أُضيف <span className="num">{added}</span> بندًا</span>}<Button variant="outline" onClick={onClose}>تمّ</Button></>}
+            title={choosing ? choosing.name : 'منتج من الكتالوج'}
+            description={choosing ? 'اختر الإضافات لكل قطعة — أو أضف المنتج بدونها.' : 'ابحث بالاسم أو رمز الصنف أو الباركود — والنافذة تبقى مفتوحة لتضيف أكثر من بند.'}
+            footer={choosing ? (
+                <>
+                    <span className="me-auto text-[13px] text-[#6b7280]">الإجمالي <span className="font-bold text-ink num">{money(lineTotal(choosing.price, quantity, picks, options), currency)}</span></span>
+                    <Button variant="outline" onClick={() => setChoosing(null)}>رجوع</Button>
+                    <Button icon={<Check />} onClick={() => add(choosing, quantity, picks)}>إضافة للفاتورة</Button>
+                </>
+            ) : (
+                <>{added > 0 && <span className="me-auto text-[12px] text-[#047857]">أُضيف <span className="num">{added}</span> بندًا</span>}<Button variant="outline" onClick={onClose}>تمّ</Button></>
+            )}
         >
-            <div className="relative">
-                <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[#9ca3af]" />
-                <Input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder="اسم الصنف أو رمزه أو الباركود" className="ps-9" aria-label="بحث في الكتالوج" />
-            </div>
-            <div ref={list} className="mt-2 max-h-80 overflow-y-auto" role="listbox" aria-label="المنتجات">
-                {shown.map((p, i) => (
-                    <button
-                        key={p.id}
-                        type="button"
-                        role="option"
-                        aria-selected={i === active}
-                        data-active={i === active}
-                        onMouseEnter={() => setActive(i)}
-                        onClick={() => take(p)}
-                        className={cn('flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-start text-[13px]', i === active ? 'bg-[#f1f1ef]' : 'hover:bg-[#f7f7f5]')}
-                    >
-                        <span className="min-w-0 flex-1">
-                            <span className="block truncate text-ink">{p.name}</span>
-                            <span className="block truncate text-[11px] text-[#9ca3af]">
-                                {[p.sku, p.barcode].filter(Boolean).join(' · ') || (p.track_stock ? '' : 'خدمة')}
-                                {p.track_stock && <> {p.sku || p.barcode ? '·' : ''} المتوفر <span className="num">{p.stock ?? 0}</span></>}
-                            </span>
-                        </span>
-                        {picked.includes(p.id) && <span className="shrink-0 rounded-full bg-[#eff6ff] px-2 py-0.5 text-[11px] text-[#1d4ed8]">في الفاتورة</span>}
-                        <span className="shrink-0 tabular-nums text-[#6b7280]">{money(p.price, currency)}</span>
-                    </button>
-                ))}
-                {shown.length === 0 && <p className="p-4 text-center text-[12px] text-[#9ca3af]">{products.length === 0 ? 'لا أصناف في الكتالوج بعد — تُضاف من صفحة المنتجات.' : 'لا صنف بهذا الاسم أو الرمز'}</p>}
-                {matched.length > shown.length && <p className="p-3 text-center text-[11px] text-[#9ca3af]">عُرض <span className="num">{shown.length}</span> من <span className="num">{matched.length}</span> — ضيّق البحث</p>}
-            </div>
-            {truncated && needle === '' && <p className="mt-1 text-[11px] text-[#b45309]">الكتالوج أكبر ممّا يُحمَّل هنا — ابحث بالاسم أو الرمز للوصول إلى الباقي.</p>}
+            {choosing ? (
+                <div className="space-y-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-[13px] text-[#6b7280]">
+                            السعر <span className="font-semibold text-ink num">{money(choosing.price, currency)}</span>
+                            {choosing.track_stock && <> · المتوفر <span className={cn('num', (choosing.stock ?? 0) < quantity ? 'text-[#b91c1c]' : 'text-ink')}>{choosing.stock ?? 0}</span></>}
+                        </p>
+                        <Stepper value={quantity} onChange={setQuantity} min={1} max={pieces} label="الكمية" />
+                    </div>
+                    <AddonChoices options={options} chosen={chosen} onChange={setChosen} room={(a) => room(a, quantity)} />
+                </div>
+            ) : (
+                <>
+                    <div className="relative">
+                        <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[#9ca3af]" />
+                        <Input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder="اسم الصنف أو رمزه أو الباركود" className="ps-9" aria-label="بحث في الكتالوج" />
+                    </div>
+                    <div ref={list} className="mt-2 max-h-80 overflow-y-auto" role="listbox" aria-label="المنتجات">
+                        {shown.map((p, i) => (
+                            <button
+                                key={p.id}
+                                type="button"
+                                role="option"
+                                aria-selected={i === active}
+                                data-active={i === active}
+                                onMouseEnter={() => setActive(i)}
+                                onClick={() => take(p)}
+                                className={cn('flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-start text-[13px]', i === active ? 'bg-[#f1f1ef]' : 'hover:bg-[#f7f7f5]')}
+                            >
+                                <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-ink">{p.name}</span>
+                                    <span className="block truncate text-[11px] text-[#9ca3af]">
+                                        {[p.sku, p.barcode].filter(Boolean).join(' · ') || (p.track_stock ? '' : 'خدمة')}
+                                        {p.track_stock && <> {p.sku || p.barcode ? '·' : ''} المتوفر <span className="num">{p.stock ?? 0}</span></>}
+                                        {addonsOf(p).length > 0 && <span className="text-[#7c3aed]"> · إضافات</span>}
+                                    </span>
+                                </span>
+                                {picked.includes(p.id) && <span className="shrink-0 rounded-full bg-[#eff6ff] px-2 py-0.5 text-[11px] text-[#1d4ed8]">في الفاتورة</span>}
+                                <span className="shrink-0 tabular-nums text-[#6b7280]">{money(p.price, currency)}</span>
+                            </button>
+                        ))}
+                        {shown.length === 0 && <p className="p-4 text-center text-[12px] text-[#9ca3af]">{products.length === 0 ? 'لا أصناف في الكتالوج بعد — تُضاف من صفحة المنتجات.' : 'لا صنف بهذا الاسم أو الرمز'}</p>}
+                        {matched.length > shown.length && <p className="p-3 text-center text-[11px] text-[#9ca3af]">عُرض <span className="num">{shown.length}</span> من <span className="num">{matched.length}</span> — ضيّق البحث</p>}
+                    </div>
+                    {truncated && needle === '' && <p className="mt-1 text-[11px] text-[#b45309]">الكتالوج أكبر ممّا يُحمَّل هنا — ابحث بالاسم أو الرمز للوصول إلى الباقي.</p>}
+                </>
+            )}
+        </Modal>
+    );
+}
+
+/** A product line's add-ons, changed from the line: how many of each per piece of its quantity. */
+function LineAddonsDialog({ line, options, room, onClose, onSave }: { line: Line; options: Addon[]; room: (a: Addon) => number; onClose: () => void; onSave: (chosen: LineAddon[]) => void }) {
+    const currency = useCurrency();
+    const [chosen, setChosen] = useState<Record<number, number>>(() => Object.fromEntries(line.addons.map((a) => [a.id, a.qty])));
+    const picks = chosenList(options, chosen);
+    const total = picks.reduce((t, a) => t + addonAmount(options.find((o) => o.id === a.id)?.price ?? '0', units(line.quantity, a.qty)), 0);
+
+    return (
+        <Modal
+            open
+            onClose={onClose}
+            size="md"
+            title={`إضافات «${line.description || 'البند'}»`}
+            description={<>لكل قطعة من <span className="num">{N(line.quantity)}</span> — وكل إضافة بند مستقل تحت المنتج في الفاتورة.</>}
+            footer={<>
+                <span className="me-auto text-[13px] text-[#6b7280]">الإضافات <span className="font-bold text-ink num">{money(total, currency)}</span></span>
+                <Button variant="outline" onClick={onClose}>إلغاء</Button>
+                <Button icon={<Check />} onClick={() => onSave(picks)}>حفظ الإضافات</Button>
+            </>}
+        >
+            <AddonChoices options={options} chosen={chosen} onChange={setChosen} room={room} />
+        </Modal>
+    );
+}
+
+/**
+ * إضافة من الإضافات: the add-ons offered, searched by name; one chosen goes with a product — a line of the invoice it
+ * fits, or a catalogue product it goes with on a new line — how many per piece, within its limit and the shelf. Only what
+ * the add-on goes with is offered. The dialog stays open to add several.
+ */
+function AddonsDialog({ open, onClose, addons, products, lines, productOf, room, onAttach }: { open: boolean; onClose: () => void; addons: Addon[]; products: Product[]; lines: Line[]; productOf: (l: Line) => Product | undefined; room: (a: Addon, quantity: number, except?: number) => number; onAttach: (id: number, qty: number, target: Target) => void }) {
+    const currency = useCurrency();
+    const [q, setQ] = useState('');
+    const [active, setActive] = useState(0);
+    const [added, setAdded] = useState(0);
+    const [addon, setAddon] = useState<Addon | null>(null);
+    const [target, setTarget] = useState<Target | null>(null);
+    const [qty, setQty] = useState(1);
+    const [pq, setPq] = useState('');
+    const list = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (open) {
+            setQ('');
+            setActive(0);
+            setAdded(0);
+            setAddon(null);
+        }
+    }, [open]);
+
+    const needle = q.trim().toLowerCase();
+    const shown = needle === '' ? addons : addons.filter((a) => [a.name, a.description ?? '', a.scope].some((v) => v.toLowerCase().includes(needle)));
+    useEffect(() => setActive(0), [q]);
+    useEffect(() => {
+        list.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
+    }, [active]);
+    const onLines = (a: Addon) => lines.some((l) => l.addons.some((x) => x.id === a.id));
+
+    // What the chosen add-on goes with: the invoice's lines it fits, and catalogue products for a new line.
+    const fitLines = addon ? lines.flatMap((l, i) => (productOf(l)?.addons.includes(addon.id) ? [{ line: l, i }] : [])) : [];
+    const pneedle = pq.trim().toLowerCase();
+    const fitProducts = addon ? products.filter((p) => p.addons.includes(addon.id) && (pneedle === '' || [p.name, p.sku ?? '', p.barcode ?? ''].some((v) => v.toLowerCase().includes(pneedle)))) : [];
+    const on = target && 'line' in target ? lines[target.line] : undefined;
+    const pieces = on ? N(on.quantity) : 1;
+    const already = on?.addons.find((x) => x.id === addon?.id)?.qty ?? 0;
+    const cap = addon ? Math.min(addon.max, Math.max(room(addon, pieces, target && 'line' in target ? target.line : -1), 0)) : 0;
+
+    const choose = (a: Addon) => {
+        const first = lines.flatMap((l, i) => (productOf(l)?.addons.includes(a.id) ? [i] : []));
+        setAddon(a);
+        setPq('');
+        setTarget(first.length === 1 ? { line: first[0] } : null);
+        setQty(Math.max(1, lines[first[0]]?.addons.find((x) => x.id === a.id)?.qty ?? 1));
+    };
+    const aim = (t: Target) => {
+        setTarget(t);
+        setQty(Math.max(1, 'line' in t ? (lines[t.line].addons.find((x) => x.id === addon?.id)?.qty ?? 1) : 1));
+    };
+    const confirm = () => {
+        if (!addon || !target) return;
+        onAttach(addon.id, Math.min(qty, cap), target);
+        setAdded((n) => n + 1);
+        setAddon(null);
+        setQ('');
+    };
+    const onKey = (e: KeyboardEvent) => {
+        if (shown.length === 0) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setActive((i) => (i + 1) % shown.length);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setActive((i) => (i - 1 + shown.length) % shown.length);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            choose(shown[active] ?? shown[0]);
+        }
+    };
+    const isTarget = (t: Target) => target !== null && ('line' in t ? 'line' in target && target.line === t.line : 'product' in target && target.product.id === t.product.id);
+
+    return (
+        <Modal
+            open={open}
+            onClose={onClose}
+            size="wide"
+            title={addon ? addon.name : 'إضافة من الإضافات'}
+            description={addon ? <>{addon.scope} · <span className="num">{money(addon.price, currency)}</span> للواحدة · {addon.max > 1 ? <>حتى <span className="num">{addon.max}</span> لكل قطعة</> : 'واحدة لكل قطعة'}</> : 'الإضافات المفعّلة في نقطة البيع — كل إضافة تُباع مع صنف من الكتالوج.'}
+            footer={addon ? (
+                <>
+                    <span className="me-auto text-[13px] text-[#6b7280]">{target ? <>الإضافة <span className="font-bold text-ink num">{money(addonAmount(addon.price, units(pieces, Math.min(qty, cap))), currency)}</span></> : 'اختر الصنف أولًا'}</span>
+                    <Button variant="outline" onClick={() => setAddon(null)}>رجوع</Button>
+                    <Button icon={<Check />} disabled={!target || cap < 1} onClick={confirm}>{already > 0 ? 'تحديث الإضافة' : 'إضافة للفاتورة'}</Button>
+                </>
+            ) : (
+                <>{added > 0 && <span className="me-auto text-[12px] text-[#047857]">أُضيفت <span className="num">{added}</span></span>}<Button variant="outline" onClick={onClose}>تمّ</Button></>
+            )}
+        >
+            {addon ? (
+                <div className="space-y-4">
+                    <div>
+                        <p className="mb-2 text-[13px] font-semibold text-[#4b4b4b]">مع أي صنف؟</p>
+                        {fitLines.length > 0 && (
+                            <div className="mb-3 space-y-1.5" role="radiogroup" aria-label="أصناف الفاتورة">
+                                <p className="text-[11px] text-[#9ca3af]">من أصناف الفاتورة</p>
+                                {fitLines.map(({ line, i }) => {
+                                    const has = line.addons.find((x) => x.id === addon.id);
+                                    return (
+                                        <button key={i} type="button" role="radio" aria-checked={isTarget({ line: i })} onClick={() => aim({ line: i })} className={cn('flex w-full items-center gap-3 rounded-[10px] border px-3 py-2 text-start text-[13px]', isTarget({ line: i }) ? 'border-[#111] bg-[#fafafa]' : 'border-line hover:bg-[#fafafa]')}>
+                                            <span className="text-[#9ca3af] num">{i + 1}</span>
+                                            <span className="min-w-0 flex-1 truncate text-ink">{line.description}</span>
+                                            {has && <span className="shrink-0 rounded-full bg-[#f5f3ff] px-2 py-0.5 text-[11px] text-[#6d28d9]">مضافة ×<span className="num">{has.qty}</span></span>}
+                                            <span className="shrink-0 text-[12px] text-[#6b7280]">الكمية <span className="num">{N(line.quantity)}</span></span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        <p className="mb-1.5 text-[11px] text-[#9ca3af]">{fitLines.length > 0 ? 'أو صنف جديد من الكتالوج' : 'صنف من الكتالوج — يُضاف بندًا بكمية 1'}</p>
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[#9ca3af]" />
+                            <Input value={pq} onChange={(e) => setPq(e.target.value)} placeholder="ابحث عن الصنف" className="ps-9" aria-label="بحث عن صنف للإضافة" />
+                        </div>
+                        <div className="mt-1.5 max-h-44 overflow-y-auto" role="radiogroup" aria-label="أصناف الكتالوج">
+                            {fitProducts.slice(0, 20).map((p) => (
+                                <button key={p.id} type="button" role="radio" aria-checked={isTarget({ product: p })} onClick={() => aim({ product: p })} className={cn('flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-start text-[13px]', isTarget({ product: p }) ? 'bg-[#f1f1ef] font-medium' : 'hover:bg-[#f7f7f5]')}>
+                                    <span className="min-w-0 flex-1 truncate text-ink">{p.name}</span>
+                                    {p.track_stock && <span className="shrink-0 text-[11px] text-[#9ca3af]">المتوفر <span className="num">{p.stock ?? 0}</span></span>}
+                                    <span className="shrink-0 tabular-nums text-[#6b7280]">{money(p.price, currency)}</span>
+                                </button>
+                            ))}
+                            {fitProducts.length === 0 && <p className="p-3 text-center text-[12px] text-[#9ca3af]">{pneedle ? 'لا صنف بهذا الاسم تُباع معه هذه الإضافة' : 'لا صنف في الكتالوج تُباع معه هذه الإضافة'}</p>}
+                        </div>
+                    </div>
+                    {target && (
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-line px-3 py-2.5">
+                            <p className="text-[13px] text-[#4b4b4b]">
+                                الكمية لكل قطعة
+                                <span className="block text-[11px] text-[#9ca3af]">{cap < 1 ? <span className="text-[#b91c1c]">نفدت من المخزون</span> : <><span className="num">{units(pieces, Math.min(qty, cap))}</span> مع الكمية{addon.left !== null && <> · المتوفر <span className="num">{addon.left}</span></>}</>}</span>
+                            </p>
+                            <Stepper size="sm" value={Math.min(qty, Math.max(cap, 1))} min={1} max={Math.max(cap, 1)} label={`${addon.name} لكل قطعة`} onChange={setQty} />
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <>
+                    <div className="relative">
+                        <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[#9ca3af]" />
+                        <Input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder="اسم الإضافة" className="ps-9" aria-label="بحث في الإضافات" />
+                    </div>
+                    <div ref={list} className="mt-2 max-h-80 overflow-y-auto" role="listbox" aria-label="الإضافات المتاحة">
+                        {shown.map((a, i) => (
+                            <button
+                                key={a.id}
+                                type="button"
+                                role="option"
+                                aria-selected={i === active}
+                                data-active={i === active}
+                                onMouseEnter={() => setActive(i)}
+                                onClick={() => choose(a)}
+                                className={cn('flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-start text-[13px]', i === active ? 'bg-[#f1f1ef]' : 'hover:bg-[#f7f7f5]', a.available === false && 'opacity-60')}
+                            >
+                                <PlusCircle className="size-4 shrink-0 text-[#7c3aed]" />
+                                <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-ink">{a.name}</span>
+                                    <span className="block truncate text-[11px] text-[#9ca3af]">
+                                        {a.scope}
+                                        {a.available === false ? <span className="text-[#b91c1c]"> · نفدت</span> : a.left !== null && <> · المتوفر <span className="num">{a.left}</span></>}
+                                    </span>
+                                </span>
+                                {onLines(a) && <span className="shrink-0 rounded-full bg-[#eff6ff] px-2 py-0.5 text-[11px] text-[#1d4ed8]">في الفاتورة</span>}
+                                <span className="shrink-0 font-semibold tabular-nums text-[#7c3aed]">+{money(a.price, currency)}</span>
+                            </button>
+                        ))}
+                        {shown.length === 0 && <p className="p-4 text-center text-[12px] text-[#9ca3af]">{addons.length === 0 ? 'لا إضافات مفعّلة في نقطة البيع — تُضاف من صفحة الإضافات.' : 'لا إضافة بهذا الاسم'}</p>}
+                    </div>
+                </>
+            )}
         </Modal>
     );
 }

@@ -5,6 +5,7 @@ namespace App\Modules\Inventory\Http\Controllers;
 use App\Core\Support\SubmittedOnce;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
+use App\Modules\Finance\Models\Invoice;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Models\ProductCategory;
@@ -44,6 +45,11 @@ class ProductAddonController extends Controller
         $sold = DB::table('sale_item_addons as sa')->join('sale_items as si', 'si.id', '=', 'sa.sale_item_id')->join('sales as s', 's.id', '=', 'si.sale_id')
             ->where('s.status', 'completed')->whereIn('sa.product_addon_id', $addons->pluck('id'))
             ->selectRaw('sa.product_addon_id, sum(sa.quantity * si.quantity) as n')->groupBy('sa.product_addon_id')->pluck('n', 'product_addon_id');
+        // Sold on customer invoices too: an add-on line under its product, on an invoice issued and not voided.
+        $invoiced = DB::table('invoice_items as ii')->join('invoices as i', 'i.id', '=', 'ii.invoice_id')
+            ->where('ii.itemable_type', 'product_addon')->whereNotNull('ii.parent_id')->whereNotIn('i.status', [Invoice::DRAFT, Invoice::VOID])
+            ->whereIn('ii.itemable_id', $addons->pluck('id'))
+            ->selectRaw('ii.itemable_id, sum(ii.quantity) as n')->groupBy('ii.itemable_id')->pluck('n', 'itemable_id');
 
         return Inertia::render('Inventory/Addons/Index', [
             'addons' => $addons->map(fn (ProductAddon $a) => [
@@ -64,7 +70,7 @@ class ProductAddonController extends Controller
                 'stock_product' => $a->stockProduct?->name,
                 'stock_usage' => $a->stock_usage,
                 'stock_left' => $a->stockProduct?->track_stock ? $a->stockProduct->stock_quantity : null,
-                'sold' => round((float) ($sold[$a->id] ?? 0), 3),
+                'sold' => round((float) ($sold[$a->id] ?? 0) + (float) ($invoiced[$a->id] ?? 0), 3),
             ]),
             'counts' => ['all' => (int) $counts->total, 'active' => (int) $counts->active, 'inactive' => (int) $counts->inactive],
             'products' => Product::with('category:id,name')->orderBy('name')->get(['id', 'name', 'product_category_id', 'is_active', 'track_stock', 'stock_quantity'])

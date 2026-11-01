@@ -46,7 +46,7 @@ final class InvoiceService
                 'public_token' => Str::random(48),
                 'created_by' => Auth::guard('web')->id(),
             ])->save();
-            $invoice->items()->saveMany($items);
+            self::keepItems($invoice, $items);
 
             // Nothing to collect (fully discounted, upgrade credit covers it): it is paid on issue.
             if (Money::isZero($invoice->total)) {
@@ -89,7 +89,9 @@ final class InvoiceService
     }
 
     /**
-     * @param  list<array{description: string, quantity?: int|float|string, unit_price: string|int|float, discount?: string|int|float|null, itemable?: Model|null}>  $lines
+     * A line may name the earlier line it goes with (parent: its index in $lines) — an add-on under its product.
+     *
+     * @param  list<array{description: string, quantity?: int|float|string, unit_price: string|int|float, discount?: string|int|float|null, itemable?: Model|null, parent?: int|null}>  $lines
      * @param  array<string, mixed>  $options
      */
     private function compose(?Billable $billable, array $lines, array $options, ?string $customerName): Invoice
@@ -111,7 +113,7 @@ final class InvoiceService
             $subtotal += $gross;
             $discount += $lineDiscount;
             $itemable = $line['itemable'] ?? null;
-            $items[] = new InvoiceItem([
+            $item = new InvoiceItem([
                 'description' => Str::limit($line['description'], 250),
                 'quantity' => $qty,
                 'unit_price' => Money::normalize($line['unit_price']),
@@ -120,6 +122,10 @@ final class InvoiceService
                 'itemable_type' => $itemable?->getMorphClass(),
                 'itemable_id' => $itemable?->getKey(),
             ]);
+            if (isset($line['parent'])) {
+                $item->setRelation('parent', $items[$line['parent']] ?? throw new BusinessRuleException('invoice.line', 'بند غير صالح في الفاتورة.'));
+            }
+            $items[] = $item;
         }
 
         $taxRate = (float) ($options['tax_rate'] ?? $tenant->setting('vat_rate', 0));
@@ -158,6 +164,21 @@ final class InvoiceService
         ]);
 
         return $invoice->setRelation('items', new Collection($items));
+    }
+
+    /**
+     * Save the lines of an invoice (or a draft) in their order, each add-on line under the product line it goes with.
+     *
+     * @param  iterable<InvoiceItem>  $items  from draft()
+     */
+    public static function keepItems(Invoice $invoice, iterable $items): void
+    {
+        foreach ($items as $item) {
+            if ($item->relationLoaded('parent')) {
+                $item->parent_id = $item->getRelation('parent')->getKey();
+            }
+            $invoice->items()->save($item);
+        }
     }
 
     public function void(Invoice $invoice, string $reason): Invoice
