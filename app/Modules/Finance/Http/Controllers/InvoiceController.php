@@ -12,6 +12,7 @@ use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
+use App\Modules\Accounting\Rules\OpenPeriod;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\InvoiceAttachment;
 use App\Modules\Finance\Services\InvoiceService;
@@ -332,7 +333,7 @@ class InvoiceController extends Controller
             'customer_name' => [$preview ? 'nullable' : 'required_if:customer_mode,new', 'nullable', 'string', 'max:160'],
             'customer_phone' => ['nullable', 'string', 'max:32'],
             'customer_email' => ['nullable', 'email', 'max:160'],
-            'issue_date' => [$preview ? 'nullable' : 'required', 'date', ...($issue ? ['before_or_equal:today'] : [])],
+            'issue_date' => [$preview ? 'nullable' : 'required', 'date', ...($issue ? ['before_or_equal:today', new OpenPeriod] : [])],
             'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
             'payment_terms_days' => ['nullable', 'integer', 'min:0', 'max:365'],
             'notes' => ['nullable', 'string', 'max:500'],

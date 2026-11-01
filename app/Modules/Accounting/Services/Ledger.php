@@ -33,6 +33,8 @@ final class Ledger
             return $existing;
         }
 
+        // Nothing enters a closed period, whoever posts; a correction is posted in an open one.
+        app(AccountingPeriods::class)->assertOpen($header['date'], 'date');
         $prepared = $this->prepare($lines, $allowClosedAccounts);
 
         try {
@@ -63,10 +65,12 @@ final class Ledger
 
     /**
      * Post the mirror image of an entry and mark it reversed — once. Closed accounts may be reversed into, so an
-     * old mistake can always be undone.
+     * old mistake can always be undone; dated in a closed period, the reversal is posted today instead.
      */
     public function reverse(JournalEntry $entry, string $description, array $source = [], DateTimeInterface|string|null $date = null): JournalEntry
     {
+        $date = app(AccountingPeriods::class)->postingDate($date);
+
         return DB::transaction(function () use ($entry, $description, $source, $date) {
             $original = JournalEntry::whereKey($entry->id)->lockForUpdate()->firstOrFail();
             if ($original->reversed_at !== null || $original->reverses_id !== null && $source === []) {
@@ -74,7 +78,7 @@ final class Ledger
             }
 
             $mirror = $this->post([
-                'date' => $date ?? now(),
+                'date' => $date,
                 'description' => $description,
                 'branch_id' => $original->branch_id,
                 ...$source,

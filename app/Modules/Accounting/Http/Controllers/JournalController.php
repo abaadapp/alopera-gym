@@ -10,6 +10,7 @@ use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
+use App\Modules\Accounting\Rules\OpenPeriod;
 use App\Modules\Accounting\Services\Ledger;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -55,7 +56,7 @@ class JournalController extends Controller
     {
         $data = $request->validate([
             'client_key' => SubmittedOnce::RULE,
-            'date' => ['required', 'date', 'before_or_equal:today'],
+            'date' => ['required', 'date', 'before_or_equal:today', new OpenPeriod],
             'description' => ['required', 'string', 'max:255'],
             'lines' => ['required', 'array', 'min:2', 'max:30'],
             'lines.*.account_id' => ['required', 'integer', TenantRule::exists('gym_accounts')],

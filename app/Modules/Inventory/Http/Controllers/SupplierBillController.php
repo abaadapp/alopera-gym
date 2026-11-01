@@ -7,6 +7,7 @@ use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
+use App\Modules\Accounting\Rules\OpenPeriod;
 use App\Modules\Inventory\Http\Controllers\Concerns\ScopesBranches;
 use App\Modules\Inventory\Models\GoodsReceipt;
 use App\Modules\Inventory\Models\PurchaseOrder;
@@ -80,7 +81,7 @@ class SupplierBillController extends Controller
             'supplier_id' => ['required', TenantRule::exists('suppliers')->whereNull('deleted_at')],
             'purchase_order_id' => ['nullable', TenantRule::exists('purchase_orders')],
             'reference' => ['required', 'string', 'max:60'],
-            'issue_date' => ['required', 'date', 'before_or_equal:today'],
+            'issue_date' => ['required', 'date', 'before_or_equal:today', new OpenPeriod],
             'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
             'subtotal' => ['required', 'numeric', 'min:0.001', 'max:9999999'],
             'discount' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
@@ -139,7 +140,7 @@ class SupplierBillController extends Controller
         $data = $request->validate([
             'account_id' => ['required', TenantRule::exists('gym_accounts')],
             'amount' => ['required', 'numeric', 'min:0.001', 'max:9999999'],
-            'paid_on' => ['required', 'date', 'before_or_equal:today'],
+            'paid_on' => ['required', 'date', 'before_or_equal:today', new OpenPeriod],
             'reference' => ['nullable', 'string', 'max:120'],
             'notes' => ['nullable', 'string', 'max:255'],
             'client_key' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9-]+$/'],

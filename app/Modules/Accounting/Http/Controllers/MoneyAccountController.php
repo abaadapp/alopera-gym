@@ -10,6 +10,7 @@ use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
+use App\Modules\Accounting\Rules\OpenPeriod;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\FinanceReports;
 use App\Modules\Accounting\Services\Ledger;
@@ -117,7 +118,7 @@ class MoneyAccountController extends Controller
     public function opening(Request $request, Account $account): RedirectResponse
     {
         abort_unless($account->isMoney() && $account->isPostable(), 404);
-        $data = $request->validate(['amount' => ['required', 'numeric', 'min:0', 'max:999999999'], 'date' => ['required', 'date', 'before_or_equal:today']], [], ['amount' => 'الرصيد الافتتاحي']);
+        $data = $request->validate(['amount' => ['required', 'numeric', 'min:0', 'max:999999999'], 'date' => ['required', 'date', 'before_or_equal:today', new OpenPeriod]], [], ['amount' => 'الرصيد الافتتاحي']);
 
         DB::transaction(function () use ($account, $data) {
             $previous = JournalEntry::where(['source_type' => 'account', 'source_id' => $account->id, 'source_event' => 'opening'])->whereNull('reversed_at')->latest('revision')->first();
@@ -140,7 +141,7 @@ class MoneyAccountController extends Controller
             'from_id' => ['required', 'integer', 'different:to_id', TenantRule::exists('gym_accounts')],
             'to_id' => ['required', 'integer', TenantRule::exists('gym_accounts')],
             'amount' => ['required', 'numeric', 'gt:0', 'max:999999999'],
-            'date' => ['required', 'date', 'before_or_equal:today'],
+            'date' => ['required', 'date', 'before_or_equal:today', new OpenPeriod],
             'note' => ['nullable', 'string', 'max:200'],
         ], [], ['from_id' => 'من حساب', 'to_id' => 'إلى حساب', 'amount' => 'المبلغ']);
         $from = Account::money()->postable()->findOrFail($data['from_id']);

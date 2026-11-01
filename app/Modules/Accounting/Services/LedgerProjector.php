@@ -2,6 +2,7 @@
 
 namespace App\Modules\Accounting\Services;
 
+use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
@@ -121,7 +122,7 @@ final class LedgerProjector
         // Posted before the tax was split out (the whole amount to returns): the tax is moved to the VAT payable once.
         if (! Money::isZero($tax) && ! $issued->lines()->where('account_id', $vat->id)->exists()) {
             $this->ledger->post([
-                'date' => $note->created_at ?? now(),
+                'date' => app(AccountingPeriods::class)->postingDate($note->created_at),
                 'description' => "ضريبة الإشعار الدائن {$note->number} — تصحيح",
                 'branch_id' => $note->branch_id,
                 ...$this->key('credit_note', $note->id, 'tax'),
@@ -171,31 +172,44 @@ final class LedgerProjector
         ]);
     }
 
-    /** Post everything of the current club that is not in the books yet (records from before the books existed). */
+    /**
+     * Post everything of the current club that is not in the books yet (records from before the books existed). A
+     * record dated in a closed period is skipped and counted (the period's checks keep that from happening).
+     */
     public function syncClub(): array
     {
         $this->chart->ensure();
-        $counts = ['invoices' => 0, 'payments' => 0, 'credit_notes' => 0, 'expenses' => 0];
+        $counts = ['invoices' => 0, 'payments' => 0, 'credit_notes' => 0, 'expenses' => 0, 'skipped_closed' => 0];
         $before = JournalEntry::count();
+        $each = function (callable $post) use (&$counts) {
+            try {
+                $post();
+            } catch (BusinessRuleException $e) {
+                if ($e->rule !== 'period.closed') {
+                    throw $e;
+                }
+                $counts['skipped_closed']++;
+            }
+        };
 
-        Invoice::query()->orderBy('id')->each(function (Invoice $i) use (&$counts) {
-            $this->invoice($i);
+        Invoice::query()->orderBy('id')->each(function (Invoice $i) use (&$counts, $each) {
+            $each(fn () => $this->invoice($i));
             $counts['invoices']++;
         });
-        CreditNote::query()->orderBy('id')->each(function (CreditNote $n) use (&$counts) {
-            $this->creditNote($n);
+        CreditNote::query()->orderBy('id')->each(function (CreditNote $n) use (&$counts, $each) {
+            $each(fn () => $this->creditNote($n));
             $counts['credit_notes']++;
         });
-        Payment::query()->orderBy('id')->each(function (Payment $p) use (&$counts) {
-            $this->payment($p);
+        Payment::query()->orderBy('id')->each(function (Payment $p) use (&$counts, $each) {
+            $each(fn () => $this->payment($p));
             $counts['payments']++;
         });
-        Expense::withTrashed()->with('category')->orderBy('id')->each(function (Expense $e) use (&$counts) {
+        Expense::withTrashed()->with('category')->orderBy('id')->each(function (Expense $e) use (&$counts, $each) {
             // A record deleted before the books existed never reached them: nothing to post or reverse.
             if ($e->trashed() && ! $this->entry('expense', $e->id, 'record')) {
                 return;
             }
-            $this->expense($e, $e->trashed());
+            $each(fn () => $this->expense($e, $e->trashed()));
             $counts['expenses']++;
         });
 

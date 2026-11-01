@@ -7,6 +7,7 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Modules\Accounting\Models\Account;
+use App\Modules\Accounting\Services\AccountingPeriods;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\Ledger;
 use App\Modules\Gym\Models\StaffAttendance;
@@ -148,8 +149,10 @@ final class PayrollService
             $lines[] = ['account' => $this->chart->account('salaries_payable'), 'credit' => $run->net];
 
             // The month's salaries belong to that month: dated at its end, or today if it is not over yet.
+            $date = $run->period->endOfMonth()->min(today());
+            app(AccountingPeriods::class)->assertOpen($date, 'error', 'شهر المسيرة مقفل محاسبيًا؛ لا تُعتمد رواتبه بتاريخه. أعد فتح الفترة أولًا، أو أدرج التصحيح في مسيرة شهر مفتوح.');
             $this->ledger->post([
-                'date' => $run->period->endOfMonth()->min(today()),
+                'date' => $date,
                 'description' => "رواتب {$run->label()} — {$run->number}",
                 'source_type' => 'payroll_run', 'source_id' => $run->id, 'event' => 'approve',
             ], $lines);

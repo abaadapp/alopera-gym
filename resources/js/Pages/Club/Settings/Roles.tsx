@@ -14,7 +14,7 @@ const ACTIONS: [string, string, RegExp][] = [
     ['pos', 'نقطة البيع', /^(pos\.sell|sales\.discount|pos_devices\.manage)$/],
     ['print', 'طباعة', /(\.print|\.payslips)$/],
     ['export', 'تصدير', /(\.export|^payroll\.reports)$/],
-    ['approve', 'اعتماد', /(\.approve|\.confirm)$/],
+    ['approve', 'اعتماد', /(\.approve|\.confirm|\.close|\.reopen)$/],
     ['delete', 'حذف وإلغاء', /(\.delete|\.void|\.cancel|\.refund|\.credit)$/],
     ['view', 'عرض', /(\.view|\.inbox)$/],
     ['add', 'إضافة', /(\.create|\.sell|\.record|\.perform|\.prepare|\.mark|\.send|\.receive|\.renew)$/],

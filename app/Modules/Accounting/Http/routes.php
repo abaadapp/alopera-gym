@@ -5,6 +5,7 @@ use App\Modules\Accounting\Http\Controllers\FinanceController;
 use App\Modules\Accounting\Http\Controllers\FinanceSettingsController;
 use App\Modules\Accounting\Http\Controllers\JournalController;
 use App\Modules\Accounting\Http\Controllers\MoneyAccountController;
+use App\Modules\Accounting\Http\Controllers\PeriodController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -21,6 +22,17 @@ Route::prefix('finance')->name('finance.')->whereNumber(['account', 'entry'])->g
         Route::get('/banks', [MoneyAccountController::class, 'index'])->name('banks');
         Route::get('/accounts', [AccountController::class, 'index'])->name('accounts');
         Route::get('/journal', [JournalController::class, 'index'])->name('journal');
+        Route::get('/periods', [PeriodController::class, 'index'])->name('periods');
+    });
+
+    // Closing and reopening periods: each its own permission (the owner's alone unless given).
+    Route::middleware(['can:accounting.close', 'throttle:20,1'])->group(function () {
+        Route::post('/periods/close', [PeriodController::class, 'close'])->name('periods.close');
+        Route::post('/periods/years/close', [PeriodController::class, 'closeYear'])->name('periods.years.close');
+    });
+    Route::middleware(['can:accounting.reopen', 'throttle:20,1'])->group(function () {
+        Route::post('/periods/reopen', [PeriodController::class, 'reopen'])->name('periods.reopen');
+        Route::post('/periods/years/reopen', [PeriodController::class, 'reopenYear'])->name('periods.years.reopen');
     });
 
     Route::middleware('can:accounting.manage')->group(function () {

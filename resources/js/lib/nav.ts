@@ -124,6 +124,7 @@ export const NAV: NavGroup[] = [
                     { label: 'الحسابات البنكية', route: 'club.finance.banks', permission: 'accounting.view' },
                     { label: 'القيود اليومية', route: 'club.finance.journal', permission: 'accounting.view' },
                     { label: 'شجرة الحسابات', route: 'club.finance.accounts', permission: 'accounting.view' },
+                    { label: 'الفترات المحاسبية', route: 'club.finance.periods', permission: 'accounting.view' },
                 ],
             },
             {

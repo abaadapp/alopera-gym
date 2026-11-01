@@ -8,6 +8,7 @@ use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
+use App\Modules\Accounting\Services\AccountingPeriods;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\Ledger;
 use App\Modules\Inventory\Models\GoodsReceipt;
@@ -70,6 +71,7 @@ final class SupplierBillService
     {
         return DB::transaction(function () use ($bill) {
             $bill = $this->lock($bill, [SupplierBill::PENDING], 'السند معتمد مسبقًا أو مغلق.');
+            app(AccountingPeriods::class)->assertOpen($bill->issue_date, 'issue_date', 'تاريخ السند داخل فترة محاسبية مقفلة؛ صحّح تاريخه قبل الاعتماد أو اطلب إعادة فتح الفترة.');
             $order = $bill->purchase_order_id ? PurchaseOrder::whereKey($bill->purchase_order_id)->lockForUpdate()->first() : null;
             $this->check($bill->supplier, $order, ['reference' => $bill->reference, 'total' => $bill->total], $bill->id);
 

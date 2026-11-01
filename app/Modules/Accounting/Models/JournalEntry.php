@@ -28,6 +28,8 @@ class JournalEntry extends Model
         'payroll_payout' => 'صرف رواتب',
         'account' => 'رصيد افتتاحي',
         'transfer' => 'تحويل بين الحسابات',
+        'supplier_bill' => 'سند مورد',
+        'supplier_payment' => 'سداد مورد',
     ];
 
     protected function casts(): array

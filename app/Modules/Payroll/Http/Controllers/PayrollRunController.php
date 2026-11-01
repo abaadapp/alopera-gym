@@ -7,6 +7,7 @@ use App\Core\Papers\Papers;
 use App\Core\Support\Money;
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
+use App\Modules\Accounting\Rules\OpenPeriod;
 use App\Modules\Accounting\Services\FinanceReports;
 use App\Modules\Payroll\Models\PayrollItem;
 use App\Modules\Payroll\Models\PayrollPayout;
@@ -140,7 +141,7 @@ class PayrollRunController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*' => ['integer'],
             'account_id' => ['required', 'integer'],
-            'paid_on' => ['required', 'date', 'before_or_equal:today'],
+            'paid_on' => ['required', 'date', 'before_or_equal:today', new OpenPeriod],
             'reference' => ['nullable', 'string', 'max:120'],
         ], [], ['items' => 'الموظفين', 'account_id' => 'حساب الصرف', 'paid_on' => 'تاريخ الصرف']);
         $account = Account::findOrFail($data['account_id']);

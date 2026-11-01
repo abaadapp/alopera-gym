@@ -60,6 +60,8 @@ final class PermissionRegistry
         'accounting' => ['label' => 'المحاسبة', 'permissions' => [
             'accounting.view' => 'الملخص المالي والحسابات والقيود والتقارير المالية',
             'accounting.manage' => 'الحسابات البنكية والقيود اليدوية والإعدادات المالية',
+            'accounting.close' => 'إقفال الفترات المحاسبية',
+            'accounting.reopen' => 'إعادة فتح الفترات المقفلة',
         ]],
         'payroll' => ['label' => 'الرواتب والموظفون', 'permissions' => [
             'employees.view' => 'عرض ملفات الموظفين (دون الرواتب)',

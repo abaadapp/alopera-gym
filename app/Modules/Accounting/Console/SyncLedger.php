@@ -24,7 +24,7 @@ class SyncLedger extends Command
 
         foreach ($clubs as $club) {
             $counts = $tenants->run($club, fn () => $projector->syncClub());
-            $this->line(sprintf('%s: %d invoices, %d payments, %d credit notes, %d expenses checked — %d entries added', $club->slug, $counts['invoices'], $counts['payments'], $counts['credit_notes'], $counts['expenses'], $counts['entries_added']));
+            $this->line(sprintf('%s: %d invoices, %d payments, %d credit notes, %d expenses checked — %d entries added, %d skipped (closed period)', $club->slug, $counts['invoices'], $counts['payments'], $counts['credit_notes'], $counts['expenses'], $counts['entries_added'], $counts['skipped_closed']));
         }
 
         return self::SUCCESS;

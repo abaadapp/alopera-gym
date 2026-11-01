@@ -10,6 +10,8 @@ use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
+use App\Modules\Accounting\Rules\OpenPeriod;
+use App\Modules\Accounting\Services\AccountingPeriods;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\ExpenseCategory;
 use App\Modules\Finance\Models\Payment;
@@ -58,6 +60,7 @@ class ExpenseController extends Controller
 
     public function update(Request $request, Expense $expense, TenantContext $tenants): RedirectResponse
     {
+        app(AccountingPeriods::class)->assertEditable($expense->expense_date, 'المصروف');
         $data = $this->validated($request);
         $expense->fill(collect($data)->except('attachment')->all());
         if ($request->hasFile('attachment')) {
@@ -70,6 +73,7 @@ class ExpenseController extends Controller
 
     public function destroy(Expense $expense): RedirectResponse
     {
+        app(AccountingPeriods::class)->assertEditable($expense->expense_date, 'المصروف');
         $expense->delete();
 
         return back()->with('success', 'تم حذف المصروف.');
@@ -116,7 +120,7 @@ class ExpenseController extends Controller
         return $request->validate([
             'description' => ['required', 'string', 'max:255'],
             'amount' => ['required', 'numeric', 'min:0.001', 'max:9999999'],
-            'expense_date' => ['required', 'date', 'before_or_equal:today'],
+            'expense_date' => ['required', 'date', 'before_or_equal:today', new OpenPeriod],
             'expense_category_id' => ['nullable', TenantRule::exists('expense_categories')],
             'supplier_id' => ['nullable', TenantRule::exists('suppliers')],
             'payment_method' => ['required', 'in:cash,bank_transfer,card,other'],
