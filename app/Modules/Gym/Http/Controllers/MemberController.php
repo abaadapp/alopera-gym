@@ -141,7 +141,8 @@ class MemberController extends Controller
                 ->map(fn ($n) => $n->only('id', 'channel', 'direction', 'body') + ['user' => $n->user?->name, 'at' => $n->created_at->format('Y-m-d H:i'), 'follow_up_on' => $n->follow_up_on?->toDateString()]),
             'messages' => $user->can('whatsapp.inbox') ? Message::where('member_id', $member->id)->latest('id')->limit(50)->get()
                 ->map(fn ($m) => $m->only('id', 'direction', 'type', 'template_key', 'body', 'status', 'error_code') + ['at' => $m->created_at->format('Y-m-d H:i')]) : [],
-            'credentials' => AccessCredential::where('holder_type', 'member')->where('holder_id', $member->id)->get(['id', 'type', 'identifier', 'label', 'is_active']),
+            'credentials' => AccessCredential::where('holder_type', 'member')->where('holder_id', $member->id)->get(['id', 'type', 'identifier', 'label', 'is_active'])
+                ->map(fn (AccessCredential $c) => ['identifier' => $c->shownIdentifier()] + $c->only('id', 'type', 'label', 'is_active')),
             'pt' => $member->ptSubscriptions()->with(['package:id,name', 'trainer:id,name'])->latest()->get()
                 ->map(fn ($s) => $s->only('id', 'status', 'sessions_total', 'sessions_used', 'price') + ['package' => $s->package?->name, 'trainer' => $s->trainer?->name, 'expires_on' => $s->expires_on?->toDateString()]),
             'plans' => MembershipPlan::active()->with('programs:id')->orderBy('sort')->get()->map(fn ($p) => GymPresenter::plan($p)),
@@ -208,7 +209,8 @@ class MemberController extends Controller
     public function export(Request $request): StreamedResponse
     {
         $rows = function () {
-            foreach (Member::with('currentMembership')->orderBy('id')->lazy(500) as $m) {
+            // The branch the list shows (a user tied to a branch: theirs), as the list itself.
+            foreach (BranchContext::scope(Member::with('currentMembership'))->orderBy('id')->lazy(500) as $m) {
                 $ms = $m->currentMembership;
                 yield [$m->member_no, $m->full_name, $m->phone, $m->email, Member::STATUS_LABELS[$m->status] ?? $m->status, $m->joined_on?->toDateString(),
                     $ms?->plan_snapshot['name'] ?? '', $ms ? (Membership::STATUS_LABELS[$ms->status] ?? $ms->status) : '', $ms?->ends_on?->toDateString() ?? '',

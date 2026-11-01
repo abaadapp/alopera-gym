@@ -4,10 +4,12 @@ namespace App\Modules\Payroll\Models;
 
 use App\Core\Support\Money;
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class PayrollItem extends Model
+/** One employee's line in a month's run; it belongs to the employee's branch (their payslip is theirs). */
+class PayrollItem extends Model implements BranchOwned
 {
     use BelongsToTenant;
 
@@ -21,6 +23,11 @@ class PayrollItem extends Model
             'basic' => 'decimal:3', 'allowances' => 'decimal:3', 'overtime' => 'decimal:3', 'deductions' => 'decimal:3', 'net' => 'decimal:3',
             'overtime_hours' => 'decimal:2', 'attendance_hours' => 'decimal:2', 'allowance_lines' => 'array', 'paid_at' => 'datetime',
         ];
+    }
+
+    public function owningBranchId(): ?int
+    {
+        return $this->employee?->branch_id;
     }
 
     public function run(): BelongsTo

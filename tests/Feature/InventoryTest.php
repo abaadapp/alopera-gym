@@ -273,6 +273,22 @@ class InventoryTest extends TestCase
         $this->assertSame(1, $this->asTenant($club, fn () => ProductStock::where('branch_id', $khoud->id)->count()));
     }
 
+    public function test_a_supply_request_is_withdrawn_by_who_raises_or_reviews_requests_not_by_a_viewer(): void
+    {
+        $club = $this->club();
+        [, $khoud] = $this->twoBranches($club);
+        $bar = $this->stocked($club, []);
+        $khoudManager = $this->staff($club, 'manager', ['branch_id' => $khoud->id]);
+        $this->actingAs($khoudManager)->post(route('club.inventory.supply.store'), ['branch_id' => $khoud->id, 'lines' => [['product_id' => $bar->id, 'quantity' => 3]]])->assertSessionHasNoErrors();
+        $request = $this->asTenant($club, fn () => SupplyRequest::sole());
+
+        // Finance sees stock (inventory.view) but neither raises nor reviews requests.
+        $this->actingAs($this->staff($club, 'finance'))->post(route('club.inventory.supply.review', [$request, 'cancel']), ['reason' => 'not needed'])->assertForbidden();
+        $this->asTenant($club, fn () => $this->assertNotSame(SupplyRequest::CANCELLED, $request->fresh()->status));
+        $this->actingAs($khoudManager)->post(route('club.inventory.supply.review', [$request, 'cancel']), ['reason' => 'not needed'])->assertSessionHasNoErrors();
+        $this->asTenant($club, fn () => $this->assertSame(SupplyRequest::CANCELLED, $request->fresh()->status));
+    }
+
     private function expectExceptionOnce(callable $call, string $contains): void
     {
         try {

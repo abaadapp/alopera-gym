@@ -10,9 +10,9 @@ import { useCan, useShared } from '@/hooks/useShared';
 
 /** A page of a section. `permission` may list several (any one is enough); `match` lists the route patterns
  *  of its detail pages, which keep the section lit; `params` marks a tab that is a view of a shared route;
- *  `multiBranch` shows a tab only in a club with more than one open branch; `menuOnly` is where the menu leads whoever
- *  lacks the section's other pages, never a tab of its own. */
-export type NavTab = { label: string; route: string; params?: Record<string, string>; permission?: string | string[]; match?: string | string[]; roleKey?: string; multiBranch?: boolean; menuOnly?: boolean };
+ *  `multiBranch` shows a tab only in a club with more than one open branch; `clubWide` hides it from a user tied to
+ *  a branch; `menuOnly` is where the menu leads whoever lacks the section's other pages, never a tab of its own. */
+export type NavTab = { label: string; route: string; params?: Record<string, string>; permission?: string | string[]; match?: string | string[]; roleKey?: string; multiBranch?: boolean; clubWide?: boolean; menuOnly?: boolean };
 export type NavSection = { label: string; icon: LucideIcon; tabs: NavTab[]; match?: string[] };
 /** A run of sections between two thin separators; the `footer` group sits at the bottom of the menu. */
 export type NavGroup = { sections: NavSection[]; footer?: boolean };
@@ -134,8 +134,8 @@ export const NAV: NavGroup[] = [
                 tabs: [
                     // Staff attendance opens from the employees page (and each employee's file); it keeps that tab lit.
                     { label: 'الموظفون', route: 'club.employees.index', permission: 'employees.view', match: ['club.employees.*', 'club.staff-attendance.*'] },
-                    { label: 'مسيرات الرواتب', route: 'club.payroll.index', permission: ['payroll.prepare', 'payroll.edit', 'payroll.approve', 'payroll.pay', 'payroll.payslips', 'payroll.reports'], match: 'club.payroll.print' },
-                    { label: 'صرف الرواتب', route: 'club.payroll.payouts', permission: ['payroll.pay', 'payroll.payslips', 'payroll.reports'] },
+                    { label: 'مسيرات الرواتب', route: 'club.payroll.index', permission: ['payroll.prepare', 'payroll.edit', 'payroll.approve', 'payroll.pay', 'payroll.payslips', 'payroll.reports'], match: 'club.payroll.print', clubWide: true },
+                    { label: 'صرف الرواتب', route: 'club.payroll.payouts', permission: ['payroll.pay', 'payroll.payslips', 'payroll.reports'], clubWide: true },
                     { label: 'المسميات الوظيفية', route: 'club.job-titles.index', permission: 'employees.view', match: 'club.job-titles.*' },
                 ],
             },
@@ -262,7 +262,8 @@ export function useNavigation() {
 
     const allowed = (permission?: string | string[]) => !permission || list(permission).some(can);
     // The trainer screen is for trainers (and whoever manages classes); a trainer lands on it.
-    const visible = (tab: NavTab) => allowed(tab.permission) && (!tab.roleKey || roleKey === tab.roleKey || can('classes.manage')) && (!tab.multiBranch || Boolean(auth?.branch?.multi));
+    const visible = (tab: NavTab) => allowed(tab.permission) && (!tab.roleKey || roleKey === tab.roleKey || can('classes.manage')) && (!tab.multiBranch || Boolean(auth?.branch?.multi))
+        && (!tab.clubWide || !auth?.branch?.locked);
     const onTab = (tab: NavTab) => route().current(tab.route) && Object.entries(tab.params ?? {}).every(([key, value]) => query.get(key) === value);
 
     const groups = NAV.map((group) => ({

@@ -22,7 +22,7 @@ class ScheduleController extends Controller
     public function index(): Response
     {
         return Inertia::render('Gym/Schedule/Index', [
-            'slots' => ClassSchedule::with(['program:id,name,color', 'trainer:id,name'])->orderBy('weekday')->orderBy('starts_at')->get()
+            'slots' => BranchContext::scope(ClassSchedule::with(['program:id,name,color', 'trainer:id,name']))->orderBy('weekday')->orderBy('starts_at')->get()
                 ->map(fn (ClassSchedule $s) => $s->only('id', 'weekday', 'duration_minutes', 'capacity', 'room', 'is_active', 'program_id', 'trainer_id', 'branch_id') + [
                     'starts_at' => substr($s->starts_at, 0, 5),
                     'program' => $s->program?->name, 'color' => $s->program?->color, 'trainer' => $s->trainer?->name,

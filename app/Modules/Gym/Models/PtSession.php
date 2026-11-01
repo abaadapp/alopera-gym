@@ -3,10 +3,11 @@
 namespace App\Modules\Gym\Models;
 
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class PtSession extends Model
+class PtSession extends Model implements BranchOwned
 {
     use BelongsToTenant;
 
@@ -32,6 +33,12 @@ class PtSession extends Model
             'closed_at' => 'immutable_datetime',
             'closed_early' => 'boolean',
         ];
+    }
+
+    /** Its branch; one booked while «all branches» was shown belongs where its trainer works. */
+    public function owningBranchId(): ?int
+    {
+        return $this->branch_id ? (int) $this->branch_id : ($this->trainer?->branch_id ? (int) $this->trainer->branch_id : null);
     }
 
     public function subscription(): BelongsTo

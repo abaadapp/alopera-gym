@@ -28,6 +28,8 @@ class MemberCredentialController extends Controller
 
     public function destroy(AccessCredential $credential): RedirectResponse
     {
+        // A member's card or fingerprint only; the staff's are managed with the devices (devices.manage).
+        abort_unless($credential->holder_type === 'member', 404);
         $credential->delete();
 
         return back()->with('success', 'تم حذف وسيلة الدخول.');

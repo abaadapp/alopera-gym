@@ -3,7 +3,7 @@ import { ArrowLeftRight, Banknote, CreditCard, Landmark, Scale, TrendingDown, Tr
 import ClubLayout from '@/Layouts/ClubLayout';
 import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
 import { Badge, Card, CardHeader, EmptyState, PageHeader, StatCard } from '@/Components/ui';
-import { useCurrency } from '@/hooks/useShared';
+import { useCurrency, useShared } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, money } from '@/lib/format';
 
@@ -23,6 +23,8 @@ export const kindIcon = { cash: Banknote, bank: Landmark, card: CreditCard, gate
 
 export default function FinanceSummary({ summary, accounts, overdue, unpaidSalaries, recent, period }: Props) {
     const currency = useCurrency();
+    // The payroll pages are the whole club's: someone tied to a branch sees the figure, not the page.
+    const branchLocked = Boolean(useShared().auth?.branch?.locked);
     const m = (v: string) => money(v, currency);
     const negative = Number(summary.net) < 0;
 
@@ -44,7 +46,7 @@ export default function FinanceSummary({ summary, accounts, overdue, unpaidSalar
                 <StatCard label="الإيرادات" value={m(summary.revenue)} icon={<TrendingUp className="size-5" />} tone="green" />
                 <StatCard label="المصروفات" value={m(summary.expenses)} hint={`منها الرواتب ${m(summary.salaries)}`} icon={<TrendingDown className="size-5" />} tone="red" />
                 <StatCard label="صافي النتيجة" value={<span className={cn(negative && 'text-red-700')}>{m(summary.net)}</span>} icon={<Scale className="size-5" />} tone={negative ? 'red' : 'brand'} href={route('club.reports.show', { report: 'statements', ...periodParams(period) })} />
-                <StatCard label="رواتب معتمدة لم تُصرف" value={m(unpaidSalaries)} hint={Number(summary.vat_payable) ? `ضريبة مستحقة ${m(summary.vat_payable)}` : undefined} icon={<Wallet className="size-5" />} tone={Number(unpaidSalaries) ? 'amber' : 'gray'} href={route('club.payroll.payouts')} />
+                <StatCard label="رواتب معتمدة لم تُصرف" value={m(unpaidSalaries)} hint={Number(summary.vat_payable) ? `ضريبة مستحقة ${m(summary.vat_payable)}` : undefined} icon={<Wallet className="size-5" />} tone={Number(unpaidSalaries) ? 'amber' : 'gray'} href={branchLocked ? undefined : route('club.payroll.payouts')} />
             </div>
 
             <div className="grid gap-4 lg:grid-cols-3">

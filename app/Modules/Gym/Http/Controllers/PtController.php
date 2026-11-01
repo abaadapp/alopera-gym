@@ -2,6 +2,7 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Gym\Models\Member;
@@ -31,7 +32,7 @@ class PtController extends Controller
                     'member' => $s->member?->only('id', 'full_name', 'member_no'), 'package' => $s->package?->name, 'trainer' => $s->trainer?->name,
                     'expires_on' => $s->expires_on?->toDateString(), 'remaining' => $s->sessionsRemaining(),
                 ]),
-            'upcoming' => PtSession::with(['member:id,full_name', 'trainer:id,name'])->where('status', PtSession::SCHEDULED)
+            'upcoming' => BranchContext::scope(PtSession::with(['member:id,full_name', 'trainer:id,name']))->where('status', PtSession::SCHEDULED)
                 ->where('starts_at', '>=', now()->startOfDay())->orderBy('starts_at')->limit(50)->get()
                 ->map(fn (PtSession $s) => ['id' => $s->id, 'member' => $s->member?->full_name, 'trainer' => $s->trainer?->name, 'starts_at' => $s->starts_at->format('Y-m-d H:i'), 'ends_at' => $s->ends_at->format('H:i'), 'status' => $s->status, 'started' => $s->starts_at->lte(now())]),
             'trainers' => Trainer::where('is_active', true)->get(['id', 'name']),

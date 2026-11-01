@@ -41,7 +41,7 @@ class DeviceController extends Controller
             'events' => $this->events(),
             'simulation' => session('device_simulation'),
             'drivers' => DeviceDrivers::catalog(),
-            'staffCredentials' => AccessCredential::where('holder_type', 'user')->get()->map(fn ($c) => $c->only('id', 'type', 'identifier', 'label', 'holder_id', 'is_active')),
+            'staffCredentials' => AccessCredential::where('holder_type', 'user')->get()->map(fn ($c) => ['identifier' => $c->shownIdentifier()] + $c->only('id', 'type', 'label', 'holder_id', 'is_active')),
             'staff' => User::ofTenant($tid)->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'branches' => app(BranchContext::class)->choices(),
             'types' => AccessDevice::TYPES,

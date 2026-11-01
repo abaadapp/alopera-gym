@@ -253,6 +253,10 @@ class EmployeeController extends Controller
             $stored = $account->custom_permissions !== null ? PermissionRegistry::sanitize($account->custom_permissions) : $role->expandedPermissions();
             $custom = [...Grants::merge($actor, $stored, $data['permissions'] ?? []), ...PermissionRegistry::dormant($account->custom_permissions ?? [])];
         }
+        // Dropping a person's own list hands them their role's whole list: only for someone who holds all of it.
+        if ($custom === null && $account->custom_permissions !== null && ! Grants::mayAssign($actor, $role)) {
+            throw ValidationException::withMessages(['custom' => 'يفتح الدور ما لا تملكه؛ لا يمكنك إعادة هذا الموظف إلى صلاحيات دوره كاملة.']);
+        }
         $account->forceFill([
             'role_id' => $role->id,
             'branch_id' => $data['branch_id'] ?? null,

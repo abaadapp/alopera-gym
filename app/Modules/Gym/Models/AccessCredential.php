@@ -45,4 +45,10 @@ class AccessCredential extends Model
     {
         return $this->morphTo();
     }
+
+    /** The identifier as the panel shows it: a PIN is a secret typed at the door, so it is never sent back to a screen. */
+    public function shownIdentifier(): string
+    {
+        return $this->type === 'pin' ? '••••' : (string) $this->identifier;
+    }
 }

@@ -97,16 +97,27 @@ class User extends Authenticatable
             return $this->permissionCache;
         }
 
-        if (! $this->is_active || $this->tenant_id === null || ! $this->role || $this->role->tenant_id !== $this->tenant_id) {
-            return $this->permissionCache = [];
+        return $this->permissionCache = $this->is_active ? $this->assignedPermissions() : [];
+    }
+
+    /**
+     * What the account opens once it is on: its role's permissions, or the list set for this person. A stopped account
+     * opens nothing, but who may manage it (and so switch it back on) goes by this.
+     *
+     * @return list<string>
+     */
+    public function assignedPermissions(): array
+    {
+        if ($this->tenant_id === null || ! $this->role || $this->role->tenant_id !== $this->tenant_id) {
+            return [];
         }
 
         // A list set for this person replaces the role's (the owner role always keeps everything).
         if (is_array($this->custom_permissions) && ! $this->isOwner()) {
-            return $this->permissionCache = PermissionRegistry::sanitize($this->custom_permissions);
+            return PermissionRegistry::sanitize($this->custom_permissions);
         }
 
-        return $this->permissionCache = $this->role->expandedPermissions();
+        return $this->role->expandedPermissions();
     }
 
     /** Does this person have a list of their own instead of their role's? */

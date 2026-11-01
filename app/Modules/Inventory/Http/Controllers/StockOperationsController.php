@@ -273,6 +273,8 @@ class StockOperationsController extends Controller
     {
         if ($decision === 'cancel') {
             abort_unless(app(BranchContext::class)->allows($request->user(), $supplyRequest->branch_id), 404);
+            // Withdrawn by those who raise requests (or review them), not by someone who only views stock.
+            abort_unless($request->user()->canAny(['inventory.transfer', 'inventory.approve']), 403);
             $supply->cancel($supplyRequest, (string) $request->validate(['reason' => ['required', 'string', 'min:3', 'max:255']])['reason']);
 
             return back()->with('success', 'أُلغي الطلب.');

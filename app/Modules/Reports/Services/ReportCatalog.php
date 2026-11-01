@@ -219,6 +219,11 @@ final class ReportCatalog
             return false;
         }
 
+        // Payroll runs and payouts are the whole club's (no branch): for those who reach every branch.
+        if (in_array($r['key'], ['payroll', 'payouts'], true) && $user->branch_id !== null) {
+            return false;
+        }
+
         // The branches side by side: for those who see every branch, in a club that has more than one.
         return $r['key'] !== 'branches' || ($user->branch_id === null && $this->multiBranch());
     }

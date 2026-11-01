@@ -8,25 +8,43 @@ use App\Core\Support\Money;
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Rules\OpenPeriod;
+use App\Modules\Accounting\Services\AccountingPeriods;
 use App\Modules\Accounting\Services\FinanceReports;
 use App\Modules\Payroll\Models\PayrollItem;
 use App\Modules\Payroll\Models\PayrollPayout;
 use App\Modules\Payroll\Models\PayrollRun;
 use App\Modules\Payroll\Services\PayrollService;
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /** Payroll runs (مسيرات الرواتب) and their payouts (صرف الرواتب). Each action checks its own permission. */
-class PayrollRunController extends Controller
+class PayrollRunController extends Controller implements HasMiddleware
 {
     private const ANY = ['payroll.prepare', 'payroll.edit', 'payroll.approve', 'payroll.pay', 'payroll.payslips', 'payroll.reports'];
 
     public function __construct(private readonly PayrollService $payroll) {}
+
+    /**
+     * A run is the whole club's (every branch's staff on one sheet): opened, edited, approved, paid, printed and
+     * exported by accounts that reach every branch. Someone tied to a branch sees their branch's payslips in the
+     * employee files.
+     */
+    public static function middleware(): array
+    {
+        return [new Middleware(function (Request $request, Closure $next) {
+            abort_if($request->user()?->branch_id !== null, 403, 'مسيرات الرواتب تشمل موظفي كل الفروع؛ تُفتح لمن يصل إلى كل الفروع.');
+
+            return $next($request);
+        })];
+    }
 
     public function index(Request $request): Response
     {
@@ -40,7 +58,7 @@ class PayrollRunController extends Controller
             'runs' => $runs->map(fn (PayrollRun $r) => $this->summary($r)),
             'run' => $selected ? $this->detail($selected) : null,
             'months' => collect(range(0, 5))->map(fn ($i) => now()->startOfMonth()->subMonths($i))
-                ->reject(fn ($m) => $used->contains($m->format('Y-m')))
+                ->reject(fn ($m) => $used->contains($m->format('Y-m')) || app(AccountingPeriods::class)->isLocked($m->endOfMonth()))
                 ->map(fn ($m) => ['value' => $m->format('Y-m'), 'label' => $m->locale('ar')->translatedFormat('F Y')])->values(),
             'can' => $this->abilities($request),
         ]);
@@ -63,13 +81,15 @@ class PayrollRunController extends Controller
             'deduction_notes' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:255'],
         ]);
+        $this->guardOwnLine($request, $item);
         $this->payroll->updateItem($item, $data);
 
         return back()->with('success', "حُدّث سطر {$item->employee_name}.");
     }
 
-    public function destroyItem(PayrollItem $item): RedirectResponse
+    public function destroyItem(Request $request, PayrollItem $item): RedirectResponse
     {
+        $this->guardOwnLine($request, $item);
         $this->payroll->removeItem($item);
 
         return back()->with('success', "أُزيل سطر {$item->employee_name} من المسيرة.");
@@ -149,6 +169,13 @@ class PayrollRunController extends Controller
         $result = $this->payroll->pay($run, $data['items'], $account, $data['paid_on'], $data['reference'] ?? null);
 
         return back()->with('success', "صُرفت الرواتب لعدد {$result['paid']} من الموظفين ({$result['payout']->number}) من «{$account->name}». تسجيل الصرف هنا لا ينفّذ تحويلًا بنكيًا.");
+    }
+
+    /** Nobody but the owner changes their own pay, here as in the employee file. */
+    private function guardOwnLine(Request $request, PayrollItem $item): void
+    {
+        $user = $request->user();
+        abort_if(! $user->isOwner() && $item->employee?->user_id === $user->id, 403, 'لا تعدّل سطر راتبك في المسيرة بنفسك.');
     }
 
     private function allowAny(Request $request, array $permissions): void

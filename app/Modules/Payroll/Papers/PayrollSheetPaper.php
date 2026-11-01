@@ -21,7 +21,8 @@ final class PayrollSheetPaper extends PaperBuilder
 
     public static function allows(User $user, Model $record): bool
     {
-        return $user->hasPermission('payroll.payslips');
+        // The whole run, every branch's staff: for those who reach every branch.
+        return $user->hasPermission('payroll.payslips') && $user->branch_id === null;
     }
 
     public static function filename(Model $record): string

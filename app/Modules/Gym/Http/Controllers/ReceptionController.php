@@ -2,6 +2,7 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Tenancy\BranchContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Http\GymPresenter;
@@ -21,19 +22,20 @@ class ReceptionController extends Controller
     public function index(): Response
     {
         return Inertia::render('Gym/Reception', [
-            'todaySessions' => ClassSession::with(['program:id,name,color', 'trainer:id,name'])
+            // The branch this desk works in (a user tied to a branch: theirs; else the one shown in the top bar).
+            'todaySessions' => BranchContext::scope(ClassSession::with(['program:id,name,color', 'trainer:id,name']))
                 ->whereDate('starts_at', today())->where('status', '!=', ClassSession::CANCELLED)
                 ->orderBy('starts_at')->get()->map(fn ($s) => GymPresenter::session($s)),
-            'recentCheckins' => CheckIn::with('member:id,full_name,member_no')->latest('id')->limit(12)->get()
+            'recentCheckins' => BranchContext::scope(CheckIn::with('member:id,full_name,member_no'))->latest('id')->limit(12)->get()
                 ->map(fn (CheckIn $c) => ['id' => $c->id, 'member' => $c->member?->full_name, 'member_id' => $c->member_id, 'result' => $c->result, 'reason' => $c->reason, 'at' => $c->checked_in_at->format('H:i')]),
-            'expiringToday' => Membership::with('member:id,full_name,phone')->where('status', Membership::ACTIVE)->whereDate('ends_on', '<=', today()->addDays(3))
+            'expiringToday' => BranchContext::scope(Membership::with('member:id,full_name,phone'))->where('status', Membership::ACTIVE)->whereDate('ends_on', '<=', today()->addDays(3))
                 ->orderBy('ends_on')->limit(10)->get()->map(fn ($m) => ['member_id' => $m->member_id, 'member' => $m->member?->full_name, 'ends_on' => $m->ends_on->toDateString(), 'plan' => $m->plan_snapshot['name'] ?? '']),
-            'pendingPayments' => Membership::with(['member:id,full_name', 'invoice:id,number,total,paid_total'])->where('status', Membership::PENDING)->latest('id')->limit(10)->get()
+            'pendingPayments' => BranchContext::scope(Membership::with(['member:id,full_name', 'invoice:id,number,total,paid_total']))->where('status', Membership::PENDING)->latest('id')->limit(10)->get()
                 ->map(fn ($m) => ['member_id' => $m->member_id, 'member' => $m->member?->full_name, 'invoice_id' => $m->invoice_id, 'number' => $m->invoice?->number, 'balance' => $m->invoice?->balance()]),
             'plans' => MembershipPlan::active()->orderBy('sort')->get()->map(fn ($p) => GymPresenter::plan($p)),
             'stats' => [
-                'checkins' => CheckIn::where('result', 'allowed')->where('checked_in_at', '>=', today())->count(),
-                'denied' => CheckIn::where('result', 'denied')->where('checked_in_at', '>=', today())->count(),
+                'checkins' => BranchContext::scope(CheckIn::query())->where('result', 'allowed')->where('checked_in_at', '>=', today())->count(),
+                'denied' => BranchContext::scope(CheckIn::query())->where('result', 'denied')->where('checked_in_at', '>=', today())->count(),
                 'collected' => (float) Payment::completed()->where('kind', 'payment')->where('paid_at', '>=', today())->where('received_by', auth()->id())->sum('amount'),
             ],
         ]);

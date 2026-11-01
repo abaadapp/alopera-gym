@@ -21,7 +21,7 @@ class TrainerController extends Controller
     public function index(TenantContext $tenants): Response
     {
         return Inertia::render('Gym/Trainers/Index', [
-            'trainers' => Trainer::with(['availabilities', 'user:id,name,email'])->orderBy('sort')->orderBy('name')->get()->map(fn (Trainer $t) => $t->only(
+            'trainers' => BranchContext::scope(Trainer::with(['availabilities', 'user:id,name,email']))->orderBy('sort')->orderBy('name')->get()->map(fn (Trainer $t) => $t->only(
                 'id', 'name', 'phone', 'email', 'bio', 'specialties', 'color', 'is_public', 'is_active', 'sort', 'user_id', 'branch_id'
             ) + [
                 'photo_url' => $t->photoUrl(),

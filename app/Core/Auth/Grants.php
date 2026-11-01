@@ -50,7 +50,8 @@ final class Grants
             return false;
         }
 
-        return self::covers($actor, $target->permissions());
+        // What the account opens when on, so a stopped account is not a way into more than the actor holds.
+        return self::covers($actor, $target->assignedPermissions());
     }
 
     /**

@@ -4,6 +4,8 @@ namespace App\Modules\Gym\Models;
 
 use App\Core\Audit\Auditable;
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\OwnedByBranch;
 use App\Models\Branch;
 use App\Modules\Gym\Services\ScheduleService;
 use Illuminate\Database\Eloquent\Model;
@@ -11,9 +13,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /** Weekly recurring slot. {@see ScheduleService} turns it into sessions. */
-class ClassSchedule extends Model
+class ClassSchedule extends Model implements BranchOwned
 {
-    use Auditable, BelongsToTenant;
+    use Auditable, BelongsToTenant, OwnedByBranch;
 
     protected $table = 'gym_class_schedules';
 

@@ -42,6 +42,8 @@ final class SystemRoles
                     'payroll.salaries', 'payroll.compensation', 'payroll.approve', 'payroll.pay', 'accounting.manage', 'purchases.pay',
                     // Sensitive business documents are the owner's unless shared one by one.
                     'documents.confidential',
+                    // Undoing money, the books' closed months and the drawer's shifts stay the owner's until granted by name.
+                    'payments.cancel', 'accounting.close', 'accounting.reopen', 'cash_shifts.manage', 'cash_shifts.view',
                 ])),
                 'home' => 'club.dashboard',
             ],
