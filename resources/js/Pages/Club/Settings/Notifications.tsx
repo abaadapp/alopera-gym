@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
-import { BellRing, FileText, Plus, Workflow, X } from 'lucide-react';
+import { BellRing, FileText, HandCoins, Plus, Workflow, X } from 'lucide-react';
 import { PageActions, SettingsScreen, SettingsSection } from '@/Components/Settings';
 import { Button, Field, Input, Toggle } from '@/Components/ui';
 import { useCan } from '@/hooks/useShared';
@@ -10,6 +10,10 @@ interface Rules {
     expired_followup_days: number[];
     notify_class_changes: boolean;
     class_reminder_hours: number;
+    dues_reminders_enabled: boolean;
+    dues_reminder_before_days: number[];
+    dues_reminder_overdue_days: number[];
+    dues_reminder_max: number;
 }
 
 export default function NotificationSettings({ rules }: { rules: Rules }) {
@@ -19,6 +23,10 @@ export default function NotificationSettings({ rules }: { rules: Rules }) {
         expired_followup_days: (rules.expired_followup_days ?? []).map(Number),
         notify_class_changes: Boolean(rules.notify_class_changes),
         class_reminder_hours: Number(rules.class_reminder_hours ?? 0),
+        dues_reminders_enabled: Boolean(rules.dues_reminders_enabled),
+        dues_reminder_before_days: (rules.dues_reminder_before_days ?? []).map(Number),
+        dues_reminder_overdue_days: (rules.dues_reminder_overdue_days ?? []).map(Number),
+        dues_reminder_max: Number(rules.dues_reminder_max ?? 3),
     });
     const errors = form.errors as Record<string, string | undefined>;
 
@@ -39,6 +47,18 @@ export default function NotificationSettings({ rules }: { rules: Rules }) {
                         <Field label="تذكير قبل الحصة المحجوزة بـ (ساعات)" hint="0 يوقف التذكير. يُرسل مرة واحدة لكل حجز تم قبل موعد التذكير." error={errors.class_reminder_hours} className="mt-4 max-w-xs">
                             <Input type="number" min={0} max={48} value={form.data.class_reminder_hours} onChange={(e) => form.setData('class_reminder_hours', Number(e.target.value))} />
                         </Field>
+                    </SettingsSection>
+                    <SettingsSection icon={HandCoins} title="تذكيرات السداد" description="رسائل واتساب لأعضاء عليهم فواتير مفتوحة، قبل الاستحقاق وبعده">
+                        <Toggle checked={form.data.dues_reminders_enabled} onChange={(v) => form.setData('dues_reminders_enabled', v)} label="إرسال تذكيرات السداد تلقائيًا" hint="متوقفة افتراضيًا. لا تُرسل إلا بعد ربط واتساب واعتماد قالبي «تذكير بفاتورة يقترب موعد استحقاقها» و«تذكير بفاتورة متأخرة»، ولمن وافق من الأعضاء." />
+                        {form.data.dues_reminders_enabled && (
+                            <div className="mt-4">
+                                <DaysField label="قبل الاستحقاق بـ (أيام)" values={form.data.dues_reminder_before_days} onChange={(v) => form.setData('dues_reminder_before_days', v)} min={1} max={30} error={errors.dues_reminder_before_days} />
+                                <DaysField label="بعد الاستحقاق بـ (أيام)" values={form.data.dues_reminder_overdue_days} onChange={(v) => form.setData('dues_reminder_overdue_days', v)} min={1} max={90} error={errors.dues_reminder_overdue_days} />
+                                <Field label="الحد الأقصى للتذكيرات لكل فاتورة" hint="كل مرحلة تُرسل مرة واحدة فقط، ولا يتجاوز مجموعها هذا الحد." error={errors.dues_reminder_max} className="max-w-xs">
+                                    <Input type="number" min={1} max={6} value={form.data.dues_reminder_max} onChange={(e) => form.setData('dues_reminder_max', Number(e.target.value))} />
+                                </Field>
+                            </div>
+                        )}
                         <PageActions processing={form.processing} />
                     </SettingsSection>
                 </form>

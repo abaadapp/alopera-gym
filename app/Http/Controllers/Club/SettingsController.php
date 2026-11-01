@@ -21,7 +21,7 @@ class SettingsController extends Controller
         'audit.view', 'backups.manage', 'accounting.manage', 'documents.manage', 'pos_devices.manage',
     ];
 
-    private const NOTIFICATION_RULES = ['expiry_reminder_days', 'expired_followup_days', 'notify_class_changes', 'class_reminder_hours'];
+    private const NOTIFICATION_RULES = ['expiry_reminder_days', 'expired_followup_days', 'notify_class_changes', 'class_reminder_hours', 'dues_reminders_enabled', 'dues_reminder_before_days', 'dues_reminder_overdue_days', 'dues_reminder_max'];
 
     public function index(Request $request): Response
     {
@@ -111,6 +111,12 @@ class SettingsController extends Controller
             'expired_followup_days.*' => ['integer', 'between:1,180'],
             'notify_class_changes' => ['boolean'],
             'class_reminder_hours' => ['nullable', 'integer', 'between:0,48'],
+            'dues_reminders_enabled' => ['boolean'],
+            'dues_reminder_before_days' => ['array', 'max:3'],
+            'dues_reminder_before_days.*' => ['integer', 'between:1,30'],
+            'dues_reminder_overdue_days' => ['array', 'max:5'],
+            'dues_reminder_overdue_days.*' => ['integer', 'between:1,90'],
+            'dues_reminder_max' => ['nullable', 'integer', 'between:1,6'],
         ]);
 
         $tenant->settings = array_replace($tenant->settings ?? [], [
@@ -118,6 +124,10 @@ class SettingsController extends Controller
             'expired_followup_days' => array_values(array_unique(array_map('intval', $data['expired_followup_days'] ?? []))),
             'notify_class_changes' => (bool) ($data['notify_class_changes'] ?? false),
             'class_reminder_hours' => (int) ($data['class_reminder_hours'] ?? 0),
+            'dues_reminders_enabled' => (bool) ($data['dues_reminders_enabled'] ?? false),
+            'dues_reminder_before_days' => array_values(array_unique(array_map('intval', $data['dues_reminder_before_days'] ?? []))),
+            'dues_reminder_overdue_days' => array_values(array_unique(array_map('intval', $data['dues_reminder_overdue_days'] ?? []))),
+            'dues_reminder_max' => (int) ($data['dues_reminder_max'] ?? 3),
         ]);
         $tenant->save();
         app(AuditLogger::class)->logChanges('settings.notifications_updated', $tenant, $before, Arr::only($tenant->settings, self::NOTIFICATION_RULES));

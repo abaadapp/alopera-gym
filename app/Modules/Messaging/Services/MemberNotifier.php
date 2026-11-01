@@ -8,6 +8,7 @@ use App\Modules\Finance\Models\Invoice;
 use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Messaging\Models\Message;
 use App\Modules\Payments\Services\OnlinePaymentService;
 
 /**
@@ -39,6 +40,28 @@ final class MemberNotifier
             'amount' => $this->money($invoice->balance()),
             'payment_link' => $this->paymentLink($invoice),
         ], $invoice, 'invoice:'.$invoice->id);
+    }
+
+    /**
+     * A reminder of a member's open invoice: before it is due (`before`) or after (`overdue`), `days` from the due date.
+     * Each stage once per invoice (dedupe); one sent by hand at most once a day. Null when nothing was queued (WhatsApp off,
+     * the invoice paid, not a member's, or already reminded); a skipped message (no consent, template not approved)
+     * is returned with its reason.
+     */
+    public function duesReminder(Invoice $invoice, string $stage, int $days, bool $byHand = false): ?Message
+    {
+        $member = $invoice->billable;
+        if (! $member instanceof Member || ! $invoice->isOpen() || Money::isZero($invoice->balance())) {
+            return null;
+        }
+
+        return $this->whatsapp->queueTemplate($member, $stage === 'before' ? 'invoice_due_soon' : 'invoice_overdue', $this->base($member) + [
+            'invoice_number' => $invoice->number,
+            'amount' => $this->money($invoice->balance()),
+            'due_date' => $invoice->due_date?->format('Y-m-d') ?? '',
+            'days' => (string) $days,
+            'payment_link' => $this->paymentLink($invoice),
+        ], $invoice, $byHand ? 'dues:'.$invoice->id.':hand:'.today()->toDateString() : 'dues:'.$invoice->id.':'.$stage.':'.$days);
     }
 
     public function paymentReceived(Member $member, string $amount, string $receipt, int $paymentId, ?Invoice $invoice = null): void

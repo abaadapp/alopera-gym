@@ -109,6 +109,18 @@ final class TemplateCatalog
             'variables' => ['member_name', 'class_name', 'date', 'time', 'change'],
             'body' => 'تنبيه يا {{1}}: تم تعديل حصة {{2}} يوم {{3}} الساعة {{4}}. التعديل: {{5}}',
         ],
+        'invoice_due_soon' => [
+            'label' => 'تذكير بفاتورة يقترب موعد استحقاقها',
+            'category' => 'utility',
+            'variables' => ['member_name', 'invoice_number', 'amount', 'due_date', 'days', 'payment_link'],
+            'body' => 'مرحبًا {{1}}، تذكير بأن الفاتورة رقم {{2}} بمبلغ {{3}} تستحق بتاريخ {{4}} (بعد {{5}} يوم). للدفع أو الاطلاع: {{6}}',
+        ],
+        'invoice_overdue' => [
+            'label' => 'تذكير بفاتورة متأخرة',
+            'category' => 'utility',
+            'variables' => ['member_name', 'invoice_number', 'amount', 'due_date', 'days', 'payment_link'],
+            'body' => 'مرحبًا {{1}}، الفاتورة رقم {{2}} بمبلغ {{3}} كان استحقاقها {{4}} (متأخرة {{5}} يوم). نرجو السداد من هنا: {{6}} وشكرًا لك.',
+        ],
         'document_expiry' => [
             'label' => 'تنبيه انتهاء مستند (للموظف المسؤول عنه)',
             'category' => 'utility',

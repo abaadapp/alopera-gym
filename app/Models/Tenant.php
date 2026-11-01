@@ -33,6 +33,11 @@ class Tenant extends Model
         'expired_followup_days' => [7],
         'notify_class_changes' => true,
         'class_reminder_hours' => 0, // WhatsApp reminder this many hours before a booked class; 0 = off
+        // Payment reminders for members' open invoices: off until the owner turns them on.
+        'dues_reminders_enabled' => false,
+        'dues_reminder_before_days' => [3],
+        'dues_reminder_overdue_days' => [1, 7, 14],
+        'dues_reminder_max' => 3,
         'class_session_weeks_ahead' => 4,
         'vat_rate' => 0,
         'vat_number' => null,

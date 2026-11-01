@@ -1,10 +1,10 @@
 import { Link, router } from '@inertiajs/react';
-import { AlertTriangle, CalendarClock, CircleAlert, HandCoins, Hourglass } from 'lucide-react';
+import { AlertTriangle, BellRing, CalendarClock, CircleAlert, HandCoins, Hourglass, MessageCircle } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Card, Checkbox, EmptyState, PageHeader, StatCard } from '@/Components/ui';
-import { useCurrency } from '@/hooks/useShared';
+import { Badge, Card, CardHeader, Checkbox, ConfirmAction, EmptyState, Notice, PageHeader, StatCard } from '@/Components/ui';
+import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, money } from '@/lib/format';
-import { invoiceStatus, invoiceType, label } from '@/lib/labels';
+import { invoiceStatus, invoiceType, label, messageStatus } from '@/lib/labels';
 
 interface DueRow {
     id: number;
@@ -28,11 +28,18 @@ interface Props {
     aging: { current: number; '1_30': number; '31_60': number; '60_plus': number };
     total: number;
     filters: { overdue: boolean };
+    reminders: {
+        enabled: boolean;
+        whatsapp: boolean;
+        log: { id: number; at: string; member: string | null; invoice_id: number | null; invoice: string | null; kind: string; status: string; reason: string | null; by_hand: boolean }[];
+    };
 }
 
 /** Collection follow-up (spec 1.5): outstanding balances and arrears by age. */
-export default function Dues({ invoices, aging, total, filters }: Props) {
+export default function Dues({ invoices, aging, total, filters, reminders }: Props) {
     const currency = useCurrency();
+    const can = useCan();
+    const mayRemind = can('whatsapp.send');
 
     return (
         <ClubLayout title="المستحقات">
@@ -45,7 +52,15 @@ export default function Dues({ invoices, aging, total, filters }: Props) {
                 <StatCard label="أكثر من 60 يومًا" value={money(aging['60_plus'], currency)} icon={<CircleAlert />} tone="red" />
             </div>
 
-            <Card className="mt-6" padded={false}>
+            <Notice tone={reminders.enabled && reminders.whatsapp ? 'green' : 'gray'} icon={<BellRing />} className="mt-6" href={can('settings.manage') ? route('club.settings.notifications') : undefined}>
+                {reminders.enabled && reminders.whatsapp
+                    ? 'تذكيرات السداد الآلية مفعّلة: تُرسل عبر واتساب قبل الاستحقاق وبعده كما في قواعد الإشعارات، مرة لكل مرحلة، وبحد أقصى لكل فاتورة.'
+                    : reminders.enabled
+                        ? 'تذكيرات السداد مفعّلة في الإعدادات، لكن واتساب غير مربوط بعد؛ لن يُرسل شيء حتى يكتمل الربط واعتماد القوالب.'
+                        : 'تذكيرات السداد الآلية متوقفة. تُفعَّل من قواعد الإشعارات، ولا تُرسل إلا بعد ربط واتساب واعتماد قالبي التذكير من Meta وموافقة العضو.'}
+            </Notice>
+
+            <Card className="mt-4" padded={false}>
                 <div className="flex flex-wrap items-center justify-between gap-3 p-4">
                     <p className="text-sm text-muted"><span className="num">{invoices.length}</span> فاتورة مفتوحة</p>
                     <Checkbox
@@ -60,7 +75,7 @@ export default function Dues({ invoices, aging, total, filters }: Props) {
                     <div className="overflow-x-auto">
                         <table className="table-base">
                             <thead>
-                                <tr><th>الفاتورة</th><th>العميل</th><th>النوع</th><th>الاستحقاق</th><th>التأخير</th><th>الإجمالي</th><th>المتبقي</th><th>الحالة</th></tr>
+                                <tr><th>الفاتورة</th><th>العميل</th><th>النوع</th><th>الاستحقاق</th><th>التأخير</th><th>الإجمالي</th><th>المتبقي</th><th>الحالة</th>{mayRemind && <th />}</tr>
                             </thead>
                             <tbody>
                                 {invoices.map((inv) => {
@@ -88,6 +103,40 @@ export default function Dues({ invoices, aging, total, filters }: Props) {
                                             <td className="num">{money(inv.total, currency)}</td>
                                             <td className="font-semibold text-red-600 num">{money(inv.balance, currency)}</td>
                                             <td><Badge tone={tone}>{statusLabel}</Badge></td>
+                                            {mayRemind && (
+                                                <td className="text-end">
+                                                    {inv.billable_type === 'member' && (
+                                                        <ConfirmAction url={route('club.dues.remind', inv.id)} title="تذكير بالسداد" message={`يُرسل للعضو تذكير بالفاتورة ${inv.number} عبر واتساب بالقالب المعتمد، مرة واحدة في اليوم على الأكثر.`} confirmLabel="إرسال" tone="primary" variant="ghost" icon={<MessageCircle className="size-3.5" />}>تذكير</ConfirmAction>
+                                                    )}
+                                                </td>
+                                            )}
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </Card>
+
+            <Card className="mt-4" padded={false}>
+                <div className="p-4 pb-0"><CardHeader title="سجل التذكيرات" subtitle="آخر محاولات الإرسال وحالتها؛ ما لم يُرسل يذكر سببه." /></div>
+                {reminders.log.length === 0 ? (
+                    <EmptyState icon={<BellRing className="size-6" />} title="لا تذكيرات بعد" />
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="table-base">
+                            <thead><tr><th>الوقت</th><th>العضو</th><th>الفاتورة</th><th>التذكير</th><th>الحالة</th></tr></thead>
+                            <tbody>
+                                {reminders.log.map((r) => {
+                                    const [text, tone] = label(messageStatus, r.status);
+                                    return (
+                                        <tr key={r.id}>
+                                            <td className="text-xs text-muted num">{r.at}</td>
+                                            <td>{r.member ?? '—'}</td>
+                                            <td>{r.invoice_id ? <Link href={route('club.invoices.show', r.invoice_id)} className="text-[#1d4ed8] num hover:underline">{r.invoice}</Link> : '—'}</td>
+                                            <td className="text-[13px]">{r.kind}{r.by_hand && <span className="text-muted"> · يدوي</span>}</td>
+                                            <td><Badge tone={tone}>{text}</Badge>{r.reason && <p className="mt-0.5 text-xs text-muted">{r.reason}</p>}</td>
                                         </tr>
                                     );
                                 })}

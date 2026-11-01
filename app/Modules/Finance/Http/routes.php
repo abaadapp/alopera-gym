@@ -49,6 +49,7 @@ Route::middleware(['can:cash_shifts.manage', 'throttle:30,1'])->group(function (
 });
 
 Route::get('/dues', DuesController::class)->middleware('can:dues.view')->name('dues');
+Route::post('/dues/{invoice}/remind', [DuesController::class, 'remind'])->middleware(['can:dues.view', 'can:whatsapp.send', 'throttle:30,1'])->name('dues.remind');
 
 Route::middleware('can:expenses.manage')->group(function () {
     Route::get('/expenses/export', [ExpenseController::class, 'export'])->middleware('throttle:exports')->name('expenses.export');
