@@ -2,8 +2,11 @@
 
 namespace App\Modules\Accounting\Http\Controllers;
 
+use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Period;
+use App\Core\Support\SubmittedOnce;
+use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
@@ -48,31 +51,39 @@ class JournalController extends Controller
         ]);
     }
 
-    public function store(Request $request, Ledger $ledger): RedirectResponse
+    public function store(Request $request, Ledger $ledger, AuditLogger $audit): RedirectResponse
     {
         $data = $request->validate([
+            'client_key' => SubmittedOnce::RULE,
             'date' => ['required', 'date', 'before_or_equal:today'],
             'description' => ['required', 'string', 'max:255'],
             'lines' => ['required', 'array', 'min:2', 'max:30'],
-            'lines.*.account_id' => ['required', 'integer'],
+            'lines.*.account_id' => ['required', 'integer', TenantRule::exists('gym_accounts')],
             'lines.*.debit' => ['nullable', 'numeric', 'min:0', 'max:999999999'],
             'lines.*.credit' => ['nullable', 'numeric', 'min:0', 'max:999999999'],
             'lines.*.memo' => ['nullable', 'string', 'max:255'],
         ], [], ['description' => 'البيان', 'lines' => 'سطور القيد']);
 
-        $entry = $ledger->post(['date' => CarbonImmutable::parse($data['date']), 'description' => $data['description']], array_map(fn ($l) => [
-            'account' => (int) $l['account_id'], 'debit' => $l['debit'] ?? 0, 'credit' => $l['credit'] ?? 0, 'memo' => $l['memo'] ?? null,
-        ], $data['lines']));
+        // The form sent twice (a double click, a retry) posts one entry; who posted it and its lines stay on record.
+        $number = SubmittedOnce::run($data['client_key'] ?? null, 'journal-entry', function () use ($ledger, $audit, $data) {
+            $entry = $ledger->post(['date' => CarbonImmutable::parse($data['date']), 'description' => $data['description']], array_map(fn ($l) => [
+                'account' => (int) $l['account_id'], 'debit' => $l['debit'] ?? 0, 'credit' => $l['credit'] ?? 0, 'memo' => $l['memo'] ?? null,
+            ], $data['lines']));
+            $audit->log('journal.posted', $entry, ['number' => $entry->number, 'date' => $entry->entry_date?->toDateString(), 'lines' => array_map(fn ($l) => array_filter(['account_id' => (int) $l['account_id'], 'debit' => $l['debit'] ?? null, 'credit' => $l['credit'] ?? null]), $data['lines'])]);
 
-        return back()->with('success', "رُحّل القيد {$entry->number}.");
+            return $entry->number;
+        });
+
+        return back()->with('success', "رُحّل القيد {$number}.");
     }
 
-    public function reverse(JournalEntry $entry, Ledger $ledger): RedirectResponse
+    public function reverse(JournalEntry $entry, Ledger $ledger, AuditLogger $audit): RedirectResponse
     {
         if (! $entry->isManual()) {
             throw new BusinessRuleException('ledger.source_entry', 'هذا القيد سجّله النظام من مستند (فاتورة، دفعة، مصروف، رواتب)؛ يُصحَّح من المستند نفسه.');
         }
         $mirror = $ledger->reverse($entry, "عكس القيد {$entry->number} — {$entry->description}");
+        $audit->log('journal.reversed', $entry, ['number' => $entry->number, 'reversal' => $mirror->number]);
 
         return back()->with('success', "عُكس القيد بالقيد {$mirror->number}.");
     }

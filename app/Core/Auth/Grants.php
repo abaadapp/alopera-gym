@@ -37,14 +37,29 @@ final class Grants
         return self::covers($actor, $role->expandedPermissions());
     }
 
-    /** May the actor edit this person's account (details, role, permissions, password, active)? */
+    /**
+     * May the actor edit this person's account (details, role, permissions, password, active)? A user tied to a branch
+     * manages only that branch's accounts — not another branch's, nor an account that reaches every branch.
+     */
     public static function mayManage(User $actor, User $target): bool
     {
         if ($target->isOwner()) {
             return $actor->isOwner();
         }
+        if ($actor->branch_id !== null && (int) $target->branch_id !== (int) $actor->branch_id) {
+            return false;
+        }
 
         return self::covers($actor, $target->permissions());
+    }
+
+    /**
+     * May the actor give an account this reach (null: every branch)? A user tied to a branch keeps the accounts they
+     * open or edit in their own branch.
+     */
+    public static function mayPlace(User $actor, ?int $branchId): bool
+    {
+        return $actor->branch_id === null || ($branchId !== null && $branchId === (int) $actor->branch_id);
     }
 
     /**

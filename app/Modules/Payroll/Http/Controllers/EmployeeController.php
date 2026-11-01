@@ -202,12 +202,17 @@ class EmployeeController extends Controller
         $data = $this->validated($request, $employee);
         $this->guardSelf($request, $employee, $data);
         $account = $this->accountRequest($request, $employee);
+        $closing = $this->closingAccount($request, $employee, $data);
 
         $before = $employee->getAttributes();
-        DB::transaction(function () use ($employee, $data, $account, $request) {
+        DB::transaction(function () use ($employee, $data, $account, $request, $closing, $audit) {
             $employee->update(Arr::except($data, ['user_id']) + ($account && $account['mode'] === 'link' ? ['user_id' => $account['user_id']] : []));
             if ($account && $account['mode'] === 'new') {
                 $this->createAccount($request, $employee, $account);
+            }
+            if ($closing) {
+                $closing->forceFill(['is_active' => false, 'remember_token' => Str::random(60)])->save();
+                $audit->log('user.deactivated', $closing, ['reason' => 'employee.terminated', 'employee' => $employee->name]);
             }
         });
         $this->logChanges($audit, $employee, $before);
@@ -235,6 +240,9 @@ class EmployeeController extends Controller
         $role = Role::findOrFail($data['role_id']);
         if ($role->id !== $account->role_id && ! Grants::mayAssign($actor, $role)) {
             throw ValidationException::withMessages(['role_id' => 'لا يمكنك إسناد دور يفتح ما لا تملكه.']);
+        }
+        if (! Grants::mayPlace($actor, isset($data['branch_id']) ? (int) $data['branch_id'] : null)) {
+            throw ValidationException::withMessages(['branch_id' => 'حسابك مرتبط بفرعك: الحسابات التي تديرها تبقى في فرعك.']);
         }
         $this->keepAnOwner($account, $role, (bool) ($data['is_active'] ?? true));
 
@@ -400,6 +408,9 @@ class EmployeeController extends Controller
         if (! Grants::mayAssign($request->user(), Role::findOrFail($data['account_role_id']))) {
             throw ValidationException::withMessages(['account_role_id' => 'لا يمكنك إسناد دور يفتح ما لا تملكه.']);
         }
+        if (! Grants::mayPlace($request->user(), isset($data['account_branch_id']) ? (int) $data['account_branch_id'] : null)) {
+            throw ValidationException::withMessages(['account_branch_id' => 'حسابك مرتبط بفرعك: الحسابات التي تديرها تبقى في فرعك.']);
+        }
 
         return ['mode' => 'new', 'email' => strtolower($data['account_email']), 'role_id' => (int) $data['account_role_id'], 'branch_id' => $data['account_branch_id'] ?? null];
     }
@@ -424,6 +435,31 @@ class EmployeeController extends Controller
         if (! $account) {
             throw new BusinessRuleException('employee.no_account', 'لا يوجد حساب دخول لهذا الموظف.');
         }
+
+        return $account;
+    }
+
+    /**
+     * The sign-in account that leaving the club switches off: an employee marked «انتهت الخدمة» no longer signs in. Only
+     * someone who may manage that account ends it, never their own, and never the last active owner.
+     */
+    private function closingAccount(Request $request, Employee $employee, array $data): ?User
+    {
+        if (($data['status'] ?? $employee->status) !== 'terminated' || $employee->status === 'terminated' || ! $employee->user_id) {
+            return null;
+        }
+        $account = User::ofTenant($this->tenants->id())->find($employee->user_id);
+        if (! $account || ! $account->is_active) {
+            return null;
+        }
+        $actor = $request->user();
+        if ($account->id === $actor->id) {
+            throw ValidationException::withMessages(['status' => 'لا تُنهِ خدمتك بنفسك.']);
+        }
+        if (! Grants::mayManage($actor, $account)) {
+            throw ValidationException::withMessages(['status' => 'حساب دخول هذا الموظف يفتح ما لا تفتحه، فلا تُنهِ خدمته.']);
+        }
+        $this->keepAnOwner($account, $account->role, false);
 
         return $account;
     }

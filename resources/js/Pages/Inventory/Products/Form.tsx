@@ -4,7 +4,7 @@ import { Check, History, ImagePlus, Plus, Puzzle, Scale, Star, Trash2, X } from 
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, Field, Input, PageHeader, Select, Switch, Tabs, Textarea, BackLink } from '@/Components/ui';
 import { AdjustModal, MovementsModal } from '@/Components/Products/Stock';
-import { useCurrency } from '@/hooks/useShared';
+import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
 import type { Option } from '@/types';
@@ -43,6 +43,7 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
     const [tab, setTab] = useState<Tab>('basic');
     const [newCategory, setNewCategory] = useState(false);
     const [adjusting, setAdjusting] = useState(false);
+    const can = useCan();
     const [history, setHistory] = useState(false);
     const form = useForm({
         name: product?.name ?? '',
@@ -113,7 +114,7 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
                     actions={product && (
                         <>
                             <Button variant="outline" icon={<History />} onClick={() => setHistory(true)}>حركة المخزون</Button>
-                            {product.track_stock && <Button variant="outline" icon={<Scale />} onClick={() => setAdjusting(true)}>جرد</Button>}
+                            {product.track_stock && can('inventory.adjust') && <Button variant="outline" icon={<Scale />} onClick={() => setAdjusting(true)}>جرد</Button>}
                         </>
                     )}
                 />
@@ -210,7 +211,7 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
                                                 <Field label="الكمية الحالية" hint="تتغير بالبيع والشراء والجرد فقط">
                                                     <div className="flex gap-2">
                                                         <Input dir="ltr" value={number(product.stock_quantity, 3)} readOnly disabled />
-                                                        <Button type="button" variant="outline" icon={<Scale />} onClick={() => setAdjusting(true)}>جرد</Button>
+                                                        {can('inventory.adjust') && <Button type="button" variant="outline" icon={<Scale />} onClick={() => setAdjusting(true)}>جرد</Button>}
                                                     </div>
                                                 </Field>
                                             ) : (

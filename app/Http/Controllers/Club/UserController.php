@@ -30,8 +30,9 @@ class UserController extends Controller
         $tid = $this->tenants->require()->id;
         $actor = $request->user();
 
+        // A user tied to a branch sees that branch's accounts.
         return Inertia::render('Club/Settings/Users', [
-            'users' => User::ofTenant($tid)->with('role', 'branch:id,name')->orderBy('name')->get()
+            'users' => User::ofTenant($tid)->when($actor->branch_id, fn ($q, $branch) => $q->where('branch_id', $branch))->with('role', 'branch:id,name')->orderBy('name')->get()
                 ->map(fn (User $u) => $u->only('id', 'name', 'email', 'phone', 'is_active', 'role_id', 'branch_id') + [
                     'role' => $u->role?->name, 'role_key' => $u->role?->key, 'branch' => $u->branch?->name,
                     'last_login_at' => $u->last_login_at?->format('Y-m-d H:i'),
@@ -40,7 +41,7 @@ class UserController extends Controller
                     'may_manage' => Grants::mayManage($actor, $u),
                 ]),
             'roles' => Role::orderBy('id')->get(['id', 'name', 'key', 'permissions'])->map(fn (Role $r) => $r->only('id', 'name', 'key') + ['assignable' => Grants::mayAssign($actor, $r)]),
-            'branches' => Branch::where('is_active', true)->get(['id', 'name']),
+            'branches' => Branch::where('is_active', true)->when($actor->branch_id, fn ($q, $branch) => $q->whereKey($branch))->get(['id', 'name']),
         ]);
     }
 
@@ -48,6 +49,7 @@ class UserController extends Controller
     {
         $data = $this->validated($request);
         $this->guardRole($request, (int) $data['role_id']);
+        $this->guardBranch($request, $data['branch_id'] ?? null);
 
         $user = new User(collect($data)->only('name', 'email', 'phone', 'password')->all());
         $user->email = strtolower($user->email);
@@ -66,9 +68,15 @@ class UserController extends Controller
         $this->ensureOwnClub($user);
         abort_unless($user->id === $request->user()->id || Grants::mayManage($request->user(), $user), 403, 'هذا الحساب يفتح ما لا تفتحه، فلا تعدّله.');
         $data = $this->validated($request, $user);
+        // Nobody changes their own role, branch reach or on/off: that is for whoever manages them.
+        $branch = isset($data['branch_id']) ? (int) $data['branch_id'] : null;
+        if ($user->id === $request->user()->id && ((int) $data['role_id'] !== $user->role_id || $branch !== $user->branch_id || ! ($data['is_active'] ?? true))) {
+            throw ValidationException::withMessages(['role_id' => 'لا تغيّر دورك أو فرعك أو حالة حسابك بنفسك.']);
+        }
         if ((int) $data['role_id'] !== $user->role_id) {
             $this->guardRole($request, (int) $data['role_id']);
         }
+        $this->guardBranch($request, $branch);
 
         // The club must always keep at least one active owner.
         $ownerRole = Role::where('key', SystemRoles::OWNER)->value('id');
@@ -116,6 +124,14 @@ class UserController extends Controller
         $role = Role::findOrFail($roleId);
         if (! Grants::mayAssign($request->user(), $role)) {
             throw ValidationException::withMessages(['role_id' => 'لا يمكنك إسناد دور يفتح ما لا تملكه.']);
+        }
+    }
+
+    /** A user tied to a branch opens and keeps accounts in that branch only (Grants::mayPlace). */
+    private function guardBranch(Request $request, int|string|null $branchId): void
+    {
+        if (! Grants::mayPlace($request->user(), $branchId === null ? null : (int) $branchId)) {
+            throw ValidationException::withMessages(['branch_id' => 'حسابك مرتبط بفرعك: الحسابات التي تديرها تبقى في فرعك.']);
         }
     }
 

@@ -3,12 +3,14 @@
 namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Core\Support\ImageStore;
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Models\ProductCategory;
 use App\Modules\Inventory\Models\StockMovement;
+use App\Modules\Inventory\Services\InventoryService;
 use App\Modules\Inventory\Services\StockService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -28,6 +30,9 @@ class ProductController extends Controller
 {
     /** Photos per product: the main one and up to five more. */
     private const PHOTOS = 6;
+
+    /** @var array<int, string>|null the branch in view's quantities, by product id */
+    private ?array $shelf = null;
 
     public function index(Request $request): Response
     {
@@ -167,15 +172,25 @@ class ProductController extends Controller
         return back()->with('success', 'تم حذف «'.$product->name.'». تبقى مبيعاته وحركات مخزونه في السجلات والتقارير.');
     }
 
-    public function adjust(Request $request, Product $product, StockService $stock): RedirectResponse
+    /**
+     * A count from the product's page: what is on the shelf of the branch in view. The difference is recorded as the
+     * inventory screen records an adjustment («جرد»): its own number, the branch, the note and the audit trail.
+     */
+    public function adjust(Request $request, Product $product, InventoryService $inventory, StockService $stock, BranchContext $branches): RedirectResponse
     {
         $data = $request->validate([
             'counted' => ['required', 'numeric', 'min:0', 'max:1000000'],
             'reason' => ['required', 'string', 'max:200'],
         ]);
-        $stock->adjustTo($product, (float) $data['counted'], $data['reason']);
+        $branch = $branches->assign() ?? $branches->mainId();
+        $moved = DB::transaction(function () use ($product, $data, $branch, $inventory, $stock) {
+            Product::whereKey($product->id)->lockForUpdate()->first();
+            $diff = round((float) $data['counted'] - (float) $stock->quantity($product, $branch), 3);
 
-        return back()->with('success', 'تم تعديل المخزون.');
+            return $diff == 0.0 ? null : $inventory->adjust($product, $branch, $diff, 'count', $data['reason']);
+        });
+
+        return back()->with('success', $moved ? 'تم تعديل المخزون بالمستند '.$moved->document.'.' : 'الكمية على الرف كما في النظام؛ لم يتغير شيء.');
     }
 
     public function movements(Product $product): JsonResponse
@@ -217,7 +232,11 @@ class ProductController extends Controller
     {
         $price = (float) $p->price;
 
+        // The shelf of the branch in view, which a count from this page sets.
+        $this->shelf ??= app(StockService::class)->quantities(app(BranchContext::class)->assign());
+
         return $p->only('id', 'name', 'sku', 'barcode', 'price', 'cost', 'stock_quantity', 'track_stock', 'is_active', 'show_on_website', 'product_category_id') + [
+            'shelf' => $p->track_stock ? (float) ($this->shelf[$p->id] ?? 0) : null,
             'category' => $p->category?->name,
             'image_url' => $p->imageUrl(),
             'photos_count' => count($p->imageUrls()),

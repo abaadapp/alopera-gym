@@ -135,6 +135,7 @@ class PortalAuthController extends Controller
     {
         Auth::guard('member')->logout();
         $request->session()->regenerateToken();
+        Inertia::clearHistory();
 
         return redirect()->route('site.home');
     }

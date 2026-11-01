@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use Closure;
@@ -24,7 +25,8 @@ class ResolveSiteTenant
         $slug = (string) $request->route('club');
         $tenant = Tenant::where('slug', $slug)->first();
 
-        if (! $tenant) {
+        // Only the gym this system serves has a website and portal (HomeGym).
+        if (! $tenant || ! HomeGym::allows($tenant->id)) {
             abort(404);
         }
 

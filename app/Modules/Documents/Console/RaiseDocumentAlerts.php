@@ -2,6 +2,7 @@
 
 namespace App\Modules\Documents\Console;
 
+use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Modules\Documents\Services\DocumentService;
@@ -16,7 +17,7 @@ class RaiseDocumentAlerts extends Command
 
     public function handle(TenantContext $tenants, DocumentService $documents): int
     {
-        $clubs = Tenant::query()->when($this->option('club'), fn ($q, $slug) => $q->where('slug', $slug))->orderBy('id')->get();
+        $clubs = Tenant::query()->when(HomeGym::id(), fn ($q, $home) => $q->whereKey($home))->when($this->option('club'), fn ($q, $slug) => $q->where('slug', $slug))->orderBy('id')->get();
         foreach ($clubs as $club) {
             $count = $tenants->run($club, fn () => $documents->raiseAlerts());
             if ($count > 0) {

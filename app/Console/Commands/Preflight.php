@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Core\Audit\AuditLogger;
 use App\Core\Auth\DemoAccounts;
+use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Models\User;
@@ -77,6 +78,9 @@ class Preflight extends Command
         $demoMembers = $tenants->bypass(fn () => Member::whereNotNull('email')->pluck('email')->filter(fn ($e) => DemoAccounts::isReservedEmail($e))->count());
         $this->check($demoMembers === 0, 'No members on demo email domains', $demoMembers.' member(s)', warn: true, hint: '— their portal sign-in is refused in production');
 
+        // One gym is served (HomeGym): with several club records, the one meant is named.
+        $home = HomeGym::tenant();
+        $this->check($home !== null, 'One gym is served', $home ? $home->slug : Tenant::count().' club records and none named', warn: true, hint: '— GYM_HOME_CLUB=<the gym slug>');
         $demoClubs = Tenant::whereIn('slug', ['alopera', 'demofit'])->get()->filter(fn (Tenant $t) => DemoAccounts::isReservedEmail($t->email))->pluck('slug');
         $this->check($demoClubs->isEmpty(), 'No demo clubs', $demoClubs->isEmpty() ? 'none' : $demoClubs->implode(', ').' look like seeded demo data', warn: true);
 

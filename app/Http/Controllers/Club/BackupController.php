@@ -39,6 +39,8 @@ class BackupController extends Controller
     /** Owner-only by permission; requires typing the club slug to confirm. */
     public function restore(Request $request): RedirectResponse
     {
+        // A restore replaces every record of the club: the owner's decision alone, whatever a role was given.
+        abort_unless($request->user()->isOwner(), 403, 'استعادة النسخة الاحتياطية لصاحب النشاط وحده.');
         $tenant = $this->tenants->require();
         $request->validate([
             'archive' => ['required', 'file', 'mimes:zip', 'max:512000'],

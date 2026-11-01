@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Modules\Gym\Models\AccessDevice;
@@ -27,7 +28,7 @@ class AuthenticateDevice
         }
 
         $tenant = Tenant::find($device->tenant_id);
-        if (! $tenant) {
+        if (! $tenant || ! HomeGym::allows($tenant->id)) {
             return response()->json(['allowed' => false, 'error' => 'club_unavailable'], 403);
         }
 

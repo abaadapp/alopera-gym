@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\User;
 use Closure;
@@ -28,9 +29,10 @@ class ResolveTenantFromUser
             return redirect()->route('login');
         }
 
-        // An account that belongs to no gym (an old platform account) has no screen here.
+        // An account that belongs to no gym (an old platform account), or to a club this system does not serve, has no
+        // screen here.
         $tenant = $user->tenant_id ? $user->tenant()->first() : null;
-        if (! $tenant) {
+        if (! $tenant || ! HomeGym::allows($tenant->id)) {
             Auth::guard('web')->logout();
 
             return redirect()->route('login');

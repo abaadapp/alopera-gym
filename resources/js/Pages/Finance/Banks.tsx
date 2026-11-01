@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { ArrowLeftRight, Banknote, CreditCard, Landmark, Pencil, Plus, Scale, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import { clientKey } from '@/Components/Inventory/parts';
 import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Select, StatCard, SummaryCard, Toggle } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
@@ -155,10 +156,13 @@ function OpeningForm({ account, onClose }: { account: Account; onClose: () => vo
 }
 
 function TransferForm({ accounts, onClose }: { accounts: Account[]; onClose: () => void }) {
+    // One key per transfer: a double click or a retry moves the money once.
+    const key = useRef(clientKey());
     const form = useForm({ from_id: '', to_id: '', amount: '', date: today(), note: '' });
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        form.post(route('club.finance.transfers.store'), { preserveScroll: true, onSuccess: onClose });
+        form.transform((x) => ({ ...x, client_key: key.current }));
+        form.post(route('club.finance.transfers.store'), { preserveScroll: true, onSuccess: () => { key.current = clientKey(); onClose(); } });
     };
 
     return (

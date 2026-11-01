@@ -2,12 +2,13 @@
 
 namespace App\Console\Commands;
 
+use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use Illuminate\Console\Command;
 use Throwable;
 
-/** Runs a scheduled job once per club record, isolating failures. */
+/** Runs a scheduled job once per club served (HomeGym: the gym alone, when there is one), isolating failures. */
 abstract class ForEachTenant extends Command
 {
     abstract protected function handleTenant(Tenant $tenant): string;
@@ -15,7 +16,7 @@ abstract class ForEachTenant extends Command
     public function handle(TenantContext $tenants): int
     {
         $failed = 0;
-        $query = Tenant::query();
+        $query = Tenant::query()->when(HomeGym::id(), fn ($q, $home) => $q->whereKey($home));
         if ($slug = $this->option('tenant')) {
             $query->where('slug', $slug);
         }

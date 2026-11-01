@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Console;
 
+use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Modules\Inventory\Services\OrderService;
@@ -16,7 +17,7 @@ class ExpireOrders extends Command
 
     public function handle(TenantContext $tenants, OrderService $orders): int
     {
-        foreach (Tenant::query()->orderBy('id')->get() as $club) {
+        foreach (Tenant::query()->when(HomeGym::id(), fn ($q, $home) => $q->whereKey($home))->orderBy('id')->get() as $club) {
             $count = $tenants->run($club, fn () => $orders->expireOverdue());
             if ($count > 0) {
                 $this->line("{$club->slug}: {$count} expired");

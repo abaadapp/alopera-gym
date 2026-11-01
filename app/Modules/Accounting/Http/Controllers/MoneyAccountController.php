@@ -5,6 +5,8 @@ namespace App\Modules\Accounting\Http\Controllers;
 use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
+use App\Core\Support\SubmittedOnce;
+use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
@@ -131,11 +133,12 @@ class MoneyAccountController extends Controller
     }
 
     /** Move money between two of the club's accounts (cash deposited at the bank, card settlements reaching it…). */
-    public function transfer(Request $request): RedirectResponse
+    public function transfer(Request $request, AuditLogger $audit): RedirectResponse
     {
         $data = $request->validate([
-            'from_id' => ['required', 'integer', 'different:to_id'],
-            'to_id' => ['required', 'integer'],
+            'client_key' => SubmittedOnce::RULE,
+            'from_id' => ['required', 'integer', 'different:to_id', TenantRule::exists('gym_accounts')],
+            'to_id' => ['required', 'integer', TenantRule::exists('gym_accounts')],
             'amount' => ['required', 'numeric', 'gt:0', 'max:999999999'],
             'date' => ['required', 'date', 'before_or_equal:today'],
             'note' => ['nullable', 'string', 'max:200'],
@@ -143,10 +146,16 @@ class MoneyAccountController extends Controller
         $from = Account::money()->postable()->findOrFail($data['from_id']);
         $to = Account::money()->postable()->findOrFail($data['to_id']);
 
-        $this->ledger->post(['date' => $data['date'], 'description' => "تحويل من {$from->name} إلى {$to->name}".($data['note'] ? " — {$data['note']}" : '')], [
-            ['account' => $to, 'debit' => $data['amount']],
-            ['account' => $from, 'credit' => $data['amount']],
-        ]);
+        // Sent twice (a double click, a retry): moved once. Who moved what stays on record.
+        SubmittedOnce::run($data['client_key'] ?? null, 'money-transfer', function () use ($data, $from, $to, $audit) {
+            $entry = $this->ledger->post(['date' => $data['date'], 'description' => "تحويل من {$from->name} إلى {$to->name}".(filled($data['note'] ?? null) ? " — {$data['note']}" : '')], [
+                ['account' => $to, 'debit' => $data['amount']],
+                ['account' => $from, 'credit' => $data['amount']],
+            ]);
+            $audit->log('money.transferred', $entry, ['from' => $from->code, 'to' => $to->code, 'amount' => $data['amount'], 'date' => $data['date']]);
+
+            return $entry->number;
+        });
 
         return back()->with('success', 'سُجّل التحويل بين الحسابين.');
     }

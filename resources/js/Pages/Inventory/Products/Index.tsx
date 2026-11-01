@@ -6,7 +6,7 @@ import { Button, Card, EmptyState, PageHeader, Pagination, Select, Switch } from
 import { DropdownItem, DropdownSeparator } from '@/Components/ui/Dropdown';
 import { ConfirmDelete, FilterMenu, ProductThumb, RowMenu, StatusTabs, StockBadge, Toolbar, ToolbarSearch, ViewToggle, useView, visit, type FilterDef } from '@/Components/Products/parts';
 import { AdjustModal, MovementsModal } from '@/Components/Products/Stock';
-import { useCurrency } from '@/hooks/useShared';
+import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { addonCount, money, number } from '@/lib/format';
 import type { Option, Paginated } from '@/types';
@@ -45,6 +45,7 @@ export default function ProductsIndex({ products, counts, categories, filters }:
     const currency = useCurrency();
     const [view, setView] = useView('products');
     const [adjusting, setAdjusting] = useState<ProductRow | null>(null);
+    const can = useCan();
     const [history, setHistory] = useState<ProductRow | null>(null);
     const [deleting, setDeleting] = useState<ProductRow | null>(null);
     const go = (change: Partial<Filters>) => visit('club.products.index', filters, change);
@@ -62,7 +63,7 @@ export default function ProductsIndex({ products, counts, categories, filters }:
             {(close) => (
                 <>
                     <DropdownItem href={route('club.products.edit', p.id)}><Pencil /> تعديل</DropdownItem>
-                    {p.track_stock && <DropdownItem onClick={() => { close(); setAdjusting(p); }}><Scale /> جرد المخزون</DropdownItem>}
+                    {p.track_stock && can('inventory.adjust') && <DropdownItem onClick={() => { close(); setAdjusting(p); }}><Scale /> جرد المخزون</DropdownItem>}
                     <DropdownItem onClick={() => { close(); setHistory(p); }}><History /> حركة المخزون</DropdownItem>
                     <DropdownItem onClick={() => { close(); toggle(p, 'is_active', !p.is_active); }}>{p.is_active ? 'إيقاف البيع' : 'تفعيل البيع'}</DropdownItem>
                     <DropdownSeparator />

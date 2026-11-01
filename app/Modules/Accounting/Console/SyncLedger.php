@@ -2,6 +2,7 @@
 
 namespace App\Modules\Accounting\Console;
 
+use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Modules\Accounting\Services\LedgerProjector;
@@ -19,7 +20,7 @@ class SyncLedger extends Command
 
     public function handle(TenantContext $tenants, LedgerProjector $projector): int
     {
-        $clubs = Tenant::query()->when($this->option('club'), fn ($q, $slug) => $q->where('slug', $slug))->orderBy('id')->get();
+        $clubs = Tenant::query()->when(HomeGym::id(), fn ($q, $home) => $q->whereKey($home))->when($this->option('club'), fn ($q, $slug) => $q->where('slug', $slug))->orderBy('id')->get();
 
         foreach ($clubs as $club) {
             $counts = $tenants->run($club, fn () => $projector->syncClub());

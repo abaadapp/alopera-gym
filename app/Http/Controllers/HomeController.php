@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Tenant;
+use App\Core\Tenancy\HomeGym;
 use Illuminate\Http\RedirectResponse;
 
 /**
@@ -13,10 +13,8 @@ class HomeController extends Controller
 {
     public function __invoke(): RedirectResponse
     {
-        $slug = config('gym.home_club') ?: (Tenant::query()->count() === 1 ? Tenant::query()->value('slug') : null);
+        $gym = HomeGym::tenant();
 
-        return $slug && Tenant::where('slug', $slug)->exists()
-            ? redirect()->route('site.home', ['club' => $slug])
-            : redirect()->route('login');
+        return $gym ? redirect()->route('site.home', ['club' => $gym->slug]) : redirect()->route('login');
     }
 }

@@ -1,7 +1,8 @@
-import { Fragment, useState, type FormEvent } from 'react';
+import { Fragment, useRef, useState, type FormEvent } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import { ChevronDown, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import { clientKey } from '@/Components/Inventory/parts';
 import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
 import { Badge, Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Pagination, SearchInput, Select } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
@@ -115,13 +116,16 @@ type FormLine = { account_id: string; debit: string; credit: string; memo: strin
 function EntryForm({ accounts, onClose }: { accounts: Props['accounts']; onClose: () => void }) {
     const currency = useCurrency();
     const blank = (): FormLine => ({ account_id: '', debit: '', credit: '', memo: '' });
+    // One key per entry: a double click or a retry posts it once.
+    const key = useRef(clientKey());
     const form = useForm<{ date: string; description: string; lines: FormLine[] }>({ date: new Date().toISOString().slice(0, 10), description: '', lines: [blank(), blank()] });
     const sum = (key: 'debit' | 'credit') => form.data.lines.reduce((t, l) => t + Math.round(Number(l[key] || 0) * 1000), 0) / 1000;
     const diff = Math.round((sum('debit') - sum('credit')) * 1000) / 1000;
     const set = (i: number, patch: Partial<FormLine>) => form.setData('lines', form.data.lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        form.post(route('club.finance.journal.store'), { preserveScroll: true, onSuccess: onClose });
+        form.transform((x) => ({ ...x, client_key: key.current }));
+        form.post(route('club.finance.journal.store'), { preserveScroll: true, onSuccess: () => { key.current = clientKey(); onClose(); } });
     };
     const errors = form.errors as Record<string, string>;
 

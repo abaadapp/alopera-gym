@@ -4,9 +4,9 @@ import { Button, EmptyState, Field, Input, Modal } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
 
-/** A product's stock count (set the shelf quantity, the difference is recorded) and its stock card. */
+/** A product's stock count (set the shelf quantity of the branch in view, the difference is recorded) and its stock card. */
 
-type Target = { id: number; name: string; stock_quantity: string };
+type Target = { id: number; name: string; stock_quantity: string; shelf?: number | null };
 
 interface Movement {
     id: number;
@@ -22,17 +22,18 @@ interface Movement {
 export const MOVEMENT_TYPES: Record<string, string> = { purchase: 'شراء', sale: 'بيع', adjustment: 'تعديل جرد', return: 'مرتجع', void: 'إلغاء بيع', order: 'محجوز لطلب من الموقع', release: 'إلغاء طلب من الموقع' };
 
 export function AdjustModal({ product, onClose }: { product: Target; onClose: () => void }) {
-    const form = useForm({ counted: String(Number(product.stock_quantity)), reason: '' });
+    const onShelf = product.shelf ?? Number(product.stock_quantity);
+    const form = useForm({ counted: String(onShelf), reason: '' });
     const submit = (e: FormEvent) => {
         e.preventDefault();
         form.post(route('club.products.adjust', product.id), { preserveScroll: true, onSuccess: onClose });
     };
-    const diff = Number(form.data.counted || 0) - Number(product.stock_quantity);
+    const diff = Number(form.data.counted || 0) - onShelf;
 
     return (
         <Modal open onClose={onClose} size="sm" title={`جرد: ${product.name}`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="adjust-form" loading={form.processing}>حفظ الجرد</Button></>}>
             <form id="adjust-form" onSubmit={submit} className="space-y-4">
-                <p className="text-sm text-muted">الرصيد في النظام: <span className="font-medium text-ink num">{number(product.stock_quantity, 3)}</span></p>
+                <p className="text-sm text-muted">الرصيد في النظام لهذا الفرع: <span className="font-medium text-ink num">{number(onShelf, 3)}</span></p>
                 <Field label="الكمية الفعلية على الرف" error={form.errors.counted} required>
                     <Input type="number" step="any" min="0" dir="ltr" value={form.data.counted} onChange={(e) => form.setData('counted', e.target.value)} required />
                 </Field>

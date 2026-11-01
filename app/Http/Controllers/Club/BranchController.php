@@ -10,6 +10,10 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * The club's branches. Opening and stopping branches belongs to someone who works across the club; a user tied to a
+ * branch may only keep their own branch's details.
+ */
 class BranchController extends Controller
 {
     public function index(): Response
@@ -19,6 +23,7 @@ class BranchController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        abort_if($request->user()->branch_id !== null, 403, 'حسابك مرتبط بفرعك، فلا تفتح فروعًا.');
         Branch::create($this->validated($request));
 
         return back()->with('success', 'تمت إضافة الفرع.');
@@ -26,13 +31,20 @@ class BranchController extends Controller
 
     public function update(Request $request, Branch $branch): RedirectResponse
     {
-        $branch->update($this->validated($request, $branch));
+        $tied = $request->user()->branch_id;
+        abort_if($tied !== null && (int) $tied !== $branch->id, 403, 'حسابك مرتبط بفرعك، فلا تعدّل فرعًا آخر.');
+        $data = $this->validated($request, $branch);
+        if ($tied !== null) {
+            unset($data['is_active']);
+        }
+        $branch->update($data);
 
         return back()->with('success', 'تم حفظ الفرع.');
     }
 
-    public function destroy(Branch $branch): RedirectResponse
+    public function destroy(Request $request, Branch $branch): RedirectResponse
     {
+        abort_if($request->user()->branch_id !== null, 403, 'حسابك مرتبط بفرعك، فلا توقف الفروع.');
         if ($branch->is_main) {
             return back()->with('error', 'لا يمكن حذف الفرع الرئيسي.');
         }

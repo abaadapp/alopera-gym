@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Console;
 
 use App\Core\Tenancy\BranchContext;
+use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use Illuminate\Console\Command;
@@ -22,7 +23,7 @@ class CheckStock extends Command
     public function handle(TenantContext $tenants, BranchContext $branches): int
     {
         $problems = 0;
-        $clubs = Tenant::query()->when($this->option('club'), fn ($q, $slug) => $q->where('slug', $slug))->orderBy('id')->get();
+        $clubs = Tenant::query()->when(HomeGym::id(), fn ($q, $home) => $q->whereKey($home))->when($this->option('club'), fn ($q, $slug) => $q->where('slug', $slug))->orderBy('id')->get();
 
         foreach ($clubs as $club) {
             $tenants->run($club, function () use ($club, $branches, &$problems) {
