@@ -4,8 +4,9 @@ namespace App\Core\Papers;
 
 /**
  * The fixed words printed on papers, in Arabic with their English. A paper set to «Arabic and English» prints each
- * caption as two lines, Arabic first; one set to Arabic prints the Arabic line alone. Values the club or a person
- * typed (names, items, notes) are printed as they are, never translated.
+ * caption as two lines, Arabic first; one set to Arabic prints the Arabic line alone; one set to «English and Arabic»
+ * (left to right) prints the English first and the Arabic under it, and its fixed values (a status, the payment terms)
+ * in English. Values the club or a person typed (names, items, notes) are printed as they are, never translated.
  */
 final class PaperLabels
 {
@@ -122,6 +123,33 @@ final class PaperLabels
         'توقيع الموظف' => 'Employee signature',
         'المعتمد' => 'Approved by',
         'أمين المخزن' => 'Storekeeper',
+        'تعليمات الدفع' => 'Payment instructions',
+        // fixed values
+        'مسودة' => 'Draft',
+        'عميل نقدي' => 'Walk-in customer',
+        'رقم العضوية' => 'Member No',
+        'هاتف' => 'Tel',
+        'عدد الأصناف' => 'Items',
+        'لا بنود على هذه الفاتورة' => 'No items on this invoice',
+        'مستحق فورًا' => 'Due on receipt',
+        'عضوية' => 'Membership',
+        'تدريب شخصي' => 'Personal training',
+        'مبيعات المنتجات' => 'Product sales',
+        'خدمات أخرى' => 'Other services',
+        'ملغاة' => 'Void',
+        'أُلغيت قيمتها بإشعار دائن' => 'Cancelled by credit note',
+        'مدفوعة' => 'Paid',
+        'مدفوعة جزئيًا' => 'Partially paid',
+        'غير مدفوعة' => 'Unpaid',
+        'متأخرة السداد' => 'Overdue',
+        'أُلغيت الفاتورة' => 'Invoice voided',
+        'رد مبلغ' => 'Refund',
+        'نقدًا' => 'Cash',
+        'بطاقة (جهاز الشبكة)' => 'Card',
+        'أخرى' => 'Other',
+        'تحويل بنكي' => 'Bank transfer',
+        'دفع إلكتروني' => 'Online payment',
+        PaperTypes::PAYMENT_NOTE => 'Pay at the club reception in cash or by card, or by bank transfer quoting the invoice number.',
     ];
 
     public static function en(string $arabic): string
@@ -137,6 +165,24 @@ final class PaperLabels
      */
     public static function pair(string $arabic, string $lang): array
     {
+        if ($lang === 'en_ar') {
+            $english = self::en($arabic);
+
+            return $english === '' ? [$arabic, ''] : [$english, $arabic];
+        }
+
         return [$arabic, $lang === 'ar_en' ? self::en($arabic) : ''];
+    }
+
+    /** A fixed value (a status, a payment method) as an English-first paper prints it; Arabic papers keep it. */
+    public static function word(string $arabic, string $lang): string
+    {
+        return $lang === 'en_ar' ? (self::en($arabic) ?: $arabic) : $arabic;
+    }
+
+    /** Does this paper read left to right (English first)? */
+    public static function ltr(string $lang): bool
+    {
+        return $lang === 'en_ar';
     }
 }

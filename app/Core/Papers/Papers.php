@@ -48,12 +48,17 @@ final class Papers
      * size (a point-of-sale device whose printer is 58 mm).
      *
      * @param  array<string, mixed>|null  $override
+     * @param  bool  $tailored  the record's own choices (an invoice's language) over the template; the template editor
+     *                          previews the template as it is
      */
-    public static function for(string $type, Model $record, ?array $override = null, string $face = 'sheet', ?string $size = null): Paper
+    public static function for(string $type, Model $record, ?array $override = null, string $face = 'sheet', ?string $size = null, bool $tailored = true): Paper
     {
         $tenant = app(TenantContext::class)->require();
         $builder = self::builder($type);
         $tpl = PaperTypes::settings($tenant, $type, $override);
+        if ($tailored) {
+            $tpl = $builder::tailor($record, $tpl);
+        }
 
         return new Paper($tenant, $type, $builder::document($record, $tpl, $tenant), $tpl, $builder::issuer($record, $tenant), self::size($tpl, $face, $size), $builder::filename($record));
     }
@@ -71,7 +76,7 @@ final class Papers
         $builder = self::builder($type);
         $record = $builder::latest($user);
         if ($record && self::reachable($user, $record) && $builder::allows($user, $record)) {
-            return self::for($type, $record, $override, $face);
+            return self::for($type, $record, $override, $face, tailored: false);
         }
         $tpl = PaperTypes::settings($tenant, $type, $override);
 

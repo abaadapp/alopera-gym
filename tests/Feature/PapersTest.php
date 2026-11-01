@@ -285,6 +285,29 @@ class PapersTest extends TestCase
         $this->actingAs($owner)->get(route('club.settings.papers.edit', 'nothing'))->assertNotFound();
     }
 
+    public function test_the_invoice_prints_payment_instructions_and_may_read_english_first(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $invoice = $this->sellMembership($club);
+        $editor = fn () => $this->actingAs($owner)->get(route('club.settings.papers.edit', 'invoice'))->viewData('page')['props']['paper'];
+
+        // Where to pay: the club's own words, under the totals while something is owed; emptied, it is gone.
+        $this->assertSame(['payment_note'], array_column($editor()['texts'], 'key'));
+        $this->assertArrayHasKey('en_ar', $editor()['langs']);
+        $this->actingAs($owner)->put(route('club.settings.papers.update', 'invoice'), ['payment_note' => "تحويل إلى بنك مسقط\nOM12 0001 2345"])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->get(route('club.invoices.print', $invoice))->assertSee('تعليمات الدفع')->assertSee('OM12 0001 2345');
+        $this->actingAs($owner)->put(route('club.settings.papers.update', 'invoice'), ['payment_note' => ''])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->get(route('club.invoices.print', $invoice))->assertDontSee('تعليمات الدفع');
+
+        // English first, left to right, for the invoice; the other papers stay Arabic first.
+        $this->actingAs($owner)->put(route('club.settings.papers.update', 'invoice'), ['lang' => 'en_ar'])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->get(route('club.invoices.print', $invoice))->assertSee('<html lang="en" dir="ltr">', false)->assertSee('Membership')->assertSee('فاتورة');
+        $this->actingAs($owner)->get(route('club.invoices.create'))->assertInertia(fn ($page) => $page->where('paper_lang', 'en'));
+        $this->actingAs($owner)->put(route('club.settings.papers.update', 'sale'), ['lang' => 'en_ar'])->assertSessionHasErrors('lang');
+        $this->assertArrayNotHasKey('en_ar', $this->actingAs($owner)->get(route('club.settings.papers.edit', 'receipt'))->viewData('page')['props']['paper']['langs']);
+    }
+
     public function test_a4_sheet_and_thermal_strip_follow_the_template(): void
     {
         $club = $this->club();

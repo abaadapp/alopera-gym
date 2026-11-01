@@ -11,6 +11,7 @@ type Values = Record<string, string | boolean>;
 type Paper = {
     key: string; label: string; desc: string; section: string; sheet: boolean; strip: boolean;
     fields: { key: string; label: string; hint: string | null }[];
+    texts: { key: string; label: string; hint: string }[];
     required: string[];
     fonts: Record<string, string>; langs: Record<string, string>; papers: string[]; strips: string[];
     values: Values; defaults: Values;
@@ -126,6 +127,11 @@ export default function PaperEditor({ paper, others, brand }: { paper: Paper; ot
                             <Field label="نص التذييل" hint="أسفل الورقة — كل سطر كما كتبته" error={form.errors.footer}>
                                 <Textarea rows={3} maxLength={500} value={String(form.data.footer ?? '')} onChange={(e) => set('footer', e.target.value)} />
                             </Field>
+                            {paper.texts.map((t) => (
+                                <Field key={t.key} label={t.label} hint={t.hint} error={(form.errors as Record<string, string | undefined>)[t.key]}>
+                                    <Textarea rows={3} maxLength={500} value={String(form.data[t.key] ?? '')} onChange={(e) => set(t.key, e.target.value)} />
+                                </Field>
+                            ))}
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                                 <Field label="حجم الخط" error={form.errors.font}>
                                     <Select value={String(form.data.font)} onChange={(e) => set('font', e.target.value)}>

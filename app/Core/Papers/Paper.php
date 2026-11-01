@@ -83,6 +83,7 @@ final class Paper
         // The engine warns while reading a few empty feature tables of the Arabic font the first time it caches it;
         // the shaping it produces is correct, so those warnings are not turned into errors here.
         $level = error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED);
+        $ltr = PaperLabels::ltr((string) ($this->tpl['lang'] ?? 'ar_en'));
         try {
             $mpdf = new Mpdf([
                 'mode' => 'utf-8',
@@ -95,15 +96,15 @@ final class Paper
                 'fontDir' => [...$dirs, public_path('fonts/papers')],
                 'fontdata' => $fonts + ['ibmplexsansarabic' => ['R' => 'IBMPlexSansArabic-Regular.ttf', 'B' => 'IBMPlexSansArabic-Bold.ttf', 'useOTL' => 0xFF, 'useKashida' => 75]],
                 'default_font' => 'ibmplexsansarabic',
-                'directionality' => 'rtl',
+                'directionality' => $ltr ? 'ltr' : 'rtl',
                 'tempDir' => $tmp,
             ]);
             $mpdf->SetTitle($this->doc['title'].' '.$this->doc['number']);
             $mpdf->SetCreator($this->issuer['name'] ?? '');
             $second = PaperTheme::SECOND;
             $mpdf->SetHTMLFooter('<table width="100%" style="font-family:ibmplexsansarabic;font-size:8pt;color:'.$second.';border-collapse:collapse"><tr>'
-                .'<td style="text-align:right">'.e($this->issuer['name'] ?? '').' · <span dir="ltr">'.e($this->doc['number']).'</span></td>'
-                .'<td style="text-align:left" dir="ltr">{PAGENO} / {nbpg}</td></tr></table>');
+                .'<td style="text-align:'.($ltr ? 'left' : 'right').'">'.e($this->issuer['name'] ?? '').' · <span dir="ltr">'.e($this->doc['number']).'</span></td>'
+                .'<td style="text-align:'.($ltr ? 'right' : 'left').'" dir="ltr">{PAGENO} / {nbpg}</td></tr></table>');
             $mpdf->WriteHTML($this->html(pdf: true));
             $bytes = $mpdf->Output('', 'S');
         } finally {

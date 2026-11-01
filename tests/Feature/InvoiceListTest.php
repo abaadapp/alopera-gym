@@ -118,8 +118,12 @@ class InvoiceListTest extends TestCase
         $this->assertSame([$preview['totals']['subtotal'], $preview['totals']['tax_total'], $preview['totals']['total']], [$issued->subtotal, $issued->tax_total, $issued->total]);
         $this->assertStringEndsWith('000001', $issued->number);
 
-        // No line yet: no paper. A discount larger than its line is shown whole, not refused. Without the permission: 403.
-        $this->assertNull($this->actingAs($owner)->postJson(route('club.invoices.preview'), ['lines' => [['description' => '', 'unit_price' => 5, 'quantity' => 1]]])->json('html'));
+        // No line yet: the whole paper all the same, its totals at zero and no number. A discount larger than its line
+        // is shown whole, not refused. Without the permission: 403.
+        $empty = $this->actingAs($owner)->postJson(route('club.invoices.preview'), ['lines' => [['description' => '', 'unit_price' => 5, 'quantity' => 1]]])->assertOk()->json();
+        $this->assertStringContainsString('لا بنود على هذه الفاتورة', $empty['html']);
+        $this->assertSame('0.000', $empty['totals']['total']);
+        $this->asTenant($club, fn () => $this->assertSame(1, Invoice::count()));
         $this->assertSame('0.000', $this->actingAs($owner)->postJson(route('club.invoices.preview'), ['lines' => [['description' => 'بند', 'unit_price' => 5, 'quantity' => 1, 'discount' => 9]]])->json('totals.total'));
         $this->actingAs($this->staff($club, 'trainer'))->postJson(route('club.invoices.preview'), ['lines' => $lines])->assertForbidden();
         $stranger = $this->member($this->club('Other'));

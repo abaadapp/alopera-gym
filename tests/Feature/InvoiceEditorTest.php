@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Core\Papers\Papers;
 use App\Models\Tenant;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Finance\Models\Invoice;
@@ -194,6 +195,91 @@ class InvoiceEditorTest extends TestCase
         $preview = $this->actingAs($owner)->postJson(route('club.invoices.preview'), $this->form())->assertOk()->json();
         $this->assertStringContainsString('شركة الواحة', $preview['html']);
         $this->assertSame('75.000', $preview['totals']['total']);
+    }
+
+    public function test_the_whole_paper_is_there_before_the_first_line_and_before_a_customer_and_nothing_is_saved(): void
+    {
+        $club = $this->club('نادي الواحة');
+        $owner = $this->owner($club);
+        $member = $this->member($club);
+
+        // The editor opens with the paper drawn: the club, the title, the number to come, the dates, an empty table,
+        // the totals at zero and where to pay — and a dash where the customer will be.
+        $paper = $this->actingAs($owner)->get(route('club.invoices.create'))->assertOk()->assertInertia(fn ($page) => $page->component('Finance/Invoices/Create')->where('paper_lang', 'ar')->has('terms'))->viewData('page')['props']['paper'];
+        foreach (['نادي الواحة', 'فاتورة', 'Invoice', 'رقم الفاتورة', 'مسودة', 'تاريخ الإصدار', 'تاريخ الاستحقاق', 'العميل', '—', 'البيان', 'لا بنود على هذه الفاتورة', 'المجموع الفرعي', 'المتبقي', 'تعليمات الدفع'] as $part) {
+            $this->assertStringContainsString($part, $paper['html'], $part);
+        }
+        $this->assertSame(['A4', '0.000'], [$paper['size'], $paper['totals']['total']]);
+        $this->assertStringNotContainsString('عميل نقدي', $paper['html'], 'no member picked yet is not a walk-in');
+
+        // As the form changes: a member picked, then a line.
+        $picked = $this->actingAs($owner)->postJson(route('club.invoices.preview'), ['customer_mode' => 'member', 'member_id' => $member->id, 'lines' => []])->assertOk()->json('html');
+        $this->assertStringContainsString($member->full_name, $picked);
+        $this->assertStringContainsString($member->member_no, $picked);
+        $lined = $this->actingAs($owner)->postJson(route('club.invoices.preview'), ['customer_mode' => 'member', 'member_id' => $member->id, 'lines' => [['description' => 'حصة تقييم', 'quantity' => 1, 'unit_price' => 7]]])->assertOk()->json();
+        $this->assertStringContainsString('حصة تقييم', $lined['html']);
+        $this->assertSame('7.000', $lined['totals']['total']);
+
+        // Drawing took no number and saved nothing; an invoice without a line is still never saved or issued.
+        $this->asTenant($club, fn () => $this->assertSame([0, 0], [Invoice::count(), Invoice::drafts()->count()]));
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1, 'lines' => []]))->assertSessionHasErrors('lines');
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 0, 'lines' => []]))->assertSessionHasErrors('lines');
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1, 'lines' => [['description' => '', 'quantity' => 1, 'unit_price' => 5]]]))->assertSessionHasErrors('lines.0.description');
+        $this->asTenant($club, fn () => $this->assertSame([0, 0], [Invoice::count(), Invoice::drafts()->count()]));
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1]))->assertSessionHasNoErrors();
+        $this->assertStringEndsWith('000001', $this->asTenant($club, fn () => Invoice::sole()->number));
+    }
+
+    public function test_the_issued_invoice_is_the_paper_that_was_previewed(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $this->asTenant($club, fn () => $club->forceFill(['settings' => array_merge($club->settings ?? [], ['vat_rate' => 5])])->save());
+
+        $preview = $this->actingAs($owner)->postJson(route('club.invoices.preview'), $this->form())->assertOk()->json('html');
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1]))->assertSessionHasNoErrors();
+        $invoice = $this->asTenant($club, fn () => Invoice::sole());
+
+        // Line for line the same paper; only the number, given on issue, takes the place of «مسودة».
+        $issued = $this->asTenant($club, fn () => Papers::for('invoice', $invoice->fresh())->html());
+        $this->assertSame(str_replace('مسودة', $invoice->number, $preview), $issued);
+        // The print page (without the print dialog) is the same paper again.
+        $this->assertSame($issued, $this->actingAs($owner)->get(route('club.invoices.print', ['invoice' => $invoice, 'print' => 0]))->assertOk()->getContent());
+        $this->assertStringContainsString('صافي 15 يومًا', $issued);
+        $this->assertStringContainsString('تعليمات الدفع', $issued);
+    }
+
+    public function test_the_english_face_prints_left_to_right_and_stays_with_the_invoice(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+
+        $en = $this->actingAs($owner)->postJson(route('club.invoices.preview'), $this->form(['paper_lang' => 'en', 'customer_mode' => 'walk_in', 'customer_name' => '']))->assertOk()->json('html');
+        $this->assertStringContainsString('<html lang="en" dir="ltr">', $en);
+        foreach (['Invoice', 'Draft', 'Walk-in customer', 'Net 15 days', 'OMR', 'Payment instructions', 'Pay at the club reception'] as $part) {
+            $this->assertStringContainsString($part, $en, $part);
+        }
+        // The Arabic stays under each English caption; typed values print as typed.
+        $this->assertStringContainsString('تاريخ الإصدار', $en);
+        $this->assertStringContainsString('تأجير القاعة', $en);
+        $this->actingAs($owner)->postJson(route('club.invoices.preview'), $this->form(['paper_lang' => 'fr']))->assertUnprocessable();
+
+        // Saved with the draft, reopened with it, and issued with it: the invoice, its print page and PDF read English.
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 0, 'paper_lang' => 'en']))->assertSessionHasNoErrors();
+        $draft = $this->asTenant($club, fn () => Invoice::drafts()->sole());
+        $this->actingAs($owner)->get(route('club.invoices.drafts.edit', $draft->id))->assertOk()->assertInertia(fn ($page) => $page->where('draft.paper_lang', 'en')->where('paper.html', fn ($html) => str_contains($html, 'dir="ltr"') && str_contains($html, 'تأجير القاعة')));
+        $this->actingAs($owner)->post(route('club.invoices.drafts.update', $draft->id), $this->form(['issue' => 1, 'paper_lang' => 'en']))->assertSessionHasNoErrors();
+        $invoice = $this->asTenant($club, fn () => Invoice::sole());
+        $this->assertSame('en', $invoice->paper_lang);
+        $this->actingAs($owner)->get(route('club.invoices.show', $invoice))->assertOk()->assertInertia(fn ($page) => $page->where('paper.html', fn ($html) => str_contains($html, '<html lang="en" dir="ltr">')));
+        $this->assertStringContainsString('dir="ltr"', $this->actingAs($owner)->get(route('club.invoices.print', $invoice))->assertOk()->getContent());
+        $pdf = $this->actingAs($owner)->get(route('club.papers.pdf', ['type' => 'invoice', 'id' => $invoice->id]))->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF', $pdf->getContent());
+
+        // Another invoice left in Arabic keeps the template's face; the template editor previews the template.
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1, 'paper_lang' => 'ar']))->assertSessionHasNoErrors();
+        $arabic = $this->asTenant($club, fn () => Invoice::latest('id')->first());
+        $this->assertStringContainsString('<html lang="ar" dir="rtl">', $this->asTenant($club, fn () => Papers::for('invoice', $arabic)->html()));
     }
 
     public function test_the_paper_and_the_issued_invoice_add_up_the_same_with_tax_discounts_and_baisa(): void

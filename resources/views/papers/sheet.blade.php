@@ -21,13 +21,16 @@
 @php
     use App\Core\Papers\PaperLabels;
     $cap = fn (string $ar) => PaperLabels::pair($ar, $lang);
+    // An English-first paper reads left to right: every «start» and «end» below follows it.
+    $ltr = PaperLabels::ltr($lang);
+    $end = $ltr ? 'right' : 'left';
     [$title1, $title2] = $cap($doc['title']);
     $meta = array_values(array_filter($doc['meta'] ?? [], fn ($f) => filled($f['value'] ?? null)));
     // Up to five fields read as one column; more are split in two side by side.
     $split = count($meta) > 5;
     $half = (int) ceil(count($meta) / 2);
     $parties = array_values(array_filter($doc['parties'] ?? [], fn ($p) => count(array_filter($p['lines'] ?? [])) > 0));
-    $contact = array_values(array_filter([$issuer['address'] ?? '', ($issuer['phone'] ?? '') !== '' ? 'هاتف: '.$issuer['phone'] : '', $issuer['email'] ?? '']));
+    $contact = array_values(array_filter([$issuer['address'] ?? '', ($issuer['phone'] ?? '') !== '' ? PaperLabels::word('هاتف', $lang).': '.$issuer['phone'] : '', $issuer['email'] ?? '']));
     $sub = trim(implode(' — ', array_filter([($issuer['legal_name'] ?? '') !== ($issuer['name'] ?? '') ? ($issuer['legal_name'] ?? '') : '', $issuer['city'] ?? ''])));
     $proof = array_values(array_filter([
         ['label' => 'الرقم الضريبي', 'value' => $issuer['vat_number'] ?? ''],
@@ -41,7 +44,7 @@
     $header = trim((string) ($tpl['header'] ?? ''));
 @endphp
 <!doctype html>
-<html lang="ar" dir="rtl">
+<html lang="{{ $ltr ? 'en' : 'ar' }}" dir="{{ $ltr ? 'ltr' : 'rtl' }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="{{ \App\Core\Papers\PaperSize::viewport($size) }}">
@@ -57,7 +60,7 @@
             <td style="width:27%">
                 <table class="fields">
                     <tr><td class="doctitle">{{ $title1 }}</td></tr>
-                    <tr><td class="doctitle2">{{ $title2 !== '' ? $title2 : ' ' }}</td></tr>
+                    <tr><td class="doctitle2 f-title">{{ $title2 !== '' ? $title2 : ' ' }}</td></tr>
                 </table>
                 @foreach ($parties as $party)
                     @php([$p1, $p2] = $cap($party['caption']))
@@ -83,7 +86,7 @@
                 @endif
             </td>
             <td style="width:3%"></td>
-            <td style="width:27%; text-align:left">
+            <td style="width:27%; text-align:{{ $end }}">
                 @if (($tpl['show_logo'] ?? true) && $logo)
                     <img src="{{ $logo }}" alt="" style="max-height:{{ \App\Core\Papers\PaperTheme::SIZES['logo'] }}pt; max-width:100%; margin-bottom:8pt">
                 @endif
@@ -157,7 +160,7 @@
             </tbody>
         </table>
         @if (! empty($table['count']) && count($table['rows']) > 0)
-            <div class="count">عدد الأصناف: <span dir="ltr">{{ count($table['rows']) }}</span></div>
+            <div class="count">{{ PaperLabels::word('عدد الأصناف', $lang) }}: <span dir="ltr">{{ count($table['rows']) }}</span></div>
         @endif
     @endif
 
@@ -183,13 +186,13 @@
                 @if ($n2 !== '')<tr><td class="cap lbl2">{{ $n2 }}</td></tr>@endif
                 <tr><td>
                     @if (filled($panel['text'] ?? null))
-                        <div dir="{{ \App\Core\Papers\PaperFormat::dir($panel['text']) }}" style="white-space:pre-line">{{ \App\Core\Papers\PaperFormat::bidi($panel['text']) }}</div>
+                        <div dir="{{ \App\Core\Papers\PaperFormat::dir($panel['text']) }}" style="white-space:pre-line; text-align:{{ $ltr ? 'left' : 'right' }}">{{ \App\Core\Papers\PaperFormat::bidi($panel['text']) }}</div>
                     @endif
                     @if (count($panel['rows'] ?? []) > 0)
                         <table class="rows" width="100%">
                             @foreach ($panel['rows'] as $r)
                                 <tr>
-                                    <td class="lbl2" style="width:70%">{{ $r['label'] }}@if (filled($r['sub'] ?? null))<div style="text-align:right"><span dir="{{ \App\Core\Papers\PaperFormat::dir($r['sub']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['sub']) }}</span></div>@endif</td>
+                                    <td class="lbl2" style="width:70%">{{ $r['label'] }}@if (filled($r['sub'] ?? null))<div style="text-align:{{ $ltr ? 'left' : 'right' }}"><span dir="{{ \App\Core\Papers\PaperFormat::dir($r['sub']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['sub']) }}</span></div>@endif</td>
                                     <td class="amt" style="width:30%"><span dir="ltr" class="{{ ($r['strong'] ?? false) ? 'b' : '' }}">{{ $r['value'] }}</span></td>
                                 </tr>
                             @endforeach

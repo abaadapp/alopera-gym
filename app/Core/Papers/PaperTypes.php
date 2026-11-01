@@ -54,6 +54,9 @@ final class PaperTypes
             'sheet' => true,
             'footer' => '',
             'fields' => ['show_logo' => true, 'show_branch' => false, 'show_employee' => false, 'show_phone' => true, 'show_payments' => true, 'show_notes' => true, 'show_signature' => false],
+            'texts' => ['payment_note' => self::PAYMENT_NOTE],
+            // Printed English first, left to right, too: for a company or a visitor who reads English.
+            'english' => true,
             'required' => ['رقم الفاتورة وتاريخ إصدارها', 'اسم العضو أو العميل', 'البنود والأسعار والخصومات', 'الإجمالي والمدفوع والمتبقي', 'الرقم الضريبي عند احتساب الضريبة'],
         ],
         'receipt' => [
@@ -136,7 +139,16 @@ final class PaperTypes
 
     public const FONTS = ['small' => 'صغير', 'normal' => 'عادي', 'large' => 'كبير'];
 
-    public const LANGS = ['ar_en' => 'عربي وإنجليزي', 'ar' => 'عربي فقط'];
+    /** «en_ar» (English first, left to right) only for papers marked `english`; see langs(). */
+    public const LANGS = ['ar_en' => 'عربي وإنجليزي', 'ar' => 'عربي فقط', 'en_ar' => 'إنجليزي وعربي — من اليسار'];
+
+    /** Texts a paper prints that the club writes (beyond the header and footer), with what each is. */
+    public const TEXTS = [
+        'payment_note' => ['label' => 'تعليمات الدفع', 'hint' => 'تحت الإجماليات ما دامت الفاتورة غير مدفوعة: أين وكيف يدفع العميل — يُترك فارغًا فلا تظهر'],
+    ];
+
+    /** The invoice's payment instructions until the club writes its own (printed in English on an English invoice). */
+    public const PAYMENT_NOTE = 'يُدفع المبلغ في استقبال النادي نقدًا أو بالبطاقة، أو بالتحويل البنكي مع ذكر رقم الفاتورة.';
 
     /** A known paper whose module (sales, inventory) is switched on for this installation. */
     public static function exists(string $type): bool
@@ -144,11 +156,30 @@ final class PaperTypes
         return isset(self::TYPES[$type]) && (! isset(self::TYPES[$type]['module']) || PermissionRegistry::moduleEnabled(self::TYPES[$type]['module']));
     }
 
+    /** @return array<string, string> the languages this paper may print in */
+    public static function langs(string $type): array
+    {
+        return (self::TYPES[$type]['english'] ?? false) ? self::LANGS : array_diff_key(self::LANGS, ['en_ar' => true]);
+    }
+
+    /**
+     * The language a document prints in when it carries a face of its own (an invoice chosen in English in the editor):
+     * «en» is English first; «ar» is the template's Arabic (both lines, or Arabic alone); none is the template's.
+     */
+    public static function face(string $lang, ?string $face): string
+    {
+        return match ($face) {
+            'en' => 'en_ar',
+            'ar' => $lang === 'en_ar' ? 'ar_en' : $lang,
+            default => $lang,
+        };
+    }
+
     /** @return array<string, mixed> */
     public static function defaults(string $type): array
     {
         $spec = self::TYPES[$type];
-        $out = $spec['fields'] + ['header' => '', 'footer' => $spec['footer'] ?? '', 'font' => 'normal', 'lang' => 'ar_en'];
+        $out = $spec['fields'] + ($spec['texts'] ?? []) + ['header' => '', 'footer' => $spec['footer'] ?? '', 'font' => 'normal', 'lang' => 'ar_en'];
         if ($spec['sheet'] ?? false) {
             $out['paper'] = PaperSize::A4;
         }
@@ -178,13 +209,13 @@ final class PaperTypes
         $out = [];
         foreach ($defaults as $key => $default) {
             $raw = $override !== null && array_key_exists($key, $override) ? $override[$key] : ($saved[$key] ?? null);
-            $out[$key] = self::cast($key, $raw, $default);
+            $out[$key] = self::cast($type, $key, $raw, $default);
         }
 
         return $out;
     }
 
-    private static function cast(string $key, mixed $raw, mixed $default): mixed
+    private static function cast(string $type, string $key, mixed $raw, mixed $default): mixed
     {
         if ($raw === null) {
             return $default;
@@ -196,7 +227,7 @@ final class PaperTypes
 
         return match ($key) {
             'font' => isset(self::FONTS[$value]) ? $value : $default,
-            'lang' => isset(self::LANGS[$value]) ? $value : $default,
+            'lang' => isset(self::langs($type)[$value]) ? $value : $default,
             'paper' => in_array($value, PaperSize::sheets(), true) ? $value : $default,
             'strip' => in_array($value, PaperSize::strips(), true) ? $value : $default,
             // An emptied header or footer is a choice, not a missing value.
@@ -212,7 +243,7 @@ final class PaperTypes
             $rules[$key] = match (true) {
                 str_starts_with($key, 'show_') => ['sometimes', 'boolean'],
                 $key === 'font' => ['sometimes', 'in:'.implode(',', array_keys(self::FONTS))],
-                $key === 'lang' => ['sometimes', 'in:'.implode(',', array_keys(self::LANGS))],
+                $key === 'lang' => ['sometimes', 'in:'.implode(',', array_keys(self::langs($type)))],
                 $key === 'paper' => ['sometimes', 'in:'.implode(',', PaperSize::sheets())],
                 $key === 'strip' => ['sometimes', 'in:'.implode(',', PaperSize::strips())],
                 $key === 'header' => ['sometimes', 'nullable', 'string', 'max:120'],
@@ -229,7 +260,7 @@ final class PaperTypes
         $values = [];
         foreach (self::defaults($type) as $key => $default) {
             if (array_key_exists($key, $data)) {
-                $values[$key] = self::cast($key, $data[$key] ?? '', $default);
+                $values[$key] = self::cast($type, $key, $data[$key] ?? '', $default);
             }
         }
         $settings = $tenant->settings ?? [];
@@ -274,7 +305,8 @@ final class PaperTypes
             'fields' => array_map(fn ($key) => ['key' => $key, 'label' => self::FIELDS[$key]['label'], 'hint' => self::FIELDS[$key]['hint'] ?? null], array_keys($spec['fields'])),
             'required' => $spec['required'],
             'fonts' => self::FONTS,
-            'langs' => self::LANGS,
+            'langs' => self::langs($type),
+            'texts' => array_map(fn ($key) => ['key' => $key] + self::TEXTS[$key], array_keys($spec['texts'] ?? [])),
             'papers' => PaperSize::sheets(),
             'strips' => PaperSize::strips(),
             'values' => self::settings($tenant, $type),

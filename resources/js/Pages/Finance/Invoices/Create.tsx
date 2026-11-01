@@ -30,6 +30,8 @@ interface Line {
 
 type Mode = 'member' | 'new' | 'walk_in';
 type Method = 'credit' | 'cash' | 'card' | 'bank_transfer';
+/** The face of the paper: Arabic first (right to left) or English first (left to right). */
+type PaperLang = 'ar' | 'en';
 
 interface Draft {
     id: number;
@@ -43,6 +45,7 @@ interface Draft {
     payment_terms_days: number | null;
     notes: string;
     internal_notes: string;
+    paper_lang: PaperLang | null;
     lines: Line[];
     attachments: { id: number; name: string; size: number; url: string }[];
     updated_at: string | null;
@@ -54,14 +57,18 @@ interface Props {
     tax_rate: number;
     due_days: number;
     today: string;
+    terms: number[];
+    paper_lang: PaperLang;
     methods: Method[];
     may: { issue: boolean; pay: boolean; design: boolean };
     draft?: Draft;
+    /** The paper as the editor opens: drawn by the server with the form's first values, nothing on it yet. */
+    paper: Paper;
 }
 
 type Totals = { subtotal: string; discount_total: string; tax_rate: string; tax_total: string; total: string };
+type Paper = { html: string; size: string; totals: Totals };
 
-const TERMS = [0, 7, 15, 30, 45, 60, 90];
 const CUSTOM = 'custom';
 const METHOD_LABEL: Record<Method, string> = { credit: 'آجل — لا يُقبض الآن', cash: 'مدفوع نقدًا', card: 'مدفوع بالبطاقة (جهاز الشبكة)', bank_transfer: 'تحويل بنكي' };
 const ACCEPT = '.jpg,.jpeg,.png,.pdf,.webp,.heic';
@@ -84,12 +91,16 @@ function addDays(from: string, days: number): string {
  * invoice is issued); the money taken now is recorded with it. «حفظ كمسودة» keeps the work as a real draft — no number,
  * nothing owed, nothing in the books — to reopen from the drafts tab; «إصدار الفاتورة» numbers and issues it. The
  * buttons sit in the header, in sight however long the invoice grows.
+ *
+ * The paper is there from the first moment, the whole sheet with nothing on it yet, and follows every change. Its face —
+ * Arabic or English (left to right) — is chosen beside it and kept with the invoice, so it prints as it was previewed.
  */
-export default function InvoiceCreate({ products, catalog_truncated, tax_rate, due_days, today, methods, may, draft }: Props) {
+export default function InvoiceCreate({ products, catalog_truncated, tax_rate, due_days, today, terms, paper_lang, methods, may, draft, paper: firstPaper }: Props) {
     const currency = useCurrency();
     const symbol = currencyLabel(currency);
     const m = (v: string | number) => money(v, currency);
-    const startTerms = draft ? (draft.payment_terms_days !== null && TERMS.includes(draft.payment_terms_days) ? String(draft.payment_terms_days) : CUSTOM) : TERMS.includes(due_days) ? String(due_days) : CUSTOM;
+    const startTerms = draft ? (draft.payment_terms_days !== null && terms.includes(draft.payment_terms_days) ? String(draft.payment_terms_days) : CUSTOM) : terms.includes(due_days) ? String(due_days) : CUSTOM;
+    const [lang, setLang] = useState<PaperLang>(draft?.paper_lang ?? paper_lang);
     const [lines, setLines] = useState<Line[]>(draft?.lines.length ? draft.lines : [blank()]);
     const [member, setMember] = useState<{ id: number; label: string; phone?: string; membership?: string | null } | null>(draft?.member ?? null);
     const [internal, setInternal] = useState(Boolean(draft?.internal_notes));
@@ -157,25 +168,31 @@ export default function InvoiceCreate({ products, catalog_truncated, tax_rate, d
         payment_terms_days: d.payment_terms_days === CUSTOM ? null : Number(d.payment_terms_days),
         notes: d.notes || null,
         internal_notes: internal ? d.internal_notes || null : null,
+        paper_lang: lang,
         lines: lines.map((l) => ({ product_id: l.product_id || null, description: l.description, quantity: l.quantity || 0, unit_price: l.unit_price || 0, discount: l.discount || 0 })),
-    }), [d.customer_mode, member, d.customer_name, d.customer_phone, d.customer_email, d.issue_date, d.due_date, d.payment_terms_days, d.notes, d.internal_notes, internal, lines]);
+    }), [d.customer_mode, member, d.customer_name, d.customer_phone, d.customer_email, d.issue_date, d.due_date, d.payment_terms_days, d.notes, d.internal_notes, internal, lang, lines]);
 
-    // ── The live paper and its totals, a moment after typing stops; an answer to an older request is dropped. ──
-    const [paper, setPaper] = useState<{ html: string; size: string } | null>(null);
-    const [totals, setTotals] = useState<Totals | null>(null);
+    // ── The live paper and its totals: the server's first one, then redrawn a moment after typing stops (the same form
+    // is not drawn twice; an answer to an older request is dropped). ──
+    const [paper, setPaper] = useState<{ html: string; size: string }>({ html: firstPaper.html, size: firstPaper.size });
+    const [totals, setTotals] = useState<Totals>(firstPaper.totals);
     const [drawing, setDrawing] = useState(false);
     const ticket = useRef(0);
+    const drawn = useRef(JSON.stringify(payload));
     const draw = useCallback(async () => {
+        const sent = JSON.stringify(payload);
+        if (sent === drawn.current) return;
         const mine = ++ticket.current;
         setDrawing(true);
         try {
             const res = await postJson(route('club.invoices.preview'), { ...payload, internal_notes: null });
             const body = await res.json();
             if (mine !== ticket.current || !res.ok) return;
-            setPaper(body.html ? { html: body.html, size: body.size } : null);
+            drawn.current = sent;
+            setPaper({ html: body.html, size: body.size });
             setTotals(body.totals);
         } catch {
-            // offline or refused: the form still saves; the paper waits for the next change
+            // offline or refused: the form still saves; the last paper stays until the next change
         } finally {
             if (mine === ticket.current) setDrawing(false);
         }
@@ -265,7 +282,7 @@ export default function InvoiceCreate({ products, catalog_truncated, tax_rate, d
                             </Field>
                             <Field label="شروط الدفع" error={errors.payment_terms_days}>
                                 <Select value={d.payment_terms_days} onChange={(e) => setTerms(e.target.value)}>
-                                    {TERMS.map((t) => <option key={t} value={String(t)}>{t === 0 ? 'مستحق فورًا' : `${t} ${t <= 10 ? 'أيام' : 'يومًا'}`}</option>)}
+                                    {terms.map((t) => <option key={t} value={String(t)}>{t === 0 ? 'مستحق فورًا' : `${t} ${t <= 10 ? 'أيام' : 'يومًا'}`}</option>)}
                                     <option value={CUSTOM}>تاريخ مخصص</option>
                                 </Select>
                             </Field>
@@ -487,18 +504,24 @@ export default function InvoiceCreate({ products, catalog_truncated, tax_rate, d
                             معاينة الفاتورة
                             {drawing && <RefreshCw className="ms-2 inline size-3.5 animate-spin text-[#d1d5db]" />}
                         </h2>
+                        {/* The paper's language, not the panel's: an English invoice for a company, in an Arabic panel. */}
+                        <div role="group" aria-label="لغة الفاتورة" className="flex overflow-hidden rounded-[10px] border border-line">
+                            {(['ar', 'en'] as const).map((code) => (
+                                <button
+                                    key={code}
+                                    type="button"
+                                    aria-pressed={lang === code}
+                                    onClick={() => setLang(code)}
+                                    className={cn('px-2.5 py-1 text-[12px] font-medium transition-colors', lang === code ? 'bg-[#111] text-white' : 'bg-white text-[#4b4b4b] hover:bg-[#fafafa]')}
+                                >
+                                    {code === 'ar' ? 'العربية' : 'English'}
+                                </button>
+                            ))}
+                        </div>
                         {may.design && <Button variant="outline" size="sm" icon={<Settings2 />} href={route('club.settings.papers.edit', 'invoice')} external>تخصيص التصميم</Button>}
                     </div>
-                    <div className="overflow-hidden rounded-[16px] border border-line bg-white">
-                        {paper ? (
-                            <PaperFrame html={paper.html} paper={paper.size} height="min(72svh, 1000px)" title="معاينة الفاتورة" className="rounded-none border-0" />
-                        ) : (
-                            // Before the first line: an empty sheet at the paper's size, waiting for it.
-                            <div className="bg-[#f4f4f5] p-4" style={{ height: 'min(72svh, 1000px)' }}>
-                                <div className="mx-auto grid h-full max-w-[560px] place-items-center bg-white px-6 text-center text-[13px] text-[#9ca3af] shadow-[0_1px_3px_rgba(0,0,0,0.08)]">اكتب بندًا لتظهر الفاتورة كما ستُصدر.</div>
-                            </div>
-                        )}
-                    </div>
+                    {/* As tall as the sheet, up to most of the screen: a phone shows the whole page without a grey well under it. */}
+                    <PaperFrame html={paper.html} paper={paper.size} height="auto" title="معاينة الفاتورة" className="max-h-[min(72svh,1000px)]" />
                     <p className="px-1 text-[12px] leading-relaxed text-[#9ca3af]">الملاحظات الداخلية والمرفقات لا تظهر في الورقة المطبوعة. والرقم يظهر بعد الإصدار.</p>
                 </div>
             </div>

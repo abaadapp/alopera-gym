@@ -37,6 +37,18 @@ abstract class PaperBuilder
         return PaperIssuer::resolve($tenant);
     }
 
+    /**
+     * The template's settings as this record prints them: what the record chose for itself (an invoice's language)
+     * over the club's template. The template editor's preview leaves this out, so it shows the template.
+     *
+     * @param  array<string, mixed>  $tpl
+     * @return array<string, mixed>
+     */
+    public static function tailor(Model $record, array $tpl): array
+    {
+        return $tpl;
+    }
+
     /** A real recent record to preview the template with, when this user may see it. */
     public static function latest(User $user): ?Model
     {

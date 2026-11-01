@@ -28,7 +28,7 @@ use Illuminate\Support\Str;
  * Issuing a saved draft issues a new invoice from it and removes the draft, its files moving to the invoice. Either
  * all of it happens or none (short stock, an amount larger than the invoice): one transaction.
  *
- * @phpstan-type Data array{customer_mode: string, member_id?: int|null, customer_name?: string|null, customer_phone?: string|null, customer_email?: string|null, issue_date: string, due_date?: string|null, payment_terms_days?: int|string|null, notes?: string|null, internal_notes?: string|null, lines: list<array{product_id?: int|string|null, description: string, quantity: string|float, unit_price: string|float, discount?: string|float|null}>}
+ * @phpstan-type Data array{customer_mode: string, member_id?: int|null, customer_name?: string|null, customer_phone?: string|null, customer_email?: string|null, issue_date: string, due_date?: string|null, payment_terms_days?: int|string|null, notes?: string|null, internal_notes?: string|null, paper_lang?: string|null, lines: list<array{product_id?: int|string|null, description: string, quantity: string|float, unit_price: string|float, discount?: string|float|null}>}
  */
 final class ManualInvoices
 {
@@ -139,10 +139,12 @@ final class ManualInvoices
         });
     }
 
-    /** The invoice as it would be issued, unsaved: the editor's live paper and its totals. */
+    /** The invoice as it would be issued, unsaved: the editor's live paper and its totals (before the first line too). */
     public function preview(array $data): Invoice
     {
-        return $this->build($data, null);
+        [$member, $lines, $options, $name] = $this->parts($data, null);
+
+        return $this->invoices->preview($member, $lines, $options, $name);
     }
 
     /** @param  Data  $data */
@@ -185,6 +187,7 @@ final class ManualInvoices
             'notes' => $data['notes'] ?? null,
             'internal_notes' => $data['internal_notes'] ?? null,
             'payment_terms_days' => is_numeric($data['payment_terms_days'] ?? null) ? (int) $data['payment_terms_days'] : null,
+            'paper_lang' => $data['paper_lang'] ?? null,
             'customer_phone' => $mode === 'new' ? ($data['customer_phone'] ?? null) : null,
             'customer_email' => $mode === 'new' ? ($data['customer_email'] ?? null) : null,
         ];

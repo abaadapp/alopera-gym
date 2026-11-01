@@ -64,7 +64,7 @@ final class InvoiceService
      * paper is drawn from it, so what is previewed is what is issued.
      *
      * @param  list<array{description: string, quantity?: int|float|string, unit_price: string|int|float, discount?: string|int|float|null, itemable?: Model|null}>  $lines
-     * @param  array{type?: string, branch_id?: int|null, due_date?: string|null, notes?: string|null, tax_rate?: float|int|null, issue_date?: string|null, customer_phone?: string|null, customer_email?: string|null, payment_terms_days?: int|null, internal_notes?: string|null}  $options
+     * @param  array{type?: string, branch_id?: int|null, due_date?: string|null, notes?: string|null, tax_rate?: float|int|null, issue_date?: string|null, customer_phone?: string|null, customer_email?: string|null, payment_terms_days?: int|null, internal_notes?: string|null, paper_lang?: string|null}  $options
      */
     public function draft(?Billable $billable, array $lines, array $options = [], ?string $customerName = null): Invoice
     {
@@ -72,6 +72,28 @@ final class InvoiceService
             throw new BusinessRuleException('invoice.empty', 'لا يمكن إصدار فاتورة بدون بنود.');
         }
 
+        return $this->compose($billable, $lines, $options, $customerName);
+    }
+
+    /**
+     * The invoice editor's live paper: draft() as it stands, and before the first line too (a sheet with nothing on it
+     * yet, totals at zero). Never saved or issued: issue() and the editor's drafts go through draft(), which refuses
+     * an invoice without lines.
+     *
+     * @param  list<array{description: string, quantity?: int|float|string, unit_price: string|int|float, discount?: string|int|float|null, itemable?: Model|null}>  $lines
+     * @param  array<string, mixed>  $options
+     */
+    public function preview(?Billable $billable, array $lines, array $options = [], ?string $customerName = null): Invoice
+    {
+        return $this->compose($billable, $lines, $options, $customerName);
+    }
+
+    /**
+     * @param  list<array{description: string, quantity?: int|float|string, unit_price: string|int|float, discount?: string|int|float|null, itemable?: Model|null}>  $lines
+     * @param  array<string, mixed>  $options
+     */
+    private function compose(?Billable $billable, array $lines, array $options, ?string $customerName): Invoice
+    {
         $tenant = $this->tenants->require();
         $subtotal = 0;
         $discount = 0;
@@ -131,6 +153,8 @@ final class InvoiceService
             // The editor's: the terms the due date came from, and the team's note (never printed).
             'payment_terms_days' => $options['payment_terms_days'] ?? null,
             'internal_notes' => $options['internal_notes'] ?? null,
+            // The face its paper prints in, chosen in the editor (none: the invoice template's).
+            'paper_lang' => $options['paper_lang'] ?? null,
         ]);
 
         return $invoice->setRelation('items', new Collection($items));

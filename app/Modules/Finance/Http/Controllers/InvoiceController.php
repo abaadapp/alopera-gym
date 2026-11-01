@@ -4,6 +4,7 @@ namespace App\Modules\Finance\Http\Controllers;
 
 use App\Core\Auth\PermissionRegistry;
 use App\Core\Papers\Papers;
+use App\Core\Papers\PaperTypes;
 use App\Core\Support\Money;
 use App\Core\Support\Period;
 use App\Core\Support\SubmittedOnce;
@@ -126,41 +127,58 @@ class InvoiceController extends Controller
         };
     }
 
-    /** The invoice editor, empty. */
-    public function create(Request $request): Response
+    /** The editor's payment terms, in days (the due date follows the one chosen until it is typed by hand). */
+    public const TERMS = [0, 7, 15, 30, 45, 60, 90];
+
+    /** The invoice editor, empty — with its paper already drawn: the club, the title, the dates, nothing on it yet. */
+    public function create(Request $request, ManualInvoices $invoices): Response
     {
-        return Inertia::render('Finance/Invoices/Create', $this->editor($request));
+        $editor = $this->editor($request);
+
+        return Inertia::render('Finance/Invoices/Create', $editor + ['paper' => $this->paper($request, $invoices, [
+            'customer_mode' => 'member',
+            'issue_date' => $editor['today'],
+            'due_date' => today()->addDays($editor['due_days'])->toDateString(),
+            'payment_terms_days' => in_array($editor['due_days'], self::TERMS, true) ? $editor['due_days'] : null,
+            'paper_lang' => $editor['paper_lang'],
+            'lines' => [],
+        ])]);
     }
 
-    /** A saved draft, reopened in the editor. */
-    public function edit(Request $request, int $draft): Response
+    /** A saved draft, reopened in the editor with its paper as it was left. */
+    public function edit(Request $request, ManualInvoices $invoices, int $draft): Response
     {
         $invoice = $this->draftOf($request, $draft)->load(['items.itemable', 'billable', 'attachments']);
         $member = $invoice->billable instanceof Member ? $invoice->billable : null;
+        $editor = $this->editor($request);
 
-        return Inertia::render('Finance/Invoices/Create', $this->editor($request) + [
-            'draft' => [
-                'id' => $invoice->id,
-                'customer_mode' => $member ? 'member' : ($invoice->customer_phone || $invoice->customer_email ? 'new' : 'walk_in'),
-                'member' => $member ? ['id' => $member->id, 'label' => $member->full_name.' · '.$member->member_no] : null,
-                'customer_name' => $member ? '' : ($invoice->customer_name === 'عميل نقدي' ? '' : $invoice->customer_name),
-                'customer_phone' => $member ? '' : (string) $invoice->customer_phone,
-                'customer_email' => $member ? '' : (string) $invoice->customer_email,
-                'issue_date' => $invoice->issue_date->toDateString(),
-                'due_date' => $invoice->due_date?->toDateString(),
-                'payment_terms_days' => $invoice->payment_terms_days,
-                'notes' => (string) $invoice->notes,
-                'internal_notes' => (string) $invoice->internal_notes,
-                'lines' => $invoice->items->map(fn ($i) => [
-                    'product_id' => $i->itemable instanceof Product ? (string) $i->itemable->id : '',
-                    'description' => $i->description,
-                    'quantity' => Money::normalize($i->quantity),
-                    'unit_price' => Money::normalize($i->unit_price),
-                    'discount' => Money::normalize($i->discount),
-                ])->all(),
-                'attachments' => $invoice->attachments->map(fn ($a) => $a->only('id', 'name', 'size') + ['url' => route('club.invoices.attachments.show', $a)])->all(),
-                'updated_at' => $invoice->updated_at?->format('Y-m-d H:i'),
-            ],
+        $form = [
+            'id' => $invoice->id,
+            'customer_mode' => $member ? 'member' : ($invoice->customer_phone || $invoice->customer_email ? 'new' : 'walk_in'),
+            'member' => $member ? ['id' => $member->id, 'label' => $member->full_name.' · '.$member->member_no] : null,
+            'customer_name' => $member ? '' : ($invoice->customer_name === 'عميل نقدي' ? '' : $invoice->customer_name),
+            'customer_phone' => $member ? '' : (string) $invoice->customer_phone,
+            'customer_email' => $member ? '' : (string) $invoice->customer_email,
+            'issue_date' => $invoice->issue_date->toDateString(),
+            'due_date' => $invoice->due_date?->toDateString(),
+            'payment_terms_days' => $invoice->payment_terms_days,
+            'notes' => (string) $invoice->notes,
+            'internal_notes' => (string) $invoice->internal_notes,
+            'paper_lang' => $invoice->paper_lang,
+            'lines' => $invoice->items->map(fn ($i) => [
+                'product_id' => $i->itemable instanceof Product ? (string) $i->itemable->id : '',
+                'description' => $i->description,
+                'quantity' => Money::normalize($i->quantity),
+                'unit_price' => Money::normalize($i->unit_price),
+                'discount' => Money::normalize($i->discount),
+            ])->all(),
+            'attachments' => $invoice->attachments->map(fn ($a) => $a->only('id', 'name', 'size') + ['url' => route('club.invoices.attachments.show', $a)])->all(),
+            'updated_at' => $invoice->updated_at?->format('Y-m-d H:i'),
+        ];
+
+        return Inertia::render('Finance/Invoices/Create', $editor + [
+            'draft' => $form,
+            'paper' => $this->paper($request, $invoices, ['member_id' => $member?->id, 'paper_lang' => $form['paper_lang'] ?? $editor['paper_lang']] + $form),
         ]);
     }
 
@@ -184,11 +202,24 @@ class InvoiceController extends Controller
 
     /**
      * The invoice's paper as the form stands: the engine's unsaved invoice (the same arithmetic issuing will save) drawn
-     * by the invoice paper's own builder and view. Nothing is numbered or saved; an unfinished line is left out.
+     * by the invoice paper's own builder and view, in the face chosen beside it (Arabic or English). Nothing is numbered
+     * or saved; an unfinished line is left out. Before the first line, and before a customer is chosen, the whole sheet
+     * is still drawn — the club, the title, the dates, an empty table and totals at zero — so the paper is there from
+     * the moment the editor opens. Saving and issuing keep their own rules: an invoice is never issued without a line.
      */
     public function preview(Request $request, ManualInvoices $invoices): JsonResponse
     {
-        $data = $request->validate($this->rules(preview: true), self::MESSAGES);
+        return response()->json($this->paper($request, $invoices, $request->validate($this->rules(preview: true), self::MESSAGES)));
+    }
+
+    /**
+     * The editor's paper and totals for a form as it stands (see preview()).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{html: string, size: string, totals: array<string, mixed>}
+     */
+    private function paper(Request $request, ManualInvoices $invoices, array $data): array
+    {
         $data['lines'] = collect($data['lines'] ?? [])
             ->filter(fn ($l) => filled($l['description'] ?? null) && (float) ($l['quantity'] ?? 0) > 0)
             ->map(fn ($l) => [
@@ -199,24 +230,26 @@ class InvoiceController extends Controller
                 // A discount typed larger than its line would be refused on issue; the preview shows it at most whole.
                 'discount' => min((float) ($l['discount'] ?? 0), (float) Money::mul($l['unit_price'] ?? 0, (float) $l['quantity'])),
             ])->values()->all();
-        if ($data['lines'] === []) {
-            return response()->json(['html' => null, 'size' => null, 'totals' => null]);
-        }
-        $data += ['customer_mode' => 'walk_in', 'issue_date' => today()->toDateString()];
-        if (($data['customer_mode'] ?? null) === 'member' && empty($data['member_id'])) {
+        $data['customer_mode'] ??= 'walk_in';
+        $data['issue_date'] ??= today()->toDateString();
+        // No customer yet (a member not picked, a new customer not named): the paper leaves the name to come.
+        $unnamed = ($data['customer_mode'] === 'member' && empty($data['member_id'])) || ($data['customer_mode'] === 'new' && blank($data['customer_name'] ?? null));
+        if ($data['customer_mode'] === 'member' && empty($data['member_id'])) {
             $data['customer_mode'] = 'walk_in';
         }
 
         $draft = $invoices->preview($data);
-        $draft->number = 'مسودة';
+        if ($unnamed) {
+            $draft->customer_name = '';
+        }
         $draft->setRelation('payments', new EloquentCollection)->setRelation('branch', null)->setRelation('creator', $request->user());
         $paper = Papers::for('invoice', $draft);
 
-        return response()->json([
+        return [
             'html' => $paper->html(),
             'size' => $paper->size,
             'totals' => $draft->only('subtotal', 'discount_total', 'tax_rate', 'tax_total', 'total'),
-        ]);
+        ];
     }
 
     /** A file kept with an invoice (or a draft), for whoever may read the invoice in its branch. */
@@ -291,6 +324,8 @@ class InvoiceController extends Controller
             'payment_terms_days' => ['nullable', 'integer', 'min:0', 'max:365'],
             'notes' => ['nullable', 'string', 'max:500'],
             'internal_notes' => ['nullable', 'string', 'max:500'],
+            // The face of its paper: «ar» Arabic first, «en» English first (left to right); none follows the template.
+            'paper_lang' => ['nullable', 'in:ar,en'],
             'lines' => [$preview ? 'nullable' : 'required', 'array', ...($preview ? [] : ['min:1']), 'max:50'],
             'lines.*.product_id' => ['nullable', TenantRule::exists('products')],
             'lines.*.description' => [$preview ? 'nullable' : 'required', 'string', 'max:250'],
@@ -319,6 +354,7 @@ class InvoiceController extends Controller
         $user = $request->user();
         $tenant = app(TenantContext::class)->require();
         $branch = app(BranchContext::class)->assign();
+        $lang = (string) PaperTypes::settings($tenant, 'invoice')['lang'];
         $stock = PermissionRegistry::moduleEnabled('sales') ? app(StockService::class)->quantities($branch) : [];
         $products = PermissionRegistry::moduleEnabled('sales')
             ? Product::where('is_active', true)->orderBy('name')->limit(501)->get(['id', 'name', 'sku', 'barcode', 'price', 'track_stock'])
@@ -329,7 +365,10 @@ class InvoiceController extends Controller
             'catalog_truncated' => $products->count() > 500,
             'tax_rate' => (float) $tenant->setting('vat_rate', 0),
             'due_days' => (int) $tenant->setting('invoice_due_days', 0),
+            // The paper's face a new invoice starts with: the invoice template's.
+            'paper_lang' => str_starts_with($lang, 'en') ? 'en' : 'ar',
             'today' => today()->toDateString(),
+            'terms' => self::TERMS,
             'methods' => $user->can('payments.record') ? ManualInvoices::METHODS : ['credit'],
             'may' => ['issue' => $user->can('invoices.manage'), 'pay' => $user->can('payments.record'), 'design' => $user->can('papers.manage')],
         ];

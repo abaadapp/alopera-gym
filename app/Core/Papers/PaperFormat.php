@@ -76,10 +76,13 @@ final class PaperFormat
         return preg_match('/\p{L}/u', (string) $text, $m) && ! preg_match('/[\p{Arabic}\p{Hebrew}]/u', $m[0]) ? 'ltr' : 'rtl';
     }
 
-    public static function terms(?int $days): string
+    public static function terms(?int $days, string $lang = 'ar_en'): string
     {
         if ($days === null) {
             return '';
+        }
+        if (PaperLabels::ltr($lang)) {
+            return $days === 0 ? 'Due on receipt' : 'Net '.$days.' days';
         }
 
         return $days === 0 ? 'مستحق فورًا' : 'صافي '.$days.' يومًا';
