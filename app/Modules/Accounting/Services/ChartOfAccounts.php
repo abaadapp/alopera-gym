@@ -48,6 +48,8 @@ final class ChartOfAccounts
         'suppliers_payable' => ['2103', 'الموردون (ذمم دائنة)', 'liability', 'credit', 'liabilities', false, null],
         // Money received and not applied to its invoice: owed to the customer until applied to another invoice or paid back.
         'customer_credits' => ['2104', 'أرصدة العملاء الدائنة', 'liability', 'credit', 'liabilities', false, null],
+        // A cash drawer counted short (debit) or over (credit) when its shift closes.
+        'cash_over_short' => ['5298', 'فروقات الصندوق', 'expense', 'debit', 'operating_expenses', false, null],
         'cost_of_goods' => ['53', 'تكلفة البضاعة', 'expense', 'debit', 'expenses', true, null],
         'purchases' => ['5301', 'مشتريات البضاعة', 'expense', 'debit', 'cost_of_goods', false, null],
     ];

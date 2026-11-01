@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Finance\Http\Controllers\CashShiftController;
 use App\Modules\Finance\Http\Controllers\CreditNoteController;
 use App\Modules\Finance\Http\Controllers\DuesController;
 use App\Modules\Finance\Http\Controllers\ExpenseController;
@@ -37,6 +38,15 @@ Route::post('/payments/{payment}/allocate', [PaymentController::class, 'allocate
 Route::post('/payments/{payment}/refund-credit', [PaymentController::class, 'refundCredit'])->middleware(['can:payments.refund', 'throttle:20,1'])->name('payments.refund-credit');
 Route::get('/payments/{payment}/receipt', [PaymentController::class, 'receipt'])->middleware('can:papers.print')->name('payments.receipt');
 Route::get('/payments/{payment}/proof', [PaymentController::class, 'proof'])->middleware('can:invoices.view')->name('payments.proof');
+
+// The cash drawer's shifts: viewing with cash_shifts.view or .manage (checked in the controller), acting with .manage.
+Route::get('/cash-shifts', [CashShiftController::class, 'index'])->name('cash-shifts.index');
+Route::get('/cash-shifts/{shift}', [CashShiftController::class, 'show'])->whereNumber('shift')->name('cash-shifts.show');
+Route::middleware(['can:cash_shifts.manage', 'throttle:30,1'])->group(function () {
+    Route::post('/cash-shifts', [CashShiftController::class, 'store'])->name('cash-shifts.store');
+    Route::post('/cash-shifts/{shift}/movements', [CashShiftController::class, 'move'])->whereNumber('shift')->name('cash-shifts.move');
+    Route::post('/cash-shifts/{shift}/close', [CashShiftController::class, 'close'])->whereNumber('shift')->name('cash-shifts.close');
+});
 
 Route::get('/dues', DuesController::class)->middleware('can:dues.view')->name('dues');
 

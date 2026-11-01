@@ -55,6 +55,8 @@ final class PermissionRegistry
             'payments.confirm' => 'تأكيد التحويلات البنكية',
             'payments.refund' => 'رد المبالغ',
             'payments.cancel' => 'إلغاء الدفعات المسجّلة بالخطأ',
+            'cash_shifts.manage' => 'فتح ورديات الصندوق وإقفالها ونقل النقد من الدرج وإليه',
+            'cash_shifts.view' => 'عرض ورديات الصندوق وتقارير إقفالها',
             'expenses.manage' => 'المصروفات',
             'dues.view' => 'المستحقات والمتأخرات',
         ]],

@@ -30,6 +30,9 @@ class JournalEntry extends Model
         'transfer' => 'تحويل بين الحسابات',
         'supplier_bill' => 'سند مورد',
         'supplier_payment' => 'سداد مورد',
+        'payment_allocation' => 'تخصيص رصيد عميل',
+        'cash_shift' => 'فرق إقفال وردية',
+        'cash_shift_movement' => 'نقل نقد من الدرج أو إليه',
     ];
 
     protected function casts(): array

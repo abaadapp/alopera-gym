@@ -18,6 +18,8 @@ final class TenantTables
         'gym_programs', 'gym_membership_plans', 'gym_plan_program', 'gym_coupons',
         'gym_trainers', 'gym_trainer_availabilities',
         'gym_members',
+        // The drawer's shifts before the payments and expenses that carry them.
+        'gym_cash_shifts', 'gym_cash_shift_movements',
         'invoices', 'invoice_items', 'invoice_attachments', 'credit_notes', 'payments', 'payment_allocations',
         'gym_memberships', 'gym_coupon_redemptions', 'gym_membership_freezes', 'gym_membership_events',
         'gym_member_documents', 'gym_member_notes',

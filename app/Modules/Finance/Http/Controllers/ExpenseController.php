@@ -19,6 +19,7 @@ use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\ExpenseCategory;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Finance\Services\CashShifts;
 use App\Modules\Inventory\Models\Supplier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -60,6 +61,8 @@ class ExpenseController extends Controller
             $expense->branch_id = app(BranchContext::class)->assign();
             $expense->created_by = $request->user()->id;
             $expense->account_id = $this->moneyAccount($data);
+            // Paid from a drawer during its shift: the shift's closing counts it.
+            $expense->cash_shift_id = app(CashShifts::class)->current(Account::find($expense->account_id), $expense->branch_id);
             if ($request->hasFile('attachment')) {
                 $expense->attachment_path = $request->file('attachment')->store('tenants/'.$tenants->require()->id.'/expenses', 'local');
             }
