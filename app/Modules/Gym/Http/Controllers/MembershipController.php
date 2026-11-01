@@ -30,13 +30,22 @@ class MembershipController extends Controller
 
     public function index(Request $request): Response|StreamedResponse
     {
-        $filter = $request->string('filter')->toString() ?: 'active';
+        // Every membership unless a status is asked for (the dashboard and the alerts link to theirs).
+        $filter = $request->string('filter')->toString() ?: 'all';
+        $dir = $request->string('dir')->toString() === 'desc' ? 'desc' : 'asc';
 
         $query = BranchContext::scope(Membership::with('member:id,full_name,member_no,phone'))
-            ->when($filter === 'expiring', fn ($q) => $q->expiringWithin((int) ($request->integer('days') ?: 7))->orderBy('ends_on'))
+            ->when($filter === 'expiring', fn ($q) => $q->expiringWithin((int) ($request->integer('days') ?: 7)))
             ->when(in_array($filter, ['active', 'frozen', 'pending', 'scheduled', 'expired', 'cancelled'], true), fn ($q) => $q->where('status', $filter))
             ->when($request->integer('plan_id'), fn ($q, $id) => $q->where('membership_plan_id', $id))
-            ->when($filter !== 'expiring', fn ($q) => $q->latest('id'));
+            ->when($request->string('kind')->toString(), fn ($q, $k) => $q->where('kind', $k))
+            ->when($request->string('q')->toString(), fn ($q, $term) => $q->whereHas('member', fn ($m) => $m->search($term)))
+            ->tap(fn ($q) => match ($request->string('sort')->toString()) {
+                'ends_on' => $q->orderBy('ends_on', $dir),
+                'starts_on' => $q->orderBy('starts_on', $dir),
+                'total' => $q->orderBy('total', $dir),
+                default => $filter === 'expiring' ? $q->orderBy('ends_on') : $q->latest('id'),
+            });
 
         if ($request->string('format')->toString() && $request->user()->can('members.export')) {
             $rows = function () use ($query) {
@@ -51,13 +60,13 @@ class MembershipController extends Controller
         }
 
         return Inertia::render('Gym/Memberships/Index', [
-            'memberships' => $query->paginate(25)->withQueryString()->through(fn (Membership $m) => GymPresenter::membership($m) + [
+            'memberships' => $query->paginate(in_array($request->integer('per_page'), [25, 50, 100], true) ? $request->integer('per_page') : 25)->withQueryString()->through(fn (Membership $m) => GymPresenter::membership($m) + [
                 'member' => $m->member?->only('id', 'full_name', 'member_no', 'phone'),
             ]),
             'counts' => BranchContext::scope(Membership::selectRaw('status, count(*) as how_many'))->groupBy('status')->pluck('how_many', 'status')
                 ->put('expiring', BranchContext::scope(Membership::expiringWithin(7))->count()),
             'plans' => MembershipPlan::orderBy('sort')->get(['id', 'name']),
-            'filters' => ['filter' => $filter, 'plan_id' => $request->integer('plan_id') ?: null],
+            'filters' => $request->only('filter', 'plan_id', 'kind', 'q', 'sort', 'dir', 'per_page'),
         ]);
     }
 

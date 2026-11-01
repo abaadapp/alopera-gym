@@ -35,8 +35,11 @@ class PaymentController extends Controller
                     ? $q->where('status', Payment::COMPLETED)->whereColumn('credit_amount', '>', 'credit_used')
                     : $q->where('status', $s))
                 ->when($request->string('method')->toString(), fn ($q, $m) => $q->where('method', $m))
+                // The receipt, the invoice's number or the customer's name.
+                ->when($request->string('q')->toString(), fn ($q, $term) => $q->where(fn ($w) => $w->where('receipt_number', 'ilike', "%{$term}%")->orWhere('reference', 'ilike', "%{$term}%")
+                    ->orWhereHas('invoice', fn ($i) => $i->where('number', 'ilike', "%{$term}%")->orWhere('customer_name', 'ilike', "%{$term}%"))))
                 ->tap(fn ($q) => $request->string('status')->toString() === 'credit' ? $q : Period::fromRequest($request)->apply($q, 'paid_at'))
-                ->latest('id')->paginate(30)->withQueryString()
+                ->latest('id')->paginate(in_array($request->integer('per_page'), [30, 50, 100], true) ? $request->integer('per_page') : 30)->withQueryString()
                 ->through(fn (Payment $p) => $p->only('id', 'receipt_number', 'kind', 'method', 'status', 'amount', 'reference', 'invoice_id', 'from_credit', 'cancel_reason') + [
                     'invoice' => $p->invoice?->number, 'customer' => $p->invoice?->customer_name, 'receiver' => $p->receiver?->name, 'account' => $p->account?->name,
                     'paid_at' => $p->paid_at?->format('Y-m-d H:i'), 'has_proof' => $p->proof_path !== null,
@@ -44,7 +47,7 @@ class PaymentController extends Controller
                 ]),
             'pendingCount' => BranchContext::scope(Payment::where('status', Payment::PENDING))->count(),
             'creditCount' => BranchContext::scope(Payment::where('status', Payment::COMPLETED)->whereColumn('credit_amount', '>', 'credit_used'))->count(),
-            'filters' => $request->only('status', 'method'),
+            'filters' => $request->only('status', 'method', 'q', 'per_page'),
             'period' => Period::fromRequest($request)->toArray(),
         ]);
     }

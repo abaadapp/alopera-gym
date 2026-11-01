@@ -1,10 +1,10 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { router, useForm } from '@inertiajs/react';
+import { useForm } from '@inertiajs/react';
 import { Download, Lock, Paperclip, Pencil, Plus, Trash2, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { clientKey } from '@/Components/Inventory/parts';
 import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
-import { Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Pagination, SearchInput, Select, StatCard, FileInput } from '@/Components/ui';
+import { Button, ConfirmAction, DataTable, Field, Input, Modal, PageHeader, Select, StatCard, FileInput, type Column, type PageMeta, type TableFilter } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { date, money } from '@/lib/format';
 import { paymentMethod } from '@/lib/labels';
@@ -32,10 +32,7 @@ interface ExpenseRow {
 
 type MoneyAccount = { id: number; name: string; kind: string };
 
-interface Filters {
-    category_id?: string;
-    q?: string;
-}
+type Filters = Record<string, string | undefined>;
 
 interface Props {
     expenses: Paginated<ExpenseRow>;
@@ -53,20 +50,49 @@ export default function ExpensesIndex({ expenses, total, categories, suppliers, 
     const currency = useCurrency();
     const [editing, setEditing] = useState<ExpenseRow | 'new' | null>(null);
     const [categoryOpen, setCategoryOpen] = useState(false);
-
-    const apply = (patch: Partial<Filters>) => {
-        const next = { ...filters, ...periodParams(period), ...patch };
-        router.get(route('club.expenses.index'), Object.fromEntries(Object.entries(next).filter(([, v]) => v)) as Record<string, string>, { preserveState: true, replace: true });
-    };
+    const params = { ...filters, ...periodParams(period) };
 
     const exportUrl = (format: 'csv' | 'xlsx') =>
         route('club.expenses.export', { ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)), ...periodParams(period), format });
+
+    const Actions = ({ e }: { e: ExpenseRow }) => (
+        <div className="flex justify-end gap-1">
+            {e.has_attachment && <Button variant="ghost" size="sm" href={route('club.expenses.attachment', e.id)} external icon={<Paperclip className="size-3.5" />} aria-label="المرفق" />}
+            {e.locked ? (
+                <span className="inline-flex items-center gap-1 px-2 text-xs text-muted" title="في فترة محاسبية مقفلة: لا يُعدّل ولا يُحذف. سجّل التصحيح بمصروف جديد في فترة مفتوحة."><Lock className="size-3.5" /> مقفل</span>
+            ) : (
+                <>
+                    <Button variant="ghost" size="sm" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(e)} aria-label="تعديل" />
+                    <ConfirmAction url={route('club.expenses.destroy', e.id)} method="delete" title="حذف المصروف" message={`حذف «${e.description}»؟`} confirmLabel="حذف" variant="ghost" icon={<Trash2 className="size-3.5 text-red-600" />}>
+                        <span className="sr-only">حذف</span>
+                    </ConfirmAction>
+                </>
+            )}
+        </div>
+    );
+
+    const columns: Column<ExpenseRow>[] = [
+        { key: 'number', header: 'الرقم', cell: (e) => <span className="text-xs text-muted num">{e.number}</span> },
+        { key: 'date', header: 'التاريخ', cell: (e) => <span className="whitespace-nowrap">{date(e.expense_date)}</span> },
+        { key: 'description', header: 'الوصف', cell: (e) => <span className="font-medium">{e.description}</span> },
+        { key: 'category', header: 'التصنيف', cell: (e) => e.category ?? <span className="text-muted">غير مصنف</span> },
+        { key: 'payee', header: 'المستفيد', cell: (e) => e.payee ?? '—' },
+        { key: 'method', header: 'الطريقة والحساب', cell: (e) => <span className="text-muted">{paymentMethod[e.payment_method] ?? e.payment_method}{e.account && <span className="block text-xs">{e.account}</span>}</span> },
+        { key: 'amount', header: 'المبلغ', align: 'end', cell: (e) => <span className="font-medium num">{money(e.amount, currency)}</span> },
+        { key: 'actions', header: '', align: 'end', cell: (e) => <Actions e={e} /> },
+    ];
+
+    const tableFilters: TableFilter[] = [
+        { param: 'category_id', label: 'التصنيف', options: categories.map((c) => ({ value: String(c.id), label: c.name })) },
+        { param: 'payment_method', label: 'طريقة الدفع', options: Object.entries(paymentMethod).filter(([k]) => k !== 'paymob').map(([value, text]) => ({ value, label: text })) },
+        { param: 'per_page', label: 'عدد الصفوف', options: ['30', '50', '100'].map((n) => ({ value: n, label: n })) },
+    ];
 
     return (
         <ClubLayout title="المصروفات">
             <PageHeader
                 title="المصروفات"
-                subtitle="الإيجار والرواتب والصيانة وكل ما يُصرف"
+                subtitle="الإيجار والرواتب والصيانة وكل ما يُصرف، ومن أي صندوق أو حساب"
                 actions={
                     <>
                         <Button variant="outline" href={exportUrl('xlsx')} external icon={<Download className="size-4" />}>Excel</Button>
@@ -76,66 +102,30 @@ export default function ExpensesIndex({ expenses, total, categories, suppliers, 
                 }
             />
 
-            <PeriodTabs period={period} params={{ ...filters }} />
-
             <div className="mb-4 grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                <StatCard label="إجمالي المصروفات (حسب المرشحات)" value={money(total, currency)} tone="red" icon={<Wallet className="size-5" />} />
+                <StatCard label="إجمالي المصروفات (حسب الفترة والفلاتر)" value={money(total, currency)} tone="red" icon={<Wallet className="size-5" />} />
             </div>
 
-            <Card padded={false}>
-                <div className="flex flex-wrap items-end justify-between gap-3 p-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <div className="w-48">
-                            <Select value={filters.category_id ?? ''} onChange={(e) => apply({ category_id: e.target.value })} placeholder="كل التصنيفات">
-                                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </Select>
-                        </div>
-                        <Button variant="ghost" size="sm" icon={<Plus className="size-3.5" />} onClick={() => setCategoryOpen(true)}>تصنيف</Button>
-                    </div>
-                    <SearchInput value={filters.q} placeholder="الوصف أو المستفيد…" extra={{ category_id: filters.category_id, ...periodParams(period) }} />
-                </div>
+            <PeriodTabs period={period} params={{ ...filters }} />
 
-                {expenses.data.length === 0 ? (
-                    <EmptyState icon={<Wallet className="size-6" />} title="لا توجد مصروفات" action={<Button size="sm" onClick={() => setEditing('new')}>تسجيل مصروف</Button>} />
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="table-base">
-                            <thead>
-                                <tr><th>الرقم</th><th>التاريخ</th><th>الوصف</th><th>التصنيف</th><th>المستفيد</th><th>الطريقة</th><th>المبلغ</th><th /></tr>
-                            </thead>
-                            <tbody>
-                                {expenses.data.map((e) => (
-                                    <tr key={e.id}>
-                                        <td className="text-xs text-muted num">{e.number}</td>
-                                        <td className="whitespace-nowrap">{date(e.expense_date)}</td>
-                                        <td className="font-medium">{e.description}</td>
-                                        <td>{e.category ?? <span className="text-muted">غير مصنف</span>}</td>
-                                        <td>{e.payee ?? '—'}</td>
-                                        <td className="text-muted">{paymentMethod[e.payment_method] ?? e.payment_method}{e.account && <p className="text-xs">{e.account}</p>}</td>
-                                        <td className="font-medium num">{money(e.amount, currency)}</td>
-                                        <td>
-                                            <div className="flex justify-end gap-1">
-                                                {e.has_attachment && <Button variant="ghost" size="sm" href={route('club.expenses.attachment', e.id)} external icon={<Paperclip className="size-3.5" />} aria-label="المرفق" />}
-                                                {e.locked ? (
-                                                    <span className="inline-flex items-center gap-1 px-2 text-xs text-muted" title="في فترة محاسبية مقفلة: لا يُعدّل ولا يُحذف. سجّل التصحيح بمصروف جديد في فترة مفتوحة."><Lock className="size-3.5" /> مقفل</span>
-                                                ) : (
-                                                    <>
-                                                        <Button variant="ghost" size="sm" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(e)} aria-label="تعديل" />
-                                                        <ConfirmAction url={route('club.expenses.destroy', e.id)} method="delete" title="حذف المصروف" message={`حذف «${e.description}»؟`} confirmLabel="حذف" variant="ghost" icon={<Trash2 className="size-3.5 text-red-600" />}>
-                                                            <span className="sr-only">حذف</span>
-                                                        </ConfirmAction>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+            <DataTable
+                rows={expenses.data}
+                columns={columns}
+                rowKey={(e) => e.id}
+                params={params}
+                pagination={expenses as unknown as PageMeta}
+                search={{ placeholder: 'الوصف أو المستفيد' }}
+                filters={tableFilters}
+                toolbar={<Button variant="ghost" size="sm" icon={<Plus className="size-3.5" />} onClick={() => setCategoryOpen(true)}>تصنيف</Button>}
+                empty="لا توجد مصروفات"
+                card={(e) => (
+                    <div className="space-y-1 px-4 py-3 text-[13px]">
+                        <div className="flex items-start justify-between gap-3"><span className="font-medium">{e.description}</span><span className="font-medium num">{money(e.amount, currency)}</span></div>
+                        <p className="text-muted">{date(e.expense_date)} · {e.category ?? 'غير مصنف'} · {paymentMethod[e.payment_method] ?? e.payment_method}{e.account ? ` · ${e.account}` : ''}</p>
+                        <div className="flex items-center justify-between"><span className="text-xs text-muted num">{e.number}</span><Actions e={e} /></div>
                     </div>
                 )}
-                <Pagination data={expenses} />
-            </Card>
+            />
 
             {editing && <ExpenseModal expense={editing === 'new' ? null : editing} categories={categories} suppliers={suppliers} accounts={moneyAccounts} onClose={() => setEditing(null)} />}
             <CategoryModal open={categoryOpen} onClose={() => setCategoryOpen(false)} />

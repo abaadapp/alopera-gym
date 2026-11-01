@@ -35,7 +35,7 @@ class ExpenseController extends Controller
         $query = $this->filtered($request);
 
         return Inertia::render('Finance/Expenses/Index', [
-            'expenses' => (clone $query)->with('category:id,name', 'account:id,name')->latest('expense_date')->latest('id')->paginate(30)->withQueryString()
+            'expenses' => (clone $query)->with('category:id,name', 'account:id,name')->latest('expense_date')->latest('id')->paginate(in_array($request->integer('per_page'), [30, 50, 100], true) ? $request->integer('per_page') : 30)->withQueryString()
                 ->through(fn (Expense $e) => $e->only('id', 'number', 'description', 'amount', 'payment_method', 'payee', 'reference', 'expense_category_id', 'supplier_id', 'account_id') + [
                     'category' => $e->category?->name, 'account' => $e->account?->name, 'expense_date' => $e->expense_date->toDateString(), 'has_attachment' => $e->attachment_path !== null,
                     'locked' => $periods->isLocked($e->expense_date),
@@ -46,7 +46,7 @@ class ExpenseController extends Controller
             'moneyAccounts' => Account::money()->postable()->whereIn('kind', Account::PAYING_KINDS)->orderBy('code')->get(['id', 'name', 'kind']),
             // Suppliers belong to the sales & inventory module; without it the expense form has no supplier field.
             'suppliers' => PermissionRegistry::moduleEnabled('inventory') ? Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name']) : [],
-            'filters' => $request->only('category_id', 'q'),
+            'filters' => $request->only('category_id', 'payment_method', 'q', 'per_page'),
             'period' => Period::fromRequest($request)->toArray(),
         ]);
     }
@@ -127,6 +127,7 @@ class ExpenseController extends Controller
     {
         return BranchContext::scope(Expense::query())
             ->when($request->integer('category_id'), fn ($q, $id) => $q->where('expense_category_id', $id))
+            ->when($request->string('payment_method')->toString(), fn ($q, $m) => $q->where('payment_method', $m))
             ->tap(fn ($q) => Period::fromRequest($request)->apply($q, 'expense_date'))
             ->when($request->string('q')->toString(), fn ($q, $t) => $q->where(fn ($w) => $w->where('description', 'ilike', "%{$t}%")->orWhere('payee', 'ilike', "%{$t}%")));
     }

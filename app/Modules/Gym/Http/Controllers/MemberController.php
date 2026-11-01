@@ -50,11 +50,21 @@ class MemberController extends Controller
             ->when($status === 'expired', fn ($q) => $q->whereDoesntHave('memberships', fn ($m) => $m->whereIn('status', [Membership::ACTIVE, Membership::FROZEN, Membership::SCHEDULED, Membership::PENDING])))
             ->when($status === 'pending', fn ($q) => $q->whereHas('memberships', fn ($m) => $m->where('status', Membership::PENDING)))
             ->when($request->string('status')->toString(), fn ($q, $s) => $q->where('status', $s))
-            ->latest('id')
-            ->paginate(25)->withQueryString()
+            // The order the table asks for (its headings and «ترتيب»), newest first otherwise.
+            ->tap(function ($q) use ($request) {
+                $dir = $request->string('dir')->toString() === 'desc' ? 'desc' : 'asc';
+                match ($request->string('sort')->toString()) {
+                    'name' => $q->orderBy('full_name', $dir),
+                    'joined' => $q->orderBy('joined_on', $dir)->orderBy('id', $dir),
+                    'ends_on' => $q->orderBy(Membership::select('ends_on')->whereColumn('gym_memberships.member_id', 'gym_members.id')
+                        ->whereIn('status', [Membership::ACTIVE, Membership::FROZEN, Membership::SCHEDULED, Membership::PENDING])->orderByDesc('ends_on')->limit(1), $dir),
+                    default => $q->latest('id'),
+                };
+            })
+            ->paginate(in_array($request->integer('per_page'), [25, 50, 100], true) ? $request->integer('per_page') : 25)->withQueryString()
             ->through(fn (Member $m) => GymPresenter::memberRow($m));
 
-        return Inertia::render('Gym/Members/Index', ['members' => $members, 'filters' => $request->only('q', 'membership', 'status')]);
+        return Inertia::render('Gym/Members/Index', ['members' => $members, 'filters' => $request->only('q', 'membership', 'status', 'sort', 'dir', 'per_page')]);
     }
 
     /** Quick lookup for reception, POS and pickers. */
