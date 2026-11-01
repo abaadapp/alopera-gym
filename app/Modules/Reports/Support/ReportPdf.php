@@ -66,11 +66,11 @@ final class ReportPdf
         $css = 'body{font-family:ibmplexsansarabic;font-size:9pt;color:#111}h1{font-size:15pt;margin:0 0 2pt}h2{font-size:11pt;margin:12pt 0 4pt}'
             .'.club{color:#6b7280;font-size:9pt}table.meta td{padding:1pt 6pt 1pt 0;font-size:8.5pt}table.meta td.k{color:#6b7280}'
             .'table.data{width:100%;border-collapse:collapse;margin-top:4pt}table.data th{background:#f2f2f0;font-weight:bold;text-align:right;padding:4pt;border-bottom:0.6pt solid #d4d4d4;font-size:8.5pt}'
-            .'table.data td{padding:3pt 4pt;border-bottom:0.3pt solid #ececec;font-size:8.5pt}td.n,th.n{text-align:left}.note{color:#92400e;font-size:8pt;margin-top:3pt}';
+            .'table.data td{padding:3pt 4pt;border-bottom:0.3pt solid #ececec;font-size:8.5pt}.note{color:#92400e;font-size:8pt;margin-top:3pt}';
         $out = '<html dir="rtl"><head><style>'.$css.'</style></head><body>';
         $out .= ($this->club ? '<div class="club">'.e($this->club).'</div>' : '').'<h1>'.e($this->title).'</h1><table class="meta">';
         foreach ($this->meta as [$label, $value]) {
-            $out .= '<tr><td class="k">'.e($label).'</td><td>'.e((string) $value).'</td></tr>';
+            $out .= '<tr><td class="k">'.e($label).'</td>'.$this->cell((string) $value).'</tr>';
         }
         $out .= '</table>';
 
@@ -81,7 +81,7 @@ final class ReportPdf
             $numeric = array_map(fn ($c) => $c[1] !== ReportSheet::TEXT, $sheet->columns);
             $out .= '<table class="data"><thead><tr>';
             foreach ($sheet->columns as $i => [$label, $kind]) {
-                $out .= '<th'.($numeric[$i] ? ' class="n"' : '').'>'.e($this->heading($label, $kind)).'</th>';
+                $out .= '<th style="text-align:'.($numeric[$i] ? 'left' : 'right').'">'.e($this->heading($label, $kind)).'</th>';
             }
             $out .= '</tr></thead><tbody>';
             $n = 0;
@@ -97,7 +97,7 @@ final class ReportPdf
                     $kind = $sheet->columns[$i][1] ?? ReportSheet::TEXT;
                     [$value, $kind] = is_array($cell) && array_key_exists('__kind', $cell) ? [$cell['value'], $cell['__kind']] : [$cell, $kind];
                     $text = $this->format($value, $kind);
-                    $out .= $kind === ReportSheet::TEXT || ! is_numeric($value) ? '<td>'.e($text).'</td>' : '<td class="n" dir="ltr">'.e($text).'</td>';
+                    $out .= $kind === ReportSheet::TEXT || ! is_numeric($value) ? $this->cell($text) : '<td style="text-align:left" dir="ltr">'.e($text).'</td>';
                 }
                 $out .= '</tr>';
             }
@@ -111,6 +111,20 @@ final class ReportPdf
         }
 
         return $out.'</body></html>';
+    }
+
+    /**
+     * A text cell whose dates keep their order in a right-to-left table: a cell that is only a date (and time) is set left
+     * to right as a whole; dates inside words are set left to right on their own.
+     */
+    private function cell(string $value): string
+    {
+        $date = '\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?';
+        if (preg_match('/^'.$date.'$/', $value)) {
+            return '<td dir="ltr" style="text-align:right">'.e($value).'</td>';
+        }
+
+        return '<td>'.preg_replace('/('.$date.')/u', '<span dir="ltr">$1</span>', e($value)).'</td>';
     }
 
     private function format(mixed $value, string $kind): string
