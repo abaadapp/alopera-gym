@@ -7,6 +7,7 @@ use App\Http\Middleware\AuthenticateDevice;
 use App\Http\Middleware\EnforceBranchAccess;
 use App\Http\Middleware\EnsureModuleEnabled;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\NormalizeNumbers;
 use App\Http\Middleware\ResolveCustomDomain;
 use App\Http\Middleware\ResolveSiteTenant;
 use App\Http\Middleware\ResolveTenantFromUser;
@@ -33,6 +34,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->prepend(ResolveCustomDomain::class);
         $middleware->append(SecurityHeaders::class);
+        // Figures typed on an Arabic keyboard (١٢٫٥) read as figures, everywhere a form or a device posts.
+        $middleware->append(NormalizeNumbers::class);
 
         $middleware->alias([
             'tenant.user' => ResolveTenantFromUser::class,

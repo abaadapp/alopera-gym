@@ -3,6 +3,7 @@ import '../css/app.css';
 import { createInertiaApp, router } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
 import type { ComponentType } from 'react';
+import ErrorBoundary from './Components/ErrorBoundary';
 
 const pages = import.meta.glob<{ default: ComponentType }>('./Pages/**/*.tsx');
 
@@ -36,7 +37,11 @@ createInertiaApp({
         applyBrand(props.initialPage.props as Record<string, unknown>);
         router.on('navigate', (event) => applyBrand(event.detail.page.props as Record<string, unknown>));
         router.on('error', revealFirstError);
-        createRoot(el).render(<App {...props} />);
+        createRoot(el).render(
+            <ErrorBoundary>
+                <App {...props} />
+            </ErrorBoundary>,
+        );
     },
-    progress: { color: '#be185d', showSpinner: false },
+    progress: { color: '#111111', showSpinner: false },
 });

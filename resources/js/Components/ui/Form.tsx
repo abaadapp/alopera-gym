@@ -33,8 +33,36 @@ export function Field({ label, error, hint, children, className, required }: { l
     );
 }
 
-export function Input({ className, ...props }: ComponentProps<'input'>) {
-    return <input className={cn('input', className)} {...props} />;
+/** Arabic-Indic and Persian digits, and the Arabic decimal and thousands marks, as arithmetic and the server read them. */
+export function asciiDigits(value: string): string {
+    return value
+        .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+        .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+        .replace(/٫/g, '.')
+        .replace(/٬/g, '');
+}
+
+/**
+ * A figure typed on an Arabic keyboard is a figure: number, phone and decimal fields turn «١٢٫٥» into 12.5 as it is
+ * typed. A number field is drawn as text with a numeric keyboard (a browser's number field drops what it cannot read);
+ * the server checks its range.
+ */
+export function Input({ className, onChange, type, inputMode, ...props }: ComponentProps<'input'>) {
+    const number = type === 'number';
+    const numeric = number || type === 'tel' || inputMode === 'decimal' || inputMode === 'numeric' || inputMode === 'tel';
+    const change: typeof onChange = numeric && onChange
+        ? (e) => {
+              const fixed = asciiDigits(e.target.value);
+              if (fixed !== e.target.value) e.target.value = fixed;
+              onChange(e);
+          }
+        : onChange;
+    const fractional = number && props.step !== undefined && String(props.step) !== '1';
+
+    // Figures, dates and times read left to right whatever the page's direction.
+    const ltr = number || type === 'date' || type === 'time' || type === 'datetime-local' || type === 'month';
+
+    return <input className={cn('input', className)} type={number ? 'text' : type} inputMode={number ? (fractional ? 'decimal' : 'numeric') : inputMode} autoComplete={number ? 'off' : props.autoComplete} dir={ltr ? 'ltr' : undefined} onChange={change} {...props} />;
 }
 
 export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
