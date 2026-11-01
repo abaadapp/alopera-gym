@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from '@inertiajs/react';
 import { cn } from '@/lib/cn';
+import { useAdmin } from './AdminScope';
 
 /**
  * A menu that opens under its trigger: click (or Enter/Space) toggles it, Escape and a click outside close it, and
@@ -9,6 +11,9 @@ import { cn } from '@/lib/cn';
  *
  * The panel is 12px-rounded, white, with a soft shadow; items are 8px-rounded rows that turn light grey on hover
  * and focus. `DropdownItem` renders a link, a button, or a destructive (red) action.
+ *
+ * The panel is drawn over the page (portalled), placed from its trigger: a row's menu in a table that scrolls sideways
+ * is never cut off, and near the bottom of the screen it opens upwards. The arrow keys move through its items.
  */
 export function Dropdown({ trigger, children, label, hover = false, className, panelClassName }: {
     trigger: (state: { open: boolean }) => ReactNode;
@@ -19,7 +24,12 @@ export function Dropdown({ trigger, children, label, hover = false, className, p
     panelClassName?: string;
 }) {
     const [open, setOpen] = useState(false);
+    const admin = useAdmin();
     const box = useRef<HTMLDivElement>(null);
+    const panel = useRef<HTMLDivElement>(null);
+    // Fixed from the first frame (as wide as its items, not the page), hidden until it is placed.
+    const hidden: CSSProperties = { position: 'fixed', top: 0, left: 0, visibility: 'hidden' };
+    const [place, setPlace] = useState<CSSProperties>(hidden);
     const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
     // Opened by the pointer coming over it: the click that usually follows keeps it open instead of closing it.
     const byHover = useRef(false);
@@ -33,7 +43,7 @@ export function Dropdown({ trigger, children, label, hover = false, className, p
 
     useEffect(() => {
         if (!open) return;
-        const onDown = (e: PointerEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
+        const onDown = (e: PointerEvent) => !box.current?.contains(e.target as Node) && !panel.current?.contains(e.target as Node) && setOpen(false);
         const onKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') close();
         };
@@ -46,6 +56,47 @@ export function Dropdown({ trigger, children, label, hover = false, className, p
     }, [open]);
 
     useEffect(() => () => clearTimeout(timer.current), []);
+
+    // Under the trigger at its end edge (the left in Arabic), kept on the screen, upwards when there is no room below;
+    // placed again as the page or a table scrolls.
+    useLayoutEffect(() => {
+        if (!open) {
+            setPlace(hidden);
+            return;
+        }
+        const put = () => {
+            const trigger = box.current?.getBoundingClientRect();
+            const menu = panel.current;
+            if (!trigger || !menu) return;
+            const width = menu.offsetWidth;
+            const height = menu.offsetHeight;
+            const rtl = getComputedStyle(box.current!).direction === 'rtl';
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            let left = rtl ? trigger.left : trigger.right - width;
+            left = Math.min(Math.max(8, left), vw - width - 8);
+            const below = trigger.bottom + 6;
+            const top = below + height > vh - 8 && trigger.top - height - 6 > 8 ? trigger.top - height - 6 : below;
+            setPlace({ position: 'fixed', top, left, visibility: 'visible' });
+        };
+        put();
+        window.addEventListener('scroll', put, true);
+        window.addEventListener('resize', put);
+        return () => {
+            window.removeEventListener('scroll', put, true);
+            window.removeEventListener('resize', put);
+        };
+    }, [open]);
+
+    // Down and up move through the items, Home and End to the first and last.
+    const keys = (e: ReactKeyboardEvent) => {
+        const items = [...(panel.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+        if (!items.length || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+        e.preventDefault();
+        const at = items.indexOf(document.activeElement as HTMLElement);
+        const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : e.key === 'ArrowDown' ? (at + 1) % items.length : (at - 1 + items.length) % items.length;
+        items[next].focus();
+    };
 
     const enter = () => {
         if (!hover || !window.matchMedia('(hover: hover)').matches) return;
@@ -72,21 +123,31 @@ export function Dropdown({ trigger, children, label, hover = false, className, p
 
     return (
         <div ref={box} className={cn('relative', className)} onMouseEnter={enter} onMouseLeave={leave}>
-            <button ref={button} type="button" aria-haspopup="menu" aria-expanded={open} aria-label={label} onClick={toggle} className="block rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-[#111]/15">
+            <button ref={button} type="button" aria-haspopup="menu" aria-expanded={open} aria-label={label} onClick={toggle}
+                onKeyDown={(e) => e.key === 'ArrowDown' && open && (e.preventDefault(), panel.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus())}
+                className="block rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-[#111]/15">
                 {trigger({ open })}
             </button>
-            {open && (
-                <div
-                    role="menu"
-                    aria-label={label}
-                    className={cn(
-                        'absolute end-0 top-full z-50 mt-1.5 min-w-[10rem] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)]',
-                        'origin-top-left animate-[menu-in_.14s_ease-out]',
-                        panelClassName,
-                    )}
-                >
-                    {typeof children === 'function' ? children(close) : children}
-                </div>
+            {open && createPortal(
+                <div className={cn(admin && 'admin-ui')} dir={box.current ? getComputedStyle(box.current).direction : undefined}>
+                    <div
+                        ref={panel}
+                        role="menu"
+                        aria-label={label}
+                        style={place}
+                        onKeyDown={keys}
+                        onMouseEnter={enter}
+                        onMouseLeave={leave}
+                        className={cn(
+                            'z-[60] min-w-[10rem] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)]',
+                            'origin-top-left animate-[menu-in_.14s_ease-out]',
+                            panelClassName,
+                        )}
+                    >
+                        {typeof children === 'function' ? children(close) : children}
+                    </div>
+                </div>,
+                document.body,
             )}
         </div>
     );
