@@ -136,6 +136,24 @@ final class OnlinePaymentService
 
             $integration->markWebhook();
 
+            // The reference that found the intent is not signed; the order id is. A signed callback of another order
+            // (same amount) is not let onto this intent.
+            $signedOrder = (string) Arr::get($obj, 'order.id', '');
+            if ($intent->provider_order_id !== null && $signedOrder !== (string) $intent->provider_order_id) {
+                $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, ['reason' => 'order', 'order' => $signedOrder]));
+
+                return $this->log($intent->tenant_id, $transactionId, $reference, true, 'order_mismatch', $payload, $ip);
+            }
+
+            // A refund or void made on Paymob's side arrives as its own (child) transaction, signed and successful, for
+            // the same order: it is money going back, never a new payment. Refunds are confirmed by finance (the
+            // pending refund's reference), so it is only logged here.
+            $moneyBack = Arr::get($obj, 'is_refund') === true || Arr::get($obj, 'is_void') === true
+                || (Arr::get($obj, 'has_parent_transaction') === true && Arr::get($obj, 'is_capture') !== true);
+            if ($moneyBack) {
+                return $this->log($intent->tenant_id, $transactionId, $reference, true, 'ignored_refund', $payload, $ip);
+            }
+
             $succeeded = Arr::get($obj, 'success') === true
                 && Arr::get($obj, 'pending') !== true
                 && Arr::get($obj, 'is_voided') !== true

@@ -365,7 +365,7 @@ final class MembershipService
             $this->bookings->cancelFutureForMembership($membership, 'إلغاء العضوية');
 
             // An unpaid sale is simply withdrawn; money already taken is refunded by finance.
-            if ($wasPending && $membership->invoice && Money::isZero($membership->invoice->paid_total) && $membership->invoice->isOpen()) {
+            if ($wasPending && $membership->invoice && Money::isZero($membership->invoice->paid_total) && Money::isZero($membership->invoice->credited_total) && $membership->invoice->isOpen()) {
                 $this->invoices->void($membership->invoice, 'إلغاء العضوية: '.$reason);
             }
 

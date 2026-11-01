@@ -44,6 +44,8 @@ final class PayrollService
         if (PayrollRun::where('period', $period->toDateString())->exists()) {
             throw new BusinessRuleException('payroll.exists', 'توجد مسيرة لهذا الشهر بالفعل.', 'month');
         }
+        // A closed month takes no salaries: a run opened for it could never be approved.
+        app(AccountingPeriods::class)->assertOpen($period->endOfMonth(), 'month', 'هذا الشهر مقفل محاسبيًا؛ لا تُفتح له مسيرة رواتب.');
 
         $end = $period->endOfMonth();
         $employees = Employee::with('jobTitle')->where('status', 'active')

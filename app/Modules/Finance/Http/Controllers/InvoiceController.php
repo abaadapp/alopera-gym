@@ -363,7 +363,7 @@ class InvoiceController extends Controller
                 'remove_attachments.*' => ['integer'],
                 'payment_method' => ['nullable', 'in:'.implode(',', ManualInvoices::METHODS)],
                 'paid_amount' => ['nullable', 'numeric', 'decimal:0,3', 'min:0', 'max:999999'],
-                'payment_date' => ['nullable', 'date', 'before_or_equal:today'],
+                'payment_date' => ['nullable', 'date', 'before_or_equal:today', new OpenPeriod],
                 'payment_reference' => ['nullable', 'string', 'max:120'],
                 'payment_proof' => ['nullable', ...$file],
             ]),

@@ -144,7 +144,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
     const discounted = invoice.items.some((i) => Number(i.discount) > 0);
     const overdueBadge = invoice.overdue && <Badge tone="red">متأخرة {dayCount(invoice.days_overdue)}</Badge>;
     const canVoid = can('invoices.void') && invoice.status !== 'void' && Number(invoice.paid_total) === 0
-        && !invoice.payments.some((p) => p.status === 'pending');
+        && Number(invoice.credited_total) === 0 && !invoice.payments.some((p) => p.status === 'pending');
 
     const copy = async (text: string) => {
         try {

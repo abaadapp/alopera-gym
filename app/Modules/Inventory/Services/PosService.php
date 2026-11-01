@@ -133,7 +133,7 @@ final class PosService
                     'card' => 'card', 'cash', null => 'cash', 'bank_transfer' => 'bank_transfer', default => 'other',
                 };
                 $this->credits->issue($invoice, $invoice->netTotal(), 'إلغاء عملية بيع '.$sale->number.': '.$reason,
-                    ['method' => $method, 'reference' => $payment?->reference]);
+                    ['method' => $method, 'reference' => $payment?->reference, 'account_id' => $this->payments->paidInto($invoice, $method)]);
             }
 
             $sale->forceFill(['status' => Sale::VOIDED, 'voided_at' => now(), 'cancel_reason' => $reason])->save();

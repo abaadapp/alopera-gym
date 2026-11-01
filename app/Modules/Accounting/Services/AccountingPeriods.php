@@ -74,6 +74,12 @@ final class AccountingPeriods
         $this->assertOpen($date, 'error', $what.' في فترة محاسبية مقفلة (حتى '.$this->lockedThrough()?->format('d/m/Y').')؛ لا يُعدّل ولا يُحذف. سجّل التصحيح بتاريخ في فترة مفتوحة.');
     }
 
+    /** Hold off a closing (or reopening) of the club's months until the current transaction ends. */
+    public function holdClosing(): void
+    {
+        Tenant::whereKey($this->tenants->require()->id)->sharedLock()->first();
+    }
+
     /** The date a correction is posted on: its own date if that is open, else today (always open — a month closes once over). */
     public function postingDate(DateTimeInterface|string|null $date): CarbonImmutable
     {

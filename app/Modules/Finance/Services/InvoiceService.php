@@ -196,6 +196,10 @@ final class InvoiceService
             if (! Money::isZero($invoice->paid_total) || $hasPending) {
                 throw new BusinessRuleException('invoice.has_payments', 'لا يمكن إلغاء فاتورة عليها دفعات. قم برد المبلغ أولًا.');
             }
+            // A credit note already took back part of it in the books; voiding would take that part back a second time.
+            if (! Money::isZero($invoice->credited_total)) {
+                throw new BusinessRuleException('invoice.credited', 'على الفاتورة إشعار دائن، فلا تُلغى. أصدر إشعارًا دائنًا بما بقي منها بدل الإلغاء.');
+            }
 
             $invoice->forceFill([
                 'status' => Invoice::VOID,

@@ -7,6 +7,7 @@ use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
+use Carbon\CarbonImmutable;
 use DateTimeInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Auth;
@@ -40,6 +41,11 @@ final class Ledger
         try {
             // A savepoint: a duplicate key leaves an outer transaction usable.
             return DB::transaction(function () use ($header, $key, $prepared) {
+                // Dated in a month that is over: a closing of that month waits for this entry, or this entry sees it closed.
+                if (CarbonImmutable::parse($header['date'])->lt(CarbonImmutable::today()->startOfMonth())) {
+                    app(AccountingPeriods::class)->holdClosing();
+                    app(AccountingPeriods::class)->assertOpen($header['date'], 'date');
+                }
                 $entry = JournalEntry::create([
                     'number' => NumberSequence::next('journal'),
                     'entry_date' => $header['date'],

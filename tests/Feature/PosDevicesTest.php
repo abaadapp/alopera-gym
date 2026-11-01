@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Tenant;
 use App\Modules\Accounting\Services\ChartOfAccounts;
+use App\Modules\Accounting\Services\FinanceReports;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Inventory\Models\PosDevice;
@@ -78,6 +79,15 @@ class PosDevicesTest extends TestCase
             $this->assertSame([$device->id, $khoud->id, $cashier->id, $bank->id], [$sale->pos_device_id, $sale->branch_id, $sale->cashier_id, $sale->settlement_account_id]);
             $this->assertSame('9.000', app(StockService::class)->quantity($water, $khoud->id));
             $this->assertNotNull($device->fresh()->last_seen_at);
+        });
+
+        // Voided, the card money goes back out of the bank it was settled into, not the default card account.
+        $sale = $this->asTenant($club, fn () => Sale::sole());
+        $this->actingAs($this->owner($club))->post(route('club.pos.void', $sale), ['reason' => 'رجّع العميل المنتج'])->assertSessionHasNoErrors();
+        $this->asTenant($club, function () use ($bank) {
+            $this->assertSame($bank->id, Payment::where('kind', Payment::KIND_REFUND)->sole()->account_id);
+            $this->assertSame('0.000', app(FinanceReports::class)->balance($bank));
+            $this->assertSame('0.000', app(FinanceReports::class)->balanceOf('card_clearing'));
         });
 
         // A cashier tied to the main branch may not sell on an Al Khoud device.

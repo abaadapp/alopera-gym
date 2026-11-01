@@ -45,9 +45,16 @@ class CreditNoteTest extends TestCase
             $this->assertSame(Invoice::ISSUED, $invoice->status);
             $this->assertSame(0, Payment::where('kind', Payment::KIND_REFUND)->count(), 'nothing was paid, so nothing goes back');
 
-            // Cannot credit more than the net value, and cancelling all of an unpaid invoice is a void.
+            // Once a note took part of it, the rest is credited too (voiding it would take the first part back twice).
+            app(CreditNoteService::class)->issue($invoice, 70, 'The rest');
+            $this->assertSame(['100.000', '0.000'], [$invoice->fresh()->credited_total, $invoice->fresh()->balance()]);
+        });
+
+        // Cannot credit more than the net value, and cancelling all of an untouched unpaid invoice is a void.
+        $untouched = $this->invoice($club);
+        $this->asTenant($club, function () use ($untouched) {
             $this->expectException(BusinessRuleException::class);
-            app(CreditNoteService::class)->issue($invoice, 70, 'All of it');
+            app(CreditNoteService::class)->issue($untouched, 100, 'All of it');
         });
     }
 

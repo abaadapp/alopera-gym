@@ -44,10 +44,12 @@ final class CashShifts
         if ($user === null) {
             return null;
         }
+        // Read under a share lock: a shift being closed is waited for (and then no longer open), and a shift's closing
+        // waits for the money being stamped to it, so its count includes it.
         if ($account?->kind === 'cash') {
-            return CashShift::where('status', CashShift::OPEN)->where('account_id', $account->id)->value('id');
+            return CashShift::where('status', CashShift::OPEN)->where('account_id', $account->id)->sharedLock()->value('id');
         }
-        $open = CashShift::where('status', CashShift::OPEN)->when($branchId, fn ($q) => $q->where('branch_id', $branchId));
+        $open = CashShift::where('status', CashShift::OPEN)->when($branchId, fn ($q) => $q->where('branch_id', $branchId))->sharedLock();
 
         return (clone $open)->where('opened_by', $user)->latest('id')->value('id') ?? $open->latest('id')->value('id');
     }

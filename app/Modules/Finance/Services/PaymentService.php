@@ -9,11 +9,13 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Modules\Accounting\Models\Account;
+use App\Modules\Accounting\Services\AccountingPeriods;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\Ledger;
 use App\Modules\Finance\Events\InvoicePaid;
 use App\Modules\Finance\Events\PaymentRecorded;
 use App\Modules\Finance\Events\TransferSubmitted;
+use App\Modules\Finance\Models\CashShift;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
@@ -54,6 +56,11 @@ final class PaymentService
         $account = $this->accountFor($method, $options['account_id'] ?? null);
         if (! isset($options['account_id']) && ($settlement = $options['settlement_account_id'] ?? null)) {
             $account = rescue(fn () => $this->accountFor($method, (int) $settlement), $account, false);
+        }
+
+        // Money dated back into a closed month would never reach its books.
+        if (filled($options['paid_at'] ?? null)) {
+            app(AccountingPeriods::class)->assertOpen($options['paid_at'], 'payment_date');
         }
 
         return DB::transaction(function () use ($invoice, $amount, $method, $options, $account) {
@@ -407,6 +414,15 @@ final class PaymentService
             if (Money::cmp($applied, $invoice->paid_total) > 0) {
                 throw new BusinessRuleException('payment.refunded_after', 'رُدّ من الفاتورة مبلغ بعد هذه الدفعة؛ لا تُلغى.');
             }
+            // A refund waiting to be made counts on the money paid; cancelling under it would refund money never received.
+            if (Payment::where('invoice_id', $invoice->id)->where('kind', Payment::KIND_REFUND)->where('status', Payment::PENDING)->exists()) {
+                throw new BusinessRuleException('payment.refund_pending', 'على الفاتورة رد مبلغ بانتظار التنفيذ؛ أكّده أو ألغِ طلبه قبل إلغاء الدفعة.');
+            }
+            // Cash counted in a closed shift: its closing already put the drawer right (the difference is in the books).
+            $shift = $payment->cash_shift_id ? CashShift::find($payment->cash_shift_id) : null;
+            if ($shift && ! $shift->isOpen() && (int) $payment->account_id === (int) $shift->account_id) {
+                throw new BusinessRuleException('payment.shift_closed', "دخلت هذه الدفعة النقدية في الوردية {$shift->number} وقد أُقفلت وحُسب فرقها؛ لا تُلغى. صحّح بقيد يومية أو بإشعار دائن.");
+            }
 
             $payment->forceFill(['status' => Payment::CANCELLED, 'cancelled_at' => now(), 'cancelled_by' => Auth::guard('web')->id(), 'cancel_reason' => $reason])->save();
             $invoice->forceFill(['paid_total' => Money::sub($invoice->paid_total, $applied)]);
@@ -423,6 +439,10 @@ final class PaymentService
     {
         $invoice = $refund->invoice_id ? Invoice::whereKey($refund->invoice_id)->lockForUpdate()->first() : null;
         $note = $refund->credit_note_id ? CreditNote::whereKey($refund->credit_note_id)->lockForUpdate()->first() : null;
+        // Still owed back now that it is made: nothing paid on the invoice was cancelled under it meanwhile.
+        if (! $refund->from_credit && $invoice && Money::cmp($refund->amount, $invoice->refundDue()) > 0) {
+            throw new BusinessRuleException('refund.not_due', 'لم يعد المبلغ مستحق الرد على الفاتورة (تغيّرت دفعاتها)؛ ألغِ طلب الرد.');
+        }
 
         $refund->forceFill([
             'status' => Payment::COMPLETED,
@@ -465,6 +485,19 @@ final class PaymentService
      * The money account a payment or refund by this method uses: the one chosen (an active cash box, bank account or
      * clearing account suiting the method), else the finance settings' account for the method.
      */
+    /**
+     * The account the invoice's money came into by this method (the till's drawer, a card device's settlement bank),
+     * for a refund made the same way to go back out of it; null (the method's default account) when it was paid
+     * another way or that account no longer takes postings.
+     */
+    public function paidInto(Invoice $invoice, string $method): ?int
+    {
+        $account = Payment::where('invoice_id', $invoice->id)->where('kind', Payment::KIND_PAYMENT)->where('status', Payment::COMPLETED)
+            ->where('method', $method)->whereNotNull('account_id')->latest('id')->value('account_id');
+
+        return $account && Account::money()->postable()->whereKey($account)->whereIn('kind', Payment::METHOD_ACCOUNT_KINDS[$method] ?? [])->exists() ? (int) $account : null;
+    }
+
     private function accountFor(string $method, ?int $chosen): Account
     {
         $chart = app(ChartOfAccounts::class);

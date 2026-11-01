@@ -193,4 +193,28 @@ class PaymobPaymentTest extends TestCase
         $this->post(route('site.pay.start', ['club' => $club->slug, 'token' => $token]))
             ->assertRedirectContains('unifiedcheckout');
     }
+
+    public function test_a_refund_or_void_from_paymob_and_another_orders_callback_never_become_payments(): void
+    {
+        $club = $this->club();
+        [$membership, $intent] = $this->pendingWithIntent($club);
+
+        // Signed, successful, the same amount — but for another Paymob order: not let onto this intent.
+        $this->postWebhook($this->paymobCallback($intent, ['id' => 555000, 'order' => ['id' => 7777]]))->assertOk();
+        $this->assertSame('order_mismatch', PaymentWebhookEvent::latest('id')->first()->outcome);
+        $this->asTenant($club, fn () => $this->assertSame([0, Membership::PENDING], [Payment::count(), $membership->fresh()->status]));
+
+        $this->postWebhook($this->paymobCallback($intent))->assertOk();
+        $this->asTenant($club, fn () => $this->assertSame(1, Payment::count()));
+
+        // The refund made later in Paymob's dashboard comes back as its own signed, successful transaction: money going
+        // back, never a second payment (nor the customer's credit).
+        $this->postWebhook($this->paymobCallback($intent, ['id' => 555002, 'has_parent_transaction' => true, 'is_refund' => true]))->assertOk();
+        $this->postWebhook($this->paymobCallback($intent, ['id' => 555003, 'has_parent_transaction' => true, 'is_void' => true]))->assertOk();
+        $this->assertSame(['ignored_refund', 'ignored_refund'], PaymentWebhookEvent::latest('id')->limit(2)->pluck('outcome')->all());
+        $this->asTenant($club, function () {
+            $this->assertSame(1, Payment::count());
+            $this->assertSame('0.000', Payment::sole()->credit_amount);
+        });
+    }
 }

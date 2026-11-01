@@ -40,6 +40,7 @@ class IntegrationController extends Controller
     private const WEBHOOK_OUTCOMES = [
         'processed' => 'سُجّلت الدفعة', 'duplicate' => 'مكرر — لم يُسجَّل مرة أخرى', 'failed_payment' => 'دفع مرفوض من البنك',
         'amount_mismatch' => 'المبلغ لا يطابق — لم يُسجَّل', 'rejected_signature' => 'توقيع غير صحيح — رُفض', 'unknown_intent' => 'عملية غير معروفة',
+        'ignored_refund' => 'رد أو إلغاء من Paymob — لم يُسجَّل دفعة', 'order_mismatch' => 'رقم الطلب لا يطابق — لم يُسجَّل',
     ];
 
     public function __construct(private readonly IntegrationHub $hub, private readonly TenantContext $tenants) {}
@@ -90,7 +91,7 @@ class IntegrationController extends Controller
                 ->get(['id', 'reference', 'signature_valid', 'outcome', 'created_at'])
                 ->map(fn (PaymentWebhookEvent $e) => [
                     'id' => $e->id, 'reference' => $e->reference, 'valid' => $e->signature_valid,
-                    'outcome' => self::WEBHOOK_OUTCOMES[$e->outcome] ?? $e->outcome, 'ok' => in_array($e->outcome, ['processed', 'duplicate'], true),
+                    'outcome' => self::WEBHOOK_OUTCOMES[$e->outcome] ?? $e->outcome, 'ok' => in_array($e->outcome, ['processed', 'duplicate', 'ignored_refund'], true),
                     'at' => $e->created_at->format('Y-m-d H:i'),
                 ]),
             'endpoints' => [

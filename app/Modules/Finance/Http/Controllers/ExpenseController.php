@@ -16,6 +16,7 @@ use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Rules\OpenPeriod;
 use App\Modules\Accounting\Services\AccountingPeriods;
 use App\Modules\Accounting\Services\ChartOfAccounts;
+use App\Modules\Finance\Models\CashShift;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\ExpenseCategory;
 use App\Modules\Finance\Models\Payment;
@@ -80,6 +81,9 @@ class ExpenseController extends Controller
         $data = $this->validated($request);
         $expense->fill(collect($data)->except('attachment', 'client_key')->all());
         $expense->account_id = $this->moneyAccount($data);
+        if ($expense->isDirty(['amount', 'account_id', 'payment_method'])) {
+            $this->assertShiftOpen($expense);
+        }
         if ($request->hasFile('attachment')) {
             $expense->attachment_path = $request->file('attachment')->store('tenants/'.$tenants->require()->id.'/expenses', 'local');
         }
@@ -91,9 +95,19 @@ class ExpenseController extends Controller
     public function destroy(Expense $expense): RedirectResponse
     {
         app(AccountingPeriods::class)->assertEditable($expense->expense_date, 'المصروف');
+        $this->assertShiftOpen($expense);
         $expense->delete();
 
         return back()->with('success', 'تم حذف المصروف.');
+    }
+
+    /** Paid from a drawer whose shift is closed: the closing counted it, so its money is not changed afterwards. */
+    private function assertShiftOpen(Expense $expense): void
+    {
+        $shift = $expense->getOriginal('cash_shift_id') ? CashShift::find($expense->getOriginal('cash_shift_id')) : null;
+        if ($shift && ! $shift->isOpen() && (int) $expense->getOriginal('account_id') === (int) $shift->account_id) {
+            throw new BusinessRuleException('expense.shift_closed', "دُفع هذا المصروف من الصندوق في الوردية {$shift->number} وقد أُقفلت وحُسب فرقها؛ لا يُحذف ولا يُغيَّر مبلغه أو حسابه. صحّح بقيد يومية.");
+        }
     }
 
     public function storeCategory(Request $request): RedirectResponse

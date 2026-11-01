@@ -24,7 +24,7 @@ final class CreditNoteService
     public function __construct(private readonly PaymentService $payments, private readonly AuditLogger $audit) {}
 
     /**
-     * @param  array{method: string, reference?: string|null}|null  $refund  pay back what the note makes overpaid, now
+     * @param  array{method: string, reference?: string|null, account_id?: int|null}|null  $refund  pay back what the note makes overpaid, now
      */
     /**
      * The tax a credit note gives back: its share of the invoice's tax, so the VAT owed falls with the revenue. The
@@ -59,7 +59,8 @@ final class CreditNoteService
             if (Money::cmp($amount, $invoice->netTotal()) > 0) {
                 throw new BusinessRuleException('credit.amount', 'المبلغ أكبر من صافي الفاتورة ('.$invoice->netTotal().').', 'amount');
             }
-            if (Money::isZero($invoice->paid_total) && Money::cmp($amount, $invoice->netTotal()) === 0) {
+            // Untouched and unpaid, the whole of it is voided instead; once a note took part of it, the rest is credited.
+            if (Money::isZero($invoice->paid_total) && Money::isZero($invoice->credited_total) && Money::cmp($amount, $invoice->netTotal()) === 0) {
                 throw new BusinessRuleException('credit.use_void', 'الفاتورة غير مدفوعة: لإلغائها بالكامل استخدم «إلغاء الفاتورة».', 'amount');
             }
 
@@ -87,7 +88,7 @@ final class CreditNoteService
 
             if ($refund !== null && ! Money::isZero($invoice->refundDue())) {
                 $owed = Money::cmp($invoice->refundDue(), $note->amount) <= 0 ? $invoice->refundDue() : $note->amount;
-                $this->payments->refund($note, $owed, $refund['method'], $refund['reference'] ?? null);
+                $this->payments->refund($note, $owed, $refund['method'], $refund['reference'] ?? null, $refund['account_id'] ?? null);
             }
 
             // The note settled what was left (e.g. an agreed discount on the remainder).

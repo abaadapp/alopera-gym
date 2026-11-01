@@ -174,7 +174,7 @@ final class LedgerProjector
 
         if ($deleted) {
             if ($current) {
-                $this->ledger->reverse($current, "حذف المصروف {$expense->number}", $this->key('expense', $expense->id, 'delete', $current->revision));
+                $this->ledger->reverse($current, "حذف المصروف {$expense->number}", $this->key('expense', $expense->id, 'delete', $current->revision), $current->entry_date);
             }
 
             return;
@@ -190,8 +190,9 @@ final class LedgerProjector
             if ($same) {
                 return;
             }
-            // Edited: the old posting is reversed and the record posted again as it now stands.
-            $this->ledger->reverse($current, "تعديل المصروف {$expense->number}", $this->key('expense', $expense->id, 'adjust', $current->revision));
+            // Edited: the old posting is reversed on its own date (today if that month is closed) and the record posted
+            // again as it now stands, so each month carries the expense once.
+            $this->ledger->reverse($current, "تعديل المصروف {$expense->number}", $this->key('expense', $expense->id, 'adjust', $current->revision), $current->entry_date);
         }
 
         $this->ledger->post([

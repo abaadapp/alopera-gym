@@ -196,9 +196,13 @@ final class OrderService
 
             if ($invoice && $invoice->status !== Invoice::VOID) {
                 if ($paid) {
-                    $this->credits->issue($invoice, $invoice->netTotal(), 'إلغاء طلب '.$sale->number.': '.$reason, ['method' => $refundMethod, 'reference' => $sale->number]);
-                } else {
+                    $this->credits->issue($invoice, $invoice->netTotal(), 'إلغاء طلب '.$sale->number.': '.$reason,
+                        ['method' => $refundMethod, 'reference' => $sale->number, 'account_id' => $this->payments->paidInto($invoice, $refundMethod)]);
+                } elseif (Money::isZero($invoice->credited_total)) {
                     $this->invoices->void($invoice, 'إلغاء طلب '.$sale->number.': '.$reason);
+                } elseif (! Money::isZero($invoice->netTotal())) {
+                    // Part of it was already credited: what is left is credited too, rather than voided twice over.
+                    $this->credits->issue($invoice, $invoice->netTotal(), 'إلغاء طلب '.$sale->number.': '.$reason);
                 }
             }
             $this->audit->log('sale.order_cancelled', $sale, ['reason' => $reason, 'refunded' => $paid]);

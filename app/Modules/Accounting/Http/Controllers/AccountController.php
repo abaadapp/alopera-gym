@@ -73,6 +73,11 @@ class AccountController extends Controller
         if (array_key_exists('is_active', $data) && ! $data['is_active'] && $account->system_key !== null) {
             throw new BusinessRuleException('accounting.system_account', 'هذا حساب أساسي يستخدمه النظام ولا يُوقف.', 'is_active');
         }
+        // An expense category posts to its own account: stopped, the category's expenses (and edits of old ones) would
+        // not reach the books.
+        if (array_key_exists('is_active', $data) && ! $data['is_active'] && $account->expense_category_id !== null) {
+            throw new BusinessRuleException('accounting.category_account', 'هذا حساب تصنيف مصروفات تُقيَّد عليه مصروفاته، فلا يُوقف. يمكنك تغيير اسمه.', 'is_active');
+        }
         $before = ['name' => $account->name, 'is_active' => (bool) $account->is_active];
         $account->update($data);
         app(AuditLogger::class)->logChanges('accounting.chart_account_updated', $account, $before, ['name' => $account->name, 'is_active' => (bool) $account->is_active], ['code' => $account->code]);
