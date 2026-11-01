@@ -46,6 +46,16 @@ trait BelongsToTenant
         });
     }
 
+    /** A word where the address expects a record number (/members/abc) finds no record (404), not a database error. */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if (($field ?? $this->getRouteKeyName()) === $this->getKeyName() && $this->getKeyType() === 'int' && ! ctype_digit((string) $value)) {
+            return null;
+        }
+
+        return parent::resolveRouteBinding($value, $field);
+    }
+
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);

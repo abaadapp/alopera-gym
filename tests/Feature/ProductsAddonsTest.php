@@ -194,6 +194,9 @@ class ProductsAddonsTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('product.addons', fn ($addons) => collect($addons)->pluck('name')->sort()->values()->all() === ['Gift bag', 'Ice', 'Online only', 'Scoop']));
         $this->get(route('site.shop.product', ['club' => $club->slug, 'product' => $bar->id]))->assertOk()
             ->assertInertia(fn ($page) => $page->where('product.addons', fn ($addons) => collect($addons)->pluck('name')->all() === ['Gift bag']));
+        // The cart lists every product of the shop with its category, loaded with them (not one query per product).
+        $this->get(route('site.shop.cart', ['club' => $club->slug]))->assertOk()
+            ->assertInertia(fn ($page) => $page->has('products', 2));
     }
 
     public function test_the_point_of_sale_prices_addons_on_the_server_and_keeps_them_on_the_sale_invoice_and_receipt(): void

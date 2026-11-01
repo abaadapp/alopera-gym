@@ -75,7 +75,7 @@ class ShopController extends Controller
         $tenant = $this->tenants->require();
         $member = Auth::guard('member')->user();
 
-        $products = Product::onWebsite()->orderBy('name')->get();
+        $products = Product::onWebsite()->with('category:id,name')->orderBy('name')->get();
         $addons = $this->addons->map($products, 'website', true);
 
         return $this->page('Site/ShopCart', [
