@@ -12,14 +12,18 @@ use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
+use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Rules\OpenPeriod;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\InvoiceAttachment;
+use App\Modules\Finance\Models\Payment;
+use App\Modules\Finance\Models\PaymentAllocation;
 use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Finance\Services\ManualInvoices;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\ProductAddon;
+use App\Modules\Inventory\Models\Sale;
 use App\Modules\Inventory\Services\ProductAddons;
 use App\Modules\Inventory\Services\StockService;
 use App\Modules\Messaging\Services\MemberNotifier;
@@ -424,7 +428,8 @@ class InvoiceController extends Controller
 
     public function show(Request $request, Invoice $invoice, OnlinePaymentService $online): Response
     {
-        $invoice->load(['items', 'payments.receiver:id,name', 'creator:id,name', 'creditNotes.creator:id,name', 'attachments']);
+        $invoice->load(['items', 'payments.receiver:id,name', 'payments.account:id,name', 'creator:id,name', 'creditNotes.creator:id,name', 'attachments']);
+        $credits = $invoice->payments->filter(fn (Payment $p) => $p->status === Payment::COMPLETED && ! Money::isZero($p->credit_amount));
 
         return Inertia::render('Finance/Invoices/Show', [
             'invoice' => self::row($invoice) + [
@@ -435,9 +440,14 @@ class InvoiceController extends Controller
                 'paid_at' => $invoice->paid_at?->format('Y-m-d H:i'), 'tax_rate' => $invoice->tax_rate,
                 // An add-on line is marked, under the product line it was sold with when the editor recorded it.
                 'items' => $invoice->items->map(fn ($i) => $i->only('id', 'parent_id', 'description', 'quantity', 'unit_price', 'discount', 'line_total') + ['addon' => $i->itemable_type === 'product_addon']),
-                'payments' => $invoice->payments->map(fn ($p) => $p->only('id', 'receipt_number', 'kind', 'method', 'status', 'amount', 'reference', 'notes', 'rejection_reason') + [
+                'payments' => $invoice->payments->map(fn ($p) => $p->only('id', 'receipt_number', 'kind', 'method', 'status', 'amount', 'reference', 'notes', 'rejection_reason', 'cancel_reason', 'from_credit') + [
                     'paid_at' => $p->paid_at?->format('Y-m-d H:i'), 'receiver' => $p->receiver?->name, 'has_proof' => $p->proof_path !== null,
+                    'account' => $p->account?->name, 'gateway' => $p->gateway !== null,
+                    'credit_left' => $credits->contains('id', $p->id) ? $p->creditLeft() : null,
                 ]),
+                // Credit of the customer's other payments applied to this invoice.
+                'allocations' => PaymentAllocation::with('payment:id,receipt_number')->where('invoice_id', $invoice->id)->get()
+                    ->map(fn ($a) => ['id' => $a->id, 'amount' => $a->amount, 'from' => $a->payment?->receipt_number, 'date' => $a->created_at->format('Y-m-d H:i')]),
                 'credit_notes' => $invoice->creditNotes->map(fn ($n) => $n->only('id', 'number', 'amount', 'refunded_total', 'reason') + [
                     'refundable' => $n->refundable(), 'issued_at' => $n->created_at->format('Y-m-d H:i'), 'creator' => $n->creator?->name,
                 ]),
@@ -446,6 +456,14 @@ class InvoiceController extends Controller
             ],
             'intents' => PaymentIntent::where('invoice_id', $invoice->id)->latest()->limit(10)->get()->map(fn ($i) => $i->only('id', 'reference', 'amount', 'status', 'channel', 'failure_reason') + ['created_at' => $i->created_at->format('Y-m-d H:i')]),
             'onlinePayments' => $online->available(),
+            // Where a payment lands when chosen (empty: the method's account in the finance settings).
+            'moneyAccounts' => Account::money()->postable()->orderBy('code')->get(['id', 'name', 'kind']),
+            // Open invoices of the same customer this invoice's credit can be applied to.
+            'creditTargets' => $credits->isNotEmpty() && $invoice->billable_id !== null
+                ? Invoice::where(['billable_type' => $invoice->billable_type, 'billable_id' => $invoice->billable_id])->whereIn('status', Invoice::OPEN_STATUSES)->whereKeyNot($invoice->id)
+                    ->orderBy('id')->get()->map(fn (Invoice $i) => ['id' => $i->id, 'number' => $i->number, 'balance' => $i->balance()])->values()
+                : [],
+            'isSale' => Sale::where('invoice_id', $invoice->id)->exists(),
             'whatsappEnabled' => app(WhatsAppService::class)->enabled(),
             // The invoice as it prints: the same paper as the print page, the PDF and the customer's link.
             'paper' => Papers::for('invoice', $invoice)->toArray(),

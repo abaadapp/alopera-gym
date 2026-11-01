@@ -29,6 +29,14 @@ export const paymentStatus: Record<string, [string, Tone]> = {
     completed: ['مكتملة', 'green'],
     failed: ['فاشلة', 'red'],
     rejected: ['مرفوضة', 'red'],
+    cancelled: ['ملغاة', 'gray'],
+};
+
+/** A refund waiting to be made (a bank transfer out, a refund through Paymob) reads differently from a transfer awaiting confirmation. */
+export const refundStatus: Record<string, [string, Tone]> = {
+    pending: ['بانتظار التنفيذ', 'amber'],
+    completed: ['منفّذ', 'green'],
+    rejected: ['أُلغي', 'gray'],
 };
 
 export const paymentMethod: Record<string, string> = {

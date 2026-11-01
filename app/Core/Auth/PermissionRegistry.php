@@ -54,6 +54,7 @@ final class PermissionRegistry
             'payments.record' => 'تسجيل الدفعات',
             'payments.confirm' => 'تأكيد التحويلات البنكية',
             'payments.refund' => 'رد المبالغ',
+            'payments.cancel' => 'إلغاء الدفعات المسجّلة بالخطأ',
             'expenses.manage' => 'المصروفات',
             'dues.view' => 'المستحقات والمتأخرات',
         ]],

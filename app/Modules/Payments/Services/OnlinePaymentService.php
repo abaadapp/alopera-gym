@@ -46,6 +46,10 @@ final class OnlinePaymentService
         return PaymobClient::ready($this->integration());
     }
 
+    /**
+     * The checkout for what the invoice still owes. A checkout already opened for that same amount and still valid is
+     * given again rather than a second one, so a customer who opens the link twice cannot pay the invoice twice.
+     */
     public function start(Invoice $invoice, string $channel = 'portal'): PaymentIntent
     {
         $tenant = $this->tenants->require();
@@ -56,6 +60,12 @@ final class OnlinePaymentService
         }
         if (! $invoice->isOpen() || Money::isZero($invoice->balance())) {
             throw new BusinessRuleException('invoice.not_open', 'لا يوجد مبلغ مستحق على هذه الفاتورة.');
+        }
+
+        $open = PaymentIntent::where('invoice_id', $invoice->id)->where('status', PaymentIntent::PENDING)->whereNotNull('checkout_url')
+            ->where('expires_at', '>', now()->addMinutes(10))->latest('id')->first();
+        if ($open && Money::cmp($open->amount, $invoice->balance()) === 0) {
+            return $open;
         }
 
         $intent = PaymentIntent::create([

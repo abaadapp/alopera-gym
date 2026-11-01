@@ -6,6 +6,7 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
+use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Expense;
@@ -20,10 +21,14 @@ use Illuminate\Database\Eloquent\Model;
  *
  *   invoice issued       Dr receivable (total)          Cr revenue of its type (net of tax), Cr VAT payable
  *   invoice voided       the issue entry is reversed
- *   payment completed    Dr money account of the method Cr receivable
- *   refund paid          Dr receivable                  Cr money account of the method
- *   credit note          Dr returns & allowances        Cr receivable
- *   expense              Dr the category's account      Cr cash or bank by method (edits and deletes reverse)
+ *   payment completed    Dr the money account it went into          Cr receivable (Cr customer credits for what was not applied)
+ *   payment cancelled    the receipt entry is reversed (in an open period)
+ *   refund paid          Dr receivable (customer credits if from credit) Cr the money account it left from
+ *   credit note          Dr returns & allowances, Dr VAT payable    Cr receivable
+ *   expense              Dr the category's account                  Cr the cash or bank account that paid it (edits and deletes reverse)
+ *
+ * The money account is the one kept with the payment or expense; older records without one take the account the
+ * finance settings give their method.
  */
 final class LedgerProjector
 {
@@ -75,14 +80,38 @@ final class LedgerProjector
 
     public function payment(Payment $payment): void
     {
-        if ($payment->status !== Payment::COMPLETED || Money::isZero($payment->amount)) {
+        if (Money::isZero($payment->amount)) {
+            return;
+        }
+        $refund = $payment->kind === Payment::KIND_REFUND;
+        $label = $payment->receipt_number ?? '#'.$payment->id;
+
+        if ($payment->status === Payment::CANCELLED) {
+            $receipt = $this->entry('payment', $payment->id, 'receive');
+            if ($receipt && $receipt->reversed_at === null) {
+                $this->ledger->reverse($receipt, 'إلغاء الدفعة '.$label.': '.$payment->cancel_reason, $this->key('payment', $payment->id, 'cancel'), $payment->cancelled_at ?? now());
+            }
+
+            return;
+        }
+        if ($payment->status !== Payment::COMPLETED) {
             return;
         }
 
-        $money = $this->chart->moneyFor($payment->method, 'receipt');
+        $money = ($payment->account_id ? Account::find($payment->account_id) : null) ?? $this->chart->moneyFor($payment->method, 'receipt');
         $receivable = $this->chart->account('receivable');
-        $refund = $payment->kind === Payment::KIND_REFUND;
-        $label = $payment->receipt_number ?? '#'.$payment->id;
+        $credit = Money::normalize($payment->credit_amount ?? 0);
+        $receipt = $this->entry('payment', $payment->id, 'receive');
+
+        // Recorded before customer credit had its own account (the whole amount against the receivable): moved once.
+        if (! $refund && $receipt && ! Money::isZero($credit) && ! $receipt->lines()->where('account_id', $this->chart->account('customer_credits')->id)->exists()) {
+            $this->ledger->post([
+                'date' => app(AccountingPeriods::class)->postingDate($payment->paid_at),
+                'description' => 'رصيد دائن للعميل من الدفعة '.$label,
+                'branch_id' => $payment->branch_id,
+                ...$this->key('payment', $payment->id, 'credit'),
+            ], [['account' => $receivable, 'debit' => $credit], ['account' => $this->chart->account('customer_credits'), 'credit' => $credit]]);
+        }
 
         $this->ledger->post([
             'date' => $payment->confirmed_at ?? $payment->paid_at ?? $payment->created_at,
@@ -90,8 +119,12 @@ final class LedgerProjector
             'branch_id' => $payment->branch_id,
             ...$this->key('payment', $payment->id, $refund ? 'refund' : 'receive'),
         ], $refund
-            ? [['account' => $receivable, 'debit' => $payment->amount], ['account' => $money, 'credit' => $payment->amount]]
-            : [['account' => $money, 'debit' => $payment->amount], ['account' => $receivable, 'credit' => $payment->amount]]);
+            ? [['account' => $payment->from_credit ? $this->chart->account('customer_credits') : $receivable, 'debit' => $payment->amount], ['account' => $money, 'credit' => $payment->amount]]
+            : [
+                ['account' => $money, 'debit' => $payment->amount],
+                ['account' => $receivable, 'credit' => Money::sub($payment->amount, $credit)],
+                ['account' => $this->chart->account('customer_credits'), 'credit' => $credit],
+            ], allowClosedAccounts: true);
     }
 
     public function creditNote(CreditNote $note): void
@@ -148,7 +181,7 @@ final class LedgerProjector
         }
 
         $account = $this->chart->forCategory($expense->category);
-        $money = $this->chart->moneyFor($expense->payment_method, 'spending');
+        $money = ($expense->account_id ? Account::find($expense->account_id) : null) ?? $this->chart->moneyFor($expense->payment_method, 'spending');
         if ($current) {
             $debit = $current->lines->firstWhere('debit', '>', 0);
             $credit = $current->lines->firstWhere('credit', '>', 0);

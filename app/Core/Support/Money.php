@@ -59,4 +59,9 @@ final class Money
     {
         return self::cmp($a, $b) >= 0 ? self::normalize($a) : self::normalize($b);
     }
+
+    public static function min(string|int|float|null $a, string|int|float|null $b): string
+    {
+        return self::cmp($a, $b) <= 0 ? self::normalize($a) : self::normalize($b);
+    }
 }

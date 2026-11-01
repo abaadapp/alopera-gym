@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { toast } from 'sonner';
-import { AlertTriangle, Banknote, Check, Clock, Copy, CreditCard, ExternalLink, FileDown, MessageCircle, Paperclip, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, Ban, Banknote, Check, Clock, Copy, CreditCard, ExternalLink, FileDown, MessageCircle, Paperclip, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PaperPanel, { DocumentMeta, LtrDates, PaperAside, type PaperData } from '@/Components/Papers/PaperPanel';
 import { clientKey } from '@/Components/Inventory/parts';
@@ -9,7 +9,7 @@ import { Badge, Button, Card, ChoiceCard, ConfirmAction, Field, Input, Modal, No
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, dayCount, money } from '@/lib/format';
-import { invoiceStatus, invoiceType, label, paymentMethod, paymentStatus } from '@/lib/labels';
+import { invoiceStatus, invoiceType, label, paymentMethod, paymentStatus, refundStatus } from '@/lib/labels';
 import { INVOICE_STATES } from './Index';
 
 interface Item {
@@ -38,7 +38,16 @@ interface PaymentRow {
     paid_at: string | null;
     receiver: string | null;
     has_proof: boolean;
+    /** The cash box or bank account it went into or left from. */
+    account: string | null;
+    gateway: boolean;
+    cancel_reason: string | null;
+    from_credit: boolean;
+    /** Money of this payment not applied to the invoice and not yet used: the customer's credit. */
+    credit_left: string | null;
 }
+
+type MoneyAccount = { id: number; name: string; kind: string };
 
 interface CreditNoteRow {
     id: number;
@@ -84,6 +93,7 @@ interface Invoice {
     paid_at: string | null;
     items: Item[];
     payments: PaymentRow[];
+    allocations: { id: number; amount: string; from: string | null; date: string }[];
     credit_notes: CreditNoteRow[];
     pay_link: string | null;
     public_link: string;
@@ -105,6 +115,9 @@ interface Props {
     onlinePayments: boolean;
     whatsappEnabled: boolean;
     paper: PaperData;
+    moneyAccounts: MoneyAccount[];
+    creditTargets: { id: number; number: string; balance: string }[];
+    isSale: boolean;
 }
 
 const intentStatus: Record<string, ['green' | 'amber' | 'red' | 'gray', string]> = {
@@ -116,13 +129,15 @@ const intentStatus: Record<string, ['green' | 'amber' | 'red' | 'gray', string]>
 
 const channelLabel: Record<string, string> = { portal: 'البوابة', website: 'الموقع', whatsapp: 'رابط واتساب', reception: 'الاستقبال' };
 
-export default function InvoiceShow({ invoice, intents, onlinePayments, whatsappEnabled, paper }: Props) {
+export default function InvoiceShow({ invoice, intents, onlinePayments, whatsappEnabled, paper, moneyAccounts, creditTargets, isSale }: Props) {
     const mayPrint = useCan()('papers.print');
     const can = useCan();
     const currency = useCurrency() || invoice.currency;
     const [payOpen, setPayOpen] = useState(false);
     const [creditOpen, setCreditOpen] = useState(false);
     const [refundNote, setRefundNote] = useState<CreditNoteRow | null>(null);
+    const [creditAction, setCreditAction] = useState<{ payment: PaymentRow; mode: 'apply' | 'refund' } | null>(null);
+    const hasGatewayPayment = invoice.payments.some((p) => p.gateway && p.status === 'completed' && p.kind === 'payment');
     const canCredit = can('invoices.credit') && invoice.status !== 'void' && Number(invoice.net_total) > 0;
     const [statusLabel, statusTone] = label(invoiceStatus, invoice.status);
     const isOpen = invoice.status === 'issued' || invoice.status === 'partially_paid';
@@ -238,12 +253,14 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                         </dl>
                     </Card>
 
-                    {invoice.payments.length > 0 && (
+                    {(invoice.payments.length > 0 || invoice.allocations.length > 0) && (
                         <Card className="p-4">
                             <h3 className="mb-2 text-[13px] font-bold">التحصيلات</h3>
                             {invoice.payments.map((p) => {
-                                const [pLabel, pTone] = label(paymentStatus, p.status);
-                                const title = <>{p.receipt_number ?? (p.kind === 'refund' ? 'رد مبلغ' : 'دفعة')} — {p.kind === 'refund' ? 'رد مبلغ' : paymentMethod[p.method] ?? p.method}</>;
+                                const refund = p.kind === 'refund';
+                                const [pLabel, pTone] = label(refund ? refundStatus : paymentStatus, p.status);
+                                const title = <>{p.receipt_number ?? (refund ? 'رد مبلغ' : 'دفعة')} — {refund ? `رد ${paymentMethod[p.method] ?? p.method}` : paymentMethod[p.method] ?? p.method}</>;
+                                const cancellable = !refund && p.status === 'completed' && !p.gateway && !isSale && p.credit_left === null && can('payments.cancel');
                                 return (
                                     <div key={p.id} className="border-t border-line py-2 text-[13px]">
                                         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -252,24 +269,50 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                                                 : <span className="min-w-0 truncate">{title}</span>}
                                             <span dir="ltr" className="text-[#6b7280] num">{p.paid_at ?? '—'}</span>
                                             {p.status !== 'completed' && <Badge tone={pTone}>{pLabel}</Badge>}
-                                            <span className={cn('tabular-nums', p.kind === 'refund' && 'text-[#b91c1c]')}>{p.kind === 'refund' ? '− ' : ''}{money(p.amount, currency)}</span>
+                                            <span className={cn('tabular-nums', refund && 'text-[#b91c1c]', p.status === 'cancelled' && 'text-muted line-through')}>{refund ? '− ' : ''}{money(p.amount, currency)}</span>
                                         </div>
-                                        {(p.reference || p.receiver || p.notes) && <p className="mt-0.5 text-[12px] text-[#9ca3af]">{[p.reference && `مرجع ${p.reference}`, p.receiver, p.notes].filter(Boolean).join(' · ')}</p>}
-                                        {p.rejection_reason && <p className="mt-0.5 text-[12px] text-[#b91c1c]">سبب الرفض: {p.rejection_reason}</p>}
-                                        {(p.has_proof || (p.status === 'pending' && can('payments.confirm'))) && (
+                                        {(p.reference || p.receiver || p.notes || p.account) && <p className="mt-0.5 text-[12px] text-[#9ca3af]">{[p.account && (refund ? `من ${p.account}` : `إلى ${p.account}`), p.reference && `مرجع ${p.reference}`, p.receiver, p.notes].filter(Boolean).join(' · ')}</p>}
+                                        {p.rejection_reason && <p className="mt-0.5 text-[12px] text-[#b91c1c]">{refund ? 'سبب الإلغاء' : 'سبب الرفض'}: {p.rejection_reason}</p>}
+                                        {p.cancel_reason && <p className="mt-0.5 text-[12px] text-[#6b7280]">أُلغيت: {p.cancel_reason}</p>}
+                                        {refund && p.status === 'pending' && <p className="mt-0.5 text-[12px] text-amber-700">لا يدخل الدفاتر ولا يُخصم من الفاتورة حتى يُؤكَّد تنفيذه.</p>}
+                                        {p.credit_left !== null && Number(p.credit_left) > 0 && (
+                                            <p className="mt-1 rounded-[8px] bg-[#eff6ff] px-2 py-1 text-[12px] text-[#1d4ed8]">رصيد دائن للعميل من هذه الدفعة: <span className="num font-medium">{money(p.credit_left, currency)}</span></p>
+                                        )}
+                                        {(p.has_proof || (p.status === 'pending' && can('payments.confirm')) || cancellable || (p.credit_left !== null && Number(p.credit_left) > 0)) && (
                                             <div className="mt-1.5 flex flex-wrap gap-1.5">
                                                 {p.has_proof && <Button variant="ghost" size="sm" href={route('club.payments.proof', p.id)} external icon={<FileDown />}>الإثبات</Button>}
-                                                {p.status === 'pending' && can('payments.confirm') && (
+                                                {p.status === 'pending' && can('payments.confirm') && (refund ? (
+                                                    <>
+                                                        <ConfirmAction url={route('club.payments.confirm', p.id)} title="تأكيد تنفيذ الرد" message={p.method === 'paymob' ? 'أكّد بعد أن تنفّذ الرد من لوحة Paymob وتراه مكتملًا هناك.' : 'أكّد بعد أن يخرج التحويل من الحساب البنكي فعلًا.'} reason="مرجع التنفيذ (رقم العملية)" reasonName="reference" reasonOptional confirmLabel="تأكيد التنفيذ" tone="primary" variant="success" icon={<Check />}>تأكيد التنفيذ</ConfirmAction>
+                                                        <ConfirmAction url={route('club.payments.reject', p.id)} title="إلغاء طلب الرد" reason="سبب الإلغاء" confirmLabel="إلغاء الطلب" icon={<X />}>إلغاء</ConfirmAction>
+                                                    </>
+                                                ) : (
                                                     <>
                                                         <ConfirmAction url={route('club.payments.confirm', p.id)} title="تأكيد التحويل" message="تأكد من وصول المبلغ في كشف الحساب. سيُطبَّق على الفاتورة وتُفعَّل العضوية إن اكتمل السداد." confirmLabel="تأكيد الاستلام" tone="primary" variant="success" icon={<Check />}>تأكيد</ConfirmAction>
                                                         <ConfirmAction url={route('club.payments.reject', p.id)} title="رفض التحويل" reason="سبب الرفض" confirmLabel="رفض" icon={<X />}>رفض</ConfirmAction>
                                                     </>
+                                                ))}
+                                                {p.credit_left !== null && Number(p.credit_left) > 0 && (
+                                                    <>
+                                                        {can('payments.record') && creditTargets.length > 0 && <Button variant="outline" size="sm" icon={<ArrowLeftRight />} onClick={() => setCreditAction({ payment: p, mode: 'apply' })}>تخصيص لفاتورة</Button>}
+                                                        {can('payments.refund') && <Button variant="outline" size="sm" icon={<Undo2 />} onClick={() => setCreditAction({ payment: p, mode: 'refund' })}>رد الرصيد</Button>}
+                                                    </>
+                                                )}
+                                                {cancellable && (
+                                                    <ConfirmAction url={route('club.payments.cancel', p.id)} title="إلغاء الدفعة" message="للدفعة المسجّلة بالخطأ فقط (طريقة أو فاتورة خاطئة). لا تُحذف: تبقى ظاهرة ملغاة، ويُعكس قيدها بتاريخ اليوم، وتعود الفاتورة مستحقة بمبلغها. العضوية أو الباقة لا تتغير." reason="سبب الإلغاء" confirmLabel="إلغاء الدفعة" variant="ghost" icon={<Ban />}>إلغاء الدفعة</ConfirmAction>
                                                 )}
                                             </div>
                                         )}
                                     </div>
                                 );
                             })}
+                            {invoice.allocations.map((a) => (
+                                <div key={`a${a.id}`} className="flex flex-wrap items-center justify-between gap-x-3 border-t border-line py-2 text-[13px]">
+                                    <span>من رصيد الدفعة <span className="num">{a.from ?? '—'}</span></span>
+                                    <span dir="ltr" className="text-[#6b7280] num">{a.date}</span>
+                                    <span className="tabular-nums">{money(a.amount, currency)}</span>
+                                </div>
+                            ))}
                         </Card>
                     )}
 
@@ -362,9 +405,11 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                 </PaperAside>
             </div>
 
-            <RecordPaymentModal open={payOpen} onClose={() => setPayOpen(false)} invoice={invoice} currency={currency} />
-            <CreditNoteModal open={creditOpen} onClose={() => setCreditOpen(false)} invoice={invoice} currency={currency} canRefund={can('payments.refund')} />
-            <CreditRefundModal note={refundNote} invoice={invoice} onClose={() => setRefundNote(null)} currency={currency} />
+            <RecordPaymentModal open={payOpen} onClose={() => setPayOpen(false)} invoice={invoice} currency={currency} accounts={moneyAccounts} />
+            <CreditNoteModal open={creditOpen} onClose={() => setCreditOpen(false)} invoice={invoice} currency={currency} canRefund={can('payments.refund')} gateway={hasGatewayPayment} />
+            <CreditRefundModal note={refundNote} invoice={invoice} onClose={() => setRefundNote(null)} currency={currency} gateway={hasGatewayPayment} />
+            {creditAction?.mode === 'apply' && <CreditApplyModal payment={creditAction.payment} targets={creditTargets} onClose={() => setCreditAction(null)} currency={currency} />}
+            {creditAction?.mode === 'refund' && <CreditPayBackModal payment={creditAction.payment} onClose={() => setCreditAction(null)} currency={currency} />}
         </ClubLayout>
     );
 }
@@ -403,15 +448,20 @@ const methods = [
     { key: 'other', label: 'أخرى', icon: Receipt },
 ] as const;
 
-function RecordPaymentModal({ open, onClose, invoice, currency }: { open: boolean; onClose: () => void; invoice: Invoice; currency: string }) {
-    const form = useForm<{ amount: string; method: string; reference: string; notes: string; proof: File | null; client_key: string }>({
+/** The kinds of money account each method may land in (as the server checks it). */
+const METHOD_KINDS: Record<string, string[]> = { cash: ['cash'], bank_transfer: ['bank'], card: ['card', 'bank'], other: ['cash', 'bank'] };
+
+function RecordPaymentModal({ open, onClose, invoice, currency, accounts }: { open: boolean; onClose: () => void; invoice: Invoice; currency: string; accounts: MoneyAccount[] }) {
+    const form = useForm<{ amount: string; method: string; reference: string; notes: string; proof: File | null; client_key: string; account_id: string }>({
         amount: invoice.balance,
         method: 'cash',
         reference: '',
         notes: '',
         proof: null,
         client_key: '',
+        account_id: '',
     });
+    const suiting = accounts.filter((a) => METHOD_KINDS[form.data.method]?.includes(a.kind));
 
     // The balance shrinks after each payment; reopening the modal must offer what is left now.
     useEffect(() => {
@@ -450,7 +500,7 @@ function RecordPaymentModal({ open, onClose, invoice, currency }: { open: boolea
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                     {methods.map(({ key, label: text, icon: Icon }) => (
-                        <ChoiceCard key={key} selected={form.data.method === key} onClick={() => form.setData('method', key)} className="flex items-center gap-2 py-2.5 text-sm">
+                        <ChoiceCard key={key} selected={form.data.method === key} onClick={() => form.setData((d) => ({ ...d, method: key, account_id: '' }))} className="flex items-center gap-2 py-2.5 text-sm">
                             <Icon className="size-4" /> {text}
                         </ChoiceCard>
                     ))}
@@ -480,6 +530,14 @@ function RecordPaymentModal({ open, onClose, invoice, currency }: { open: boolea
                         <Input value={form.data.reference} onChange={(e) => form.setData('reference', e.target.value)} />
                     </Field>
                 )}
+                {suiting.length > 1 && (
+                    <Field label="إلى حساب" error={form.errors.account_id} hint="فارغ: الحساب المحدد لهذه الطريقة في الإعدادات المالية.">
+                        <Select value={form.data.account_id} onChange={(e) => form.setData('account_id', e.target.value)}>
+                            <option value="">الحساب الافتراضي</option>
+                            {suiting.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                        </Select>
+                    </Field>
+                )}
                 <Field label="ملاحظات" error={form.errors.notes}>
                     <Textarea rows={2} value={form.data.notes} onChange={(e) => form.setData('notes', e.target.value)} />
                 </Field>
@@ -495,7 +553,21 @@ const refundMethods = [
     { key: 'other', label: 'أخرى' },
 ];
 
-function CreditNoteModal({ open, onClose, invoice, currency, canRefund }: { open: boolean; onClose: () => void; invoice: Invoice; currency: string; canRefund: boolean }) {
+/** The refund methods offered: Paymob only when the invoice was paid through it. */
+const refundChoices = (gateway: boolean) => (gateway ? [...refundMethods, { key: 'paymob', label: 'إلكتروني (Paymob)' }] : refundMethods);
+
+/** A bank transfer out or a refund through Paymob is recorded as waiting until finance confirms it was made. */
+function RefundWaits({ method }: { method: string }) {
+    if (method !== 'bank_transfer' && method !== 'paymob') return null;
+
+    return (
+        <Notice tone="amber">
+            {method === 'paymob' ? 'نفّذ الرد من لوحة Paymob، ثم أكّده هنا بمرجعه.' : 'حوّل المبلغ من الحساب البنكي، ثم أكّد التنفيذ هنا.'} يبقى الرد «بانتظار التنفيذ» ولا يدخل الدفاتر حتى التأكيد، ومبلغه محجوز فلا يُرد مرتين.
+        </Notice>
+    );
+}
+
+function CreditNoteModal({ open, onClose, invoice, currency, canRefund, gateway }: { open: boolean; onClose: () => void; invoice: Invoice; currency: string; canRefund: boolean; gateway: boolean }) {
     const paid = Number(invoice.paid_total) > 0;
     const form = useForm({ amount: '', reason: '', refund_now: paid && canRefund, method: 'cash', reference: '' });
     // One key per note: a double click or a retry issues it (and refunds) once.
@@ -550,9 +622,10 @@ function CreditNoteModal({ open, onClose, invoice, currency, canRefund }: { open
                             <>
                                 <Field label="طريقة الرد" error={form.errors.method}>
                                     <Select value={form.data.method} onChange={(e) => form.setData('method', e.target.value)}>
-                                        {refundMethods.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+                                        {refundChoices(gateway).map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
                                     </Select>
                                 </Field>
+                                <RefundWaits method={form.data.method} />
                                 <Field label={form.data.method === 'card' ? 'رقم العملية من جهاز الشبكة' : 'مرجع (اختياري)'} error={form.errors.reference} required={form.data.method === 'card'}>
                                     <Input dir="ltr" value={form.data.reference} onChange={(e) => form.setData('reference', e.target.value)} required={form.data.method === 'card'} />
                                 </Field>
@@ -567,7 +640,7 @@ function CreditNoteModal({ open, onClose, invoice, currency, canRefund }: { open
     );
 }
 
-function CreditRefundModal({ note, invoice, onClose, currency }: { note: CreditNoteRow | null; invoice: Invoice; onClose: () => void; currency: string }) {
+function CreditRefundModal({ note, invoice, onClose, currency, gateway }: { note: CreditNoteRow | null; invoice: Invoice; onClose: () => void; currency: string; gateway: boolean }) {
     const form = useForm({ amount: '', method: 'cash', reference: '' });
     const key = useRef(clientKey());
     const available = note ? Math.min(Number(note.refundable), Number(invoice.refund_due)).toFixed(3) : '0';
@@ -614,14 +687,80 @@ function CreditRefundModal({ note, invoice, onClose, currency }: { note: CreditN
                     </Field>
                     <Field label="طريقة الرد" error={form.errors.method}>
                         <Select value={form.data.method} onChange={(e) => form.setData('method', e.target.value)}>
-                            {refundMethods.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+                            {refundChoices(gateway).map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
                         </Select>
                     </Field>
+                    <RefundWaits method={form.data.method} />
                     <Field label={form.data.method === 'card' ? 'رقم العملية من جهاز الشبكة' : 'مرجع (اختياري)'} error={form.errors.reference} required={form.data.method === 'card'}>
                         <Input dir="ltr" value={form.data.reference} onChange={(e) => form.setData('reference', e.target.value)} required={form.data.method === 'card'} />
                     </Field>
                 </form>
             )}
+        </Modal>
+    );
+}
+
+/** Apply a customer's credit to another open invoice of theirs. */
+function CreditApplyModal({ payment, targets, onClose, currency }: { payment: PaymentRow; targets: Props['creditTargets']; onClose: () => void; currency: string }) {
+    const key = useRef(clientKey());
+    const first = targets[0];
+    const form = useForm({ invoice_id: first ? String(first.id) : '', amount: first ? Math.min(Number(payment.credit_left), Number(first.balance)).toFixed(3) : '' });
+    const target = targets.find((t) => String(t.id) === form.data.invoice_id);
+    const submit = (e: FormEvent) => {
+        e.preventDefault();
+        form.transform((x) => ({ ...x, client_key: key.current }));
+        form.post(route('club.payments.allocate', payment.id), { preserveScroll: true, onSuccess: () => onClose() });
+    };
+
+    return (
+        <Modal open onClose={onClose} title="تخصيص الرصيد لفاتورة" size="sm"
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="credit-apply" loading={form.processing} icon={<ArrowLeftRight />}>تخصيص</Button></>}>
+            <form id="credit-apply" onSubmit={submit} className="space-y-4">
+                <p className="text-sm text-muted">الرصيد المتاح: <span className="num font-medium text-ink">{money(payment.credit_left, currency)}</span>. تُسدَّد به فاتورة أخرى للعميل نفسه كأي دفعة، وتُفعَّل عضويتها إن اكتمل سدادها.</p>
+                <Field label="الفاتورة" error={form.errors.invoice_id} required>
+                    <Select value={form.data.invoice_id} onChange={(e) => {
+                        const t = targets.find((x) => String(x.id) === e.target.value);
+                        form.setData((d) => ({ ...d, invoice_id: e.target.value, amount: t ? Math.min(Number(payment.credit_left), Number(t.balance)).toFixed(3) : d.amount }));
+                    }}>
+                        {targets.map((t) => <option key={t.id} value={t.id}>{t.number} — المتبقي {money(t.balance, currency)}</option>)}
+                    </Select>
+                </Field>
+                <Field label="المبلغ" error={form.errors.amount} required>
+                    <Input type="number" step="0.001" min="0.001" max={target ? Math.min(Number(payment.credit_left), Number(target.balance)) : undefined} dir="ltr" value={form.data.amount} onChange={(e) => form.setData('amount', e.target.value)} required />
+                </Field>
+            </form>
+        </Modal>
+    );
+}
+
+/** Pay a customer's credit back: at the desk at once, by bank transfer or Paymob once confirmed made. */
+function CreditPayBackModal({ payment, onClose, currency }: { payment: PaymentRow; onClose: () => void; currency: string }) {
+    const key = useRef(clientKey());
+    const form = useForm({ amount: payment.credit_left ?? '', method: payment.gateway ? 'paymob' : 'cash', reference: '' });
+    const submit = (e: FormEvent) => {
+        e.preventDefault();
+        form.transform((x) => ({ ...x, client_key: key.current }));
+        form.post(route('club.payments.refund-credit', payment.id), { preserveScroll: true, onSuccess: () => onClose() });
+    };
+
+    return (
+        <Modal open onClose={onClose} title="رد الرصيد الدائن" size="sm"
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="credit-payback" variant="danger" loading={form.processing}>تسجيل الرد</Button></>}>
+            <form id="credit-payback" onSubmit={submit} className="space-y-4">
+                <p className="text-sm text-muted">الرصيد المتاح: <span className="num font-medium text-ink">{money(payment.credit_left, currency)}</span></p>
+                <Field label="مبلغ الرد" error={form.errors.amount} required>
+                    <Input type="number" step="0.001" min="0.001" max={payment.credit_left ?? undefined} dir="ltr" value={form.data.amount} onChange={(e) => form.setData('amount', e.target.value)} required />
+                </Field>
+                <Field label="طريقة الرد" error={form.errors.method}>
+                    <Select value={form.data.method} onChange={(e) => form.setData('method', e.target.value)}>
+                        {refundChoices(payment.gateway).map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+                    </Select>
+                </Field>
+                <RefundWaits method={form.data.method} />
+                <Field label={form.data.method === 'card' ? 'رقم العملية من جهاز الشبكة' : 'مرجع (اختياري)'} error={form.errors.reference} required={form.data.method === 'card'}>
+                    <Input dir="ltr" value={form.data.reference} onChange={(e) => form.setData('reference', e.target.value)} required={form.data.method === 'card'} />
+                </Field>
+            </form>
         </Modal>
     );
 }

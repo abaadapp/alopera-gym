@@ -46,6 +46,8 @@ final class ChartOfAccounts
         'revenue_pos' => ['4104', 'إيرادات المبيعات', 'revenue', 'credit', 'revenues', false, null],
         // Purchasing: a supplier bill, once approved, is a debt to the supplier and a purchase of goods for sale.
         'suppliers_payable' => ['2103', 'الموردون (ذمم دائنة)', 'liability', 'credit', 'liabilities', false, null],
+        // Money received and not applied to its invoice: owed to the customer until applied to another invoice or paid back.
+        'customer_credits' => ['2104', 'أرصدة العملاء الدائنة', 'liability', 'credit', 'liabilities', false, null],
         'cost_of_goods' => ['53', 'تكلفة البضاعة', 'expense', 'debit', 'expenses', true, null],
         'purchases' => ['5301', 'مشتريات البضاعة', 'expense', 'debit', 'cost_of_goods', false, null],
     ];

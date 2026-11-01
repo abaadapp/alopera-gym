@@ -6,7 +6,8 @@ import { Field, Textarea } from './Form';
 
 /**
  * Button → confirmation dialog → POST/DELETE. With `reason`, a required text
- * field is shown and sent as `reason` (cancellations, voids, refunds).
+ * field is shown and sent as `reason` (cancellations, voids, refunds) — or under
+ * `reasonName`, and optional with `reasonOptional` (a reference to note down).
  */
 export default function ConfirmAction({
     url,
@@ -21,6 +22,8 @@ export default function ConfirmAction({
     tone = 'danger',
     data,
     icon,
+    reasonName = 'reason',
+    reasonOptional = false,
 }: {
     url: string;
     method?: 'post' | 'delete' | 'put';
@@ -34,6 +37,8 @@ export default function ConfirmAction({
     tone?: 'danger' | 'primary';
     data?: Record<string, unknown>;
     icon?: ReactNode;
+    reasonName?: string;
+    reasonOptional?: boolean;
 }) {
     const [open, setOpen] = useState(false);
     const [text, setText] = useState('');
@@ -44,7 +49,7 @@ export default function ConfirmAction({
         setBusy(true);
         router.visit(url, {
             method,
-            data: { ...(data ?? {}), ...(reason ? { reason: text } : {}) } as Record<string, string>,
+            data: { ...(data ?? {}), ...(reason ? { [reasonName]: text } : {}) } as Record<string, string>,
             preserveScroll: true,
             onError: (errors) => setError(Object.values(errors)[0] as string),
             onSuccess: () => {
@@ -69,7 +74,7 @@ export default function ConfirmAction({
                     <>
                         {/* «إلغاء» beside «إلغاء العملية» reads as the action itself: the way back is then «تراجع». */}
                         <Button variant="outline" onClick={() => setOpen(false)}>{confirmLabel.includes('إلغاء') ? 'تراجع' : 'إلغاء'}</Button>
-                        <Button variant={tone === 'danger' ? 'danger' : 'primary'} loading={busy} disabled={!!reason && text.trim() === ''} onClick={submit}>
+                        <Button variant={tone === 'danger' ? 'danger' : 'primary'} loading={busy} disabled={!!reason && !reasonOptional && text.trim() === ''} onClick={submit}>
                             {confirmLabel}
                         </Button>
                     </>
@@ -77,7 +82,7 @@ export default function ConfirmAction({
             >
                 {message && <p className="text-sm text-[#4b4b4b]">{message}</p>}
                 {reason && (
-                    <Field label={reason} error={error} className="mt-3" required>
+                    <Field label={reason} error={error} className="mt-3" required={!reasonOptional}>
                         <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} autoFocus />
                     </Field>
                 )}

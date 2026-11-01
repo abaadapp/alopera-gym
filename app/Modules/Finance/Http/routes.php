@@ -31,6 +31,10 @@ Route::get('/payments', [PaymentController::class, 'index'])->middleware('can:in
 Route::post('/invoices/{invoice}/payments', [PaymentController::class, 'store'])->middleware('can:payments.record')->name('payments.store');
 Route::post('/payments/{payment}/confirm', [PaymentController::class, 'confirm'])->middleware('can:payments.confirm')->name('payments.confirm');
 Route::post('/payments/{payment}/reject', [PaymentController::class, 'reject'])->middleware('can:payments.confirm')->name('payments.reject');
+Route::post('/payments/{payment}/cancel', [PaymentController::class, 'cancel'])->middleware(['can:payments.cancel', 'throttle:20,1'])->name('payments.cancel');
+// A customer's credit (money received and not applied): applied to another invoice of theirs, or paid back.
+Route::post('/payments/{payment}/allocate', [PaymentController::class, 'allocate'])->middleware(['can:payments.record', 'throttle:20,1'])->name('payments.allocate');
+Route::post('/payments/{payment}/refund-credit', [PaymentController::class, 'refundCredit'])->middleware(['can:payments.refund', 'throttle:20,1'])->name('payments.refund-credit');
 Route::get('/payments/{payment}/receipt', [PaymentController::class, 'receipt'])->middleware('can:papers.print')->name('payments.receipt');
 Route::get('/payments/{payment}/proof', [PaymentController::class, 'proof'])->middleware('can:invoices.view')->name('payments.proof');
 

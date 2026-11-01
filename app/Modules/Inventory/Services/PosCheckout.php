@@ -66,12 +66,12 @@ final class PosCheckout
 
             foreach ($plans as $line) {
                 $membership = $this->memberships->renew($member, MembershipPlan::findOrFail($line['plan_id']), array_filter(['branch_id' => $branch]));
-                $documents[] = $this->settle(Invoice::findOrFail($membership->invoice_id), 'membership', $method, $reference, $branch, $note);
+                $documents[] = $this->settle(Invoice::findOrFail($membership->invoice_id), 'membership', $method, $reference, $branch, $note, $device);
             }
 
             foreach ($packages as $line) {
                 $subscription = $this->pt->sell($member, PtPackage::findOrFail($line['package_id']), branchId: $branch);
-                $documents[] = $this->settle(Invoice::findOrFail($subscription->invoice_id), 'pt', $method, $reference, $branch, $note);
+                $documents[] = $this->settle(Invoice::findOrFail($subscription->invoice_id), 'pt', $method, $reference, $branch, $note, $device);
             }
 
             return $documents;
@@ -89,11 +89,14 @@ final class PosCheckout
      *
      * @return array{kind: string, id: int, number: string, label: string, total: string, paid: bool, payment_id: ?int, pay_url: ?string}
      */
-    private function settle(Invoice $invoice, string $kind, string $method, ?string $reference, ?int $branch, string $note): array
+    private function settle(Invoice $invoice, string $kind, string $method, ?string $reference, ?int $branch, string $note, ?PosDevice $device): array
     {
         $payment = null;
         if ($method !== 'paymob' && $invoice->isOpen()) {
-            $payment = $this->payments->record($invoice, $invoice->balance(), $method, ['reference' => $reference ?? $invoice->number, 'branch_id' => $branch ?? $invoice->branch_id, 'notes' => $note]);
+            $payment = $this->payments->record($invoice, $invoice->balance(), $method, [
+                'reference' => $reference ?? $invoice->number, 'branch_id' => $branch ?? $invoice->branch_id, 'notes' => $note,
+                'settlement_account_id' => $method === 'card' ? $device?->settlement_account_id : null,
+            ]);
         }
         $invoice->refresh();
         $slug = $this->tenants->require()->slug;

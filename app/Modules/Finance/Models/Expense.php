@@ -8,6 +8,7 @@ use App\Core\Tenancy\BranchOwned;
 use App\Core\Tenancy\OwnedByBranch;
 use App\Models\Branch;
 use App\Models\User;
+use App\Modules\Accounting\Models\Account;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -36,5 +37,11 @@ class Expense extends Model implements BranchOwned
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** The cash box or bank account that paid it. */
+    public function account(): BelongsTo
+    {
+        return $this->belongsTo(Account::class);
     }
 }
