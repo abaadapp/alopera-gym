@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Http\Controllers;
 
+use App\Core\Support\SubmittedOnce;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Inventory\Models\Product;
@@ -26,6 +27,8 @@ class ProductAddonController extends Controller
             'q' => $request->string('q')->trim()->toString(),
             'status' => in_array($request->query('status'), ['active', 'inactive'], true) ? $request->query('status') : '',
             'channel' => in_array($request->query('channel'), ['pos', 'website'], true) ? $request->query('channel') : '',
+            'sort' => in_array($request->query('sort'), ['name', 'price'], true) ? $request->query('sort') : '',
+            'dir' => $request->query('dir') === 'desc' ? 'desc' : '',
         ];
         $base = fn () => ProductAddon::query()
             ->when($filters['q'], fn ($q, $t) => $q->where('name', 'ilike', '%'.$t.'%'))
@@ -33,7 +36,8 @@ class ProductAddonController extends Controller
             ->when($filters['channel'] === 'website', fn ($q) => $q->where('show_on_website', true));
         $counts = $base()->toBase()->selectRaw('count(*) as total, count(*) filter (where is_active) as active, count(*) filter (where not is_active) as inactive')->first();
 
-        $addons = $base()->ordered()
+        $addons = $base()
+            ->when($filters['sort'], fn ($q, $sort) => $q->orderBy($sort, $filters['dir'] ?: 'asc')->orderBy('id'), fn ($q) => $q->ordered())
             ->when($filters['status'] !== '', fn ($q) => $q->where('is_active', $filters['status'] === 'active'))
             ->with(['products:products.id,name', 'categories:product_categories.id,name', 'stockProduct:id,name,stock_quantity,track_stock'])
             ->get();
@@ -64,7 +68,7 @@ class ProductAddonController extends Controller
             ]),
             'counts' => ['all' => (int) $counts->total, 'active' => (int) $counts->active, 'inactive' => (int) $counts->inactive],
             'products' => Product::with('category:id,name')->orderBy('name')->get(['id', 'name', 'product_category_id', 'is_active', 'track_stock', 'stock_quantity'])
-                ->map(fn (Product $p) => ['id' => $p->id, 'name' => $p->name, 'category' => $p->category?->name, 'is_active' => $p->is_active, 'track_stock' => $p->track_stock]),
+                ->map(fn (Product $p) => ['id' => $p->id, 'name' => $p->name, 'category' => $p->category?->name, 'is_active' => $p->is_active, 'track_stock' => $p->track_stock, 'stock' => $p->track_stock ? (float) $p->stock_quantity : null]),
             'categories' => ProductCategory::ordered()->get(['id', 'name']),
             'filters' => $filters,
         ]);
@@ -72,13 +76,20 @@ class ProductAddonController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $data = $this->validated($request);
-        DB::transaction(function () use ($data) {
-            $addon = ProductAddon::create($this->attributes($data) + ['sort_order' => (int) ProductAddon::withTrashed()->max('sort_order') + 1]);
-            $this->links($addon, $data);
+        // The dialog sent twice (a double click, a retry) adds one add-on: the second gets the first's answer, though by
+        // then its name is taken. A refused form keeps nothing and can be corrected and sent again.
+        $key = $request->validate(['client_key' => SubmittedOnce::RULE])['client_key'] ?? null;
+        $name = SubmittedOnce::run($key, 'product-addon', function () use ($request) {
+            $data = $this->validated($request);
+            DB::transaction(function () use ($data) {
+                $addon = ProductAddon::create($this->attributes($data) + ['sort_order' => (int) ProductAddon::withTrashed()->max('sort_order') + 1]);
+                $this->links($addon, $data);
+            });
+
+            return trim($data['name']);
         });
 
-        return back()->with('success', 'أُضيفت الإضافة «'.$data['name'].'».');
+        return back()->with('success', 'أُضيفت الإضافة «'.$name.'».');
     }
 
     public function update(Request $request, ProductAddon $addon): RedirectResponse

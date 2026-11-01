@@ -123,6 +123,50 @@ class ProductsAddonsTest extends TestCase
         $this->asTenant($club, fn () => $this->assertSame('2.800', Sale::firstOrFail()->total));
     }
 
+    public function test_the_addons_list_searches_filters_sorts_switches_and_adds_once(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $shake = $this->product($club, ['name' => 'Shake', 'track_stock' => false], 0);
+        $banana = $this->product($club, ['name' => 'Banana', 'track_stock' => true], 30);
+        $scoop = $this->addon($club, ['name' => 'Scoop', 'price' => 0.5, 'applies_to' => 'products'], [$shake]);
+        $this->addon($club, ['name' => 'Vanilla', 'price' => 0.2, 'applies_to' => 'all', 'show_in_pos' => false]);
+        $this->addon($club, ['name' => 'Honey', 'price' => 0.3, 'applies_to' => 'all', 'is_active' => false]);
+        $names = fn (array $query) => array_column($this->actingAs($owner)->get(route('club.product-addons.index', $query))->assertOk()->viewData('page')['props']['addons'], 'name');
+
+        // The status tabs, the «أضف فلتر» channel, the search and the two sorts (name, price either way).
+        $this->assertSame(['Honey'], $names(['status' => 'inactive']));
+        $this->assertSame(['Honey', 'Scoop'], $names(['channel' => 'pos', 'sort' => 'name']));
+        $this->assertSame(['Vanilla'], $names(['q' => 'vani']));
+        $this->assertSame(['Vanilla', 'Honey', 'Scoop'], $names(['sort' => 'price']));
+        $this->assertSame(['Scoop', 'Honey', 'Vanilla'], $names(['sort' => 'price', 'dir' => 'desc']));
+        $this->assertSame(['Honey', 'Scoop', 'Vanilla'], $names(['sort' => 'nothing']), 'an unknown sort keeps the list order');
+        // The stock the dialog offers, with what is on the shelf.
+        $offered = collect($this->actingAs($owner)->get(route('club.product-addons.index'))->viewData('page')['props']['products'])->keyBy('name');
+        $this->assertSame([30.0, null], [$offered['Banana']['stock'], $offered['Shake']['stock']]);
+
+        // The ⋮ menu's switches: off, out of the point of sale, back on.
+        $this->actingAs($owner)->patch(route('club.product-addons.toggle', $scoop), ['field' => 'is_active', 'value' => false])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->patch(route('club.product-addons.toggle', $scoop), ['field' => 'show_in_pos', 'value' => false])->assertSessionHasNoErrors();
+        $this->asTenant($club, fn () => $this->assertSame([false, false], [$scoop->fresh()->is_active, $scoop->fresh()->show_in_pos]));
+        $this->actingAs($owner)->patch(route('club.product-addons.toggle', $scoop), ['field' => 'is_active', 'value' => true])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->patch(route('club.product-addons.toggle', $scoop), ['field' => 'price', 'value' => true])->assertSessionHasErrors('field');
+
+        // The dialog sent twice with its key adds one add-on; a new dialog (a new key) is refused for the same name.
+        $form = ['name' => 'Banana slices', 'price' => '0.350', 'applies_to' => 'products', 'product_ids' => [$shake->id], 'stock_product_id' => $banana->id, 'stock_usage' => 1, 'client_key' => 'dialog-1'];
+        $this->actingAs($owner)->post(route('club.product-addons.store'), $form)->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.product-addons.store'), $form)->assertSessionHasNoErrors();
+        $this->asTenant($club, fn () => $this->assertSame(1, ProductAddon::where('name', 'Banana slices')->count()));
+        $this->actingAs($owner)->post(route('club.product-addons.store'), ['client_key' => 'dialog-2'] + $form)->assertSessionHasErrors('name');
+        $this->actingAs($owner)->post(route('club.product-addons.store'), ['client_key' => 'bad key!'] + $form)->assertSessionHasErrors('client_key');
+
+        // Reception sells with add-ons but neither lists nor changes them.
+        $reception = $this->staff($club, 'reception');
+        $this->actingAs($reception)->get(route('club.product-addons.index', ['sort' => 'price']))->assertForbidden();
+        $this->actingAs($reception)->patch(route('club.product-addons.toggle', $scoop), ['field' => 'is_active', 'value' => false])->assertForbidden();
+        $this->actingAs($reception)->post(route('club.product-addons.store'), ['client_key' => 'dialog-3'] + $form)->assertForbidden();
+    }
+
     public function test_an_addon_goes_only_with_its_products_and_where_it_is_offered(): void
     {
         $club = $this->club();

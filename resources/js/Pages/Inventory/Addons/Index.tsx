@@ -1,13 +1,12 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { router, useForm } from '@inertiajs/react';
-import { Globe, Monitor, Package, Pencil, Plus, Puzzle, Search, Trash2 } from 'lucide-react';
+import { Globe, Monitor, Plus, Power, Puzzle, Search } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, EmptyState, Field, Input, Modal, PageHeader, Select, Switch, Textarea } from '@/Components/ui';
-import { DropdownItem, DropdownSeparator } from '@/Components/ui/Dropdown';
-import { ConfirmDelete, FilterMenu, RowMenu, StatusTabs, Toolbar, ToolbarSearch, visit } from '@/Components/Products/parts';
+import { clientKey } from '@/Components/Inventory/parts';
+import { Badge, Button, Card, DataTable, Field, Input, Modal, PageHeader, RowActions, Select, type Column, type TableFilter } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
-import { fold, money, number } from '@/lib/format';
+import { currencyLabel, fold, money, number } from '@/lib/format';
 import type { Option } from '@/types';
 
 type Scope = 'all' | 'categories' | 'products';
@@ -33,8 +32,9 @@ interface Addon {
     sold: number;
 }
 
-type ProductOption = { id: number; name: string; category: string | null; is_active: boolean; track_stock: boolean };
-type Filters = { q: string; status: string; channel: string };
+type ProductOption = { id: number; name: string; category: string | null; is_active: boolean; track_stock: boolean; stock: number | null };
+type Filters = { q: string; status: string; channel: string; sort: string; dir: string };
+type Toggle = 'is_active' | 'show_in_pos' | 'show_on_website';
 
 interface Props {
     addons: Addon[];
@@ -54,18 +54,104 @@ function scopeText(a: Addon): string {
     return names.length > 2 ? `${head} و${number(names.length - 2)} أخرى` : head || '—';
 }
 
+/** Where it is offered: a chip for the point of sale and one for the website shop, or a word when it is in neither. */
+function Where({ a }: { a: Addon }) {
+    const chip = 'inline-flex items-center gap-1 rounded-full bg-[#f2f2f0] px-2 py-0.5 text-[12px] whitespace-nowrap text-[#4b4b4b] [&_svg]:size-3 [&_svg]:shrink-0';
+    if (!a.show_in_pos && !a.show_on_website) return <span className="text-[12px] text-[#9ca3af]">لا تظهر للبيع</span>;
+    return (
+        <span className="flex flex-wrap gap-1">
+            {a.show_in_pos && <span className={chip}><Monitor /> نقطة البيع</span>}
+            {a.show_on_website && <span className={chip}><Globe /> متجر الموقع</span>}
+        </span>
+    );
+}
+
+const Tile = () => <span className="grid size-11 shrink-0 place-items-center rounded-[8px] border border-line bg-[#f7f7f5] text-[#6b7280]"><Puzzle className="size-4" /></span>;
+
 /**
  * The add-ons tab: every extra a customer can buy with a product, its price, the products it goes with, where it is
- * offered and the stock it uses up. The one place add-ons are created and changed (a product's page only links or
- * unlinks those offered on chosen products).
+ * offered and the stock it uses up — in the panel's list (search, «أضف فلتر», «ترتيب», status tabs, a card per add-on on
+ * phones and tablets). The one place add-ons are created and changed (a product's page only links or unlinks those
+ * offered on chosen products). Switching one off, or out of the point of sale or the shop, is in its ⋮ menu.
  */
-export default function AddonsIndex({ addons, counts, products, categories, filters }: Props) {
+export default function AddonsIndex({ addons, products, categories, filters }: Props) {
     const currency = useCurrency();
     const [editing, setEditing] = useState<Addon | 'new' | null>(null);
-    const [deleting, setDeleting] = useState<Addon | null>(null);
-    const go = (change: Partial<Filters>) => visit('club.product-addons.index', filters, change);
-    const toggle = (a: Addon, field: 'is_active' | 'show_in_pos' | 'show_on_website', value: boolean) => router.patch(route('club.product-addons.toggle', a.id), { field, value }, { preserveScroll: true, preserveState: true });
+    const toggle = (a: Addon, field: Toggle, value: boolean) => router.patch(route('club.product-addons.toggle', a.id), { field, value }, { preserveScroll: true, preserveState: true });
     const filtered = Boolean(filters.q || filters.status || filters.channel);
+
+    const actions = (a: Addon) => (
+        <RowActions
+            label={a.name}
+            edit={() => setEditing(a)}
+            extra={[
+                { label: a.is_active ? 'إيقاف الإضافة' : 'تفعيل الإضافة', icon: <Power />, onSelect: () => toggle(a, 'is_active', !a.is_active) },
+                { label: a.show_in_pos ? 'إخفاء من نقطة البيع' : 'إظهار في نقطة البيع', icon: <Monitor />, onSelect: () => toggle(a, 'show_in_pos', !a.show_in_pos) },
+                { label: a.show_on_website ? 'إخفاء من متجر الموقع' : 'إظهار في متجر الموقع', icon: <Globe />, onSelect: () => toggle(a, 'show_on_website', !a.show_on_website) },
+            ]}
+            destroy={{ url: route('club.product-addons.destroy', a.id), message: `تُحذف «${a.name}» من نقطة البيع ومتجر الموقع، وتبقى في المبيعات والفواتير السابقة باسمها وسعرها كما بيعت.` }}
+        />
+    );
+    const status = (a: Addon) => <Badge tone={a.is_active ? 'green' : 'gray'}>{a.is_active ? 'مفعّلة' : 'موقوفة'}</Badge>;
+    const stock = (a: Addon) => (a.stock_product ? (
+        <>
+            <span className="block max-w-44 truncate">{a.stock_product}</span>
+            <span className="text-[11px] text-[#9ca3af]"><span className="num">{number(a.stock_usage, 3)}</span> لكل إضافة{a.stock_left !== null && <> · المتبقي <span className="num">{number(a.stock_left, 3)}</span></>}</span>
+        </>
+    ) : <span className="text-[#9ca3af]">لا</span>);
+
+    const columns: Column<Addon>[] = [
+        {
+            key: 'name',
+            header: 'الإضافة',
+            cell: (a) => (
+                <button type="button" onClick={() => setEditing(a)} className="flex items-center gap-3 text-start">
+                    <Tile />
+                    <span className="min-w-0">
+                        <span className={cn('block max-w-56 truncate font-medium', a.is_active ? 'text-ink' : 'text-[#6b7280]')}>{a.name}</span>
+                        <span className="block max-w-56 truncate text-[11px] text-[#9ca3af]">{a.description || (a.max_quantity > 1 ? `حتى ${number(a.max_quantity)} لكل قطعة` : 'واحدة لكل قطعة')}</span>
+                    </span>
+                </button>
+            ),
+        },
+        { key: 'price', header: 'السعر', cell: (a) => <span className="font-semibold text-ink num">{money(a.price, currency)}</span> },
+        {
+            key: 'scope',
+            header: 'تظهر مع',
+            cell: (a) => (
+                <span className="text-[13px]">
+                    <span className="block max-w-56 truncate">{scopeText(a)}</span>
+                    {a.applies_to !== 'all' && <span className="text-[11px] text-[#9ca3af]">{a.applies_to === 'categories' ? `${number(a.category_ids.length)} تصنيف` : `${number(a.product_ids.length)} منتج`}</span>}
+                </span>
+            ),
+        },
+        { key: 'stock', header: 'تخصم من المخزون', cell: (a) => <span className="text-[13px]">{stock(a)}</span> },
+        { key: 'sold', header: 'بيعت', cell: (a) => <span className="text-[13px] num">{number(a.sold, a.sold % 1 ? 3 : 0)}</span> },
+        { key: 'where', header: 'مكان الظهور', cell: (a) => <Where a={a} /> },
+        { key: 'status', header: 'الحالة', cell: status },
+        { key: 'actions', header: 'إجراءات', align: 'end', cell: actions },
+    ];
+
+    // Phones, tablets and small laptops: one card per add-on — name and price, what it goes with, where and its state.
+    const card = (a: Addon) => (
+        <div className="relative flex items-start gap-3 px-4 py-3">
+            <Tile />
+            <div className="min-w-0 flex-1">
+                <div className="flex items-start gap-2">
+                    <button type="button" onClick={() => setEditing(a)} className={cn('min-w-0 flex-1 truncate text-start text-sm font-medium after:absolute after:inset-0', a.is_active ? 'text-ink' : 'text-[#6b7280]')}>{a.name}</button>
+                    <span className="shrink-0 text-sm font-semibold text-ink num">{money(a.price, currency)}</span>
+                </div>
+                <p className="mt-0.5 truncate text-[12px] text-[#9ca3af]">مع {scopeText(a)}{a.stock_product && <> · تخصم من {a.stock_product}</>}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">{status(a)}<Where a={a} /></div>
+            </div>
+            <div className="relative z-10 -my-1 shrink-0">{actions(a)}</div>
+        </div>
+    );
+
+    const tableFilters: TableFilter[] = [
+        { param: 'status', label: 'الحالة', tabs: true, options: [{ value: 'active', label: 'مفعّلة', dot: '#059669' }, { value: 'inactive', label: 'موقوفة', dot: '#9ca3af' }] },
+        { param: 'channel', label: 'مكان الظهور', options: [{ value: 'pos', label: 'نقطة البيع' }, { value: 'website', label: 'متجر الموقع' }] },
+    ];
 
     return (
         <ClubLayout title="الإضافات">
@@ -74,79 +160,51 @@ export default function AddonsIndex({ addons, counts, products, categories, filt
             <p className="mb-3 text-[12px] text-[#9ca3af]"><span className="num">{number(addons.length)}</span> إضافة{filtered ? ' مطابقة' : ''}</p>
 
             <Card padded={false} className="overflow-hidden">
-                <Toolbar>
-                    <ToolbarSearch value={filters.q} placeholder="ابحث باسم الإضافة" onSearch={(q) => go({ q })} />
-                    <StatusTabs value={filters.status} counts={counts} onChange={(status) => go({ status })} />
-                    <FilterMenu filters={[{ key: 'channel', label: 'مكان الظهور', options: [{ value: 'pos', label: 'نقطة البيع' }, { value: 'website', label: 'متجر الموقع' }] }]} values={filters} onChange={(key, value) => go({ [key]: value })} />
-                </Toolbar>
-
-                {addons.length === 0 ? (
-                    <EmptyState
-                        icon={<Puzzle className="size-6" />}
-                        title={filtered ? 'لا توجد إضافات مطابقة' : 'لا توجد إضافات بعد'}
-                        description={filtered ? 'غيّر البحث أو أزل الفلتر.' : 'أنشئ إضافة واختر المنتجات التي تظهر معها؛ يختارها الموظف في نقطة البيع والعميل في متجر الموقع.'}
-                        action={!filtered ? <Button size="sm" icon={<Plus />} onClick={() => setEditing('new')}>إضافة جديدة</Button> : undefined}
-                    />
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="table-base">
-                            <thead><tr><th>الإضافة</th><th>السعر</th><th>تظهر مع</th><th>تخصم من المخزون</th><th>بيعت</th><th>نقطة البيع</th><th>متجر الموقع</th><th>مفعّلة</th><th className="w-12"><span className="sr-only">إجراءات</span></th></tr></thead>
-                            <tbody>
-                                {addons.map((a) => (
-                                    <tr key={a.id} className={cn(!a.is_active && 'text-[#9ca3af]')}>
-                                        <td>
-                                            <button type="button" onClick={() => setEditing(a)} className="flex items-center gap-3 text-start">
-                                                <span className="grid size-11 shrink-0 place-items-center rounded-[8px] border border-line bg-[#f7f7f5] text-[#6b7280]"><Puzzle className="size-4" /></span>
-                                                <span className="min-w-0">
-                                                    <span className={cn('block max-w-56 truncate font-medium', a.is_active ? 'text-ink' : 'text-[#6b7280]')}>{a.name}</span>
-                                                    <span className="block max-w-56 truncate text-[11px] text-[#9ca3af]">{a.description || (a.max_quantity > 1 ? `حتى ${number(a.max_quantity)} لكل قطعة` : 'واحدة لكل قطعة')}</span>
-                                                </span>
-                                            </button>
-                                        </td>
-                                        <td className="font-medium num">+{money(a.price, currency)}</td>
-                                        <td className="text-[13px]">
-                                            <span className="block max-w-56 truncate">{scopeText(a)}</span>
-                                            {a.applies_to !== 'all' && <span className="text-[11px] text-[#9ca3af]">{a.applies_to === 'categories' ? `${number(a.category_ids.length)} تصنيف` : `${number(a.product_ids.length)} منتج`}</span>}
-                                        </td>
-                                        <td className="text-[13px]">
-                                            {a.stock_product ? (
-                                                <>
-                                                    <span className="block max-w-44 truncate">{a.stock_product}</span>
-                                                    <span className="text-[11px] text-[#9ca3af]"><span className="num">{number(a.stock_usage, 3)}</span> لكل إضافة{a.stock_left !== null && <> · المتبقي <span className="num">{number(a.stock_left, 3)}</span></>}</span>
-                                                </>
-                                            ) : <span className="text-[#9ca3af]">لا</span>}
-                                        </td>
-                                        <td className="text-[13px] num">{number(a.sold, a.sold % 1 ? 3 : 0)}</td>
-                                        <td><Switch size="sm" checked={a.show_in_pos} onChange={(v) => toggle(a, 'show_in_pos', v)} label={`${a.name} في نقطة البيع`} /></td>
-                                        <td><Switch size="sm" checked={a.show_on_website} onChange={(v) => toggle(a, 'show_on_website', v)} label={`${a.name} في متجر الموقع`} /></td>
-                                        <td><Switch size="sm" checked={a.is_active} onChange={(v) => toggle(a, 'is_active', v)} label={`${a.name} مفعّلة`} /></td>
-                                        <td className="text-end">
-                                            <RowMenu label={`إجراءات ${a.name}`}>
-                                                {(close) => (
-                                                    <>
-                                                        <DropdownItem onClick={() => { close(); setEditing(a); }}><Pencil /> تعديل</DropdownItem>
-                                                        <DropdownSeparator />
-                                                        <DropdownItem destructive onClick={() => { close(); setDeleting(a); }}><Trash2 /> حذف</DropdownItem>
-                                                    </>
-                                                )}
-                                            </RowMenu>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
+                <DataTable
+                    rows={addons}
+                    columns={columns}
+                    card={card}
+                    rowKey={(a) => a.id}
+                    params={filters}
+                    search={{ placeholder: 'ابحث باسم الإضافة…' }}
+                    filters={tableFilters}
+                    sorts={[{ key: 'name', label: 'الاسم' }, { key: 'price', label: 'السعر' }]}
+                    empty={
+                        <span className="flex flex-col items-center gap-3">
+                            <span className="grid size-12 place-items-center rounded-full bg-[#f2f2f0] text-[#6b7280]"><Puzzle className="size-5" /></span>
+                            <span className="text-sm font-medium text-ink">لا توجد إضافات بعد</span>
+                            <span className="max-w-sm text-[13px]">أنشئ إضافة واختر المنتجات التي تظهر معها؛ يختارها الموظف في نقطة البيع والعميل في متجر الموقع.</span>
+                            <Button size="sm" icon={<Plus />} onClick={() => setEditing('new')}>إضافة جديدة</Button>
+                        </span>
+                    }
+                />
             </Card>
 
-            {editing && <AddonDialog addon={editing === 'new' ? null : editing} products={products} categories={categories} onClose={() => setEditing(null)} />}
-            <ConfirmDelete target={deleting} url={deleting && route('club.product-addons.destroy', deleting.id)} title={`حذف «${deleting?.name}»`} message="تختفي من نقطة البيع ومتجر الموقع، وتبقى في المبيعات والفواتير السابقة باسمها وسعرها كما بيعت." onClose={() => setDeleting(null)} />
+            {editing && <AddonDialog addon={editing === 'new' ? null : editing} products={products} categories={categories} currency={currency} onClose={() => setEditing(null)} />}
         </ClubLayout>
     );
 }
 
-function AddonDialog({ addon, products, categories, onClose }: { addon: Addon | null; products: ProductOption[]; categories: Option[]; onClose: () => void }) {
-    const currency = useCurrency();
+/** A question over its choices, as the panel's dialogs ask it. */
+function Ask({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
+    return (
+        <div>
+            <span className="mb-1.5 block text-[13px] font-medium text-ink">{label}</span>
+            {children}
+            {hint && <p className="mt-1.5 text-[12px] text-[#9ca3af]">{hint}</p>}
+        </div>
+    );
+}
+
+function Choice({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+    return (
+        <button type="button" onClick={onClick} aria-pressed={on} className={cn('flex flex-1 items-center justify-center gap-1.5 rounded-[10px] border px-3 py-2 text-[13px] font-medium transition-colors [&_svg]:size-4', on ? 'border-[#111] bg-[#111] text-white' : 'border-line bg-white text-[#4b4b4b] hover:bg-[#f7f7f5]')}>
+            {children}
+        </button>
+    );
+}
+
+function AddonDialog({ addon, products, categories, currency, onClose }: { addon: Addon | null; products: ProductOption[]; categories: Option[]; currency: string; onClose: () => void }) {
     const [search, setSearch] = useState('');
     const form = useForm({
         name: addon?.name ?? '',
@@ -163,116 +221,116 @@ function AddonDialog({ addon, products, categories, onClose }: { addon: Addon | 
         stock_usage: addon ? String(Number(addon.stock_usage)) : '1',
     });
     const [usesStock, setUsesStock] = useState(Boolean(addon?.stock_product_id));
+    const d = form.data;
+    // One key while the dialog is open: «حفظ» clicked twice adds one add-on (SubmittedOnce).
+    const key = useRef(clientKey());
 
     const shown = useMemo(() => {
         const q = fold(search.trim());
         return products.filter((p) => !q || fold(p.name).includes(q) || (p.category && fold(p.category).includes(q)));
     }, [products, search]);
 
-    const pick = (key: 'product_ids' | 'category_ids', id: number) => form.setData(key, form.data[key].includes(id) ? form.data[key].filter((x) => x !== id) : [...form.data[key], id]);
+    const pick = (key: 'product_ids' | 'category_ids', id: number) => form.setData(key, d[key].includes(id) ? d[key].filter((x) => x !== id) : [...d[key], id]);
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        form.transform((d) => ({ ...d, stock_product_id: usesStock ? d.stock_product_id || null : null, stock_usage: usesStock ? d.stock_usage : null }));
+        form.transform((x) => ({ ...x, client_key: key.current, stock_product_id: usesStock ? x.stock_product_id || null : null, stock_usage: usesStock ? x.stock_usage : null }));
         const options = { preserveScroll: true, onSuccess: onClose };
         if (addon) form.put(route('club.product-addons.update', addon.id), options);
         else form.post(route('club.product-addons.store'), options);
     };
 
-    const choice = (on: boolean) => cn('flex-1 rounded-[10px] border px-3 py-2 text-[13px] font-medium transition', on ? 'border-[#111] bg-[#111] text-white' : 'border-line bg-white text-ink hover:bg-[#fafafa]');
-
     return (
-        <Modal open onClose={onClose} size="lg" title={addon ? `تعديل «${addon.name}»` : 'إضافة جديدة'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="addon-form" loading={form.processing}>حفظ</Button></>}>
-            <form id="addon-form" onSubmit={submit} className="space-y-5">
-                <div className="grid gap-4 sm:grid-cols-[1fr_9rem_8rem]">
-                    <Field label="اسم الإضافة" error={form.errors.name} required>
-                        <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} maxLength={120} placeholder="مثل: سكوب بروتين إضافي" autoFocus={!addon} />
+        <Modal open onClose={onClose} size="md" title={addon ? 'تعديل إضافة' : 'إضافة جديدة'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="addon-form" loading={form.processing}>حفظ</Button></>}>
+            <form id="addon-form" onSubmit={submit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                    <Field label="الاسم" error={form.errors.name} required>
+                        <Input value={d.name} onChange={(e) => form.setData('name', e.target.value)} maxLength={120} placeholder="سكوب بروتين إضافي" autoFocus={!addon} />
                     </Field>
-                    <Field label={`السعر (${currency})`} error={form.errors.price} required>
-                        <Input type="number" step="0.001" min="0" dir="ltr" value={form.data.price} onChange={(e) => form.setData('price', e.target.value)} />
+                    <Field label={`السعر (${currencyLabel(currency)})`} error={form.errors.price} required>
+                        <Input inputMode="decimal" dir="ltr" value={d.price} onChange={(e) => form.setData('price', e.target.value)} placeholder="0.000" />
                     </Field>
+                </div>
+                <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-3">
                     <Field label="الحد لكل قطعة" error={form.errors.max_quantity}>
-                        <Input type="number" step="1" min="1" max="20" dir="ltr" value={form.data.max_quantity} onChange={(e) => form.setData('max_quantity', e.target.value)} />
+                        <Input inputMode="numeric" dir="ltr" value={d.max_quantity} onChange={(e) => form.setData('max_quantity', e.target.value)} />
+                    </Field>
+                    <Field label="الوصف" error={form.errors.description}>
+                        <Input value={d.description} onChange={(e) => form.setData('description', e.target.value)} maxLength={500} placeholder="يظهر للعميل في متجر الموقع (اختياري)" />
                     </Field>
                 </div>
-                <Field label="الوصف (اختياري)" error={form.errors.description} hint="يظهر للعميل تحت اسم الإضافة في متجر الموقع">
-                    <Textarea rows={2} maxLength={500} value={form.data.description} onChange={(e) => form.setData('description', e.target.value)} />
-                </Field>
 
-                <div>
-                    <p className="label">تظهر مع</p>
-                    <div className="flex flex-wrap gap-2">
-                        {SCOPES.map(([key, label]) => <button key={key} type="button" onClick={() => form.setData('applies_to', key)} aria-pressed={form.data.applies_to === key} className={choice(form.data.applies_to === key)}>{label}</button>)}
-                    </div>
-                    {form.data.applies_to === 'categories' && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                            {categories.length === 0 && <p className="text-[13px] text-muted">لا توجد تصنيفات بعد. أنشئها من تبويب «التصنيفات».</p>}
-                            {categories.map((c) => {
-                                const on = form.data.category_ids.includes(c.id);
-                                return <button key={c.id} type="button" onClick={() => pick('category_ids', c.id)} aria-pressed={on} className={cn('rounded-full border px-3 py-1.5 text-[13px] transition', on ? 'border-[#111] bg-[#111] text-white' : 'border-line hover:bg-[#fafafa]')}>{c.name}</button>;
-                            })}
-                        </div>
-                    )}
-                    {form.data.applies_to === 'products' && (
-                        <div className="mt-3 rounded-[12px] border border-line">
-                            <label className="flex items-center gap-2 border-b border-line px-3">
-                                <Search className="size-4 text-[#9ca3af]" />
-                                <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث عن منتج" aria-label="ابحث عن منتج" className="h-10 w-full border-0 bg-transparent p-0 text-sm focus:outline-none focus:ring-0" />
-                                <span className="shrink-0 text-[12px] text-[#9ca3af]"><span className="num">{number(form.data.product_ids.length)}</span> مختار</span>
-                            </label>
-                            <ul className="max-h-48 overflow-y-auto p-1.5">
-                                {shown.length === 0 && <li className="px-2 py-3 text-center text-[13px] text-muted">لا توجد منتجات</li>}
-                                {shown.map((p) => (
-                                    <li key={p.id}>
-                                        <label className="flex cursor-pointer items-center gap-2.5 rounded-[8px] px-2 py-1.5 text-sm hover:bg-[#f7f7f5]">
-                                            <input type="checkbox" className="size-4 accent-[#111]" checked={form.data.product_ids.includes(p.id)} onChange={() => pick('product_ids', p.id)} />
-                                            <span className={cn('flex-1', !p.is_active && 'text-[#9ca3af]')}>{p.name}</span>
-                                            {p.category && <span className="text-[11px] text-[#9ca3af]">{p.category}</span>}
-                                        </label>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
-                    {(form.errors.product_ids || form.errors.category_ids) && <p className="mt-1.5 text-xs text-red-600">{form.errors.product_ids || form.errors.category_ids}</p>}
-                </div>
-
-                <div>
-                    <p className="label">هل تخصم من المخزون؟</p>
+                <Ask label="هل تخصم هذه الإضافة من المخزون؟">
                     <div className="flex gap-2">
-                        <button type="button" onClick={() => setUsesStock(false)} aria-pressed={!usesStock} className={choice(!usesStock)}>لا</button>
-                        <button type="button" onClick={() => setUsesStock(true)} aria-pressed={usesStock} className={choice(usesStock)}>نعم، من منتج في المخزون</button>
+                        <Choice on={!usesStock} onClick={() => setUsesStock(false)}>لا، خدمة أو رسوم فقط</Choice>
+                        <Choice on={usesStock} onClick={() => setUsesStock(true)}>نعم، مرتبطة بصنف</Choice>
                     </div>
-                    {usesStock && (
-                        <div className="mt-3 grid gap-4 sm:grid-cols-[1fr_10rem]">
-                            <Field label="المنتج الذي تُخصم منه" error={form.errors.stock_product_id}>
-                                <Select value={form.data.stock_product_id} onChange={(e) => form.setData('stock_product_id', e.target.value)} placeholder="اختر منتجًا">
-                                    {products.filter((p) => p.track_stock).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                </Select>
-                            </Field>
-                            <Field label="الكمية لكل إضافة" error={form.errors.stock_usage} hint="مثل 1 قطعة، أو 0.030 من العبوة">
-                                <Input type="number" step="0.001" min="0.001" dir="ltr" value={form.data.stock_usage} onChange={(e) => form.setData('stock_usage', e.target.value)} />
-                            </Field>
-                        </div>
-                    )}
-                </div>
+                </Ask>
+                {usesStock && (
+                    <div className="grid grid-cols-2 gap-3">
+                        <Field label="الصنف المخزني" error={form.errors.stock_product_id} required>
+                            <Select value={d.stock_product_id} onChange={(e) => form.setData('stock_product_id', e.target.value)} placeholder="اختر الصنف…">
+                                {products.filter((p) => p.track_stock).map((p) => <option key={p.id} value={p.id}>{p.stock === null ? p.name : `${p.name} (${number(p.stock, p.stock % 1 ? 3 : 0)})`}</option>)}
+                            </Select>
+                        </Field>
+                        <Field label="الكمية المستهلكة" error={form.errors.stock_usage}>
+                            <Input inputMode="decimal" dir="ltr" value={d.stock_usage} onChange={(e) => form.setData('stock_usage', e.target.value)} />
+                        </Field>
+                        <p className="col-span-2 -mt-1 text-[12px] text-[#9ca3af]">مثال: «إضافة موز» تخصم موزة واحدة من صنف الموز؛ «سكوب بروتين» تخصم 0.030 من عبوة البروتين.</p>
+                    </div>
+                )}
 
-                <div className="divide-y divide-line rounded-[12px] border border-line px-4">
-                    {([
-                        ['show_in_pos', 'تظهر في نقطة البيع', 'يختارها الموظف عند بيع المنتج', Monitor],
-                        ['show_on_website', 'تظهر في متجر الموقع', 'يختارها العميل في صفحة المنتج بالمتجر', Globe],
-                        ['is_active', 'مفعّلة', 'أوقفها لإخفائها من كل مكان دون حذفها', Package],
-                    ] as const).map(([key, label, hint, Icon]) => (
-                        <div key={key} className="flex items-center justify-between gap-4 py-3">
-                            <span className="flex items-start gap-3">
-                                <Icon className="mt-0.5 size-4 text-[#6b7280]" />
-                                <span><span className="block text-sm font-medium">{label}</span><span className="block text-[12px] text-muted">{hint}</span></span>
-                            </span>
-                            <Switch checked={form.data[key]} onChange={(v) => form.setData(key, v)} label={label} />
+                <Ask label="تظهر مع">
+                    <div className="flex gap-2">
+                        {SCOPES.map(([key, label]) => <Choice key={key} on={d.applies_to === key} onClick={() => form.setData('applies_to', key)}>{label}</Choice>)}
+                    </div>
+                </Ask>
+                {d.applies_to === 'categories' && (
+                    <div className="flex flex-wrap gap-2">
+                        {categories.length === 0 && <p className="text-[13px] text-[#9ca3af]">لا توجد تصنيفات بعد. أنشئها من تبويب «التصنيفات».</p>}
+                        {categories.map((c) => {
+                            const on = d.category_ids.includes(c.id);
+                            return <button key={c.id} type="button" onClick={() => pick('category_ids', c.id)} aria-pressed={on} className={cn('rounded-full border px-3 py-1.5 text-[13px] transition-colors', on ? 'border-[#111] bg-[#111] text-white' : 'border-line text-[#4b4b4b] hover:bg-[#f7f7f5]')}>{c.name}</button>;
+                        })}
+                    </div>
+                )}
+                {d.applies_to === 'products' && (
+                    <div className="rounded-[12px] border border-line">
+                        <label className="flex items-center gap-2 border-b border-line px-3 py-2">
+                            <Search className="size-4 shrink-0 text-[#9ca3af]" />
+                            <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث عن منتج…" aria-label="ابحث عن منتج" className="w-full border-0 bg-transparent p-0 text-[13px] focus:outline-none focus:ring-0" />
+                            <span className="shrink-0 text-[12px] text-[#9ca3af]"><span className="num">{number(d.product_ids.length)}</span> مختار</span>
+                        </label>
+                        <div className="max-h-40 overflow-y-auto p-1">
+                            {shown.length === 0 ? (
+                                <p className="p-3 text-[13px] text-[#9ca3af]">لا نتائج</p>
+                            ) : shown.map((p) => (
+                                <label key={p.id} className="flex cursor-pointer items-center gap-2 rounded-[8px] px-2 py-1.5 hover:bg-[#f7f7f5]">
+                                    <input type="checkbox" className="size-4 accent-[#111]" checked={d.product_ids.includes(p.id)} onChange={() => pick('product_ids', p.id)} />
+                                    <span className={cn('flex-1 text-[13px]', p.is_active ? 'text-ink' : 'text-[#9ca3af]')}>{p.name}</span>
+                                    {p.category && <span className="text-[11px] text-[#9ca3af]">{p.category}</span>}
+                                </label>
+                            ))}
                         </div>
-                    ))}
-                </div>
-                {addon && addon.sold > 0 && <Badge tone="blue">بيعت <span className="num">{number(addon.sold, addon.sold % 1 ? 3 : 0)}</span> مرة؛ تغيير السعر لا يغيّر المبيعات السابقة</Badge>}
+                    </div>
+                )}
+                {(form.errors.product_ids || form.errors.category_ids) && <p className="-mt-2 text-[12px] text-[#b91c1c]">{form.errors.product_ids || form.errors.category_ids}</p>}
+
+                <Ask label="أين تظهر؟" hint="يختارها الموظف عند بيع المنتج في نقطة البيع، والعميل في صفحة المنتج بمتجر الموقع.">
+                    <div className="flex gap-2">
+                        <Choice on={d.show_in_pos} onClick={() => form.setData('show_in_pos', !d.show_in_pos)}><Monitor /> نقطة البيع</Choice>
+                        <Choice on={d.show_on_website} onClick={() => form.setData('show_on_website', !d.show_on_website)}><Globe /> متجر الموقع</Choice>
+                    </div>
+                </Ask>
+
+                <Ask label="الحالة" hint={d.is_active ? undefined : 'موقوفة: لا تظهر في أي مكان، وتبقى محفوظة لتفعيلها لاحقًا.'}>
+                    <div className="flex gap-2">
+                        <Choice on={d.is_active} onClick={() => form.setData('is_active', true)}>مفعّلة</Choice>
+                        <Choice on={!d.is_active} onClick={() => form.setData('is_active', false)}>موقوفة</Choice>
+                    </div>
+                </Ask>
+
+                {addon && addon.sold > 0 && <p className="text-[12px] text-[#6b7280]">بيعت <span className="num">{number(addon.sold, addon.sold % 1 ? 3 : 0)}</span> مرة؛ تغيير السعر لا يغيّر المبيعات السابقة.</p>}
             </form>
         </Modal>
     );
