@@ -4,6 +4,8 @@ namespace App\Modules\Gym\Services;
 
 use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
+use App\Core\Tenancy\BranchContext;
+use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Gym\Events\PtSubscriptionActivated;
 use App\Modules\Gym\Models\ClassSession;
@@ -25,13 +27,18 @@ final class PtService
         private readonly AuditLogger $audit,
     ) {}
 
-    public function sell(Member $member, PtPackage $package, ?Trainer $trainer = null): PtSubscription
+    /**
+     * Sell a package: pending until its invoice is paid. The invoice belongs to the branch where it is sold (the point
+     * of sale's, else the seller's), so whoever sold it can open it and the revenue lands in that branch.
+     */
+    public function sell(Member $member, PtPackage $package, ?Trainer $trainer = null, ?int $branchId = null): PtSubscription
     {
         if (! $package->is_active) {
             throw new BusinessRuleException('pt.package_inactive', 'الباقة غير متاحة.', 'pt_package_id');
         }
+        $branchId ??= app(BranchContext::class)->assign() ?? $member->branch_id;
 
-        return DB::transaction(function () use ($member, $package, $trainer) {
+        return DB::transaction(function () use ($member, $package, $trainer, $branchId) {
             $subscription = PtSubscription::create([
                 'member_id' => $member->id,
                 'pt_package_id' => $package->id,
@@ -46,7 +53,7 @@ final class PtService
                 'description' => 'تدريب شخصي — '.$package->name.' ('.$package->sessions_count.' جلسات)',
                 'unit_price' => $package->price,
                 'itemable' => $subscription,
-            ]], ['type' => 'pt']);
+            ]], ['type' => 'pt', 'branch_id' => $branchId]);
 
             $subscription->forceFill(['invoice_id' => $invoice->id])->save();
 
@@ -109,6 +116,8 @@ final class PtService
             $this->assertMemberFree($subscription->member_id, $startsAt, $endsAt);
 
             return PtSession::create([
+                // Where the package was sold (its invoice's branch), else where it is booked.
+                'branch_id' => Invoice::whereKey($subscription->invoice_id)->value('branch_id') ?? app(BranchContext::class)->assign(),
                 'pt_subscription_id' => $subscription->id,
                 'trainer_id' => $trainerId,
                 'member_id' => $subscription->member_id,

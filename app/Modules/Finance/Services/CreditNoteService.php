@@ -26,6 +26,25 @@ final class CreditNoteService
     /**
      * @param  array{method: string, reference?: string|null}|null  $refund  pay back what the note makes overpaid, now
      */
+    /**
+     * The tax a credit note gives back: its share of the invoice's tax, so the VAT owed falls with the revenue. The
+     * note that credits what is left of the invoice takes what is left of its tax, so the notes never give back more
+     * (or less) tax than the invoice charged, to the baisa.
+     */
+    private function taxShare(Invoice $invoice, string|float $amount): string
+    {
+        if (Money::toMinor($invoice->tax_total) <= 0 || Money::toMinor($invoice->total) <= 0) {
+            return '0.000';
+        }
+        $left = Money::sub($invoice->tax_total, (string) CreditNote::where('invoice_id', $invoice->id)->sum('tax_amount'));
+        if (Money::cmp(Money::add($invoice->credited_total, $amount), $invoice->total) >= 0) {
+            return Money::normalize($left);
+        }
+        $share = Money::fromMinor((int) round(Money::toMinor($amount) * Money::toMinor($invoice->tax_total) / Money::toMinor($invoice->total)));
+
+        return Money::cmp($share, $left) > 0 ? Money::normalize($left) : $share;
+    }
+
     public function issue(Invoice $invoice, string|float $amount, string $reason, ?array $refund = null): CreditNote
     {
         return DB::transaction(function () use ($invoice, $amount, $reason, $refund) {
@@ -51,6 +70,7 @@ final class CreditNoteService
                 'invoice_id' => $invoice->id,
                 'number' => NumberSequence::next('credit_note', $invoice->tenant_id),
                 'amount' => Money::normalize($amount),
+                'tax_amount' => $this->taxShare($invoice, $amount),
                 'currency' => $invoice->currency,
                 'reason' => $reason,
                 'created_by' => Auth::guard('web')->id(),

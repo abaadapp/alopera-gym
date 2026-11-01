@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { toast } from 'sonner';
 import { AlertTriangle, Banknote, Check, Clock, Copy, CreditCard, ExternalLink, FileDown, MessageCircle, Paperclip, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
@@ -498,14 +498,18 @@ const refundMethods = [
 function CreditNoteModal({ open, onClose, invoice, currency, canRefund }: { open: boolean; onClose: () => void; invoice: Invoice; currency: string; canRefund: boolean }) {
     const paid = Number(invoice.paid_total) > 0;
     const form = useForm({ amount: '', reason: '', refund_now: paid && canRefund, method: 'cash', reference: '' });
+    // One key per note: a double click or a retry issues it (and refunds) once.
+    const key = useRef(clientKey());
     // What the customer would be owed after this note: paid minus the new net total.
     const owed = Math.max(0, Number(invoice.paid_total) - (Number(invoice.net_total) - Number(form.data.amount || 0)));
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
+        form.transform((x) => ({ ...x, client_key: key.current }));
         form.post(route('club.credit-notes.store', invoice.id), {
             preserveScroll: true,
             onSuccess: () => {
+                key.current = clientKey();
                 form.reset();
                 onClose();
             },
@@ -565,6 +569,7 @@ function CreditNoteModal({ open, onClose, invoice, currency, canRefund }: { open
 
 function CreditRefundModal({ note, invoice, onClose, currency }: { note: CreditNoteRow | null; invoice: Invoice; onClose: () => void; currency: string }) {
     const form = useForm({ amount: '', method: 'cash', reference: '' });
+    const key = useRef(clientKey());
     const available = note ? Math.min(Number(note.refundable), Number(invoice.refund_due)).toFixed(3) : '0';
 
     useEffect(() => {
@@ -575,9 +580,11 @@ function CreditRefundModal({ note, invoice, onClose, currency }: { note: CreditN
     const submit = (e: FormEvent) => {
         e.preventDefault();
         if (!note) return;
+        form.transform((x) => ({ ...x, client_key: key.current }));
         form.post(route('club.credit-notes.refund', note.id), {
             preserveScroll: true,
             onSuccess: () => {
+                key.current = clientKey();
                 form.reset();
                 onClose();
             },

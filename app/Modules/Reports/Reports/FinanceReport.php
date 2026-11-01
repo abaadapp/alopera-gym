@@ -10,13 +10,16 @@ use App\Modules\Reports\Services\ReportService;
 use App\Modules\Reports\Support\ReportFilters;
 use App\Modules\Reports\Support\ReportSheet as S;
 
-/** الإيرادات والمصروفات: net collected, expenses, operating result and collection rate, day by day and by kind. */
+/**
+ * الإيرادات والمصروفات: the money collected (net of refunds) and the collection rate, day by day and by kind; and the
+ * period's result as the books have it — revenue earned less every expense, salaries and supplier purchases included.
+ */
 final class FinanceReport extends Report
 {
     public const INVOICE_TYPES = ['membership' => 'عضوية', 'pt' => 'تدريب شخصي', 'pos' => 'مبيعات المنتجات', 'other' => 'أخرى'];
 
     private const FIGURES = [
-        'revenue' => ['صافي التحصيل', S::MONEY], 'expenses' => ['المصروفات', S::MONEY], 'net' => ['صافي الربح التشغيلي', S::MONEY],
+        'revenue' => ['صافي التحصيل', S::MONEY], 'earned' => ['الإيراد المستحق (من الدفتر)', S::MONEY], 'expenses' => ['المصروفات (من الدفتر)', S::MONEY], 'net' => ['صافي الربح (من الدفتر)', S::MONEY],
         'invoiced' => ['قيمة الفواتير الصادرة', S::MONEY], 'collection_rate' => ['نسبة التحصيل', S::PERCENT], 'refunds' => ['المردودات', S::MONEY],
         'credit_notes' => ['الإشعارات الدائنة', S::MONEY], 'product_sales' => ['مبيعات المنتجات', S::MONEY],
     ];
@@ -41,7 +44,7 @@ final class FinanceReport extends Report
             new S('التحصيل اليومي', [['التاريخ', S::TEXT], ['صافي التحصيل', S::MONEY]], array_map(fn ($d) => [$d['date'], $d['amount']], $r['trend'])),
             new S('حسب طريقة الدفع', [['طريقة الدفع', S::TEXT], ['المبلغ', S::MONEY]], array_map(fn ($x) => [Payment::METHOD_LABELS[$x['key']] ?? $x['key'], $x['amount']], $r['revenue_by_method'])),
             new S('حسب نوع الإيراد', [['نوع الإيراد', S::TEXT], ['المبلغ', S::MONEY]], array_map(fn ($x) => [self::INVOICE_TYPES[$x['key']] ?? $x['key'], $x['amount']], $r['revenue_by_type'])),
-            new S('المصروفات حسب التصنيف', [['التصنيف', S::TEXT], ['المبلغ', S::MONEY]], array_map(fn ($x) => [$x['key'], $x['amount']], $r['expenses_by_category'])),
+            new S('المصروفات التشغيلية حسب التصنيف', [['التصنيف', S::TEXT], ['المبلغ', S::MONEY]], array_map(fn ($x) => [$x['key'], $x['amount']], $r['expenses_by_category'])),
         ];
         if ($sales) {
             $sheets[] = new S('المنتجات الأكثر مبيعًا', [['المنتج', S::TEXT], ['الكمية', S::NUMBER], ['الإيراد', S::MONEY], ['الربح', S::MONEY]],

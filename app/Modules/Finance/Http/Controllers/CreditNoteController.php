@@ -4,6 +4,7 @@ namespace App\Modules\Finance\Http\Controllers;
 
 use App\Core\Papers\Papers;
 use App\Core\Support\Money;
+use App\Core\Support\SubmittedOnce;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
@@ -24,12 +25,14 @@ class CreditNoteController extends Controller
             'refund_now' => ['boolean'],
             'method' => ['required_if:refund_now,true', 'nullable', 'in:cash,bank_transfer,card,other'],
             'reference' => ['nullable', 'string', 'max:120', 'required_if:method,card'],
+            'client_key' => SubmittedOnce::RULE,
         ], ['reference.required_if' => 'أدخل رقم العملية من جهاز الشبكة.']);
 
         abort_if($request->boolean('refund_now') && ! $request->user()->can('payments.refund'), 403);
 
-        $note = $credits->issue($invoice, $data['amount'], $data['reason'],
-            $request->boolean('refund_now') ? ['method' => $data['method'], 'reference' => $data['reference'] ?? null] : null);
+        // Sent twice (a double click, a retry): one note, one refund.
+        $note = CreditNote::findOrFail(SubmittedOnce::run($data['client_key'] ?? null, 'credit-note:'.$invoice->id, fn () => $credits->issue($invoice, $data['amount'], $data['reason'],
+            $request->boolean('refund_now') ? ['method' => $data['method'], 'reference' => $data['reference'] ?? null] : null)->id));
 
         return back()->with('success', 'تم إصدار الإشعار الدائن '.$note->number
             .(! Money::isZero($note->refunded_total) ? ' ورد '.$note->refunded_total.' للعميل.' : '.'));
@@ -42,9 +45,11 @@ class CreditNoteController extends Controller
             'amount' => ['required', 'numeric', 'min:0.001'],
             'method' => ['required', 'in:cash,bank_transfer,card,other'],
             'reference' => ['nullable', 'string', 'max:120', 'required_if:method,card'],
+            'client_key' => SubmittedOnce::RULE,
         ], ['reference.required_if' => 'أدخل رقم العملية من جهاز الشبكة.']);
 
-        $payments->refund($creditNote, $data['amount'], $data['method'], $data['reference'] ?? null);
+        // Sent twice (a double click, a retry): the money goes back once.
+        SubmittedOnce::run($data['client_key'] ?? null, 'credit-refund:'.$creditNote->id, fn () => $payments->refund($creditNote, $data['amount'], $data['method'], $data['reference'] ?? null)->id);
 
         return back()->with('success', 'تم تسجيل رد المبلغ.');
     }

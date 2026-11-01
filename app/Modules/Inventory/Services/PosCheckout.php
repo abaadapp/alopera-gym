@@ -70,7 +70,7 @@ final class PosCheckout
             }
 
             foreach ($packages as $line) {
-                $subscription = $this->pt->sell($member, PtPackage::findOrFail($line['package_id']));
+                $subscription = $this->pt->sell($member, PtPackage::findOrFail($line['package_id']), branchId: $branch);
                 $documents[] = $this->settle(Invoice::findOrFail($subscription->invoice_id), 'pt', $method, $reference, $branch, $note);
             }
 

@@ -47,6 +47,10 @@ final class CreditNotePaper extends PaperBuilder
         $currency = self::currency($tenant, $note->currency);
 
         $totals = [['label' => 'إجمالي الإشعار', 'value' => F::amount($note->amount), 'currency' => F::currency($currency), 'grand' => true]];
+        // Its share of the invoice's tax, given back with it.
+        if (Money::cmp($note->tax_amount ?? 0, 0) > 0) {
+            $totals[] = ['label' => 'منها ضريبة القيمة المضافة', 'value' => F::amount($note->tax_amount)];
+        }
         if (Money::cmp($note->refunded_total, 0) > 0) {
             $totals[] = ['label' => 'المبلغ المردود', 'value' => F::amount($note->refunded_total)];
         }

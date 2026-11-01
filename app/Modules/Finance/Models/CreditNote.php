@@ -30,6 +30,7 @@ class CreditNote extends Model implements BranchOwned
     {
         return [
             'amount' => 'decimal:3',
+            'tax_amount' => 'decimal:3',
             'refunded_total' => 'decimal:3',
         ];
     }

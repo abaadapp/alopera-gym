@@ -125,6 +125,13 @@ final class MembershipService
         }
 
         return DB::transaction(function () use ($member, $plan, $kind, $options) {
+            // One sale awaiting payment per member: a second one (a renewal on top, another upgrade carrying the same
+            // credit) would overlap periods or spend the credit twice once both are paid. The portal already refused it.
+            Member::whereKey($member->id)->lockForUpdate()->first();
+            $waiting = Membership::where('member_id', $member->id)->where('status', Membership::PENDING)->with('invoice:id,number')->first();
+            if ($waiting) {
+                throw new BusinessRuleException('membership.pending', 'للعضو اشتراك بانتظار الدفع'.($waiting->invoice ? ' (الفاتورة '.$waiting->invoice->number.')' : '').'. أكمل دفعه أو ألغِه قبل بيع اشتراك آخر.', 'membership_plan_id');
+            }
             $start = CarbonImmutable::parse($options['starts_on'] ?? today())->startOfDay();
             $end = $plan->endDateFrom($start);
 

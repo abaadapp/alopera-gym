@@ -232,6 +232,8 @@ class MembershipLifecycleTest extends TestCase
             $m = $this->svc()->sell($member, $plan, ['coupon_code' => 'welcome10']);
             $this->assertSame('5.000', $m->discount);
             $this->assertSame('45.000', $m->invoice->total);
+            // Paid, so the next sale is not refused as a second one awaiting payment: the coupon's own limit is what refuses it.
+            app(PaymentService::class)->record($m->invoice, $m->invoice->total, 'cash');
 
             try {
                 $this->svc()->sell($member, $plan, ['coupon_code' => 'WELCOME10']);

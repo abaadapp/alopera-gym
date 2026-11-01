@@ -99,15 +99,37 @@ final class LedgerProjector
             return;
         }
 
-        $this->ledger->post([
-            'date' => $note->created_at ?? now(),
-            'description' => "إشعار دائن {$note->number} — {$note->reason}",
-            'branch_id' => $note->branch_id,
-            ...$this->key('credit_note', $note->id, 'issue'),
-        ], [
-            ['account' => $this->chart->account('sales_returns'), 'debit' => $note->amount],
-            ['account' => $this->chart->account('receivable'), 'credit' => $note->amount],
-        ]);
+        // The note gives back revenue and, with it, its share of the tax: the VAT owed falls as the revenue does.
+        $tax = Money::normalize($note->tax_amount ?? 0);
+        $vat = $this->chart->account('vat_payable');
+        $issued = $this->entry('credit_note', $note->id, 'issue');
+        if (! $issued) {
+            $this->ledger->post([
+                'date' => $note->created_at ?? now(),
+                'description' => "إشعار دائن {$note->number} — {$note->reason}",
+                'branch_id' => $note->branch_id,
+                ...$this->key('credit_note', $note->id, 'issue'),
+            ], array_values(array_filter([
+                ['account' => $this->chart->account('sales_returns'), 'debit' => Money::sub($note->amount, $tax)],
+                Money::isZero($tax) ? null : ['account' => $vat, 'debit' => $tax],
+                ['account' => $this->chart->account('receivable'), 'credit' => $note->amount],
+            ])));
+
+            return;
+        }
+
+        // Posted before the tax was split out (the whole amount to returns): the tax is moved to the VAT payable once.
+        if (! Money::isZero($tax) && ! $issued->lines()->where('account_id', $vat->id)->exists()) {
+            $this->ledger->post([
+                'date' => $note->created_at ?? now(),
+                'description' => "ضريبة الإشعار الدائن {$note->number} — تصحيح",
+                'branch_id' => $note->branch_id,
+                ...$this->key('credit_note', $note->id, 'tax'),
+            ], [
+                ['account' => $vat, 'debit' => $tax],
+                ['account' => $this->chart->account('sales_returns'), 'credit' => $tax],
+            ]);
+        }
     }
 
     public function expense(Expense $expense, bool $deleted = false): void

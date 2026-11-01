@@ -29,8 +29,10 @@ export function FinanceBody({ report }: { report: PeriodReport }) {
         <>
             <StatGrid>
                 <Kpi label="صافي التحصيل" metric={m('revenue')} format={f.money} metricKey="revenue" />
-                <Kpi label="المصروفات" metric={m('expenses')} format={f.money} metricKey="expenses" />
-                <Kpi label="صافي الربح التشغيلي" metric={m('net')} format={f.money} metricKey="net" />
+                {/* The result is the books': revenue earned less every expense (salaries and purchases included). */}
+                <Kpi label="الإيراد المستحق" metric={m('earned')} format={f.money} metricKey="earned" hint="من الدفتر: الفواتير الصادرة بعد الإشعارات الدائنة" />
+                <Kpi label="المصروفات" metric={m('expenses')} format={f.money} metricKey="expenses" hint="من الدفتر: التشغيلية والرواتب والمشتريات" />
+                <Kpi label="صافي الربح" metric={m('net')} format={f.money} metricKey="net" hint="الإيراد المستحق ناقص المصروفات" />
                 <Kpi label="نسبة التحصيل" metric={m('collection_rate')} format={f.pct} metricKey="collection_rate" hint={`من فواتير بقيمة ${f.money(m('invoiced')?.current ?? 0)}`} />
                 <Kpi label="المردودات" metric={m('refunds')} format={f.money} metricKey="refunds" />
                 <Kpi label="الإشعارات الدائنة" metric={m('credit_notes')} format={f.money} metricKey="credit_notes" />
@@ -46,7 +48,7 @@ export function FinanceBody({ report }: { report: PeriodReport }) {
                 <ChartCard title="حسب نوع الإيراد" empty="لا دفعات" has={report.revenue_by_type.length > 0}>
                     <HBars data={report.revenue_by_type.map((r) => ({ label: invoiceType[r.key] ?? r.key, value: r.amount }))} format={f.money} />
                 </ChartCard>
-                <ChartCard className={cn(!sales && 'lg:col-span-2')} title="المصروفات حسب التصنيف" empty="لا مصروفات" has={report.expenses_by_category.length > 0}>
+                <ChartCard className={cn(!sales && 'lg:col-span-2')} title="المصروفات التشغيلية حسب التصنيف" empty="لا مصروفات" has={report.expenses_by_category.length > 0}>
                     <HBars data={report.expenses_by_category.map((r) => ({ label: r.key, value: r.amount, color: '#dc2626' }))} format={f.money} />
                 </ChartCard>
                 {sales && (

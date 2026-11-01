@@ -6,6 +6,7 @@ use App\Core\Auth\PermissionRegistry;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Branch;
+use App\Modules\Accounting\Services\FinanceReports;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\Invoice;
@@ -220,15 +221,18 @@ final class ReportService
 
         if ($financial) {
             $revenue = (float) $this->netCollected($from, $end, $branch);
-            $expenses = (float) $this->in(Expense::whereBetween('expense_date', [$from, $to]), $branch)->sum('amount');
+            // The period's result is the books' (the income statement): what was earned less every expense — salaries
+            // and supplier purchases with the rest — not the money collected less the expenses register.
+            $statement = app(FinanceReports::class)->incomeStatement($from->toDateString(), $to->toDateString(), $branch);
             // net of credit notes: what the invoices are worth after partial refunds and reductions
             $issued = (float) $this->in(Invoice::whereBetween('issue_date', [$from, $to])->where('status', '!=', Invoice::VOID), $branch)->sum(DB::raw('total - credited_total'));
             $collectedOnIssued = (float) $this->in(Invoice::whereBetween('issue_date', [$from, $to])->where('status', '!=', Invoice::VOID), $branch)->sum('paid_total');
 
             $row += [
                 'revenue' => round($revenue, 3),
-                'expenses' => round($expenses, 3),
-                'net' => round($revenue - $expenses, 3),
+                'earned' => round((float) $statement['total_revenue'], 3),
+                'expenses' => round((float) $statement['total_expenses'], 3),
+                'net' => round((float) $statement['net'], 3),
                 'invoiced' => round($issued, 3),
                 'collection_rate' => $issued > 0 ? round($collectedOnIssued / $issued * 100, 1) : 0,
                 'refunds' => round((float) $this->in(Payment::completed()->where('kind', Payment::KIND_REFUND)->whereBetween('paid_at', [$from, $end]), $branch)->sum('amount'), 3),

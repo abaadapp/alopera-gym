@@ -75,7 +75,7 @@ final class ReportCatalog
 
         return [
             ['key' => 'finance', 'category' => 'finance', 'title' => 'الإيرادات والمصروفات', 'icon' => 'wallet', 'class' => Reports\FinanceReport::class,
-                'desc' => 'صافي التحصيل والمصروفات والربح التشغيلي ونسبة التحصيل، يومًا بيوم وحسب طريقة الدفع ونوع الإيراد، مقارنة بفترة سابقة.'] + $period,
+                'desc' => 'صافي التحصيل ونسبته، والإيراد المستحق والمصروفات وصافي الربح من الدفتر (مع الرواتب والمشتريات)، يومًا بيوم وحسب طريقة الدفع ونوع الإيراد، مقارنة بفترة سابقة.'] + $period,
             ['key' => 'statements', 'category' => 'finance', 'title' => 'قائمة الدخل وميزان المراجعة', 'icon' => 'landmark', 'class' => Reports\StatementsReport::class,
                 'desc' => 'الإيرادات والمصروفات من دفتر القيود لفترة تختارها بجانب فترة المقارنة، وأرصدة الحسابات حتى تاريخها.'] + $period,
             ['key' => 'movement', 'category' => 'finance', 'title' => 'الحركة المالية', 'icon' => 'arrow-left-right', 'class' => Reports\MovementReport::class,
