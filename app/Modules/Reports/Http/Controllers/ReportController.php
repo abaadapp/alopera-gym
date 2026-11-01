@@ -62,12 +62,12 @@ class ReportController extends Controller
         ]);
     }
 
-    /** One report as Excel or CSV, for the same filters as its page, for those who may export it. */
+    /** One report as Excel, CSV or PDF, for the same filters as its page, for those who may export it. */
     public function export(Request $request, string $report, AuditLogger $audit, TenantContext $tenants): StreamedResponse
     {
         $entry = $this->authorizeReport($request, $report);
         abort_unless($this->catalog->canExport($request->user(), $report), 403);
-        $format = $request->string('format')->toString() === 'xlsx' ? 'xlsx' : 'csv';
+        $format = in_array($asked = $request->string('format')->toString(), ['xlsx', 'pdf'], true) ? $asked : 'csv';
         $filters = ReportFilters::fromRequest($request, $request->user(), $entry['preset']);
         $result = $this->catalog->report($report)->export($filters, $request->user());
 
@@ -85,7 +85,7 @@ class ReportController extends Controller
 
         $audit->log('report.exported', null, ['report' => $report, 'format' => $format, 'from' => $filters->from->toDateString(), 'to' => $filters->to->toDateString(), 'branch' => $filters->branch]);
 
-        return (new ReportDocument($slug, $entry['title'], $meta, $result['sheets'], $result['empty'], $tenants->require()->currency ?? 'OMR'))->download($format);
+        return (new ReportDocument($slug, $entry['title'], $meta, $result['sheets'], $result['empty'], $tenants->require()->currency ?? 'OMR', $tenants->require()->name))->download($format);
     }
 
     /** The report's entry, after its checks: unknown or switched off is 404, not allowed is 403. */

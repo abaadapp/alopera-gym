@@ -110,6 +110,11 @@ class Invoice extends Model implements BranchOwned
         return $this->belongsTo(Branch::class);
     }
 
+    public function voider(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by');
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
-    ArrowLeftRight, Banknote, BarChart3, Boxes, Briefcase, Building2, CalendarDays, ClipboardCheck, Clock, DoorOpen, Dumbbell, FileClock, HandCoins, History, Hourglass, Landmark,
-    PackageCheck, PackageX, Search, ShoppingBag, ShoppingCart, Ticket, Truck, Users, Wallet, X, type LucideIcon,
+    ArrowLeftRight, Banknote, BarChart3, Boxes, Briefcase, Building2, CalendarDays, ClipboardCheck, Clock, DoorOpen, Dumbbell, FileClock, FileText, HandCoins, History, Hourglass, Landmark,
+    PackageCheck, PackageX, Receipt, Scale, Search, ShoppingBag, ShoppingCart, Ticket, Truck, Users, Vault, Wallet, X, type LucideIcon,
 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import ExportMenu from '@/Components/Reports/ExportMenu';
@@ -28,6 +28,7 @@ const ICONS: Record<string, LucideIcon> = {
     'calendar-days': CalendarDays, dumbbell: Dumbbell, 'shopping-bag': ShoppingBag, briefcase: Briefcase, banknote: Banknote, 'door-open': DoorOpen,
     clock: Clock, 'file-clock': FileClock, history: History, 'building-2': Building2,
     boxes: Boxes, 'package-x': PackageX, 'clipboard-check': ClipboardCheck, truck: Truck, 'shopping-cart': ShoppingCart, users: Users, 'package-check': PackageCheck,
+    receipt: Receipt, 'file-text': FileText, vault: Vault, scale: Scale,
 };
 
 /**

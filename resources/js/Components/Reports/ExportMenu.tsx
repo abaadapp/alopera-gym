@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, Download, FileSpreadsheet, FileText, LoaderCircle, Lock } from 'lucide-react';
+import { ChevronDown, Download, FileSpreadsheet, FileText, FileType2, LoaderCircle, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dropdown, DropdownItem, DropdownLabel } from '@/Components/ui/Dropdown';
 import { cn } from '@/lib/cn';
@@ -7,10 +7,11 @@ import { cn } from '@/lib/cn';
 const FORMATS = [
     { key: 'xlsx', label: 'تصدير كملف إكسل', icon: FileSpreadsheet },
     { key: 'csv', label: 'تصدير كملف CSV', icon: FileText },
+    { key: 'pdf', label: 'تصدير كملف PDF', icon: FileType2 },
 ] as const;
 
 /**
- * A report's «تصدير» button: a menu of Excel and CSV. The file is fetched in the background so the page can say
+ * A report's «تصدير» button: a menu of Excel, CSV and PDF. The file is fetched in the background so the page can say
  * what happened — a file of headings only when there is no data, no permission, too many exports in a minute — and
  * is then saved under the name the server gave it (the report's key and dates, nothing personal).
  *
@@ -36,9 +37,9 @@ export default function ExportMenu({ href, params, title, scope, size = 'sm' }: 
         setBusy(true);
         try {
             const url = `${href}?${new URLSearchParams({ ...(params ?? {}), format }).toString()}`;
-            const res = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } });
+            const res = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/pdf' } });
             const type = res.headers.get('content-type') ?? '';
-            if (!res.ok || !(type.includes('spreadsheetml') || type.includes('text/csv'))) {
+            if (!res.ok || !(type.includes('spreadsheetml') || type.includes('text/csv') || type.includes('application/pdf'))) {
                 toast.error(
                     res.status === 403 ? 'لا تملك صلاحية تصدير هذا التقرير.'
                         : res.status === 429 ? 'صدّرت تقارير كثيرة خلال دقيقة؛ حاول بعد قليل.'

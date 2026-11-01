@@ -188,6 +188,10 @@ class PaymentsAndRefundsTest extends TestCase
         });
         $this->assertSame(['0.000', '60.000'], [$this->balance($club, 'cash'), $this->balance($club, 'receivable')]);
         $this->actingAs($owner)->post(route('club.payments.cancel', $payment), ['reason' => 'مرة أخرى'])->assertSessionHasErrors();
+        // The invoice's paper beside it no longer lists it among the payments (the page loads every payment).
+        $receipt = $this->asTenant($club, fn () => $payment->fresh()->receipt_number);
+        $this->actingAs($owner)->get(route('club.invoices.show', $invoice))->assertOk()
+            ->assertInertia(fn ($page) => $page->where('paper.html', fn ($html) => ! str_contains($html, $receipt))->where('invoice.payments.0.status', Payment::CANCELLED));
         Artisan::call('accounting:sync');
         $this->assertSame('0.000', $this->balance($club, 'cash'));
 

@@ -201,6 +201,7 @@ export default function MemberShow(props: Props) {
                 actions={
                     <>
                         <Button variant="outline" href={whatsappUrl(member.phone)} external icon={<MessageCircle />}>واتساب</Button>
+                        {can('invoices.view') && <Button variant="outline" href={route('club.reports.show', { report: 'member-statement', member_id: member.id, range: 'year' })} icon={<FileText />}>كشف الحساب</Button>}
                         {can('memberships.sell') && member.status !== 'blocked' && (
                             <Button icon={<CalendarPlus />} onClick={() => setSellOpen(true)}>{memberships.length > 0 ? 'تجديد / بيع عضوية' : 'بيع عضوية'}</Button>
                         )}

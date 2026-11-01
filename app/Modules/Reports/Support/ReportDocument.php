@@ -14,7 +14,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /**
  * An exported report: its name, the lines that say what it covers (period, comparison, branch, filters, when it was
  * made) and its tables. In Excel each table is a sheet that opens with those lines; in CSV (UTF-8 with BOM, so Excel
- * shows Arabic) the lines come first and the tables follow one after another. Amounts carry three decimals and the
+ * shows Arabic) the lines come first and the tables follow one after another; in PDF (ReportPdf) the lines head the
+ * page and the tables follow, right to left. Amounts carry three decimals and the
  * currency in their heading; a report with no data still gives a valid file of headings and says so in its lines.
  *
  * The file name holds only the report's key and its dates: no names of members, staff or the club.
@@ -34,12 +35,21 @@ final class ReportDocument
         public readonly array $sheets,
         public readonly bool $empty,
         private readonly string $currency = 'OMR',
+        private readonly ?string $club = null,
     ) {}
 
     public function download(string $format): StreamedResponse
     {
         $name = preg_replace('/[^A-Za-z0-9_.-]/', '_', $this->slug).'-'.now()->format('Ymd-His');
         $headers = ['X-Report-Empty' => $this->empty ? '1' : '0', 'Cache-Control' => 'no-store, private'];
+
+        if ($format === 'pdf') {
+            $bytes = (new ReportPdf($this->title, $this->meta, $this->sheets, $this->currency, $this->club))->bytes();
+
+            return response()->streamDownload(function () use ($bytes) {
+                echo $bytes;
+            }, $name.'.pdf', $headers + ['Content-Type' => 'application/pdf']);
+        }
 
         if ($format === 'xlsx') {
             return response()->streamDownload(fn () => (new Xlsx($this->book()))->save('php://output'), $name.'.xlsx',

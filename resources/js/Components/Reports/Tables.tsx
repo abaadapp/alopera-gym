@@ -1,4 +1,4 @@
-import { StatCard } from '@/Components/ui';
+import { Notice, StatCard } from '@/Components/ui';
 import { number } from '@/lib/format';
 import { TableCard, useFormats } from './parts';
 
@@ -24,11 +24,14 @@ export function TablesBody({ data }: { data: Tables }) {
         return String(value);
     };
 
+    const notes = (data.options?.notes ?? []) as { tone: 'gray' | 'blue' | 'amber' | 'green' | 'red'; text: string }[];
+
     return (
         <>
-            <div className="mb-4 grid auto-rows-fr grid-cols-2 gap-4 xl:grid-cols-4">
+            {notes.length > 0 && <div className="mb-4 space-y-2">{notes.map((n) => <Notice key={n.text} tone={n.tone}>{n.text}</Notice>)}</div>}
+            {data.figures.length > 0 && <div className="mb-4 grid auto-rows-fr grid-cols-2 gap-4 xl:grid-cols-4">
                 {data.figures.map((x) => <StatCard key={x.label} label={x.label} value={show(x.value, x.kind)} tone="gray" />)}
-            </div>
+            </div>}
             {data.tables.map((t) => (
                 <TableCard
                     key={t.title}

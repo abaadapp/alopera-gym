@@ -172,7 +172,8 @@ class ReportsCatalogTest extends TestCase
         // One permission gives its own reports, and the reports page to reach them: nothing broader is needed.
         $this->assertEqualsCanonicalizing(['payroll', 'payouts'], $keys(['payroll.reports']));
         $this->assertEqualsCanonicalizing(['finance'], $keys(['reports.financial']));
-        $this->assertEqualsCanonicalizing(['statements', 'movement'], $keys(['accounting.view']));
+        $this->assertEqualsCanonicalizing(['statements', 'movement', 'tax', 'adjustments'], $keys(['accounting.view']));
+        $this->assertEqualsCanonicalizing(['cash-shifts'], $keys(['cash_shifts.view']));
         $this->assertEqualsCanonicalizing(['dues'], $keys(['dues.view']));
         $this->assertEqualsCanonicalizing(['sales'], $keys(['sales.view']));
         $this->assertEqualsCanonicalizing(['expiring'], $keys(['memberships.view']));
@@ -227,9 +228,10 @@ class ReportsCatalogTest extends TestCase
         $this->actingAs($payroll)->get(route('club.reports.export', ['report' => 'payroll', 'format' => 'csv']))->assertForbidden();
         $this->actingAs($this->roleWith($club, ['payroll.reports', 'reports.export']))->get(route('club.reports.export', ['report' => 'payroll', 'format' => 'csv']))->assertOk();
 
-        // Reception: the reports of what it works with (entries, memberships ending), no money, no salaries, no files.
+        // Reception: the reports of what it works with (entries, memberships ending, a member's statement of the invoices
+        // it already sees), no club money, no salaries, no files.
         $reception = array_column($this->catalog($this->staff($club, 'reception')), 'key');
-        $this->assertEqualsCanonicalizing(['checkins', 'expiring'], $reception);
+        $this->assertEqualsCanonicalizing(['checkins', 'expiring', 'member-statement'], $reception);
         $this->assertNull($this->catalog($this->staff($club, 'reception'))[0]['export']);
 
         // The finance role: money, books, sales and payroll, not documents or attendance.

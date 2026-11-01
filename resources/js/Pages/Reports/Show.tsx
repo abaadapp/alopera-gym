@@ -10,7 +10,7 @@ import { PayoutsBody, PayrollBody, type Payouts, type Payroll } from '@/Componen
 import { DocumentsBody, RenewalsBody, type Documents, type Renewals } from '@/Components/Reports/Documents';
 import { BranchesBody, SalesBody, type Branches, type Sales } from '@/Components/Reports/Sales';
 import { TablesBody, type Tables } from '@/Components/Reports/Tables';
-import { BackLink, Button, Card, Checkbox, Input, Notice, PageHeader, Select } from '@/Components/ui';
+import { BackLink, Button, Card, Checkbox, Input, MemberPicker, Notice, PageHeader, Select } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 import { date } from '@/lib/format';
 
@@ -166,6 +166,15 @@ function ReportFilters({ kind, data, option, go, branch, compareRow }: { kind: s
                 {[['', 'الكل'], ['in', 'داخل'], ['out', 'خارج']].map(([k, t]) => <Chip key={k} small on={(d.options.direction ?? '') === k} onClick={() => go({ direction: k || null })}>{t}</Chip>)}
             </>
         );
+    } else if (kind === 'member-statement') {
+        // The member is the statement: chosen by search, kept in the address (?member_id=).
+        const member = option('member') as { id: number; name: string; member_no: string } | null;
+        own = (
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                {member && <span className="text-[13px]">العضو: <strong>{member.name}</strong> <span className="text-muted num">{member.member_no}</span></span>}
+                <div className="w-full sm:w-80"><MemberPicker placeholder={member ? 'عضو آخر…' : 'ابحث عن العضو بالاسم أو الهاتف أو رقم العضوية…'} onSelect={(m) => go({ member_id: String(m.id) })} /></div>
+            </div>
+        );
     } else if (kind === 'dues') {
         own = <Checkbox className="h-10 text-[13px]" label="المتأخرة فقط" checked={Boolean(option('overdue'))} onChange={(e) => go({ overdue: e.target.checked ? '1' : null })} />;
     } else if (kind === 'expiring') {
@@ -242,7 +251,8 @@ function Body({ kind, data, canFinancial, to }: { kind: string; data: Data; canF
         case 'renewals': return <RenewalsBody data={d as Renewals} />;
         case 'branches': return <BranchesBody data={d as Branches} canFinancial={canFinancial} />;
         case 'stock-balance': case 'low-stock': case 'stock-movements': case 'stocktakes': case 'transfers':
-        case 'purchases': case 'suppliers': case 'supplier-dues': case 'goods-receipts': return <TablesBody data={d as Tables} />;
+        case 'purchases': case 'suppliers': case 'supplier-dues': case 'goods-receipts':
+        case 'tax': case 'member-statement': case 'cash-shifts': case 'adjustments': return <TablesBody data={d as Tables} />;
         default: return null;
     }
 }

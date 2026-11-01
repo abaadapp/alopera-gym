@@ -99,8 +99,10 @@ final class InvoicePaper extends PaperBuilder
         $totals[] = ['label' => 'المتبقي', 'value' => F::amount($balance), 'currency' => $currency, 'grand' => Money::cmp($balance, 0) > 0];
 
         $panels = [];
-        if (($tpl['show_payments'] ?? false) && $invoice->payments->isNotEmpty()) {
-            $panels[] = ['caption' => 'المدفوعات', 'rows' => $invoice->payments->map(fn (Payment $p) => [
+        // Money that counts only: the page showing the invoice may have loaded its pending, rejected or cancelled payments too.
+        $paid = $invoice->payments->where('status', Payment::COMPLETED)->sortBy('id')->values();
+        if (($tpl['show_payments'] ?? false) && $paid->isNotEmpty()) {
+            $panels[] = ['caption' => 'المدفوعات', 'rows' => $paid->map(fn (Payment $p) => [
                 'label' => $p->kind === Payment::KIND_REFUND ? $w('رد مبلغ') : $w(Payment::METHOD_LABELS[$p->method] ?? $p->method),
                 'sub' => trim($p->paid_at?->format('Y-m-d').($p->receipt_number ? ' · '.$p->receipt_number : '')),
                 'value' => ($p->kind === Payment::KIND_REFUND ? '− ' : '').F::amount($p->amount),
