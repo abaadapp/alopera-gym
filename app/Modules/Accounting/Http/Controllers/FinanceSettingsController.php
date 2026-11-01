@@ -2,6 +2,7 @@
 
 namespace App\Modules\Accounting\Http\Controllers;
 
+use App\Core\Audit\AuditLogger;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
@@ -45,11 +46,15 @@ class FinanceSettingsController extends Controller
 
         $tenant = $tenants->require();
         $settings = $tenant->settings ?? [];
+        // In the trail as account names: «cash» → «الصندوق الرئيسي».
+        $named = fn (array $finance) => collect(['receipt', 'spending'])->mapWithKeys(fn ($purpose) => [$purpose => collect($finance[$purpose] ?? [])->map(fn ($id) => $money[$id]->name ?? $id)->all()])->all();
+        $before = $named($settings['finance'] ?? []);
         $settings['finance'] = [
             'receipt' => $clean($data['receipt'], array_keys(ChartOfAccounts::RECEIPT_DEFAULTS), false),
             'spending' => $clean($data['spending'], array_keys(ChartOfAccounts::SPENDING_DEFAULTS), true),
         ];
         $tenant->forceFill(['settings' => $settings])->save();
+        app(AuditLogger::class)->logChanges('settings.finance_updated', $tenant, $before, $named($settings['finance']));
 
         return back()->with('success', 'حُفظت الإعدادات المالية. تُطبَّق على العمليات الجديدة.');
     }

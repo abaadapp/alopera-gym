@@ -109,7 +109,11 @@ class MoneyAccountController extends Controller
                 unset($data[$field]);
             }
         }
+        // The trail keeps the numbers' last four characters only.
+        $safe = fn () => ['name' => $account->name, 'bank_name' => $account->bank_name, 'account_number' => AuditLogger::masked($account->account_number), 'iban' => AuditLogger::masked($account->iban), 'is_active' => (bool) $account->is_active];
+        $before = $safe();
         $account->update($data);
+        app(AuditLogger::class)->logChanges('accounting.account_updated', $account, $before, $safe(), ['code' => $account->code]);
 
         return back()->with('success', 'حُفظ الحساب.');
     }
@@ -128,6 +132,7 @@ class MoneyAccountController extends Controller
             if (Money::cmp($data['amount'], 0) > 0) {
                 $this->postOpening($account, $data['amount'], $data['date'], ($previous?->revision ?? 0) + 1);
             }
+            app(AuditLogger::class)->log('accounting.opening_balance_set', $account, ['account' => $account->name, 'amount' => Money::normalize($data['amount']), 'date' => $data['date'], 'replaced' => $previous?->number]);
         });
 
         return back()->with('success', 'سُجّل الرصيد الافتتاحي.');

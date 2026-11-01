@@ -51,6 +51,34 @@ final class AuditLogger
     }
 
     /**
+     * Log what changed between two snapshots of a setting: only the keys whose value differs, before and after; nothing
+     * when nothing changed. The caller passes safe values only (no passwords, keys or full account numbers).
+     *
+     * @param  array<string, mixed>  $before
+     * @param  array<string, mixed>  $after
+     * @param  array<string, mixed>  $properties
+     */
+    public function logChanges(string $event, ?Model $subject, array $before, array $after, array $properties = []): void
+    {
+        $old = $new = [];
+        foreach (array_unique([...array_keys($before), ...array_keys($after)]) as $key) {
+            if (json_encode($before[$key] ?? null) !== json_encode($after[$key] ?? null)) {
+                $old[$key] = $before[$key] ?? null;
+                $new[$key] = $after[$key] ?? null;
+            }
+        }
+        if ($new !== []) {
+            $this->log($event, $subject, $properties, $old, $new);
+        }
+    }
+
+    /** The last four characters of an account number or IBAN, for the trail. */
+    public static function masked(?string $value): ?string
+    {
+        return blank($value) ? null : '••••'.mb_substr((string) $value, -4);
+    }
+
+    /**
      * Attribute entries written inside the callback to a non-user actor
      * (a payment gateway webhook, an access device, a scheduled job).
      *

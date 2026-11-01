@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Club;
 
+use App\Core\Audit\AuditLogger;
 use App\Core\Support\ImageStore;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -82,9 +83,12 @@ class SettingsController extends Controller
         $rules = Arr::except(array_intersect_key($data['rules'] ?? [], $tenant::DEFAULT_SETTINGS), self::NOTIFICATION_RULES);
         unset($data['logo'], $data['rules']);
 
+        $snapshot = fn () => $tenant->only(array_keys($data)) + Arr::only($tenant->settings ?? [], array_keys($rules));
+        $before = $snapshot();
         $tenant->fill($data);
         $tenant->settings = array_replace($tenant->settings ?? [], $rules);
         $tenant->save();
+        app(AuditLogger::class)->logChanges('settings.club_updated', $tenant, $before, $snapshot(), $request->hasFile('logo') ? ['logo' => 'changed'] : []);
 
         return back()->with('success', 'تم حفظ إعدادات النادي.');
     }
@@ -99,6 +103,7 @@ class SettingsController extends Controller
     public function updateNotifications(Request $request, TenantContext $tenants): RedirectResponse
     {
         $tenant = $tenants->require();
+        $before = Arr::only($tenant->settings ?? [], self::NOTIFICATION_RULES);
         $data = $request->validate([
             'expiry_reminder_days' => ['array', 'max:5'],
             'expiry_reminder_days.*' => ['integer', 'between:0,60'],
@@ -115,6 +120,7 @@ class SettingsController extends Controller
             'class_reminder_hours' => (int) ($data['class_reminder_hours'] ?? 0),
         ]);
         $tenant->save();
+        app(AuditLogger::class)->logChanges('settings.notifications_updated', $tenant, $before, Arr::only($tenant->settings, self::NOTIFICATION_RULES));
 
         return back()->with('success', 'تم حفظ قواعد الإشعارات.');
     }

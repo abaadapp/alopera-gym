@@ -30,8 +30,29 @@ const QUICK = [
     { key: 'invoice', label: 'الفواتير' },
     { key: 'user.', label: 'المستخدمون' },
     { key: 'role.', label: 'الأدوار' },
+    { key: 'settings.', label: 'الإعدادات' },
+    { key: 'accounting.', label: 'المحاسبة والفترات' },
+    { key: 'cash_shift.', label: 'الصندوق' },
+    { key: 'employee.', label: 'الموظفون والرواتب' },
     { key: 'backup.', label: 'النسخ الاحتياطي' },
 ];
+
+/** The events read in words; any other shows its key. */
+const EVENTS: Record<string, string> = {
+    'auth.login': 'تسجيل دخول', 'auth.logout': 'تسجيل خروج', 'auth.failed': 'محاولة دخول فاشلة',
+    'settings.club_updated': 'تعديل إعدادات النادي', 'settings.notifications_updated': 'تعديل قواعد الإشعارات', 'settings.finance_updated': 'تعديل الإعدادات المالية',
+    'accounting.period_closed': 'إقفال فترة محاسبية', 'accounting.period_reopened': 'إعادة فتح فترة محاسبية', 'accounting.year_closed': 'إقفال سنة مالية', 'accounting.year_reopened': 'إعادة فتح سنة مالية',
+    'accounting.account_created': 'إضافة حساب بنكي أو صندوق', 'accounting.account_updated': 'تعديل حساب بنكي أو صندوق', 'accounting.opening_balance_set': 'رصيد افتتاحي',
+    'accounting.chart_account_created': 'إضافة حساب في الشجرة', 'accounting.chart_account_updated': 'تعديل حساب في الشجرة',
+    'journal.posted': 'قيد يدوي', 'journal.reversed': 'عكس قيد', 'money.transferred': 'تحويل بين الحسابات',
+    'payment.refunded': 'رد مبلغ', 'payment.refund_requested': 'طلب رد بانتظار التنفيذ', 'payment.cancelled': 'إلغاء دفعة', 'payment.credit_applied': 'تخصيص رصيد عميل', 'payment.gateway_overpayment': 'دفعة إلكترونية زائدة',
+    'cash_shift.opened': 'فتح وردية صندوق', 'cash_shift.moved': 'نقل نقد من الدرج أو إليه', 'cash_shift.closed': 'إقفال وردية صندوق',
+    'invoice.credited': 'إشعار دائن', 'report.exported': 'تصدير تقرير',
+    'user.created': 'إضافة مستخدم', 'user.updated': 'تعديل مستخدم', 'user.deactivated': 'إيقاف مستخدم', 'user.access_updated': 'تعديل صلاحيات الدخول', 'user.password_reset': 'إعادة تعيين كلمة مرور',
+    'employee.created': 'إضافة موظف', 'employee.updated': 'تعديل موظف', 'payroll.approved': 'اعتماد مسيرة رواتب', 'payroll.paid': 'صرف رواتب',
+    'role.created': 'إضافة دور', 'role.updated': 'تعديل دور', 'role.deleted': 'حذف دور',
+    'tenant_integration.created': 'إضافة تكامل', 'tenant_integration.updated': 'تعديل تكامل',
+};
 
 export default function Audit({ logs, filters, period }: { logs: Paginated<Log>; filters: { event?: string; actor?: string }; period: Period }) {
     const [f, setF] = useState({ event: filters.event ?? '', actor: filters.actor ?? '' });
@@ -88,7 +109,10 @@ export default function Audit({ logs, filters, period }: { logs: Paginated<Log>;
                                                 <span className="text-sm">{l.actor_name ?? '—'}</span>
                                                 <span className="block text-[11px] text-muted">{ACTORS[l.actor_type ?? ''] ?? l.actor_type}</span>
                                             </td>
-                                            <td><Badge tone={l.event.includes('deleted') || l.event.includes('refused') || l.event.includes('rejected') || l.event.includes('failed') ? 'red' : 'gray'}><span dir="ltr">{l.event}</span></Badge></td>
+                                            <td>
+                                                <Badge tone={l.event.includes('deleted') || l.event.includes('refused') || l.event.includes('rejected') || l.event.includes('failed') || l.event.includes('reopened') || l.event.includes('cancelled') ? 'red' : 'gray'}>{EVENTS[l.event] ?? <span dir="ltr">{l.event}</span>}</Badge>
+                                                {EVENTS[l.event] && <span className="mt-0.5 block text-[11px] text-muted" dir="ltr">{l.event}</span>}
+                                            </td>
                                             <td className="text-xs" dir="ltr">{l.subject_type ? `${l.subject_type} #${l.subject_id}` : '—'}</td>
                                             <td className="text-xs text-muted num">{l.ip_address ?? '—'}</td>
                                             <td><ChevronDown className={`size-4 text-muted transition ${open === l.id ? 'rotate-180' : ''}`} /></td>

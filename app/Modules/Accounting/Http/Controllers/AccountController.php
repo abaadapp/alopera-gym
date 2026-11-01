@@ -2,6 +2,7 @@
 
 namespace App\Modules\Accounting\Http\Controllers;
 
+use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -56,11 +57,12 @@ class AccountController extends Controller
             }
         }
 
-        Account::create([
+        $account = Account::create([
             'parent_id' => $parent->id, 'code' => $code, 'name' => $data['name'], 'type' => $parent->type,
             'normal_side' => in_array($parent->type, ['asset', 'expense'], true) ? 'debit' : 'credit',
             'is_group' => (bool) ($data['is_group'] ?? false), 'is_active' => true,
         ]);
+        app(AuditLogger::class)->log('accounting.chart_account_created', $account, ['code' => $account->code, 'name' => $account->name, 'parent' => $parent->name]);
 
         return back()->with('success', 'أُضيف الحساب.');
     }
@@ -71,7 +73,9 @@ class AccountController extends Controller
         if (array_key_exists('is_active', $data) && ! $data['is_active'] && $account->system_key !== null) {
             throw new BusinessRuleException('accounting.system_account', 'هذا حساب أساسي يستخدمه النظام ولا يُوقف.', 'is_active');
         }
+        $before = ['name' => $account->name, 'is_active' => (bool) $account->is_active];
         $account->update($data);
+        app(AuditLogger::class)->logChanges('accounting.chart_account_updated', $account, $before, ['name' => $account->name, 'is_active' => (bool) $account->is_active], ['code' => $account->code]);
 
         return back()->with('success', 'حُفظ الحساب.');
     }
