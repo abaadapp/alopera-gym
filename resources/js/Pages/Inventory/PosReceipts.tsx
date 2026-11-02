@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from '@inertiajs/react';
 import { Ban, FileText, Printer, Receipt, Search } from 'lucide-react';
 import PosLayout from '@/Layouts/PosLayout';
 import { Badge, Card, ConfirmAction, DataTable, Input, type Column } from '@/Components/ui';
+import PrintStatus from '@/Components/Printing/PrintStatus';
+import usePrint, { type PrintJob } from '@/hooks/usePrint';
+import type { PrinterLike } from '@/lib/printing/types';
 import { useCurrency } from '@/hooks/useShared';
 import { paymentMethod } from '@/lib/labels';
 import { money } from '@/lib/format';
@@ -26,8 +29,18 @@ interface Row {
  * reprint one on the till's printer, or to void a product sale (sales.refund: stock back, money refunded by a credit
  * note). A membership or package is refunded from its invoice, by whoever may issue credit notes.
  */
-export default function PosReceipts({ receipts, total, can }: { receipts: Row[]; total: string; can: { refund: boolean; print: boolean; invoices: boolean } }) {
+export default function PosReceipts({ receipts, total, can, printer = null }: { receipts: Row[]; total: string; can: { refund: boolean; print: boolean; invoices: boolean }; printer?: PrinterLike | null }) {
     const currency = useCurrency();
+    // Printing a receipt again is a reprint in the log, on this till's printer through the printing layer.
+    const reprint = usePrint(printer, { inPage: true });
+    const jobOf = (r: Row): PrintJob =>
+        r.sale
+            ? { title: r.sale.number, url: route('club.sales.receipt', r.sale.id), subject: { document: 'sale', id: r.sale.id } }
+            : { title: r.receipt ?? String(r.id), url: route('club.payments.receipt', { payment: r.id, face: 'strip' }), subject: { document: 'receipt', id: r.id } };
+    // The share sheet (iPhone, iPad) opens only in a live tap: the latest receipts are made ready beforehand.
+    useEffect(() => {
+        if (reprint.mode === 'share' && can.print) receipts.slice(0, 6).forEach((r) => void reprint.prepare(jobOf(r), true));
+    }, [receipts, reprint.mode]); // eslint-disable-line react-hooks/exhaustive-deps
     const [q, setQ] = useState('');
     const needle = q.trim().toLowerCase();
     const rows = receipts.filter((r) => !needle || [r.receipt, r.invoice, r.customer, r.sale?.number].some((v) => v?.toLowerCase().includes(needle)));
@@ -46,9 +59,9 @@ export default function PosReceipts({ receipts, total, can }: { receipts: Row[];
             cell: (r) => (
                 <div className="flex items-center justify-end gap-1">
                     {can.print && (
-                        <a href={r.sale ? route('club.sales.receipt', r.sale.id) : route('club.payments.receipt', { payment: r.id, face: 'strip' })} target="_blank" rel="noreferrer" className="grid size-8 place-items-center rounded-[10px] text-[#4b4b4b] hover:bg-ink/[0.045]" title="طباعة الإيصال" aria-label="طباعة الإيصال">
+                        <button type="button" onClick={() => void reprint.print(jobOf(r), 'reprint')} disabled={reprint.busy} className="grid size-8 place-items-center rounded-[10px] text-[#4b4b4b] hover:bg-ink/[0.045] disabled:opacity-50" title="إعادة طباعة الإيصال" aria-label="إعادة طباعة الإيصال">
                             <Printer className="size-4" />
-                        </a>
+                        </button>
                     )}
                     {can.invoices && r.invoice_id && (
                         <Link href={route('club.invoices.show', r.invoice_id)} className="grid size-8 place-items-center rounded-[10px] text-[#4b4b4b] hover:bg-ink/[0.045]" title="الفاتورة" aria-label="الفاتورة">
@@ -72,6 +85,7 @@ export default function PosReceipts({ receipts, total, can }: { receipts: Row[];
                     <h1 className="text-[20px] font-bold text-[#111]">إيصالات اليوم</h1>
                     <span className="text-sm text-gray-500"><span className="num">{receipts.length}</span> إيصال · <span className="num">{money(total, currency)}</span></span>
                 </div>
+                {can.print && <PrintStatus state={reprint.state} onRetry={() => void reprint.retry()} onOpen={() => void reprint.open()} onShare={reprint.state.job ? () => void reprint.print(reprint.state.job!, 'reprint') : undefined} className="mb-3" />}
                 <Card padded={false} className="mb-3 p-3">
                     <div className="relative">
                         <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />

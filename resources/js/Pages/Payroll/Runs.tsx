@@ -6,6 +6,7 @@ import { Badge, Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, Pa
 import { useCurrency, useCan } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, money, number } from '@/lib/format';
+import PrintButton, { PrintLink } from '@/Components/Printing/PrintButton';
 
 export type RunSummary = { id: number; number: string; period: string; label: string; status: string; gross: string; deductions: string; net: string; items_count: number | null; paid_count: number | null };
 export type Item = {
@@ -59,7 +60,7 @@ export default function PayrollRuns({ runs, run, months, can }: Props) {
                                         <p className="mt-0.5 text-[13px] text-muted num">{run.number}{run.approved_at && ` · اعتمدها ${run.approver ?? ''} في ${date(run.approved_at)}`}</p>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
-                                        {can.payslips && mayPrint && <Button variant="outline" size="sm" href={route('club.payroll.print', run.id)} external icon={<Printer className="size-3.5" />}>طباعة الكشف</Button>}
+                                        {can.payslips && mayPrint && <PrintButton variant="outline" size="sm" url={route('club.payroll.print', run.id)} title={run.number} icon={<Printer className="size-3.5" />}>طباعة الكشف</PrintButton>}
                                         {can.payslips && <Button variant="outline" size="sm" href={route('club.papers.pdf', { type: 'payroll_sheet', id: run.id, download: 1 })} external icon={<Download className="size-3.5" />}>PDF</Button>}
                                         {can.reports && <Button variant="outline" size="sm" href={route('club.payroll.export', { run: run.id, format: 'xlsx' })} external icon={<Download className="size-3.5" />}>Excel</Button>}
                                         {draft && can.edit && (
@@ -96,7 +97,7 @@ export default function PayrollRuns({ runs, run, months, can }: Props) {
                                                     <td className="text-[13px]">{i.paid_at ? <Badge tone="green">صُرف {date(i.paid_at)}</Badge> : <span className="text-muted">{run.status === 'draft' ? '—' : 'بانتظار الصرف'}</span>}</td>
                                                     <td className="text-end">
                                                         <span className="inline-flex gap-1">
-                                                            {can.payslips && <a href={route('club.payroll.print', { run: run.id, item: i.id })} target="_blank" rel="noreferrer" className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/[0.045] hover:text-ink" title="كشف راتب الموظف"><FileText className="size-4" /></a>}
+                                                            {can.payslips && <PrintLink url={route('club.payroll.print', { run: run.id, item: i.id })} title={`payslip-${i.id}`} className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/[0.045] hover:text-ink"><FileText className="size-4" /></PrintLink>}
                                                             {draft && can.edit && (
                                                                 <>
                                                                     <button type="button" onClick={() => setEditing(i)} className="grid size-8 place-items-center rounded-lg text-muted hover:bg-ink/[0.045] hover:text-ink" aria-label={`تعديل ${i.name}`}><Pencil className="size-4" /></button>

@@ -3,6 +3,7 @@
 namespace App\Core\Papers;
 
 use App\Models\Tenant;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
@@ -41,7 +42,9 @@ final class Paper
             'tpl' => $this->tpl,
             'issuer' => $this->issuer,
             'logo' => ($this->tpl['show_logo'] ?? true) ? PaperIssuer::logo($this->tenant) : null,
-            'tokens' => PaperTheme::tokens($this->tenant->primary_color, (string) ($this->tpl['font'] ?? 'normal')),
+            'tokens' => $this->isStrip()
+                ? PaperTheme::thermal(PaperTheme::tokens($this->tenant->primary_color, (string) ($this->tpl['font'] ?? 'normal')))
+                : PaperTheme::tokens($this->tenant->primary_color, (string) ($this->tpl['font'] ?? 'normal')),
             'size' => $this->size,
             'strip' => $this->isStrip(),
             'lang' => (string) ($this->tpl['lang'] ?? 'ar_en'),
@@ -64,15 +67,111 @@ final class Paper
     }
 
     /**
-     * The PDF, drawn by the PDF engine from the same HTML. A sheet only: a thermal strip has no page height and is
-     * printed from the browser.
+     * The PDF, drawn by the PDF engine from the same HTML. A sheet is its pages with the running footer (club, number,
+     * page x / y); a thermal strip is one page as long as the receipt itself, the paper a till's printer feeds (and what
+     * the club's app turns into dots for a network printer).
      */
     public function pdf(bool $download = false): Response
     {
-        if ($this->isStrip()) {
-            return (new self($this->tenant, $this->type, $this->doc, $this->tpl, $this->issuer, (string) ($this->tpl['paper'] ?? PaperSize::A4), $this->filename))->pdf($download);
+        $bytes = $this->quietly(fn () => $this->isStrip() ? $this->stripBytes() : $this->sheetBytes());
+
+        return new Response($bytes, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => ($download ? 'attachment' : 'inline').'; filename="'.$this->filename.'.pdf"',
+            'Cache-Control' => 'private, no-store',
+        ]);
+    }
+
+    /**
+     * The print page, or with ?format=pdf the PDF of the same paper: every print door of the panel answers both, so a
+     * phone's app prints any paper through the system's own print dialog from the one address the page already has.
+     */
+    public function respond(Request $request, bool $print = true): Response
+    {
+        if ($request->string('format')->toString() === 'pdf') {
+            abort_unless($request->user()?->can('papers.print'), 403, 'ملف PDF يحتاج صلاحية «طباعة المستندات».');
+
+            return $this->pdf($request->boolean('download'));
         }
+
+        return $this->page($request->has('print') ? $request->boolean('print') : $print);
+    }
+
+    private function sheetBytes(): string
+    {
         $p = PaperSize::of($this->size);
+        $ltr = PaperLabels::ltr((string) ($this->tpl['lang'] ?? 'ar_en'));
+        $mpdf = $this->engine([$p['width'], $p['height']], $p['top'], $p['side'], $p['bottom']);
+        $mpdf->SetTitle($this->doc['title'].' '.$this->doc['number']);
+        $mpdf->SetCreator($this->issuer['name'] ?? '');
+        $second = PaperTheme::SECOND;
+        $mpdf->SetHTMLFooter('<table width="100%" style="font-family:ibmplexsansarabic;font-size:8pt;color:'.$second.';border-collapse:collapse"><tr>'
+            .'<td style="text-align:'.($ltr ? 'left' : 'right').'">'.e($this->issuer['name'] ?? '').' · <span dir="ltr">'.e($this->doc['number']).'</span></td>'
+            .'<td style="text-align:'.($ltr ? 'right' : 'left').'" dir="ltr">{PAGENO} / {nbpg}</td></tr></table>');
+        $mpdf->WriteHTML($this->html(pdf: true));
+
+        return $mpdf->Output('', 'S');
+    }
+
+    /**
+     * The strip: drawn once on a probe two metres long to measure it, then on a page of exactly that height. A receipt
+     * longer than the probe (hundreds of lines) is pages of two metres that the printer feeds as one strip; its table
+     * head is then a plain first row, so it is not repeated in the middle of the lines at every seam.
+     */
+    private function stripBytes(): string
+    {
+        $html = $this->html(pdf: true);
+        $probe = $this->stripEngine(self::PROBE);
+        $probe->WriteHTML($html);
+        $used = (max(1, (int) $probe->page) - 1) * self::PROBE + (float) $probe->y;
+        $height = max(self::MIN_STRIP, round($used + self::STRIP_MARGIN, 1));
+
+        if ($height > self::PROBE) {
+            $mpdf = $this->stripEngine(self::PROBE);
+            $mpdf->WriteHTML((string) preg_replace('#<(/?)thead\b#i', '<$1tbody', $html));
+
+            return $this->stripOutput($mpdf);
+        }
+
+        // The engine keeps some room of its own at a page's foot (a block it will not split, a row's padding): what
+        // still spills onto a second page lengthens the strip by that much, so a short receipt is always one page.
+        for ($try = 0; ; $try++) {
+            $mpdf = $this->stripEngine($height);
+            $mpdf->WriteHTML($html);
+            if ((int) $mpdf->page <= 1 || $try === 2) {
+                return $this->stripOutput($mpdf);
+            }
+            $height = min(self::PROBE, round(((int) $mpdf->page - 1) * $height + (float) $mpdf->y + self::STRIP_MARGIN, 1));
+        }
+    }
+
+    private function stripOutput(Mpdf $mpdf): string
+    {
+        $mpdf->SetTitle($this->doc['title'].' '.$this->doc['number']);
+        $mpdf->SetCreator($this->issuer['name'] ?? '');
+
+        return $mpdf->Output('', 'S');
+    }
+
+    /** The probe and the longest page of a strip, in millimetres (the PDF format stops at 200 inches). */
+    private const PROBE = 2000;
+
+    /** The shortest strip printed: less comes out as a scrap nobody can hold. */
+    private const MIN_STRIP = 60;
+
+    /** Room under the last line before the cut. */
+    private const STRIP_MARGIN = 4;
+
+    private function stripEngine(float $height): Mpdf
+    {
+        $p = PaperSize::of($this->size);
+
+        return $this->engine([$p['width'], $height], $p['top'], $p['side'], $p['bottom'] - 1);
+    }
+
+    /** @param  array{0: float, 1: float|null}  $format */
+    private function engine(array $format, float $top, float $side, float $bottom): Mpdf
+    {
         $fonts = (new FontVariables)->getDefaults()['fontdata'];
         $dirs = (new ConfigVariables)->getDefaults()['fontDir'];
         $tmp = storage_path('app/mpdf');
@@ -80,41 +179,38 @@ final class Paper
             mkdir($tmp, 0775, true);
         }
 
-        // The engine warns while reading a few empty feature tables of the Arabic font the first time it caches it;
-        // the shaping it produces is correct, so those warnings are not turned into errors here.
+        return new Mpdf([
+            'mode' => 'utf-8',
+            'format' => $format,
+            'margin_top' => $top,
+            'margin_left' => $side,
+            'margin_right' => $side,
+            'margin_bottom' => $bottom,
+            'margin_footer' => 6,
+            'fontDir' => [...$dirs, public_path('fonts/papers')],
+            'fontdata' => $fonts + ['ibmplexsansarabic' => ['R' => 'IBMPlexSansArabic-Regular.ttf', 'B' => 'IBMPlexSansArabic-Bold.ttf', 'useOTL' => 0xFF, 'useKashida' => 75]],
+            'default_font' => 'ibmplexsansarabic',
+            'directionality' => PaperLabels::ltr((string) ($this->tpl['lang'] ?? 'ar_en')) ? 'ltr' : 'rtl',
+            'tempDir' => $tmp,
+        ]);
+    }
+
+    /**
+     * The engine warns while reading a few empty feature tables of the Arabic font the first time it caches it; the
+     * shaping it produces is correct, so those warnings are not turned into errors here.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $draw
+     * @return T
+     */
+    private function quietly(callable $draw): mixed
+    {
         $level = error_reporting(E_ALL & ~E_WARNING & ~E_NOTICE & ~E_DEPRECATED);
-        $ltr = PaperLabels::ltr((string) ($this->tpl['lang'] ?? 'ar_en'));
         try {
-            $mpdf = new Mpdf([
-                'mode' => 'utf-8',
-                'format' => [$p['width'], $p['height']],
-                'margin_top' => $p['top'],
-                'margin_left' => $p['side'],
-                'margin_right' => $p['side'],
-                'margin_bottom' => $p['bottom'],
-                'margin_footer' => 6,
-                'fontDir' => [...$dirs, public_path('fonts/papers')],
-                'fontdata' => $fonts + ['ibmplexsansarabic' => ['R' => 'IBMPlexSansArabic-Regular.ttf', 'B' => 'IBMPlexSansArabic-Bold.ttf', 'useOTL' => 0xFF, 'useKashida' => 75]],
-                'default_font' => 'ibmplexsansarabic',
-                'directionality' => $ltr ? 'ltr' : 'rtl',
-                'tempDir' => $tmp,
-            ]);
-            $mpdf->SetTitle($this->doc['title'].' '.$this->doc['number']);
-            $mpdf->SetCreator($this->issuer['name'] ?? '');
-            $second = PaperTheme::SECOND;
-            $mpdf->SetHTMLFooter('<table width="100%" style="font-family:ibmplexsansarabic;font-size:8pt;color:'.$second.';border-collapse:collapse"><tr>'
-                .'<td style="text-align:'.($ltr ? 'left' : 'right').'">'.e($this->issuer['name'] ?? '').' · <span dir="ltr">'.e($this->doc['number']).'</span></td>'
-                .'<td style="text-align:'.($ltr ? 'right' : 'left').'" dir="ltr">{PAGENO} / {nbpg}</td></tr></table>');
-            $mpdf->WriteHTML($this->html(pdf: true));
-            $bytes = $mpdf->Output('', 'S');
+            return $draw();
         } finally {
             error_reporting($level);
         }
-
-        return new Response($bytes, 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => ($download ? 'attachment' : 'inline').'; filename="'.$this->filename.'.pdf"',
-            'Cache-Control' => 'private, no-store',
-        ]);
     }
 }

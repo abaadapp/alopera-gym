@@ -2,6 +2,11 @@
 
 namespace App\Modules\Inventory\Http\Controllers;
 
+use App\Core\Papers\Paper;
+use App\Core\Papers\PaperFormat;
+use App\Core\Papers\PaperIssuer;
+use App\Core\Papers\PaperSize;
+use App\Core\Papers\PaperTypes;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
@@ -9,10 +14,13 @@ use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Inventory\Models\PosDevice;
 use App\Modules\Inventory\Models\PosPeripheral;
+use App\Modules\Inventory\Models\PosPrintLog;
+use App\Modules\Inventory\Rules\PrinterAddress;
 use App\Modules\Inventory\Services\PosDevices;
 use App\Modules\Inventory\Services\ShopSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -30,6 +38,8 @@ class PosDeviceController extends Controller
     {
         $current = $this->devices->current($request);
         $devices = PosDevice::with(['branch:id,name', 'activator:id,name', 'settlementAccount:id,name', 'peripherals'])->withCount('sales')->orderBy('name')->get();
+        // The print log of each device: its latest results, errors included, with who printed what.
+        $logs = PosPrintLog::with(['user:id,name', 'printer:id,name'])->whereIn('pos_device_id', $devices->pluck('id'))->latest('id')->limit(40 * max(1, $devices->count()))->get()->groupBy('pos_device_id');
 
         return Inertia::render('Club/Settings/PosDevices', [
             'devices' => $devices->map(fn (PosDevice $d) => $d->only('id', 'name', 'status', 'branch_id', 'settlement_account_id', 'sales_count', 'revoke_reason') + [
@@ -39,13 +49,22 @@ class PosDeviceController extends Controller
                 'code_expired' => $d->status === PosDevice::PENDING && ! $d->pairing_expires_at?->isFuture(),
                 'is_this' => $current?->id === $d->id, 'auto_print' => (bool) $d->setting('auto_print', false),
                 'errors' => $d->peripherals->where('last_status', 'error')->pluck('last_error')->filter()->values(),
-                'peripherals' => $d->peripherals->map(fn (PosPeripheral $p) => $p->only('id', 'type', 'name', 'brand', 'model', 'connection', 'address', 'port', 'paper_width', 'is_default', 'auto_print', 'print_website_orders', 'is_active', 'notes', 'last_status', 'last_error') + ['last_checked_at' => $p->last_checked_at?->format('Y-m-d H:i')]),
+                'peripherals' => $d->peripherals->map(fn (PosPeripheral $p) => $p->only('id', 'type', 'name', 'brand', 'model', 'connection', 'address', 'port', 'paper_width', 'is_default', 'auto_print', 'print_website_orders', 'is_active', 'notes', 'last_status', 'last_error') + [
+                    'last_checked_at' => $p->last_checked_at?->format('Y-m-d H:i'), 'paper' => $p->type === 'printer' ? $p->paperSize() : null,
+                    'direct' => $p->printsDirect(), 'printing' => $p->type === 'printer' ? $p->forPrinting() : null,
+                ]),
+                'logs' => ($logs[$d->id] ?? collect())->take(20)->map(fn (PosPrintLog $l) => [
+                    'id' => $l->id, 'at' => $l->created_at->format('Y-m-d H:i'), 'document' => $l->document, 'number' => $l->number,
+                    'trigger' => PosPrintLog::TRIGGERS[$l->trigger] ?? $l->trigger, 'via' => $l->via ? (PosPrintLog::VIAS[$l->via] ?? $l->via) : null,
+                    'status' => $l->status, 'message' => $l->message(), 'may_have_printed' => $l->may_have_printed, 'printer' => $l->printer?->name, 'by' => $l->user?->name,
+                ])->values(),
             ]),
             'code' => session('pairing_code'),
             'branches' => app(BranchContext::class)->choices(),
             'accounts' => Account::money()->postable()->where('kind', 'bank')->orderBy('code')->get(['id', 'name']),
             'policy' => ['require_device' => ShopSettings::of($this->tenants->require())['pos_require_device']],
             'types' => PosPeripheral::TYPES, 'drivable' => PosPeripheral::DRIVABLE, 'connections' => PosPeripheral::CONNECTIONS,
+            'printerConnections' => PosPeripheral::PRINTER_CONNECTIONS, 'papers' => PosPeripheral::PAPERS, 'defaultPort' => PosPeripheral::DEFAULT_PORT,
         ]);
     }
 
@@ -139,19 +158,42 @@ class PosDeviceController extends Controller
         return back()->with('success', 'حُذف الملحق.');
     }
 
-    /** A test receipt for a printer, printed through the browser's print dialog; the time is noted. */
-    public function testPrint(PosDevice $device, PosPeripheral $peripheral): Response
+    /**
+     * A printer's test page, drawn by the paper engine on the printer's own paper (strip or sheet) with the club's logo,
+     * Arabic, English, digits and an amount: the print page for the browser's dialog, or with ?format=pdf the PDF the
+     * app hands to the system's print dialog. Whether it reached the paper is for the person at the printer to see; a
+     * network printer is tested for real by the app itself (it connects and prints, and says what happened).
+     */
+    public function testPrint(Request $request, PosDevice $device, PosPeripheral $peripheral): HttpResponse
     {
         abort_unless($peripheral->pos_device_id === $device->id && $peripheral->type === 'printer', 404);
-        $peripheral->forceFill(['last_checked_at' => now()])->save();
         $club = $this->tenants->require();
+        $paper = $peripheral->paperSize();
+        $port = $peripheral->port ?: PosPeripheral::DEFAULT_PORT;
+        $doc = [
+            'title' => 'اختبار الطابعة', 'number' => 'TEST-'.now()->format('His'), 'status' => null,
+            'meta' => array_values(array_filter([
+                ['label' => 'الطابعة', 'value' => $peripheral->name],
+                filled($peripheral->brand.$peripheral->model) ? ['label' => 'الطراز', 'value' => trim($peripheral->brand.' '.$peripheral->model)] : null,
+                ['label' => 'الورق', 'value' => PosPeripheral::PAPERS[$paper] ?? $paper],
+                ['label' => 'الاتصال', 'value' => $peripheral->connection === 'network' ? 'شبكة' : 'حوار الطباعة'],
+                $peripheral->connection === 'network' ? ['label' => 'العنوان', 'value' => $peripheral->address.':'.$port, 'ltr' => true] : null,
+                ['label' => 'الجهاز', 'value' => $device->name],
+                ['label' => 'الفرع', 'value' => $device->branch?->name],
+                ['label' => 'الوقت', 'value' => now()->format('Y-m-d H:i:s'), 'ltr' => true],
+            ])),
+            'parties' => [],
+            'table' => ['rows' => [
+                ['name' => 'عربي: اشتراك شهري — تدريب شخصي', 'qty' => '1', 'unit' => '12.500', 'total' => '12.500'],
+                ['name' => 'English: Monthly membership', 'qty' => '2', 'unit' => '1.250', 'total' => '2.500'],
+            ], 'empty' => ''],
+            'totals' => [['label' => 'الإجمالي', 'value' => '15.000', 'currency' => PaperFormat::currency((string) ($club->currency ?? 'OMR')), 'grand' => true]],
+            'panels' => [['caption' => 'الأرقام', 'text' => '١٢٣٤٥٦٧٨٩٠ — 1234567890', 'rows' => []]],
+            'signatures' => [],
+        ];
+        $tpl = ['footer' => 'إن قرأت هذا كاملًا فالطابعة جاهزة · If you can read this, the printer is ready.'] + PaperTypes::settings($club, 'sale');
 
-        return Inertia::render('Club/Settings/PosTestPrint', [
-            'printer' => $peripheral->only('name', 'brand', 'model', 'connection', 'paper_width'),
-            'device' => ['name' => $device->name, 'branch' => $device->branch?->name],
-            'club' => ['name' => $club->name, 'phone' => $club->phone, 'logo' => $club->logoUrl()],
-            'at' => now()->format('Y-m-d H:i'),
-        ]);
+        return (new Paper($club, 'sale', $doc, $tpl, PaperIssuer::resolve($club), $paper, 'printer-test'))->respond($request);
     }
 
     /** @return array<string, mixed> */
@@ -162,9 +204,11 @@ class PosDeviceController extends Controller
             'name' => ['required', 'string', 'max:60'],
             'brand' => ['nullable', 'string', 'max:60'],
             'model' => ['nullable', 'string', 'max:60'],
-            'connection' => ['required', Rule::in(array_keys(PosPeripheral::CONNECTIONS))],
-            'address' => ['nullable', 'required_if:connection,network', 'string', 'max:120', 'regex:/^[A-Za-z0-9.\-:]+$/'],
+            // A printer is reached on the network (the app prints to it) or through the print dialog; nothing else is offered.
+            'connection' => ['required', Rule::in(array_keys($request->input('type') === 'printer' ? PosPeripheral::PRINTER_CONNECTIONS : PosPeripheral::CONNECTIONS))],
+            'address' => ['nullable', 'required_if:connection,network', 'string', 'max:120', new PrinterAddress],
             'port' => ['nullable', 'integer', 'min:1', 'max:65535'],
+            'paper' => ['nullable', Rule::in(array_keys(PosPeripheral::PAPERS))],
             'paper_width' => ['nullable', Rule::in([58, 80])],
             'is_default' => ['boolean'],
             'auto_print' => ['boolean'],
@@ -177,10 +221,13 @@ class PosDeviceController extends Controller
             $data['address'] = $data['port'] = null;
         }
         if ($data['type'] !== 'printer') {
-            $data['paper_width'] = null;
+            $data['paper_width'] = $data['paper'] = null;
             $data['is_default'] = $data['auto_print'] = $data['print_website_orders'] = false;
         } else {
-            $data['paper_width'] ??= 80;
+            // The paper names the printer's kind: a strip keeps its width beside it, a sheet has none.
+            $data['paper'] ??= ($data['paper_width'] ?? 80) === 58 ? '58mm' : '80mm';
+            $data['paper_width'] = PaperSize::isStrip($data['paper']) ? (int) $data['paper'] : null;
+            $data['address'] = isset($data['address']) ? trim($data['address']) : null;
         }
 
         return $data;

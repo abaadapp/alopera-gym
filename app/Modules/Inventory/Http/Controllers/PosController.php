@@ -74,10 +74,8 @@ class PosController extends Controller
             ],
             'lastSale' => session('sale_id'),
             'lastResult' => session('pos_result'),
-            'device' => $device ? [
-                'name' => $device->name, 'branch' => $device->branch?->name,
-                'auto_print' => (bool) ($printer?->auto_print ?? false), 'paper_width' => $printer?->paper_width ?? 80, 'printer' => $printer?->name,
-            ] : null,
+            // The till and its receipt printer, as the printing layer needs them to pick a way to print.
+            'device' => $device ? ['id' => $device->id, 'name' => $device->name, 'branch' => $device->branch?->name, 'printer' => $printer?->forPrinting()] : null,
             'branch' => Branch::whereKey($branch)->value('name'),
             'requireDevice' => ShopSettings::of($this->tenants->require())['pos_require_device'],
         ]);
@@ -186,6 +184,8 @@ class PosController extends Controller
             ]),
             'total' => Money::normalize($payments->reduce(fn ($sum, Payment $p) => Money::add($sum, $p->amount), '0')),
             'can' => ['refund' => $request->user()->can('sales.refund'), 'print' => $request->user()->can('papers.print'), 'invoices' => $request->user()->can('invoices.view')],
+            // A receipt printed again goes to this till's printer, through the printing layer.
+            'printer' => $device?->loadMissing('peripherals')->printer()?->forPrinting(),
         ]);
     }
 

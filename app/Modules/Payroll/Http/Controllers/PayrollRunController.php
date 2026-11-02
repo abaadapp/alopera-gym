@@ -98,10 +98,10 @@ class PayrollRunController extends Controller
         if ($request->integer('item')) {
             $item = PayrollItem::where('payroll_run_id', $run->id)->findOrFail($request->integer('item'));
 
-            return Papers::for('payslip', $item)->page($request->boolean('print', true));
+            return Papers::for('payslip', $item)->respond($request);
         }
 
-        return Papers::for('payroll_sheet', $run)->page($request->boolean('print', true));
+        return Papers::for('payroll_sheet', $run)->respond($request);
     }
 
     public function export(Request $request, PayrollRun $run): StreamedResponse

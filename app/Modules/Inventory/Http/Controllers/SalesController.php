@@ -160,7 +160,9 @@ class SalesController extends Controller
                 'invoices' => $user->can('invoices.view'),
                 'print' => $user->can('papers.print'),
             ],
-            'printOrders' => (bool) (app(PosDevices::class)->current($request)?->load('peripherals')->printer()?->print_website_orders ?? false),
+            'printOrders' => (bool) (($printer = app(PosDevices::class)->current($request)?->load('peripherals')->printer())?->print_website_orders ?? false),
+            // This device's receipt printer, for the printing layer (direct in the app, the dialog elsewhere).
+            'printer' => $printer?->forPrinting(),
         ]);
     }
 
@@ -206,11 +208,13 @@ class SalesController extends Controller
         abort_unless($request->user()->canAny(['pos.sell', 'sales.view', 'orders.manage']), 403);
         $this->ensureBranch($request->user(), $sale);
         if ($request->string('face')->toString() === 'sheet') {
-            return Papers::for('sale', $sale)->page($request->boolean('print', true));
+            return Papers::for('sale', $sale)->respond($request);
         }
-        $width = ($devices->current($request) ?? $sale->posDevice)?->loadMissing('peripherals')->printer()?->paper_width;
+        // The paper of the printer here (this browser's device), else of the device it was sold on: a strip, or a
+        // sheet when that printer feeds A4 or A5.
+        $paper = ($devices->current($request) ?? $sale->posDevice)?->loadMissing('peripherals')->printer()?->paperSize();
 
-        return Papers::for('sale', $sale, null, 'strip', $width ? $width.'mm' : null)->page($request->boolean('print', true));
+        return Papers::for('sale', $sale, null, 'strip', $paper)->respond($request);
     }
 
     /** @return array<string, mixed> */

@@ -9,7 +9,12 @@ import PosLayout from '@/Layouts/PosLayout';
 import { Button, Field, Input, Modal, Notice, type MemberHit } from '@/Components/ui';
 import { clientKey as newKey } from '@/Components/Inventory/parts';
 import { Stepper } from '@/Components/Products/parts';
+import PrintStatus from '@/Components/Printing/PrintStatus';
+import usePrint, { type PrintJob } from '@/hooks/usePrint';
 import { useCan, useCurrency } from '@/hooks/useShared';
+import { claimAutoPrint } from '@/lib/printing/print-log';
+import { abandonAutoPrint, commitAutoPrint, insideApp, prepareAutoPrint } from '@/lib/printing/printer-service';
+import type { PrinterLike } from '@/lib/printing/types';
 import { describe, lineKey, lineTotal, payload, unitPrice, type AddonOption, type ChosenAddon } from '@/lib/addons';
 import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
@@ -28,7 +33,7 @@ interface Product {
 }
 type Plan = { id: number; name: string; price: string; signup_fee: string; duration: string; sessions: number | null };
 type PtPack = { id: number; name: string; price: string; sessions: number; trainer: string | null };
-type Device = { name: string; branch: string | null; auto_print: boolean; paper_width: number; printer: string | null } | null;
+type Device = { id: number; name: string; branch: string | null; printer: (PrinterLike & { name: string }) | null } | null;
 type Doc = { kind: 'sale' | 'membership' | 'pt'; id: number; number: string; label: string; total: string; paid: boolean; payment_id: number | null; pay_url: string | null };
 type Result = { documents: Doc[]; total: string; method: string; at: string };
 type MemberCard = MemberHit & { balance: string };
@@ -525,7 +530,21 @@ function PaymentDialog({ total, cart, member, guest, discount, basketKey, device
     const change = method === 'cash' && given !== '' ? Math.round((Number(given) - total) * 1000) / 1000 : null;
     const quick = Array.from(new Set([total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20])).filter((v) => v >= total).slice(0, 4);
 
-    const receiptUrl = (d: Doc) => (d.kind === 'sale' ? route('club.sales.receipt', d.id) : d.payment_id ? route('club.payments.receipt', { payment: d.payment_id, face: 'strip' }) : null);
+    const printer = device?.printer ?? null;
+    // Receipts print through the printing layer: straight to a network printer in the app, the system's dialog for
+    // another printer in the app, the print dialog inside the page or the share sheet in a browser.
+    const receipts = usePrint(printer, { inPage: true });
+    const receiptOf = (d: Doc): PrintJob | null =>
+        d.kind === 'sale'
+            ? { title: d.number, url: route('club.sales.receipt', d.id), subject: { document: 'sale', id: d.id } }
+            : d.payment_id ? { title: d.number, url: route('club.payments.receipt', { payment: d.payment_id, face: 'strip' }), subject: { document: 'receipt', id: d.payment_id } } : null;
+    const receiptUrl = (d: Doc) => receiptOf(d)?.url ?? null;
+    const jobs = result ? result.documents.map(receiptOf).filter((j): j is PrintJob => j !== null) : [];
+
+    // On iPhone and iPad the share sheet opens only in a live tap: the receipts are made ready as soon as they exist.
+    useEffect(() => {
+        if (receipts.mode === 'share' && allowed.print) jobs.forEach((j) => void receipts.prepare(j, true));
+    }, [result, receipts.mode]);
 
     const confirm = () => {
         if (!method) return setError('اختر طريقة الدفع');
@@ -533,8 +552,8 @@ function PaymentDialog({ total, cart, member, guest, discount, basketKey, device
         if (method === 'cash' && change !== null && change < 0) return setError('المبلغ المستلم أقل من الإجمالي');
         setError(null);
         setBusy(true);
-        // Opened now, while the click still counts, so a popup blocker lets the receipt through after the sale.
-        const printer = device?.auto_print && allowed.print && method !== 'paymob' ? window.open('', '_blank') : null;
+        // Prepared now, while the click still counts (a browser's window opens only in it); carried out after the sale.
+        const attempt = allowed.print && method !== 'paymob' ? prepareAutoPrint(printer) : null;
         router.post(
             route('club.pos.checkout'),
             {
@@ -553,16 +572,18 @@ function PaymentDialog({ total, cart, member, guest, discount, basketKey, device
                 preserveState: true,
                 onSuccess: (page) => {
                     const r = (page.props as { lastResult?: Result | null }).lastResult;
-                    if (!r) return;
+                    if (!r) return abandonAutoPrint(attempt);
                     onResult(r);
-                    const first = r.documents.map(receiptUrl).find(Boolean);
-                    if (printer && first) printer.location.replace(first);
-                    else if (printer) {
-                        printer.close();
-                    }
+                    const first = r.documents.map(receiptOf).find((j): j is PrintJob => j !== null) ?? null;
+                    if (!attempt || attempt.mode === 'none' || !first?.subject) return abandonAutoPrint(attempt);
+                    // One automatic print per receipt: the server's claim decides, so a reload or a second screen never repeats it.
+                    void claimAutoPrint(first.subject).then((log) => {
+                        if (log === false) return abandonAutoPrint(attempt);
+                        void receipts.run(first, 'manual', (onProgress) => commitAutoPrint(attempt, first, onProgress), insideApp() || attempt.mode === 'page', log);
+                    });
                 },
                 onError: (errs) => {
-                    printer?.close();
+                    abandonAutoPrint(attempt);
                     setError(Object.values(errs)[0] ?? 'تعذّر إتمام البيع');
                 },
                 onFinish: () => setBusy(false),
@@ -606,12 +627,24 @@ function PaymentDialog({ total, cart, member, guest, discount, basketKey, device
                             </div>
                         </div>
                     ))}
+                    {allowed.print && (
+                        <PrintStatus
+                            state={receipts.state}
+                            onRetry={() => void receipts.retry()}
+                            onOpen={() => void receipts.open()}
+                            onShare={receipts.state.job ? () => void receipts.print(receipts.state.job!) : undefined}
+                            className="text-start"
+                        />
+                    )}
                     <div className="grid grid-cols-2 gap-3">
-                        {allowed.print && result.documents.map((d) => receiptUrl(d) && (
-                            <Button key={`p-${d.kind}-${d.id}`} variant="outline" className="rounded-full" icon={<Printer />} href={receiptUrl(d) ?? undefined} external>
-                                إيصال {d.label}
-                            </Button>
-                        ))}
+                        {allowed.print && result.documents.map((d) => {
+                            const job = receiptOf(d);
+                            return job && (
+                                <Button key={`p-${d.kind}-${d.id}`} variant="outline" className="rounded-full" icon={<Printer />} loading={receipts.busy && receipts.state.job?.url === job.url} onClick={() => void receipts.print(job)}>
+                                    {receipts.mode === 'share' && !receipts.isReady(job) ? 'تجهيز ' : ''}إيصال {d.label}
+                                </Button>
+                            );
+                        })}
                         {allowed.print && result.documents.some((d) => receiptUrl(d)) && (
                             <Button variant="outline" className="rounded-full" onClick={() => setPreview(result.documents.map(receiptUrl).find(Boolean) ?? null)}>معاينة الإيصال</Button>
                         )}

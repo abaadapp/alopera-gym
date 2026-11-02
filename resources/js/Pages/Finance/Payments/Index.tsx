@@ -8,6 +8,7 @@ import { cn } from '@/lib/cn';
 import { money } from '@/lib/format';
 import { label, paymentMethod, paymentStatus, refundStatus } from '@/lib/labels';
 import type { Paginated } from '@/types';
+import PrintButton from '@/Components/Printing/PrintButton';
 
 interface PaymentRow {
     id: number;
@@ -76,7 +77,7 @@ export default function PaymentsIndex({ payments, pendingCount, creditCount, fil
     const Actions = ({ p }: { p: PaymentRow }) => (
         <div className="flex justify-end gap-1">
             {p.has_proof && <Button variant="ghost" size="sm" href={route('club.payments.proof', p.id)} external icon={<FileDown className="size-3.5" />} aria-label="الإثبات" />}
-            {p.status === 'completed' && <Button variant="ghost" size="sm" href={route('club.payments.receipt', p.id)} external icon={<Receipt className="size-3.5" />} aria-label="الإيصال" />}
+            {p.status === 'completed' && <PrintButton variant="ghost" size="sm" url={route('club.payments.receipt', p.id)} title={`receipt-${p.id}`} icon={<Receipt className="size-3.5" />} aria-label="الإيصال" />}
             {p.status === 'pending' && can('payments.confirm') && (p.kind === 'refund' ? (
                 <>
                     <ConfirmAction url={route('club.payments.confirm', p.id)} title="تأكيد تنفيذ الرد" message="أكّد بعد تنفيذ الرد فعلًا (من البنك أو لوحة Paymob)." reason="مرجع التنفيذ (رقم العملية)" reasonName="reference" reasonOptional confirmLabel="تأكيد التنفيذ" tone="primary" variant="success" icon={<Check className="size-3.5" />}>تأكيد</ConfirmAction>

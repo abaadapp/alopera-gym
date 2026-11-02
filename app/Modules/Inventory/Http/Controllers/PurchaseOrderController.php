@@ -175,7 +175,7 @@ class PurchaseOrderController extends Controller
     /** The purchase order paper, as sent to the supplier (the paper engine). */
     public function print(Request $request, PurchaseOrder $purchaseOrder): HttpResponse
     {
-        return Papers::for('purchase_order', $purchaseOrder)->page($request->boolean('print', true));
+        return Papers::for('purchase_order', $purchaseOrder)->respond($request);
     }
 
     public function approve(PurchaseOrder $purchaseOrder): RedirectResponse

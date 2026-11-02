@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { toast } from 'sonner';
-import { AlertTriangle, ArrowLeftRight, Ban, Banknote, Check, Clock, Copy, CreditCard, ExternalLink, FileDown, MessageCircle, Paperclip, Printer, Receipt, Undo2, Wallet, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, Ban, Banknote, Check, Clock, Copy, CreditCard, ExternalLink, FileDown, MessageCircle, Paperclip, Receipt, Undo2, Wallet, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PaperPanel, { DocumentMeta, LtrDates, PaperAside, type PaperData } from '@/Components/Papers/PaperPanel';
 import { clientKey } from '@/Components/Inventory/parts';
@@ -11,6 +11,7 @@ import { cn } from '@/lib/cn';
 import { date, dayCount, money } from '@/lib/format';
 import { invoiceStatus, invoiceType, label, paymentMethod, paymentStatus, refundStatus } from '@/lib/labels';
 import { INVOICE_STATES } from './Index';
+import PrintButton, { PrintLink } from '@/Components/Printing/PrintButton';
 
 interface Item {
     id: number;
@@ -171,7 +172,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                             </ConfirmAction>
                         )}
                         {/* On a narrow screen the paper sits under the details: a way to it from the top. */}
-                        {mayPrint && <Button variant="outline" className="xl:hidden" href={route('club.invoices.print', invoice.id)} external icon={<Printer />}>طباعة</Button>}
+                        {mayPrint && <PrintButton variant="outline" className="xl:hidden" url={route('club.invoices.print', invoice.id)} title={invoice.number}>طباعة</PrintButton>}
                     </>
                 }
             />
@@ -265,7 +266,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                                     <div key={p.id} className="border-t border-line py-2 text-[13px]">
                                         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                                             {p.status === 'completed'
-                                                ? <a href={route('club.payments.receipt', p.id)} target="_blank" rel="noreferrer" className="min-w-0 truncate text-[#1d4ed8] hover:underline">{title}</a>
+                                                ? <PrintLink url={route('club.payments.receipt', p.id)} title={String(title)} className="min-w-0 truncate text-[#1d4ed8] hover:underline">{title}</PrintLink>
                                                 : <span className="min-w-0 truncate">{title}</span>}
                                             <span dir="ltr" className="text-[#6b7280] num">{p.paid_at ?? '—'}</span>
                                             {p.status !== 'completed' && <Badge tone={pTone}>{pLabel}</Badge>}
@@ -341,7 +342,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                             {invoice.credit_notes.map((n) => (
                                 <div key={n.id} className="border-t border-line py-2 text-[13px]">
                                     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                                        <a href={route('club.credit-notes.print', n.id)} target="_blank" rel="noreferrer" className="min-w-0 truncate text-[#1d4ed8] hover:underline"><span className="num">{n.number}</span>{n.reason ? ` — ${n.reason}` : ''}</a>
+                                        <PrintLink url={route('club.credit-notes.print', n.id)} title={n.number} className="min-w-0 truncate text-[#1d4ed8] hover:underline"><span className="num">{n.number}</span>{n.reason ? ` — ${n.reason}` : ''}</PrintLink>
                                         <span dir="ltr" className="text-[#6b7280] num">{n.issued_at}</span>
                                         <span className="tabular-nums">− {money(n.amount, currency)}</span>
                                     </div>

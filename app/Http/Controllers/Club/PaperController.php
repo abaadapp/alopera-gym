@@ -24,7 +24,7 @@ class PaperController extends Controller
         $paper = $this->paper($request, $type, $id);
         abort_if($request->boolean('print') && ! $request->user()->can('papers.print'), 403, 'الطباعة تحتاج صلاحية «طباعة المستندات».');
 
-        return $paper->page($request->boolean('print'));
+        return $paper->respond($request, $request->boolean('print'));
     }
 
     public function pdf(Request $request, string $type, int $id): Response

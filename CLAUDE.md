@@ -18,7 +18,8 @@ Read `docs/ARCHITECTURE.md` first.
 
 ## Commands
 - Tests: `php artisan test` (PostgreSQL database `alopera_gym_testing`)
-- Types/build: `npx tsc --noEmit -p tsconfig.json` · `npm run build`
+- Types/build: `npx tsc --noEmit -p tsconfig.json` · `npm run build` · JS tests: `npm test` (vitest, `tests/js`)
+- Printing apps: `mobile/` (Android, iOS); the iOS printing package tests on macOS with `swift test` (see `mobile/README.md`)
 - Style: `vendor/bin/pint`
 - Demo data: `php artisan migrate:fresh --seed` (refuses to run in production)
 - Release gate: `php artisan platform:preflight` (run by `scripts/deploy.sh`; fails locally by design)

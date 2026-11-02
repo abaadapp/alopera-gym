@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, router } from '@inertiajs/react';
-import { Check, CreditCard, Download, Printer, RotateCcw, X } from 'lucide-react';
+import { Check, CreditCard, Download, RotateCcw, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Card, CardHeader, Notice, PageHeader, BackLink } from '@/Components/ui';
 import { Pill, ReasonDialog } from '@/Components/Inventory/parts';
@@ -9,6 +9,7 @@ import { useCurrency, useCan } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money } from '@/lib/format';
 import { billState, type BillRow } from './Bills';
+import PrintButton from '@/Components/Printing/PrintButton';
 
 interface Bill extends BillRow {
     subtotal: string; discount: string; tax: string; notes: string | null; reason: string | null; by: string | null; approver: string | null; approved_at: string | null;
@@ -33,7 +34,7 @@ export default function BillShow({ bill, accounts, can }: { bill: Bill; accounts
                 subtitle={`${bill.supplier} · ${bill.number} · صدر ${bill.issue_date}${bill.due_date ? ` · يستحق ${bill.due_date}` : ''}`}
                 actions={<>
                     <Pill tone={tone}>{label}</Pill>
-                    {mayPrint && <Button variant="outline" icon={<Printer />} href={route('club.papers.show', { type: 'supplier_bill', id: bill.id, print: 1 })} external>طباعة</Button>}
+                    {mayPrint && <PrintButton variant="outline" url={route('club.papers.show', { type: 'supplier_bill', id: bill.id, print: 1 })} title={bill.number}>طباعة</PrintButton>}
                     {bill.has_attachment && <Button variant="outline" icon={<Download />} href={route('club.purchases.bills.attachment', bill.id)} external>المرفق</Button>}
                     {bill.status === 'pending' && can.approve && <><Button variant="outline" icon={<X />} onClick={() => setClosing('reject')}>رفض</Button><Button icon={<Check />} onClick={() => router.post(route('club.purchases.bills.decide', { supplierBill: bill.id, decision: 'approve' }), {}, { preserveScroll: true })}>اعتماد</Button></>}
                     {bill.status === 'approved' && Number(bill.balance) > 0 && can.pay && <Button icon={<CreditCard />} onClick={() => setPaying(true)}>سداد</Button>}

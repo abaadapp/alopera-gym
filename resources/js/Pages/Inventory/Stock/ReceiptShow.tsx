@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link, router } from '@inertiajs/react';
-import { Check, Printer, X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Card, Notice, PageHeader, BackLink } from '@/Components/ui';
 import { Pill, RECEIPT_LABELS, ReasonDialog } from '@/Components/Inventory/parts';
 import { useCurrency, useCan } from '@/hooks/useShared';
 import { money, number } from '@/lib/format';
+import PrintButton from '@/Components/Printing/PrintButton';
 
 interface Receipt {
     id: number; number: string; status: string; total: string; notes: string | null; reason: string | null; delivery_reference: string | null; received_on: string;
@@ -29,7 +30,7 @@ export default function ReceiptShow({ receipt, can }: { receipt: Receipt; can: {
                 subtitle={`${receipt.supplier} · ${receipt.branch} · استلمه ${receipt.by ?? '—'} في ${receipt.received_on}${receipt.approver ? ` · اعتمده ${receipt.approver}` : ''}`}
                 actions={<>
                     <Pill tone={RECEIPT_LABELS[receipt.status][1]}>{RECEIPT_LABELS[receipt.status][0]}</Pill>
-                    {mayPrint && <Button variant="outline" icon={<Printer />} href={route('club.papers.show', { type: 'goods_receipt', id: receipt.id, print: 1 })} external>طباعة السند</Button>}
+                    {mayPrint && <PrintButton variant="outline" url={route('club.papers.show', { type: 'goods_receipt', id: receipt.id, print: 1 })} title={receipt.number}>طباعة السند</PrintButton>}
                     {receipt.status === 'pending' && can.approve && <><Button variant="outline" icon={<X />} onClick={() => setRejecting(true)}>رفض</Button><Button icon={<Check />} onClick={() => router.post(route('club.inventory.receipts.decide', { goodsReceipt: receipt.id, decision: 'approve' }), {}, { preserveScroll: true })}>اعتماد وإضافة للمخزون</Button></>}
                 </>}
             />

@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, router, useForm } from '@inertiajs/react';
-import { Check, FileText, PackageCheck, Pencil, Printer, X } from 'lucide-react';
+import { Check, FileText, PackageCheck, Pencil, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Card, CardHeader, Checkbox, Field, Input, Modal, Notice, PageHeader, BackLink } from '@/Components/ui';
 import { BILL_STATES, clientKey, ORDER_TONES, Pill, RECEIPT_LABELS, ReasonDialog } from '@/Components/Inventory/parts';
 import { useCurrency, useCan } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
+import PrintButton from '@/Components/Printing/PrintButton';
 
 interface Item { id: number; product: string | null; sku: string | null; quantity: string; received_quantity: string; pending: number; remaining: number; unit: string | null; unit_factor: string; unit_cost: string; line_total: string }
 interface Order {
@@ -36,7 +37,7 @@ export default function OrderShow({ order, can }: { order: Order; can: { approve
                 subtitle={`${order.supplier?.name ?? ''} · يُستلم في ${order.branch ?? '—'} · بتاريخ ${order.order_date}${order.expected_on ? ` · متوقع ${order.expected_on}` : ''}`}
                 actions={<>
                     <Pill tone={ORDER_TONES[s] ?? 'gray'}>{order.status_label}</Pill>
-                    {mayPrint && <Button variant="outline" icon={<Printer />} href={route('club.purchases.print', order.id)} external>معاينة وطباعة</Button>}
+                    {mayPrint && <PrintButton variant="outline" url={route('club.purchases.print', order.id)} title={order.number}>معاينة وطباعة</PrintButton>}
                     {s === 'draft' && can.manage && <Button variant="outline" icon={<Pencil />} href={route('club.purchases.edit', order.id)}>تعديل</Button>}
                     {s === 'draft' && can.approve && <Button icon={<Check />} onClick={() => router.post(route('club.purchases.approve', order.id), {}, { preserveScroll: true })}>اعتماد وإرسال</Button>}
                     {(s === 'ordered' || s === 'partial') && can.receive && <Button icon={<PackageCheck />} onClick={() => setReceiving(true)}>تسجيل استلام</Button>}

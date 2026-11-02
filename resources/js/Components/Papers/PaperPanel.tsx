@@ -3,6 +3,7 @@ import { Download, Maximize2, Printer } from 'lucide-react';
 import { Button, Modal } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 import PaperFrame from './PaperFrame';
+import PrintButton from '@/Components/Printing/PrintButton';
 import { useCan } from '@/hooks/useShared';
 
 export type PaperData = { html: string; size: string; type: string; filename: string };
@@ -31,14 +32,14 @@ export default function PaperPanel({ paper, printUrl, pdfUrl, heading = 'الو�
                         <Button variant="outline" size="sm" icon={<Maximize2 className="size-3.5" />} onClick={() => setOpen(true)}><span className="max-sm:sr-only">تكبير</span></Button>
                         {/* Printing and the PDF need «طباعة المستندات»; reading the paper here does not. */}
                         {mayPrint && <Button variant="outline" size="sm" href={pdfUrl + (pdfUrl.includes('?') ? '&' : '?') + 'download=1'} external icon={<Download className="size-3.5" />}><span className="max-sm:sr-only">PDF</span></Button>}
-                        {mayPrint && <Button variant="outline" size="sm" href={printUrl} external icon={<Printer className="size-3.5" />}><span className="max-sm:sr-only">طباعة</span></Button>}
+                        {mayPrint && <PrintButton variant="outline" size="sm" url={printUrl} title={paper.filename.replace(/\.pdf$/, '')} icon={<Printer className="size-3.5" />}><span className="max-sm:sr-only">طباعة</span></PrintButton>}
                     </div>
                 </div>
                 {note && <p className="border-b border-line bg-[#fafafa] px-4 py-2 text-[12px] leading-relaxed text-muted">{note}</p>}
                 <PaperFrame html={paper.html} paper={paper.size} height="auto" className="max-h-[min(78svh,1000px)] rounded-none border-0" />
             </div>
             {/* The paper at full size, in the system's dialog (Escape, focus and the page behind held as everywhere). */}
-            <Modal open={open} onClose={() => setOpen(false)} size="full" title={heading} footer={mayPrint ? <Button variant="outline" href={printUrl} external icon={<Printer className="size-3.5" />}>طباعة</Button> : undefined}>
+            <Modal open={open} onClose={() => setOpen(false)} size="full" title={heading} footer={mayPrint ? <PrintButton variant="outline" url={printUrl} title={paper.filename.replace(/\.pdf$/, '')} icon={<Printer className="size-3.5" />}>طباعة</PrintButton> : undefined}>
                 <PaperFrame html={paper.html} paper={paper.size} height="100%" className="h-full min-h-[60svh] rounded-[12px]" />
             </Modal>
         </>

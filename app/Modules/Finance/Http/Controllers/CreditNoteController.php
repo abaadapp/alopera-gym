@@ -63,6 +63,6 @@ class CreditNoteController extends Controller
     /** The print page of the credit note — the paper engine, as on screen and in the PDF. */
     public function print(Request $request, CreditNote $creditNote): HttpResponse
     {
-        return Papers::for('credit_note', $creditNote)->page($request->boolean('print', true));
+        return Papers::for('credit_note', $creditNote)->respond($request);
     }
 }

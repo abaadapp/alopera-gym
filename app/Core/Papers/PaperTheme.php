@@ -54,6 +54,19 @@ final class PaperTheme
         ];
     }
 
+    /**
+     * A thermal strip's palette: a receipt printer has one colour, and the club's app turns each dot black or white at
+     * a brightness of 160 out of 255. The soft greys of a sheet (labels, dashed rules) fall on the white side and would
+     * leave the paper; on a strip they are dark enough to print, still a step lighter than the text.
+     *
+     * @param  array<string, mixed>  $tokens
+     * @return array<string, mixed>
+     */
+    public static function thermal(array $tokens): array
+    {
+        return ['text' => '#111827', 'second' => '#4b5563', 'muted' => '#4b5563', 'rule' => '#6b7280', 'primary' => '#111827', 'primary_ink' => '#111827'] + $tokens;
+    }
+
     private static function hex(?string $value): ?string
     {
         return is_string($value) && preg_match('/^#[0-9a-fA-F]{6}$/', $value) ? strtolower($value) : null;

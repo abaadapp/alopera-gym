@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { ClipboardList, Clock, PackageCheck, Plus, Printer, RefreshCcw, Truck } from 'lucide-react';
+import { ClipboardList, Clock, PackageCheck, Plus, RefreshCcw, Truck } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Card, CardHeader, EmptyState, PageHeader, Pagination, StatCard } from '@/Components/ui';
 import { Toolbar, ToolbarSearch, visit } from '@/Components/Products/parts';
@@ -8,6 +8,7 @@ import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
 import type { Paginated } from '@/types';
+import PrintButton from '@/Components/Printing/PrintButton';
 
 interface Row { id: number; number: string; status: string; status_label: string; total: string; items_count: number; supplier: string | null; branch: string | null; order_date: string; expected_on: string | null }
 
@@ -61,7 +62,7 @@ export default function Orders({ orders, summary, reorder, filters, labels, bran
                                         <td className="font-medium num">{money(o.total, currency)}</td>
                                         <td><Pill tone={ORDER_TONES[o.status] ?? 'gray'}>{o.status_label}</Pill></td>
                                         <td className="text-[13px] num">{o.expected_on ?? '—'}</td>
-                                        <td className="text-end">{mayPrint && <Button size="sm" variant="ghost" icon={<Printer />} href={route('club.purchases.print', o.id)} external aria-label={`طباعة ${o.number}`} />}</td>
+                                        <td className="text-end">{mayPrint && <PrintButton size="sm" variant="ghost" url={route('club.purchases.print', o.id)} title={o.number} aria-label={`طباعة ${o.number}`} />}</td>
                                     </tr>
                                 ))}
                             </tbody>

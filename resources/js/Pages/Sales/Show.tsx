@@ -4,7 +4,12 @@ import { Ban, CheckCheck, FileText, PackageCheck, Phone, Printer, Timer, Undo2 }
 import ClubLayout from '@/Layouts/ClubLayout';
 import { CancelOrderDialog, DeliverDialog, SourceBadge, StateBadge, VoidDialog, type SaleRow } from '@/Components/Sales/parts';
 import { BackLink, Badge, Button, Card, CardHeader, PageHeader } from '@/Components/ui';
+import PrintStatus from '@/Components/Printing/PrintStatus';
+import usePrint, { type PrintJob } from '@/hooks/usePrint';
 import { useCurrency } from '@/hooks/useShared';
+import { claimAutoPrint } from '@/lib/printing/print-log';
+import { abandonAutoPrint, commitAutoPrint, insideApp, prepareAutoPrint } from '@/lib/printing/printer-service';
+import type { PrinterLike } from '@/lib/printing/types';
 import { money, number } from '@/lib/format';
 
 interface Item {
@@ -45,16 +50,29 @@ const STEPS = [
  * what may be done from here: reprint the receipt, void a completed sale (stock back, money refunded), or move a website
  * order through its steps (preparing, ready, handed over and paid) or cancel it. Each button only for whoever may.
  */
-export default function SaleShow({ sale, can, printOrders = false }: { sale: Sale; can: { refund: boolean; orders: boolean; invoices: boolean; print: boolean }; printOrders?: boolean }) {
+export default function SaleShow({ sale, can, printOrders = false, printer = null }: { sale: Sale; can: { refund: boolean; orders: boolean; invoices: boolean; print: boolean }; printOrders?: boolean; printer?: PrinterLike | null }) {
+    const receipt = usePrint(printer);
+    const job: PrintJob = { title: sale.number, url: route('club.sales.receipt', sale.id), subject: { document: 'sale', id: sale.id } };
     const currency = useCurrency();
     const m = (v: string | number) => money(v, currency);
     const [dialog, setDialog] = useState<'void' | 'deliver' | 'cancel' | null>(null);
     const order = sale.source === 'website';
     const open = order && sale.status === 'pending';
     const advance = (status: 'preparing' | 'ready') => {
-        // This device prints an order when its preparation starts (its printer's setting).
-        const sheet = status === 'preparing' && printOrders ? window.open('', '_blank') : null;
-        router.post(route('club.sales.orders.status', sale.id), { status }, { preserveScroll: true, onSuccess: () => sheet?.location.replace(route('club.sales.receipt', sale.id)), onError: () => sheet?.close() });
+        // This device prints an order when its preparation starts (its printer's setting): prepared in the click, once
+        // per order whatever screen or reload asks again (the server's claim).
+        const attempt = status === 'preparing' && can.print ? prepareAutoPrint(printer, printOrders) : null;
+        router.post(route('club.sales.orders.status', sale.id), { status }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                if (!attempt || attempt.mode === 'none') return abandonAutoPrint(attempt);
+                void claimAutoPrint({ document: 'sale', id: sale.id }).then((log) => {
+                    if (log === false) return abandonAutoPrint(attempt);
+                    void receipt.run(job, 'manual', (onProgress) => commitAutoPrint(attempt, job, onProgress), insideApp() || attempt.mode === 'page', log);
+                });
+            },
+            onError: () => abandonAutoPrint(attempt),
+        });
     };
 
     return (
@@ -64,7 +82,7 @@ export default function SaleShow({ sale, can, printOrders = false }: { sale: Sal
                 title={<span className="flex flex-wrap items-center gap-2">{order ? 'طلب' : 'عملية بيع'} <span className="num">{sale.number}</span> <StateBadge sale={sale} /></span>}
                 subtitle={<span className="num">{sale.at}</span>}
                 actions={<>
-                    {can.print && <Button variant="outline" href={route('club.sales.receipt', sale.id)} external icon={<Printer />}>طباعة الإيصال</Button>}
+                    {can.print && <Button variant="outline" loading={receipt.busy} onClick={() => void receipt.print(job, 'reprint')} icon={<Printer />}>طباعة الإيصال</Button>}
                     {open && can.orders && sale.fulfillment === 'new' && <Button variant="outline" onClick={() => advance('preparing')}>بدء التجهيز</Button>}
                     {open && can.orders && (sale.fulfillment === 'new' || sale.fulfillment === 'preparing') && <Button variant="outline" icon={<PackageCheck />} onClick={() => advance('ready')}>جاهز للاستلام</Button>}
                     {open && can.orders && (!sale.paid || can.refund) && <Button variant="outline" icon={<Ban />} onClick={() => setDialog('cancel')}>إلغاء الطلب</Button>}
@@ -72,6 +90,7 @@ export default function SaleShow({ sale, can, printOrders = false }: { sale: Sal
                     {sale.status === 'completed' && can.refund && <Button variant="outline" icon={<Undo2 />} onClick={() => setDialog('void')}>إلغاء البيع</Button>}
                 </>}
             />
+            {can.print && <PrintStatus state={receipt.state} onRetry={() => void receipt.retry()} onOpen={() => void receipt.open()} className="mb-4" />}
 
             {order && sale.status !== 'cancelled' && (
                 <Card className="mb-4">

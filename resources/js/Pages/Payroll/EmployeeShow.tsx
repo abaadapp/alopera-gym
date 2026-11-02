@@ -10,6 +10,7 @@ import { cn } from '@/lib/cn';
 import { togglePermission } from '@/lib/permissions';
 import { date, money, number, phone } from '@/lib/format';
 import { statusTone, type Can, type EmployeeRow } from './Employees';
+import PrintButton from '@/Components/Printing/PrintButton';
 
 type Account = {
     id: number; name: string; email: string; phone: string | null; is_active: boolean; last_login_at: string | null;
@@ -213,7 +214,7 @@ export default function EmployeeShow({ employee, account, stats, attendance, pay
                                                         <td className="num font-medium">{money(p.net, currency)}</td>
                                                         <td>{p.paid_on ? <Badge tone="green">صُرف {p.paid_on}</Badge> : <Badge tone={p.run_status === 'draft' ? 'gray' : 'blue'}>{RUN[p.run_status]}</Badge>}</td>
                                                         <td><div className="flex justify-end gap-1">
-                                                            {mayPrint && <Button size="sm" variant="ghost" href={route('club.papers.show', { type: 'payslip', id: p.id, print: 1 })} external icon={<Printer className="size-3.5" />}>طباعة</Button>}
+                                                            {mayPrint && <PrintButton size="sm" variant="ghost" url={route('club.papers.show', { type: 'payslip', id: p.id, print: 1 })} title={`payslip-${p.id}`} icon={<Printer className="size-3.5" />}>طباعة</PrintButton>}
                                                             {mayPrint && <Button size="sm" variant="ghost" href={route('club.papers.pdf', { type: 'payslip', id: p.id })} external>PDF</Button>}
                                                         </div></td>
                                                     </tr>

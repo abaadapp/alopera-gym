@@ -6,6 +6,7 @@ import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Modal, PageH
 import { useCurrency, useCan } from '@/hooks/useShared';
 import { date, money } from '@/lib/format';
 import { RunList, type RunDetail, type RunSummary } from './Runs';
+import { PrintLink } from '@/Components/Printing/PrintButton';
 
 type Payout = { id: number; number: string; paid_on: string; account: string | null; total: string; reference: string | null; items: number; by: string | null; period: string | null };
 type MoneyAccount = { id: number; name: string; kind: string; balance: string | null };
@@ -95,7 +96,7 @@ export default function PayrollPayouts({ runs, run, payouts, waiting, accounts, 
                                                         <td className="num">{p.items}</td>
                                                         <td className="text-muted">{p.reference ?? '—'}</td>
                                                         <td className="text-end font-medium num">{m(p.total)}</td>
-                                                        <td className="text-end">{mayPrint && <a href={route('club.papers.show', { type: 'payroll_payout', id: p.id, print: 1 })} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] text-muted hover:bg-ink/[0.045] hover:text-ink" title="سند صرف الرواتب: الموظفون ومبالغهم"><Printer className="size-3.5" /> السند</a>}</td>
+                                                        <td className="text-end">{mayPrint && <PrintLink url={route('club.papers.show', { type: 'payroll_payout', id: p.id, print: 1 })} title={p.number} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] text-muted hover:bg-ink/[0.045] hover:text-ink"><Printer className="size-3.5" /> السند</PrintLink>}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>

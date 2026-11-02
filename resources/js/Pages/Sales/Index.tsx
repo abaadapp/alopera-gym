@@ -10,6 +10,7 @@ import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
 import type { Paginated } from '@/types';
+import { printDocument } from '@/lib/printing/printer-service';
 
 interface Props {
     sales: Paginated<SaleRow>;
@@ -42,7 +43,7 @@ export default function SalesIndex({ sales, period, filters, totals, options, ca
         <RowActions
             label={s.number}
             extra={[
-                ...(mayPrint ? [{ label: 'طباعة الإيصال', icon: <Printer />, href: route('club.sales.receipt', s.id), external: true }] : []),
+                ...(mayPrint ? [{ label: 'طباعة الإيصال', icon: <Printer />, onSelect: () => void printDocument({ title: s.number, url: route('club.sales.receipt', s.id) }) }] : []),
                 ...(allowed.refund && s.status === 'completed' ? [{ label: 'إلغاء البيع ورد المبلغ', icon: <Undo2 />, danger: true, onSelect: () => setVoiding(s) }] : []),
             ]}
         />

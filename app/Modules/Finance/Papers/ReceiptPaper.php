@@ -21,9 +21,10 @@ final class ReceiptPaper extends PaperBuilder
         return Payment::where('status', Payment::COMPLETED)->find($id);
     }
 
+    /** Whoever reads invoices; and a point-of-sale clerk, for a payment taken at the point of sale. */
     public static function allows(User $user, Model $record): bool
     {
-        return $user->hasPermission('invoices.view');
+        return $user->hasPermission('invoices.view') || ($user->hasPermission('pos.sell') && str_starts_with((string) $record->getAttribute('notes'), 'نقطة البيع'));
     }
 
     public static function latest(User $user): ?Model

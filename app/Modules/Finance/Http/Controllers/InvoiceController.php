@@ -473,7 +473,7 @@ class InvoiceController extends Controller
     /** The print page: the invoice paper with the browser's print dialog. */
     public function print(Request $request, Invoice $invoice): HttpResponse
     {
-        return Papers::for('invoice', $invoice)->page($request->boolean('print', true));
+        return Papers::for('invoice', $invoice)->respond($request);
     }
 
     public function void(Request $request, Invoice $invoice, InvoiceService $service): RedirectResponse

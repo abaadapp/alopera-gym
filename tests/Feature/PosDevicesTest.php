@@ -169,7 +169,9 @@ class PosDevicesTest extends TestCase
             $this->assertSame([null, null, false], [$drawer->address, $drawer->paper_width, $drawer->auto_print]);
         });
         $printer = $this->asTenant($club, fn () => $device->peripherals()->where('type', 'printer')->first());
-        $this->actingAs($owner)->get(route('club.settings.pos-devices.peripherals.test', [$device, $printer]))->assertOk()->assertInertia(fn ($page) => $page->where('printer.paper_width', 58));
+        // The test page is a paper on the printer's own strip, for the browser's dialog or (format=pdf) the app's.
+        $this->actingAs($owner)->get(route('club.settings.pos-devices.peripherals.test', [$device, $printer]))->assertOk()->assertSee('size: 58mm auto', false)->assertSee('اختبار الطابعة');
+        $this->actingAs($owner)->get(route('club.settings.pos-devices.peripherals.test', [$device, $printer, 'format' => 'pdf']))->assertOk()->assertHeader('Content-Type', 'application/pdf');
 
         // The receipt follows the device printer's paper width.
         $water = $this->product($club, $branch->id);

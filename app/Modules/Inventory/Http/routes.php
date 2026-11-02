@@ -4,6 +4,7 @@ use App\Modules\Inventory\Http\Controllers\OrderController;
 use App\Modules\Inventory\Http\Controllers\PosController;
 use App\Modules\Inventory\Http\Controllers\PosDeviceController;
 use App\Modules\Inventory\Http\Controllers\PosDeviceSetupController;
+use App\Modules\Inventory\Http\Controllers\PrintLogController;
 use App\Modules\Inventory\Http\Controllers\ProductAddonController;
 use App\Modules\Inventory\Http\Controllers\ProductCategoryController;
 use App\Modules\Inventory\Http\Controllers\ProductController;
@@ -39,6 +40,12 @@ Route::middleware('can:pos.sell')->group(function () {
     Route::get('/pos/device', [PosDeviceSetupController::class, 'show'])->name('pos.device');
     Route::post('/pos/device/pair', [PosDeviceSetupController::class, 'pair'])->middleware('throttle:pos-pairing')->name('pos.device.pair');
     Route::post('/pos/device/activate', [PosDeviceSetupController::class, 'activate'])->middleware('throttle:pos-pairing')->name('pos.device.activate');
+});
+
+// The print log: what the page or the club's app printed and how it ended, and the one claim of an automatic print.
+Route::middleware(['can:papers.print', 'throttle:120,1'])->group(function () {
+    Route::post('/prints/claim', [PrintLogController::class, 'claim'])->name('prints.claim');
+    Route::post('/prints', [PrintLogController::class, 'store'])->name('prints.store');
 });
 
 // Point-of-sale devices and their peripherals, in Settings: their own permission, separate from selling.

@@ -12,6 +12,7 @@ use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Finance\Papers\ReceiptPaper;
 use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Inventory\Services\PosDevices;
 use Illuminate\Http\RedirectResponse;
@@ -149,12 +150,12 @@ class PaymentController extends Controller
     public function receipt(Request $request, Payment $payment, PosDevices $devices): HttpResponse
     {
         abort_if($payment->status !== Payment::COMPLETED, 404);
-        // Whoever reads invoices; and a point-of-sale clerk, for a payment taken at the point of sale.
-        abort_unless($request->user()->can('invoices.view') || ($request->user()->can('pos.sell') && str_starts_with((string) $payment->notes, 'نقطة البيع')), 403);
+        abort_unless(ReceiptPaper::allows($request->user(), $payment), 403);
+        // A strip at the width of this till's printer (or a sheet, when its printer feeds A4 or A5).
         $strip = $request->string('face')->toString() === 'strip';
-        $width = $strip ? $devices->current($request)?->loadMissing('peripherals')->printer()?->paper_width : null;
+        $paper = $strip ? $devices->current($request)?->loadMissing('peripherals')->printer()?->paperSize() : null;
 
-        return Papers::for('receipt', $payment, null, $strip ? 'strip' : 'sheet', $width ? $width.'mm' : null)->page($request->boolean('print', true));
+        return Papers::for('receipt', $payment, null, $strip ? 'strip' : 'sheet', $paper)->respond($request);
     }
 
     public function proof(Payment $payment): StreamedResponse

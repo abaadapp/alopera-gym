@@ -14,6 +14,7 @@ import { date, money, whatsappUrl, dayCount } from '@/lib/format';
 import { bookingStatus, checkinReason, invoiceStatus, invoiceType, label, memberStatus, membershipKind, membershipStatus, messageStatus, paymentMethod, paymentStatus } from '@/lib/labels';
 import type { Option } from '@/types';
 import { SOURCES } from './Form';
+import { PrintLink } from '@/Components/Printing/PrintButton';
 
 /* ───────────────────────── types ───────────────────────── */
 
@@ -769,7 +770,7 @@ function FinanceTab({ invoices, payments }: Props) {
                                             <td className={`num ${p.kind === 'refund' ? 'text-red-600' : ''}`}>{p.kind === 'refund' ? '− ' : ''}{money(p.amount, currency)}</td>
                                             <td><Badge tone={tone}>{p.kind === 'refund' ? 'رد مبلغ' : l}</Badge></td>
                                             <td className="text-end">
-                                                {p.status === 'completed' && p.reachable && <a href={route('club.payments.receipt', p.id)} target="_blank" rel="noreferrer" className="text-sm text-brand">الإيصال</a>}
+                                                {p.status === 'completed' && p.reachable && <PrintLink url={route('club.payments.receipt', p.id)} title={`receipt-${p.id}`} className="text-sm text-brand">الإيصال</PrintLink>}
                                             </td>
                                         </tr>
                                     );
