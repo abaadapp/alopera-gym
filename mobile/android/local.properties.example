@@ -1,0 +1,6 @@
+# انسخه إلى local.properties (لا يُودَع). أو مرّر القيمتين لـGradle:
+#   gradle -p mobile/android assembleDebug -Palopera.baseUrl=https://<your-gym-host>
+alopera.baseUrl=https://<your-gym-host>
+# أصولٌ موثوقة مفصولة بفواصل. إن تُركت فارغة فأصلُ alopera.baseUrl وحده.
+alopera.trustedOrigins=https://<your-gym-host>
+# sdk.dir=/path/to/Android/sdk

@@ -1,0 +1,65 @@
+# تطبيقُ Alopera Gym على iPhone وiPad — مواصفةُ XcodeGen.
+#
+# المشروعُ (.xcodeproj) يُولَّد ولا يُودَع:
+#   cp Config/Alopera.local.xcconfig.example Config/Alopera.local.xcconfig   # ثمّ اضبط العنوان
+#   xcodegen generate
+#   open AloperaGym.xcodeproj
+#
+# واختباراتُ جسر الطباعة تعمل بلا Xcode:
+#   cd Packages/AloperaPrinting && swift test
+
+name: AloperaGym
+
+options:
+  bundleIdPrefix: om.alopera
+  deploymentTarget:
+    iOS: "15.0"
+  developmentLanguage: ar
+
+packages:
+  AloperaPrinting:
+    path: Packages/AloperaPrinting
+
+targets:
+  AloperaGym:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: App
+      # الـshim المشترك مع Android كما هو — يُحقن عند بدء كلّ مستند
+      - path: ../shared/js/alopera-printer-shim.js
+        buildPhase: resources
+    configFiles:
+      Debug: Config/Alopera.xcconfig
+      Release: Config/Alopera.xcconfig
+    # Info.plist مكتوبٌ باليد ومودَع — لا `info:` هنا، فتلك تولّده وتكتب فوقه
+    settings:
+      base:
+        INFOPLIST_FILE: App/Info.plist
+        GENERATE_INFOPLIST_FILE: "NO"
+        PRODUCT_BUNDLE_IDENTIFIER: om.alopera.gym
+        PRODUCT_NAME: AloperaGym
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: "NO"
+        SWIFT_VERSION: "5.0"
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_STYLE: Automatic
+    dependencies:
+      - package: AloperaPrinting
+        product: AloperaPrinting
+
+schemes:
+  AloperaGym:
+    build:
+      targets:
+        AloperaGym: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
