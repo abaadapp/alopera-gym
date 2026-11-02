@@ -99,8 +99,10 @@ class CashShiftsTest extends TestCase
         $drawer = $this->asTenant($club, fn () => app(ChartOfAccounts::class)->account('cash'));
         $open = fn ($user) => $this->actingAs($user)->post(route('club.cash-shifts.store'), ['account_id' => $drawer->id, 'opening_float' => '0', 'client_key' => $this->key()]);
 
-        // Not given to any role but the owner's unless granted; viewing alone does not open a shift.
-        $this->actingAs($this->staff($club, 'finance'))->get(route('club.cash-shifts.index'))->assertForbidden();
+        // Acting on shifts is the owner's unless granted; finance reads them (the cash closing report) and opens none.
+        $this->actingAs($this->staff($club, 'finance'))->get(route('club.cash-shifts.index'))->assertOk();
+        $open($this->staff($club, 'finance'))->assertForbidden();
+        $this->actingAs($this->staff($club, 'manager'))->get(route('club.cash-shifts.index'))->assertForbidden();
         $open($this->staff($club, 'reception'))->assertForbidden();
         $this->asTenant($club, fn () => Role::create(['name' => 'مراجعة الصندوق', 'key' => 'drawer_view', 'permissions' => ['cash_shifts.view']]));
         $viewer = $this->staff($club, 'drawer_view');

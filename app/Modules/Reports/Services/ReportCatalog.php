@@ -55,8 +55,9 @@ final class ReportCatalog
         'trainers' => ['reports.view'],
         'checkins' => ['checkin.view'],
         'staff-attendance' => ['staff_attendance.view'],
-        'payroll' => ['payroll.reports'],
-        'payouts' => ['payroll.reports'],
+        // Salary figures: payroll.reports holds only with payroll.salaries (PermissionRegistry::REQUIRES).
+        'payroll' => ['payroll.salaries', 'payroll.reports'],
+        'payouts' => ['payroll.salaries', 'payroll.reports'],
         'documents' => ['documents.view'],
         'renewals' => ['documents.view'],
         'branches' => ['reports.view'],
@@ -219,8 +220,8 @@ final class ReportCatalog
             return false;
         }
 
-        // Payroll runs and payouts are the whole club's (no branch): for those who reach every branch.
-        if (in_array($r['key'], ['payroll', 'payouts'], true) && $user->branch_id !== null) {
+        // Payroll runs and payouts are the whole club's (no branch): for those who reach the whole club's money.
+        if (in_array($r['key'], ['payroll', 'payouts'], true) && ! $user->reachesClubFinance()) {
             return false;
         }
 

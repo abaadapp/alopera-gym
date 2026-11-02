@@ -5,6 +5,7 @@ use App\Core\Tenancy\CrossTenantWriteException;
 use App\Core\Tenancy\MissingTenantException;
 use App\Http\Middleware\AuthenticateDevice;
 use App\Http\Middleware\EnforceBranchAccess;
+use App\Http\Middleware\EnsureClubFinance;
 use App\Http\Middleware\EnsureModuleEnabled;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\NormalizeNumbers;
@@ -43,6 +44,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'device' => AuthenticateDevice::class,
             'module' => EnsureModuleEnabled::class,
             'branch.guard' => EnforceBranchAccess::class,
+            'club.finance' => EnsureClubFinance::class,
         ]);
 
         // The tenant must be known before route-model binding runs: the tenant

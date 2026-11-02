@@ -29,7 +29,8 @@ class JournalController extends Controller
         $period = Period::fromRequest($request, 'month');
         $source = $request->string('source')->toString();
 
-        $entries = JournalEntry::with(['lines.account:id,code,name', 'author:id,name'])
+        $viewer = $request->user();
+        $entries = JournalEntry::with(['lines.account:id,code,name', 'author:id,name', 'reverses:id,source_type'])
             ->tap(fn ($q) => $period->apply($q, 'entry_date'))
             ->when($source === 'manual', fn ($q) => $q->whereNull('source_type')->whereNull('reverses_id'))
             ->when($source && $source !== 'manual', fn ($q) => $q->where('source_type', $source))
@@ -39,7 +40,8 @@ class JournalController extends Controller
                 'id' => $e->id, 'number' => $e->number, 'date' => $e->entry_date->toDateString(), 'description' => $e->description, 'total' => $e->total,
                 'source' => $e->sourceLabel(), 'source_type' => $e->source_type, 'manual' => $e->isManual(), 'reversed' => $e->reversed_at !== null, 'is_reversal' => $e->reverses_id !== null,
                 'by' => $e->author?->name,
-                'lines' => $e->lines->map(fn ($l) => ['account' => $l->account->code.' · '.$l->account->name, 'debit' => $l->debit, 'credit' => $l->credit, 'memo' => $l->memo]),
+                // A payroll entry's line per employee is shown only to who may see salaries.
+                'lines' => $e->shownLines($viewer),
             ]);
 
         return Inertia::render('Finance/Journal', [

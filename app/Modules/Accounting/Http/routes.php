@@ -11,9 +11,10 @@ use Illuminate\Support\Facades\Route;
 /*
 | المالية — the books: summary, money movement, cash & bank accounts, chart of accounts, journal, statements.
 | Invoices, payments, dues and expenses keep their own routes (Finance module); they sit beside these as tabs.
+| The books are the whole club's: someone tied to a branch opens them only with accounting.all_branches (club.finance).
 */
 
-Route::prefix('finance')->name('finance.')->whereNumber(['account', 'entry'])->group(function () {
+Route::prefix('finance')->name('finance.')->whereNumber(['account', 'entry'])->middleware('club.finance')->group(function () {
     Route::middleware('can:accounting.view')->group(function () {
         Route::get('/', [FinanceController::class, 'summary'])->name('summary');
         Route::get('/movement', [FinanceController::class, 'movement'])->name('movement');
@@ -47,5 +48,5 @@ Route::prefix('finance')->name('finance.')->whereNumber(['account', 'entry'])->g
     });
 });
 
-Route::get('/settings/finance', [FinanceSettingsController::class, 'edit'])->middleware('can:accounting.manage')->name('settings.finance');
-Route::put('/settings/finance', [FinanceSettingsController::class, 'update'])->middleware('can:accounting.manage')->name('settings.finance.update');
+Route::get('/settings/finance', [FinanceSettingsController::class, 'edit'])->middleware(['can:accounting.manage', 'club.finance'])->name('settings.finance');
+Route::put('/settings/finance', [FinanceSettingsController::class, 'update'])->middleware(['can:accounting.manage', 'club.finance'])->name('settings.finance.update');

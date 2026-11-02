@@ -556,6 +556,7 @@ class EmployeeController extends Controller
             'branches' => Branch::where('is_active', true)->orderByDesc('is_main')->orderBy('name')->get(['id', 'name']),
             'groups' => $labels,
             'grantable' => Grants::grantable($actor),
+            'requires' => PermissionRegistry::REQUIRES,
         ];
     }
 

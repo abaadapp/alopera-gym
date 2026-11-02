@@ -158,7 +158,11 @@ class PayrollTest extends TestCase
 
         $this->actingAs($this->owner($club))->post(route('club.payroll.approve', $run))->assertSessionHasNoErrors();
         $this->actingAs($manager)->post(route('club.payroll.pay', $run), $payload)->assertForbidden();
-        $this->actingAs($finance)->post(route('club.payroll.pay', $run), $payload)->assertSessionHasNoErrors();
+        // Paying is the owner's until granted: finance pays once the owner gives it payroll.pay by name.
+        $this->actingAs($finance)->post(route('club.payroll.pay', $run), $payload)->assertForbidden();
+        $this->assertNull($item->fresh()->paid_at);
+        $finance->role->update(['permissions' => [...$finance->role->permissions, 'payroll.pay']]);
+        $this->actingAs($finance->fresh())->post(route('club.payroll.pay', $run), $payload)->assertSessionHasNoErrors();
         $this->assertNotNull($item->fresh()->paid_at);
     }
 

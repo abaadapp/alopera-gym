@@ -8,7 +8,7 @@ import { date, money } from '@/lib/format';
 import { RunList, type RunDetail, type RunSummary } from './Runs';
 
 type Payout = { id: number; number: string; paid_on: string; account: string | null; total: string; reference: string | null; items: number; by: string | null; period: string | null };
-type MoneyAccount = { id: number; name: string; kind: string; balance: string };
+type MoneyAccount = { id: number; name: string; kind: string; balance: string | null };
 
 interface Props {
     runs: (RunSummary & { unpaid: string })[];
@@ -135,7 +135,7 @@ function PayForm({ run, ids, accounts, defaultAccount, onClose }: { run: RunDeta
                 </div>
                 <Field label="من حساب" error={errors.account_id} required>
                     <Select value={form.data.account_id} onChange={(e) => form.setData('account_id', e.target.value)}>
-                        {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} — الرصيد {money(a.balance, currency)}</option>)}
+                        {accounts.map((a) => <option key={a.id} value={a.id}>{a.balance !== null ? `${a.name} — الرصيد ${money(a.balance, currency)}` : a.name}</option>)}
                     </Select>
                 </Field>
                 <div className="grid gap-4 sm:grid-cols-2">

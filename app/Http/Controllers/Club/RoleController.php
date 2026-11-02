@@ -20,6 +20,8 @@ class RoleController extends Controller
         return Inertia::render('Club/Settings/Roles', [
             // What this user may give: the editor disables the rest instead of offering what the server refuses.
             'grantable' => Grants::grantable($request->user()),
+            // A payroll step needs seeing salaries: the editor ticks them together.
+            'requires' => PermissionRegistry::REQUIRES,
             'roles' => Role::withCount('users')->orderBy('id')->get()->map(fn (Role $r) => $r->only('id', 'key', 'name', 'description', 'is_system', 'is_locked', 'users_count') + [
                 'permissions' => $r->expandedPermissions(),
             ]),

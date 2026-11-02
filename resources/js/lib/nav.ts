@@ -10,8 +10,9 @@ import { useCan, useShared } from '@/hooks/useShared';
 
 /** A page of a section. `permission` may list several (any one is enough); `match` lists the route patterns
  *  of its detail pages, which keep the section lit; `params` marks a tab that is a view of a shared route;
- *  `multiBranch` shows a tab only in a club with more than one open branch; `clubWide` hides it from a user tied to
- *  a branch; `menuOnly` is where the menu leads whoever lacks the section's other pages, never a tab of its own. */
+ *  `multiBranch` shows a tab only in a club with more than one open branch; `clubWide` (the whole club's money) hides
+ *  it from a user tied to a branch unless they hold accounting.all_branches; `menuOnly` is where the menu leads
+ *  whoever lacks the section's other pages, never a tab of its own. */
 export type NavTab = { label: string; route: string; params?: Record<string, string>; permission?: string | string[]; match?: string | string[]; roleKey?: string; multiBranch?: boolean; clubWide?: boolean; menuOnly?: boolean };
 export type NavSection = { label: string; icon: LucideIcon; tabs: NavTab[]; match?: string[] };
 /** A run of sections between two thin separators; the `footer` group sits at the bottom of the menu. */
@@ -117,15 +118,15 @@ export const NAV: NavGroup[] = [
                 label: 'المالية',
                 icon: Wallet,
                 tabs: [
-                    { label: 'الملخص المالي', route: 'club.finance.summary', permission: 'accounting.view' },
+                    { label: 'الملخص المالي', route: 'club.finance.summary', permission: 'accounting.view', clubWide: true },
                     { label: 'المدفوعات والتحصيل', route: 'club.payments.index', permission: 'invoices.view', match: 'club.payments.*' },
                     { label: 'المستحقات', route: 'club.dues', permission: 'dues.view' },
                     { label: 'المصروفات', route: 'club.expenses.index', permission: 'expenses.manage', match: 'club.expenses.*' },
                     { label: 'ورديات الصندوق', route: 'club.cash-shifts.index', permission: ['cash_shifts.view', 'cash_shifts.manage'], match: 'club.cash-shifts.*' },
-                    { label: 'الحسابات البنكية', route: 'club.finance.banks', permission: 'accounting.view' },
-                    { label: 'القيود اليومية', route: 'club.finance.journal', permission: 'accounting.view' },
-                    { label: 'شجرة الحسابات', route: 'club.finance.accounts', permission: 'accounting.view' },
-                    { label: 'الفترات المحاسبية', route: 'club.finance.periods', permission: 'accounting.view' },
+                    { label: 'الحسابات البنكية', route: 'club.finance.banks', permission: 'accounting.view', clubWide: true },
+                    { label: 'القيود اليومية', route: 'club.finance.journal', permission: 'accounting.view', clubWide: true },
+                    { label: 'شجرة الحسابات', route: 'club.finance.accounts', permission: 'accounting.view', clubWide: true },
+                    { label: 'الفترات المحاسبية', route: 'club.finance.periods', permission: 'accounting.view', clubWide: true },
                 ],
             },
             {
@@ -263,7 +264,7 @@ export function useNavigation() {
     const allowed = (permission?: string | string[]) => !permission || list(permission).some(can);
     // The trainer screen is for trainers (and whoever manages classes); a trainer lands on it.
     const visible = (tab: NavTab) => allowed(tab.permission) && (!tab.roleKey || roleKey === tab.roleKey || can('classes.manage')) && (!tab.multiBranch || Boolean(auth?.branch?.multi))
-        && (!tab.clubWide || !auth?.branch?.locked);
+        && (!tab.clubWide || !auth?.branch?.locked || can('accounting.all_branches'));
     const onTab = (tab: NavTab) => route().current(tab.route) && Object.entries(tab.params ?? {}).every(([key, value]) => query.get(key) === value);
 
     const groups = NAV.map((group) => ({

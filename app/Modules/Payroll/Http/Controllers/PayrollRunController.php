@@ -15,36 +15,19 @@ use App\Modules\Payroll\Models\PayrollPayout;
 use App\Modules\Payroll\Models\PayrollRun;
 use App\Modules\Payroll\Services\PayrollService;
 use Carbon\CarbonImmutable;
-use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
-use Illuminate\Routing\Controllers\HasMiddleware;
-use Illuminate\Routing\Controllers\Middleware;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /** Payroll runs (مسيرات الرواتب) and their payouts (صرف الرواتب). Each action checks its own permission. */
-class PayrollRunController extends Controller implements HasMiddleware
+class PayrollRunController extends Controller
 {
     private const ANY = ['payroll.prepare', 'payroll.edit', 'payroll.approve', 'payroll.pay', 'payroll.payslips', 'payroll.reports'];
 
     public function __construct(private readonly PayrollService $payroll) {}
-
-    /**
-     * A run is the whole club's (every branch's staff on one sheet): opened, edited, approved, paid, printed and
-     * exported by accounts that reach every branch. Someone tied to a branch sees their branch's payslips in the
-     * employee files.
-     */
-    public static function middleware(): array
-    {
-        return [new Middleware(function (Request $request, Closure $next) {
-            abort_if($request->user()?->branch_id !== null, 403, 'مسيرات الرواتب تشمل موظفي كل الفروع؛ تُفتح لمن يصل إلى كل الفروع.');
-
-            return $next($request);
-        })];
-    }
 
     public function index(Request $request): Response
     {
@@ -148,8 +131,9 @@ class PayrollRunController extends Controller implements HasMiddleware
             'payouts' => PayrollPayout::with(['account:id,name', 'author:id,name', 'run:id,period'])->withCount('items')->latest('id')->limit(30)->get()
                 ->map(fn (PayrollPayout $p) => ['id' => $p->id, 'number' => $p->number, 'paid_on' => $p->paid_on->toDateString(), 'account' => $p->account?->name, 'total' => $p->total, 'reference' => $p->reference, 'items' => $p->items_count, 'by' => $p->author?->name, 'period' => $p->run?->label()]),
             'waiting' => Money::normalize(PayrollItem::whereNull('paid_at')->whereHas('run', fn ($q) => $q->where('status', PayrollRun::APPROVED))->sum('net')),
-            'accounts' => $reports->moneyAccounts()->filter(fn ($m) => in_array($m['account']->kind, Account::PAYING_KINDS, true))
-                ->map(fn ($m) => ['id' => $m['account']->id, 'name' => $m['account']->name, 'kind' => $m['account']->kind, 'balance' => $m['balance']])->values(),
+            // The accounts to pay from, for who pays; their balances only for who may see the books.
+            'accounts' => $request->user()->hasPermission('payroll.pay') ? $reports->moneyAccounts()->filter(fn ($m) => in_array($m['account']->kind, Account::PAYING_KINDS, true))
+                ->map(fn ($m) => ['id' => $m['account']->id, 'name' => $m['account']->name, 'kind' => $m['account']->kind, 'balance' => $request->user()->hasPermission('accounting.view') ? $m['balance'] : null])->values() : [],
             'defaultAccount' => $request->user()->tenant->settings['payroll']['payout_account_id'] ?? null,
             'can' => $this->abilities($request),
         ]);

@@ -3,7 +3,7 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import { NavCard, PageHeader } from '@/Components/ui';
 import { useCan, useShared } from '@/hooks/useShared';
 
-type Entry = { title: string; description: string; route: string; permission: string | string[]; icon: LucideIcon; module?: 'sales' };
+type Entry = { title: string; description: string; route: string; permission: string | string[]; icon: LucideIcon; module?: 'sales'; clubWide?: boolean };
 
 /** Every settings screen, grouped. A card shows only when the user may open it (the server checks again). */
 const SECTIONS: { title: string; items: Entry[] }[] = [
@@ -25,7 +25,7 @@ const SECTIONS: { title: string; items: Entry[] }[] = [
     {
         title: 'المالية والرواتب',
         items: [
-            { title: 'الإعدادات المالية', description: 'الحساب الذي تذهب إليه كل طريقة دفع: الصندوق والبنك والبطاقات وPaymob', route: 'club.settings.finance', permission: 'accounting.manage', icon: Landmark },
+            { title: 'الإعدادات المالية', description: 'الحساب الذي تذهب إليه كل طريقة دفع: الصندوق والبنك والبطاقات وPaymob', route: 'club.settings.finance', permission: 'accounting.manage', icon: Landmark, clubWide: true },
             { title: 'إعدادات الرواتب والحضور', description: 'ساعات العمل والساعة الإضافية وحساب صرف الرواتب ومهلة البصمة المكررة', route: 'club.settings.payroll', permission: 'settings.manage', icon: Clock },
         ],
     },
@@ -49,9 +49,11 @@ const SECTIONS: { title: string; items: Entry[] }[] = [
 
 export default function SettingsIndex() {
     const can = useCan();
-    const { modules } = useShared();
+    const { modules, auth } = useShared();
     const allowed = (p: string | string[]) => (Array.isArray(p) ? p.some(can) : can(p));
-    const sections = SECTIONS.map((s) => ({ ...s, items: s.items.filter((e) => allowed(e.permission) && (!e.module || modules[e.module])) })).filter((s) => s.items.length > 0);
+    // The whole club's money settings: not from an account tied to a branch without accounting.all_branches.
+    const reaches = (e: Entry) => !e.clubWide || !auth?.branch?.locked || can('accounting.all_branches');
+    const sections = SECTIONS.map((s) => ({ ...s, items: s.items.filter((e) => allowed(e.permission) && (!e.module || modules[e.module]) && reaches(e)) })).filter((s) => s.items.length > 0);
 
     return (
         <ClubLayout title="الإعدادات">

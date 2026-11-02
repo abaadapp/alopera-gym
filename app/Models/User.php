@@ -131,6 +131,16 @@ class User extends Authenticatable
         return in_array($permission, $this->permissions(), true);
     }
 
+    /**
+     * May this person open the whole club's money (the books, the bank accounts, the payroll runs)? Whoever reaches
+     * every branch may, by their other permissions; someone tied to a branch only with accounting.all_branches — their
+     * branch's figures are in the reports.
+     */
+    public function reachesClubFinance(): bool
+    {
+        return $this->branch_id === null || $this->hasPermission('accounting.all_branches');
+    }
+
     public function flushPermissionCache(): void
     {
         $this->permissionCache = null;

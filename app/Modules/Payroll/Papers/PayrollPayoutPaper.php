@@ -23,8 +23,8 @@ final class PayrollPayoutPaper extends PaperBuilder
 
     public static function allows(User $user, Model $record): bool
     {
-        // A payout lists staff of every branch: for those who reach every branch.
-        return ($user->hasPermission('payroll.payslips') || $user->hasPermission('payroll.pay')) && $user->branch_id === null;
+        // A payout lists staff of every branch: for those who reach the whole club's money.
+        return ($user->hasPermission('payroll.payslips') || $user->hasPermission('payroll.pay')) && $user->reachesClubFinance();
     }
 
     public static function filename(Model $record): string

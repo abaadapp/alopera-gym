@@ -65,6 +65,7 @@ final class PermissionRegistry
             'accounting.manage' => 'الحسابات البنكية والقيود اليدوية والإعدادات المالية',
             'accounting.close' => 'إقفال الفترات المحاسبية',
             'accounting.reopen' => 'إعادة فتح الفترات المقفلة',
+            'accounting.all_branches' => 'مالية النادي كله لحساب مرتبط بفرع: الملخص والحسابات البنكية والقيود والفترات ومسيرات الرواتب',
         ]],
         'payroll' => ['label' => 'الرواتب والموظفون', 'permissions' => [
             'employees.view' => 'عرض ملفات الموظفين (دون الرواتب)',
@@ -141,6 +142,20 @@ final class PermissionRegistry
         ]],
     ];
 
+    /**
+     * Permissions that open nothing without another. Every payroll step shows salaries, so each takes
+     * payroll.salaries: a list holding one without it is read, and stored, without it.
+     */
+    public const REQUIRES = [
+        'payroll.compensation' => 'payroll.salaries',
+        'payroll.prepare' => 'payroll.salaries',
+        'payroll.edit' => 'payroll.salaries',
+        'payroll.approve' => 'payroll.salaries',
+        'payroll.pay' => 'payroll.salaries',
+        'payroll.payslips' => 'payroll.salaries',
+        'payroll.reports' => 'payroll.salaries',
+    ];
+
     /** Permission groups that belong to an optional module (config gym.modules.<module>). */
     private const MODULE_GROUPS = ['sales' => 'sales', 'inventory' => 'inventory'];
 
@@ -201,14 +216,16 @@ final class PermissionRegistry
 
     /**
      * Drop unknown keys so a crafted request cannot store a permission the
-     * system does not define.
+     * system does not define, and any permission whose prerequisite is missing (REQUIRES).
      *
      * @param  array<int, mixed>  $permissions
      * @return list<string>
      */
     public static function sanitize(array $permissions): array
     {
-        return array_values(array_intersect(self::all(), $permissions));
+        $known = array_values(array_intersect(self::all(), $permissions));
+
+        return array_values(array_filter($known, fn (string $p) => ! isset(self::REQUIRES[$p]) || in_array(self::REQUIRES[$p], $known, true)));
     }
 
     /**

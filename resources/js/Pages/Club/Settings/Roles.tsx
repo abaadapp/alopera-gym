@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import { Check, Lock, Pencil, Plus, ShieldCheck, Trash2, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { togglePermission } from '@/lib/permissions';
 import { SettingsScreen } from '@/Components/Settings';
 import { Badge, Button, Card, ConfirmAction, Field, Input, Modal, Textarea } from '@/Components/ui';
 
@@ -10,7 +11,7 @@ import { Badge, Button, Card, ConfirmAction, Field, Input, Modal, Textarea } fro
  * print, export, money and confidential data, point of sale. Told from the permission's own key.
  */
 const ACTIONS: [string, string, RegExp][] = [
-    ['money', 'بيانات مالية', /^(reports\.financial|accounting\.view|payroll\.salaries|dues\.view)$/],
+    ['money', 'بيانات مالية', /^(reports\.financial|accounting\.view|accounting\.all_branches|payroll\.salaries|dues\.view)$/],
     ['pos', 'نقطة البيع', /^(pos\.sell|sales\.discount|pos_devices\.manage)$/],
     ['print', 'طباعة', /(\.print|\.payslips)$/],
     ['export', 'تصدير', /(\.export|^payroll\.reports)$/],
@@ -50,7 +51,7 @@ interface Group {
     permissions: { key: string; label: string }[];
 }
 
-export default function Roles({ roles, groups, grantable }: { roles: Role[]; groups: Group[]; grantable: string[] }) {
+export default function Roles({ roles, groups, grantable, requires }: { roles: Role[]; groups: Group[]; grantable: string[]; requires: Record<string, string> }) {
     const [editing, setEditing] = useState<Role | 'new' | null>(null);
     const total = groups.reduce((n, g) => n + g.permissions.length, 0);
 
@@ -99,18 +100,18 @@ export default function Roles({ roles, groups, grantable }: { roles: Role[]; gro
                     </Card>
                 ))}
             </div>
-            {editing && <RoleModal role={editing === 'new' ? null : editing} groups={groups} grantable={grantable} onClose={() => setEditing(null)} />}
+            {editing && <RoleModal role={editing === 'new' ? null : editing} groups={groups} grantable={grantable} requires={requires} onClose={() => setEditing(null)} />}
         </SettingsScreen>
     );
 }
 
-function RoleModal({ role, groups, grantable, onClose }: { role: Role | null; groups: Group[]; grantable: string[]; onClose: () => void }) {
+function RoleModal({ role, groups, grantable, requires, onClose }: { role: Role | null; groups: Group[]; grantable: string[]; requires: Record<string, string>; onClose: () => void }) {
     const locked = role?.is_locked ?? false;
     // Nobody gives what they do not hold: those boxes stay as they are, and the server keeps them so.
     const mine = (p: string) => grantable.includes(p);
     const form = useForm({ name: role?.name ?? '', description: role?.description ?? '', permissions: role?.permissions ?? ([] as string[]) });
     const has = (p: string) => form.data.permissions.includes(p);
-    const toggle = (p: string) => !locked && mine(p) && form.setData('permissions', has(p) ? form.data.permissions.filter((x) => x !== p) : [...form.data.permissions, p]);
+    const toggle = (p: string) => !locked && mine(p) && form.setData('permissions', togglePermission(form.data.permissions, p, requires, mine));
     const toggleGroup = (g: Group) => {
         if (locked) return;
         const keys = g.permissions.map((p) => p.key).filter(mine);

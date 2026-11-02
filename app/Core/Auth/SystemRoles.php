@@ -38,8 +38,12 @@ final class SystemRoles
                     'roles.manage', 'backups.manage', 'integrations.manage', 'members.delete',
                     // The website is the owner's, or whoever the owner grants it to by name.
                     'website.manage',
-                    // Salaries stay confidential, approved by the owner and paid by finance; suppliers are paid by finance.
-                    'payroll.salaries', 'payroll.compensation', 'payroll.approve', 'payroll.pay', 'accounting.manage', 'purchases.pay',
+                    // Salaries stay confidential: every payroll step shows them, so none is the manager's until the owner
+                    // grants salaries by name. Suppliers are paid by finance.
+                    'payroll.salaries', 'payroll.compensation', 'payroll.prepare', 'payroll.edit', 'payroll.approve', 'payroll.pay',
+                    'payroll.payslips', 'payroll.reports', 'accounting.manage', 'purchases.pay',
+                    // A manager tied to a branch sees their branch's figures (the reports), not the club's books and banks.
+                    'accounting.all_branches',
                     // Sensitive business documents are the owner's unless shared one by one.
                     'documents.confidential',
                     // Undoing money, the books' closed months and the drawer's shifts stay the owner's until granted by name.
@@ -62,14 +66,15 @@ final class SystemRoles
             ],
             self::FINANCE => [
                 'name' => 'المالية والمحاسبة',
-                'description' => 'الفواتير والتحصيل والمصروفات والحسابات، وإعداد الرواتب وصرفها بعد اعتماد المالك.',
+                'description' => 'الفواتير والتحصيل والمصروفات والحسابات والتقارير المالية، والاطلاع على الرواتب وإعداد مسيراتها. اعتماد المسيرات وصرفها للمالك أو لمن يفوّضه بالاسم.',
+                // Approving and paying salaries are the owner's until granted, each on its own (payroll.approve, payroll.pay).
                 'permissions' => [
                     'dashboard.view', 'members.view', 'memberships.view',
                     'invoices.view', 'invoices.manage', 'invoices.void', 'invoices.credit',
                     'payments.record', 'payments.confirm', 'payments.refund',
-                    'expenses.manage', 'dues.view',
-                    'accounting.view', 'accounting.manage',
-                    'employees.view', 'payroll.salaries', 'payroll.prepare', 'payroll.edit', 'payroll.pay', 'payroll.payslips', 'payroll.reports',
+                    'cash_shifts.view', 'expenses.manage', 'dues.view',
+                    'accounting.view', 'accounting.manage', 'accounting.all_branches',
+                    'employees.view', 'payroll.salaries', 'payroll.prepare', 'payroll.edit', 'payroll.payslips', 'payroll.reports',
                     'sales.view', 'sales.refund', 'products.manage', 'suppliers.view', 'suppliers.create', 'suppliers.manage', 'purchases.manage', 'pos.sell',
                     'inventory.view', 'purchases.view', 'purchases.pay',
                     'reports.view', 'reports.financial', 'reports.export', 'papers.print',

@@ -273,10 +273,16 @@ class AccessHardeningTest extends TestCase
         $this->actingAs($khoudManager)->get(route('club.payroll.export', $run))->assertForbidden();
         $this->actingAs($khoudManager)->get(route('club.papers.show', ['type' => 'payroll_sheet', 'id' => $run->id]))->assertForbidden();
         $this->actingAs($khoudManager)->get(route('club.reports.show', 'payroll'))->assertForbidden();
-        $this->actingAs($khoudManager)->get(route('club.papers.show', ['type' => 'payslip', 'id' => $mainLine->id]))->assertNotFound();
-        $this->actingAs($khoudManager)->get(route('club.papers.show', ['type' => 'payslip', 'id' => $khoudLine->id]))->assertOk();
-        // Club-wide, the manager still prepares the run.
-        $this->actingAs($this->staff($club, 'manager'))->get(route('club.payroll.index'))->assertOk();
+        // Payslips show salaries: not the manager's without seeing salaries, and then only their branch's.
+        $this->actingAs($khoudManager)->get(route('club.papers.show', ['type' => 'payslip', 'id' => $khoudLine->id]))->assertForbidden();
+        $khoudManager->forceFill(['custom_permissions' => ['employees.view', 'payroll.salaries', 'payroll.payslips']])->save();
+        $this->actingAs($khoudManager->fresh())->get(route('club.papers.show', ['type' => 'payslip', 'id' => $mainLine->id]))->assertNotFound();
+        $this->actingAs($khoudManager->fresh())->get(route('club.papers.show', ['type' => 'payslip', 'id' => $khoudLine->id]))->assertOk();
+        // Club-wide, the manager prepares the run once the owner lets them see salaries.
+        $manager = $this->staff($club, 'manager');
+        $this->actingAs($manager)->get(route('club.payroll.index'))->assertForbidden();
+        $manager->forceFill(['custom_permissions' => ['payroll.salaries', 'payroll.prepare', 'payroll.edit']])->save();
+        $this->actingAs($manager->fresh())->get(route('club.payroll.index'))->assertOk();
     }
 
     public function test_what_a_branchs_desk_lists_and_changes_is_its_own(): void

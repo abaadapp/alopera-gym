@@ -4,12 +4,15 @@ namespace App\Modules\Payroll\Models;
 
 use App\Core\Support\Money;
 use App\Core\Tenancy\BelongsToTenant;
-use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\ClubFinanceRecord;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** One employee's line in a month's run; it belongs to the employee's branch (their payslip is theirs). */
-class PayrollItem extends Model implements BranchOwned
+/**
+ * One employee's line in a month's run; it belongs to the employee's branch (their payslip is theirs), and to the
+ * club's run for whoever reaches the club's money.
+ */
+class PayrollItem extends Model implements ClubFinanceRecord
 {
     use BelongsToTenant;
 

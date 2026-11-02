@@ -7,6 +7,7 @@ import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Inpu
 import { FactList, Initials } from '@/Components/Payroll/parts';
 import { useCurrency, useShared, useCan } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
+import { togglePermission } from '@/lib/permissions';
 import { date, money, number, phone } from '@/lib/format';
 import { statusTone, type Can, type EmployeeRow } from './Employees';
 
@@ -20,6 +21,7 @@ type Access = {
     branches: { id: number; name: string }[];
     groups: { key: string; label: string; permissions: { key: string; label: string }[] }[];
     grantable: string[];
+    requires: Record<string, string>;
 };
 type HistoryRow = { id: number; event: string; actor: string | null; at: string; old: Record<string, unknown> | null; new: Record<string, unknown> | null; properties: Record<string, unknown> | null };
 
@@ -302,7 +304,7 @@ function AccessModal({ employeeId, account, access, onClose }: { employeeId: num
     });
     const mine = (p: string) => access.grantable.includes(p);
     const shown = form.data.custom ? form.data.permissions : role(form.data.role_id)?.permissions ?? [];
-    const toggle = (p: string) => form.data.custom && mine(p) && form.setData('permissions', form.data.permissions.includes(p) ? form.data.permissions.filter((x) => x !== p) : [...form.data.permissions, p]);
+    const toggle = (p: string) => form.data.custom && mine(p) && form.setData('permissions', togglePermission(form.data.permissions, p, access.requires, mine));
     const submit = (e: FormEvent) => {
         e.preventDefault();
         form.put(route('club.employees.access', employeeId), { preserveScroll: true, onSuccess: onClose });

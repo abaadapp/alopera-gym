@@ -40,7 +40,9 @@ Route::middleware('can:employees.manage')->group(function () {
     Route::delete('/job-titles/{jobTitle}', [JobTitleController::class, 'destroy'])->name('job-titles.destroy');
 });
 
-Route::prefix('payroll')->name('payroll.')->whereNumber(['run', 'item'])->group(function () {
+// A run is the whole club's (every branch's staff on one sheet): someone tied to a branch opens runs and payouts only with
+// accounting.all_branches (club.finance), and sees their branch's payslips in the employee files.
+Route::prefix('payroll')->name('payroll.')->whereNumber(['run', 'item'])->middleware('club.finance')->group(function () {
     Route::get('/', [PayrollRunController::class, 'index'])->name('index');
     Route::get('/payouts', [PayrollRunController::class, 'payouts'])->name('payouts');
     Route::post('/', [PayrollRunController::class, 'store'])->middleware('can:payroll.prepare')->name('store');

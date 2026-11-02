@@ -144,18 +144,19 @@ class StaffPermissionsTest extends TestCase
             $this->actingAs($nosy)->get($url)->assertForbidden();
         }
 
-        $clerk = $this->holding($club, ['payroll.payslips']);
+        $this->actingAs($this->holding($club, ['payroll.payslips']))->get(route('club.papers.show', ['type' => 'payslip', 'id' => $item->id]))->assertForbidden();
+        $clerk = $this->holding($club, ['payroll.salaries', 'payroll.payslips']);
         $this->actingAs($clerk)->get(route('club.papers.show', ['type' => 'payslip', 'id' => $item->id]))->assertOk()->assertSee('كشف راتب')->assertSee('450.000');
         // Reading it on screen is enough with payroll.payslips; printing it and its PDF also need papers.print.
         $this->actingAs($clerk)->get(route('club.papers.show', ['type' => 'payslip', 'id' => $item->id, 'print' => 1]))->assertForbidden();
         $this->actingAs($clerk)->get(route('club.papers.pdf', ['type' => 'payslip', 'id' => $item->id]))->assertForbidden();
         $this->actingAs($clerk)->get(route('club.payroll.print', ['run' => $run->id, 'item' => $item->id]))->assertForbidden();
-        $clerk = $this->holding($club, ['payroll.payslips', 'papers.print']);
+        $clerk = $this->holding($club, ['payroll.salaries', 'payroll.payslips', 'papers.print']);
         $this->actingAs($clerk)->get(route('club.papers.show', ['type' => 'payslip', 'id' => $item->id, 'print' => 1]))->assertOk();
         $pdf = $this->actingAs($clerk)->get(route('club.papers.pdf', ['type' => 'payslip', 'id' => $item->id]))->assertOk()->assertHeader('Content-Type', 'application/pdf');
         $this->assertStringStartsWith('%PDF', $pdf->getContent());
-        // The bank line is for whoever may also read bank details.
-        $this->actingAs($clerk)->get(route('club.papers.show', ['type' => 'payslip', 'id' => $item->id]))->assertDontSee('3456');
+        // Payslips take seeing salaries and bank details (payroll.salaries): the bank line shows its last four only.
+        $this->actingAs($clerk)->get(route('club.papers.show', ['type' => 'payslip', 'id' => $item->id]))->assertSee('•••• 3456')->assertDontSee('OM810180000001299123456');
         $this->actingAs($this->owner($club))->get(route('club.papers.show', ['type' => 'payslip', 'id' => $item->id]))->assertSee('•••• 3456');
     }
 
@@ -196,9 +197,9 @@ class StaffPermissionsTest extends TestCase
         // A role editor gives only what they hold, and leaves untouched what they do not.
         $editor = $this->holding($club, ['roles.manage', 'members.view', 'checkin.perform']);
         $this->actingAs($editor)->post(route('club.roles.store'), ['name' => 'محاولة', 'permissions' => ['members.view', 'payroll.salaries']])->assertSessionHasErrors('permissions');
-        $role = $this->role($club, ['members.view', 'payroll.pay']);
+        $role = $this->role($club, ['members.view', 'payroll.salaries', 'payroll.pay']);
         $this->actingAs($editor)->put(route('club.roles.update', $role), ['name' => $role->name, 'permissions' => ['checkin.perform', 'payroll.salaries']])->assertSessionHasNoErrors();
-        $this->assertEqualsCanonicalizing(['payroll.pay', 'checkin.perform'], $role->fresh()->permissions);
+        $this->assertEqualsCanonicalizing(['payroll.salaries', 'payroll.pay', 'checkin.perform'], $role->fresh()->permissions);
     }
 
     public function test_a_persons_own_permissions_replace_their_roles_under_the_same_rule(): void

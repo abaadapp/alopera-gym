@@ -4,6 +4,7 @@ namespace App\Core\Papers;
 
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\ClubFinanceRecord;
 use App\Core\Tenancy\TenantContext;
 use App\Models\User;
 use App\Modules\Finance\Papers\CreditNotePaper;
@@ -83,9 +84,13 @@ final class Papers
         return new Paper($tenant, $type, $builder::sample($tenant, $tpl), $tpl, PaperIssuer::resolve($tenant), self::size($tpl, $face), 'sample');
     }
 
-    /** May this user open this record at all (its branch)? */
+    /** May this user open this record at all (its branch, or the club's money for who reaches it)? */
     public static function reachable(User $user, Model $record): bool
     {
+        if ($record instanceof ClubFinanceRecord && $user->reachesClubFinance()) {
+            return true;
+        }
+
         return ! $record instanceof BranchOwned || app(BranchContext::class)->allows($user, $record->owningBranchId());
     }
 

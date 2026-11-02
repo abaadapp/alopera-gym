@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\ClubFinanceRecord;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -21,6 +22,9 @@ class EnforceBranchAccess
         $user = $request->user();
         if ($user?->branch_id) {
             foreach ($request->route()?->parameters() ?? [] as $value) {
+                if ($value instanceof ClubFinanceRecord && $user->reachesClubFinance()) {
+                    continue;
+                }
                 if ($value instanceof BranchOwned) {
                     abort_unless($this->branches->allows($user, $value->owningBranchId()), 404);
                 }
