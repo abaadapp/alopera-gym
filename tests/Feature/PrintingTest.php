@@ -17,6 +17,7 @@ use App\Modules\Inventory\Services\PosDevices;
 use App\Modules\Inventory\Services\PosService;
 use App\Modules\Inventory\Services\PrinterHealth;
 use App\Modules\Inventory\Services\StockService;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\DB;
@@ -328,5 +329,97 @@ class PrintingTest extends TestCase
         $this->assertSame(['printer_on_revoked'], array_column($page->firstWhere('id', $replacement->id)['warnings'], 'code'));
         $this->assertSame([], $page->firstWhere('id', $device->id)['warnings'], 'a stopped device is not assessed');
         $this->asTenant($club, fn () => $this->assertSame(3, $device->peripherals()->count()));
+    }
+
+    public function test_the_tills_receipts_show_amounts_only_to_who_may_see_the_clubs_payments(): void
+    {
+        $club = $this->club();
+        $main = $this->main($club);
+        [$device, $cookie] = $this->device($club, $main);
+        $sale = $this->sale($club, $main, $device);
+        $payment = $this->asTenant($club, fn () => $sale->invoice->payments()->firstOrFail());
+        $props = fn ($user) => $this->withCookie(PosDevices::COOKIE, $cookie)->actingAs($user)->get(route('club.pos.receipts'))->assertOk()->viewData('page')['props'];
+
+        // A cashier (no invoices.view): the receipts, without their amounts or the day's total — left out by the server.
+        $cashier = $this->staff($club, 'cashier', ['branch_id' => $main->id]);
+        $seen = $props($cashier);
+        $this->assertSame([$payment->receipt_number, null, null, false], [$seen['receipts'][0]['receipt'], $seen['receipts'][0]['amount'], $seen['total'], $seen['can']['amounts']]);
+        $this->assertStringNotContainsString('"0.500"', json_encode($seen['receipts']).json_encode($seen['total']));
+        // Their work stays: the receipt prints whole (the customer holds it anyway) and the reprint is logged.
+        $this->withCookie(PosDevices::COOKIE, $cookie)->actingAs($cashier)->get(route('club.payments.receipt', [$payment, 'face' => 'strip', 'format' => 'pdf']))->assertOk();
+        $this->withCookie(PosDevices::COOKIE, $cookie)->actingAs($cashier)->withCredentials()->postJson(route('club.prints.store'), ['document' => 'receipt', 'document_id' => $payment->id, 'trigger' => 'reprint', 'via' => 'native', 'ok' => true, 'printed' => true])->assertOk();
+        $this->assertTrue($seen['can']['print']);
+
+        // Reception and the owner see the club's payments, so they see the amounts and the total.
+        foreach ([$this->staff($club, 'reception', ['branch_id' => $main->id]), $this->owner($club)] as $user) {
+            $seen = $props($user);
+            $this->assertSame(['0.500', '0.500', true], [$seen['receipts'][0]['amount'], $seen['total'], $seen['can']['amounts']]);
+        }
+    }
+
+    public function test_a_device_has_one_default_printer_whatever_saves_at_once(): void
+    {
+        $club = $this->club();
+        $main = $this->main($club);
+        [$device] = $this->device($club, $main);
+        [$other] = $this->device($club, $main);
+        $owner = $this->owner($club);
+        $old = $this->printer($club, $device);
+        $defaults = fn (PosDevice $d) => $this->asTenant($club, fn () => $d->peripherals()->where('is_default', true)->pluck('id')->all());
+        $form = ['type' => 'printer', 'connection' => 'network', 'port' => 9100, 'paper' => '80mm', 'is_active' => true];
+
+        // A new printer saved as default takes the place of the old one in one step (the index never sees two).
+        $this->actingAs($owner)->post(route('club.settings.pos-devices.peripherals.store', $device), $form + ['name' => 'طابعة جديدة', 'address' => '192.168.1.61', 'is_default' => true])->assertSessionHasNoErrors();
+        $new = $this->asTenant($club, fn () => $device->peripherals()->where('name', 'طابعة جديدة')->firstOrFail());
+        $this->assertSame([$new->id], $defaults($device));
+        // One saved without it touches no other printer's choice.
+        $this->actingAs($owner)->post(route('club.settings.pos-devices.peripherals.store', $device), $form + ['name' => 'احتياطية', 'address' => '192.168.1.62'])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->put(route('club.settings.pos-devices.peripherals.update', [$device, $old]), $form + ['name' => $old->name, 'address' => $old->address])->assertSessionHasNoErrors();
+        $this->assertSame([$new->id], $defaults($device));
+        // Another device of the same branch keeps its own default: the scope is the device.
+        $this->actingAs($owner)->post(route('club.settings.pos-devices.peripherals.store', $other), $form + ['name' => 'طابعة الجهاز الثاني', 'address' => '192.168.1.70', 'is_default' => true])->assertSessionHasNoErrors();
+        $this->assertCount(1, $defaults($other));
+        $this->assertSame([$new->id], $defaults($device));
+
+        // Whatever writes it (two saves at once, a script), the database refuses a second default on one device.
+        $this->asTenant($club, function () use ($device) {
+            try {
+                DB::transaction(fn () => $device->peripherals()->create(['type' => 'printer', 'name' => 'ثانية', 'connection' => 'browser', 'paper' => '80mm', 'is_default' => true, 'is_active' => true]));
+                $this->fail('a second default printer was saved');
+            } catch (QueryException $e) {
+                $this->assertStringContainsString('pos_peripherals_one_default_printer', $e->getMessage());
+            }
+        });
+        $this->assertSame([$new->id], $defaults($device));
+    }
+
+    public function test_the_migration_keeps_the_printer_receipts_go_to_and_touches_no_other(): void
+    {
+        $club = $this->club();
+        $main = $this->main($club);
+        [$doubled] = $this->device($club, $main);
+        [$single] = $this->device($club, $main);
+        [$stopped] = $this->device($club, $main);
+        $migration = require base_path('app/Modules/Inventory/Database/migrations/2026_11_03_000100_one_default_printer_per_device.php');
+        $migration->down();
+
+        // As a database might hold them before the index: two or three defaults on a device.
+        [$printing, $rows] = $this->asTenant($club, function () use ($doubled, $single, $stopped) {
+            $add = fn (PosDevice $d, string $name, bool $active) => $d->peripherals()->create(['type' => 'printer', 'name' => $name, 'connection' => 'browser', 'paper' => '80mm', 'is_default' => true, 'is_active' => $active])->id;
+            $ids = ['off' => $add($doubled, 'موقوفة', false), 'used' => $add($doubled, 'المستعملة', true), 'newer' => $add($doubled, 'الأحدث', true),
+                'single' => $add($single, 'وحيدة', true), 'a' => $add($stopped, 'أ', false), 'b' => $add($stopped, 'ب', false)];
+
+            return [$doubled->fresh()->load('peripherals')->printer()->id, $ids];
+        });
+        $before = $this->asTenant($club, fn () => PosPeripheral::orderBy('id')->get(['id', 'name', 'is_active', 'auto_print', 'paper'])->toArray());
+        $migration->up();
+
+        $this->asTenant($club, function () use ($rows, $printing, $doubled, $before) {
+            $default = PosPeripheral::where('is_default', true)->orderBy('id')->pluck('id')->all();
+            // The printer receipts went to stays the default; a device with one default is not touched at all.
+            $this->assertSame([$rows['used'], $rows['single'], $rows['a']], $default);
+            $this->assertSame($printing, $doubled->fresh()->load('peripherals')->printer()->id);
+            $this->assertSame($before, PosPeripheral::orderBy('id')->get(['id', 'name', 'is_active', 'auto_print', 'paper'])->toArray(), 'nothing else changes');
+        });
     }
 }

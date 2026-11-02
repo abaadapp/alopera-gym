@@ -157,9 +157,15 @@ class PosController extends Controller
     /**
      * Today's receipts at the point of sale: every payment taken here (products, memberships, packages), newest first,
      * in the branch the till serves — to reprint one, or to void a product sale (sales.refund).
+     *
+     * The amounts and the day's total go only to whoever may see the club's payments (invoices.view, the payments
+     * screen's own permission): left out of the answer itself, not hidden on the page, or anyone at the till would add
+     * up the day's takings and each colleague's. Finding a receipt by its number or customer, reprinting it and voiding a
+     * sale stay as they were; a single receipt still prints whole, as the customer holds it anyway.
      */
     public function receipts(Request $request): Response
     {
+        $amounts = $request->user()->can('invoices.view');
         $device = $this->devices->current($request);
         $branch = $device?->branch_id ?? $this->branches->id();
         $payments = Payment::with(['invoice:id,number,type,customer_name,billable_type,billable_id', 'receiver:id,name'])
@@ -177,13 +183,13 @@ class PosController extends Controller
                 'kind' => ['pos' => 'منتجات', 'membership' => 'عضوية', 'pt' => 'تدريب شخصي'][$p->invoice?->type] ?? 'أخرى',
                 'customer' => $p->invoice?->customer_name,
                 'method' => $p->method,
-                'amount' => $p->amount,
+                'amount' => $amounts ? $p->amount : null,
                 'time' => $p->paid_at?->format('H:i'),
                 'cashier' => $p->receiver?->name,
                 'sale' => ($sale = $sales[$p->invoice_id] ?? null) ? ['id' => $sale->id, 'number' => $sale->number, 'voided' => $sale->status === Sale::VOIDED] : null,
             ]),
-            'total' => Money::normalize($payments->reduce(fn ($sum, Payment $p) => Money::add($sum, $p->amount), '0')),
-            'can' => ['refund' => $request->user()->can('sales.refund'), 'print' => $request->user()->can('papers.print'), 'invoices' => $request->user()->can('invoices.view')],
+            'total' => $amounts ? Money::normalize($payments->reduce(fn ($sum, Payment $p) => Money::add($sum, $p->amount), '0')) : null,
+            'can' => ['refund' => $request->user()->can('sales.refund'), 'print' => $request->user()->can('papers.print'), 'invoices' => $request->user()->can('invoices.view'), 'amounts' => $amounts],
             // A receipt printed again goes to this till's printer, through the printing layer.
             'printer' => $device?->loadMissing('peripherals')->printer()?->forPrinting(),
         ]);

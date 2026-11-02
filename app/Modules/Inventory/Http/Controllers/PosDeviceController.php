@@ -141,8 +141,9 @@ class PosDeviceController extends Controller
     public function storePeripheral(Request $request, PosDevice $device): RedirectResponse
     {
         $data = $this->peripheral($request);
-        DB::transaction(function () use ($device, $request, $data) {
-            $this->singleDefault($device, $request, $device->peripherals()->create($data));
+        DB::transaction(function () use ($device, $data) {
+            $this->takeDefault($device, $data);
+            $device->peripherals()->create($data);
         });
 
         return back()->with('success', 'أُضيف الملحق.');
@@ -152,9 +153,9 @@ class PosDeviceController extends Controller
     {
         abort_unless($peripheral->pos_device_id === $device->id, 404);
         $data = $this->peripheral($request);
-        DB::transaction(function () use ($device, $request, $peripheral, $data) {
+        DB::transaction(function () use ($device, $peripheral, $data) {
+            $this->takeDefault($device, $data, $peripheral);
             $peripheral->update($data);
-            $this->singleDefault($device, $request, $peripheral);
         });
 
         return back()->with('success', 'حُفظ الملحق.');
@@ -243,12 +244,20 @@ class PosDeviceController extends Controller
         return $data;
     }
 
-    /** One default printer per device: the one just saved as default takes the place of the other (two saves at once queue on the device's row). */
-    private function singleDefault(PosDevice $device, Request $request, PosPeripheral $keep): void
+    /**
+     * One default printer per device, held by the database too (pos_peripherals_one_default_printer): the printer saved
+     * as default takes the other's place before it is written, and the device's row is locked first, so two saves at
+     * the same moment queue instead of meeting the index. A save that does not make a printer default touches no other.
+     *
+     * @param  array<string, mixed>  $data  the validated printer (is_default is false for anything but a printer)
+     */
+    private function takeDefault(PosDevice $device, array $data, ?PosPeripheral $self = null): void
     {
-        if ($request->boolean('is_default') && $request->input('type') === 'printer') {
-            PosDevice::whereKey($device->id)->lockForUpdate()->first();
-            $device->peripherals()->where('type', 'printer')->whereKeyNot($keep->id)->update(['is_default' => false]);
+        if (! ($data['is_default'] ?? false)) {
+            return;
         }
+        PosDevice::whereKey($device->id)->lockForUpdate()->first();
+        $device->peripherals()->where('type', 'printer')->where('is_default', true)
+            ->when($self, fn ($q) => $q->whereKeyNot($self->id))->update(['is_default' => false]);
     }
 }

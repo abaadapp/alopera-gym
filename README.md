@@ -32,7 +32,7 @@
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — النشر على DigitalOcean (خادم مخصص لـ Alopera)
 - [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) — اختبارات القبول وطريقة التحقق
 - [docs/REMAINING.md](docs/REMAINING.md) — ما لم يكتمل أو لم يُختبر، والمتطلبات الخارجية
-- [docs/ABAAD.md](docs/ABAAD.md) — العلاقة مع مشروع أبعاد وخطة الدمج المستقبلي
+- [docs/ABAAD.md](docs/ABAAD.md) — العلاقة مع مشروع أبعاد، ومكونات الطباعة المأخوذة منه، وخطة الدمج المستقبلي
 
 ---
 

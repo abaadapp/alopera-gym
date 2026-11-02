@@ -16,6 +16,7 @@
 - **العقد بين الطرفين:** [`PROTOCOL.md`](PROTOCOL.md)، وهو ملزم.
 - **المتّجهات المشتركة:** [`shared/fixtures/printing-vectors.json`](shared/fixtures/printing-vectors.json)، ويمرّ عليها التطبيقان في اختباراتهما.
 - **إيصالات الاختبار الطويلة:** [`shared/fixtures/receipts/`](shared/fixtures/receipts/)، يولّدها محرك الأوراق في الجم (`PRINT_FIXTURES=1 php artisan test --filter=ThermalStripPdfTest`).
+- **الأصل:** التطبيقان وجسرهما ونواة الطباعة مأخوذة من مكونات الطباعة في أبعاد (لمالك المشروعين نفسه) بهوية Alopera Gym. ما نُقل وما كُتب للجم وما لم يُنقل في [`docs/ABAAD.md`](../docs/ABAAD.md).
 
 ## لماذا صورة لا نصّ؟
 

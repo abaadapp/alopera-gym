@@ -77,8 +77,10 @@ class PosBasketTest extends TestCase
             $this->assertSame($first->ends_on->addDay()->toDateString(), $renewal->starts_on->toDateString());
         });
 
-        // Today's receipts list every payment taken here.
+        // Today's receipts list every payment taken here; the amounts and the total only for who sees the club's payments.
         $this->actingAs($cashier)->get(route('club.pos.receipts'))->assertOk()->assertInertia(fn ($page) => $page
+            ->component('Inventory/PosReceipts')->has('receipts', 4)->where('total', null)->where('receipts.0.amount', null));
+        $this->actingAs($this->owner($club))->get(route('club.pos.receipts'))->assertOk()->assertInertia(fn ($page) => $page
             ->component('Inventory/PosReceipts')->has('receipts', 4)->where('total', '106.000'));
     }
 

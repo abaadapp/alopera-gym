@@ -18,7 +18,8 @@ interface Row {
     kind: string;
     customer: string | null;
     method: string;
-    amount: string;
+    /** Only for whoever may see the club's payments (null otherwise, from the server). */
+    amount: string | null;
     time: string | null;
     cashier: string | null;
     sale: { id: number; number: string; voided: boolean } | null;
@@ -29,7 +30,7 @@ interface Row {
  * reprint one on the till's printer, or to void a product sale (sales.refund: stock back, money refunded by a credit
  * note). A membership or package is refunded from its invoice, by whoever may issue credit notes.
  */
-export default function PosReceipts({ receipts, total, can, printer = null }: { receipts: Row[]; total: string; can: { refund: boolean; print: boolean; invoices: boolean }; printer?: PrinterLike | null }) {
+export default function PosReceipts({ receipts, total, can, printer = null }: { receipts: Row[]; total: string | null; can: { refund: boolean; print: boolean; invoices: boolean; amounts: boolean }; printer?: PrinterLike | null }) {
     const currency = useCurrency();
     // Printing a receipt again is a reprint in the log, on this till's printer through the printing layer.
     const reprint = usePrint(printer, { inPage: true });
@@ -51,7 +52,8 @@ export default function PosReceipts({ receipts, total, can, printer = null }: { 
         { key: 'cashier', header: 'الموظف', cell: (r) => <span className="text-[#6b7280]">{r.cashier ?? '—'}</span> },
         { key: 'method', header: 'طريقة الدفع', cell: (r) => paymentMethod[r.method] ?? r.method },
         { key: 'time', header: 'الوقت', cell: (r) => <span className="num text-[#6b7280]">{r.time}</span> },
-        { key: 'amount', header: 'المبلغ', align: 'end', cell: (r) => (r.sale?.voided ? <Badge tone="gray">ملغاة</Badge> : <span className="font-semibold tabular-nums">{money(r.amount, currency)}</span>) },
+        // Without the amounts the column still says which sale was voided.
+        { key: 'amount', header: can.amounts ? 'المبلغ' : 'الحالة', align: 'end', cell: (r) => (r.sale?.voided ? <Badge tone="gray">ملغاة</Badge> : r.amount !== null ? <span className="font-semibold tabular-nums">{money(r.amount, currency)}</span> : <span className="text-[#9ca3af]">—</span>) },
         {
             key: 'actions',
             header: <span className="sr-only">إجراءات</span>,
@@ -83,7 +85,7 @@ export default function PosReceipts({ receipts, total, can, printer = null }: { 
             <div className="mx-auto max-w-6xl p-4">
                 <div className="mb-4 flex items-center justify-between gap-3">
                     <h1 className="text-[20px] font-bold text-[#111]">إيصالات اليوم</h1>
-                    <span className="text-sm text-gray-500"><span className="num">{receipts.length}</span> إيصال · <span className="num">{money(total, currency)}</span></span>
+                    <span className="text-sm text-gray-500"><span className="num">{receipts.length}</span> إيصال{total !== null && <> · <span className="num">{money(total, currency)}</span></>}</span>
                 </div>
                 {can.print && <PrintStatus state={reprint.state} onRetry={() => void reprint.retry()} onOpen={() => void reprint.open()} onShare={reprint.state.job ? () => void reprint.print(reprint.state.job!, 'reprint') : undefined} className="mb-3" />}
                 <Card padded={false} className="mb-3 p-3">
