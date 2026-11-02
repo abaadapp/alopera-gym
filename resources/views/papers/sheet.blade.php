@@ -137,9 +137,9 @@
                     <tr>
                         @foreach ($table['columns'] as $i => $col)
                             @if ($i === 0)
-                                <td class="item" dir="{{ \App\Core\Papers\PaperFormat::dir($row[$col['key']] ?? '') }}">{{ \App\Core\Papers\PaperFormat::bidi($row[$col['key']] ?? '') }}
+                                <td class="item" dir="{{ \App\Core\Papers\PaperFormat::dir($row[$col['key']] ?? '') }}">{{ \App\Core\Papers\PaperFormat::bidi($row[$col['key']] ?? '', \App\Core\Papers\PaperFormat::dir($row[$col['key']] ?? '')) }}
                                     @foreach (array_filter($row['notes'] ?? []) as $note)
-                                        <div class="note" dir="{{ \App\Core\Papers\PaperFormat::dir($note) }}">{{ \App\Core\Papers\PaperFormat::bidi($note) }}</div>
+                                        <div class="note" dir="{{ \App\Core\Papers\PaperFormat::dir($note) }}">{{ \App\Core\Papers\PaperFormat::bidi($note, \App\Core\Papers\PaperFormat::dir($note)) }}</div>
                                     @endforeach
                                 </td>
                             @else
@@ -192,7 +192,7 @@
                         <table class="rows" width="100%">
                             @foreach ($panel['rows'] as $r)
                                 <tr>
-                                    <td class="lbl2" style="width:70%">{{ $r['label'] }}@if (filled($r['sub'] ?? null))<div style="text-align:{{ $ltr ? 'left' : 'right' }}"><span dir="{{ \App\Core\Papers\PaperFormat::dir($r['sub']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['sub']) }}</span></div>@endif</td>
+                                    <td class="lbl2" style="width:70%">{{ $r['label'] }}@if (filled($r['sub'] ?? null))<div style="text-align:{{ $ltr ? 'left' : 'right' }}"><span dir="{{ \App\Core\Papers\PaperFormat::dir($r['sub']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['sub'], \App\Core\Papers\PaperFormat::dir($r['sub'])) }}</span></div>@endif</td>
                                     <td class="amt" style="width:30%"><span dir="ltr" class="{{ ($r['strong'] ?? false) ? 'b' : '' }}">{{ $r['value'] }}</span></td>
                                 </tr>
                             @endforeach
@@ -224,7 +224,8 @@
     <div class="spacer"></div>
     <div class="closezone">
         @if ($footer !== '')
-            <div class="foot">{{ $footer }}</div>
+            {{-- Each line in its own direction, aligned with the paper: an English line ends with its full stop. --}}
+            <div class="foot">@foreach (preg_split('/\R/u', \App\Core\Papers\PaperFormat::printable($footer)) as $line)<div dir="{{ \App\Core\Papers\PaperFormat::dir($line) }}" style="text-align:{{ $ltr ? 'left' : 'right' }}">{{ $line === '' ? "\u{00A0}" : \App\Core\Papers\PaperFormat::bidi($line, \App\Core\Papers\PaperFormat::dir($line)) }}</div>@endforeach</div>
         @endif
         @unless ($pdf)
             <div class="docfoot">{{ $issuer['name'] ?? '' }} · <span dir="ltr">{{ $doc['number'] }}</span></div>

@@ -38,19 +38,19 @@
     <div class="s-rule"></div>
     <table class="s-rows">
         @foreach ($meta as $f)
-            <tr><td class="muted">{{ $f['label'] }}</td><td class="v" dir="{{ ($f['ltr'] ?? false) ? 'ltr' : 'auto' }}">{{ $f['value'] }}</td></tr>
+            <tr><td class="muted">{{ $f['label'] }}</td><td class="v" dir="{{ ($f['ltr'] ?? false) ? 'ltr' : \App\Core\Papers\PaperFormat::dir($f['value']) }}">{{ \App\Core\Papers\PaperFormat::bidi($f['value'], ($f['ltr'] ?? false) ? 'ltr' : \App\Core\Papers\PaperFormat::dir($f['value'])) }}</td></tr>
         @endforeach
         @foreach ($parties as $p)
-            <tr><td class="muted">{{ $p['caption'] }}</td><td class="v">{{ array_values(array_filter($p['lines']))[0] }}</td></tr>
+            <tr><td class="muted">{{ $p['caption'] }}</td><td class="v">{{ \App\Core\Papers\PaperFormat::bidi(array_values(array_filter($p['lines']))[0]) }}</td></tr>
         @endforeach
     </table>
     @if ($table)
         <div class="s-rule"></div>
         <table class="s-rows">
             @forelse ($table['rows'] as $row)
-                <tr><td colspan="2" class="s-item" dir="{{ \App\Core\Papers\PaperFormat::dir($row['name'] ?? '') }}">{{ \App\Core\Papers\PaperFormat::bidi($row['name'] ?? '') }}</td></tr>
+                <tr><td colspan="2" class="s-item" dir="{{ \App\Core\Papers\PaperFormat::dir($row['name'] ?? '') }}">{{ \App\Core\Papers\PaperFormat::bidi($row['name'] ?? '', \App\Core\Papers\PaperFormat::dir($row['name'] ?? '')) }}</td></tr>
                 @foreach (array_filter($row['notes'] ?? []) as $note)
-                    <tr><td colspan="2" class="s-sub" dir="{{ \App\Core\Papers\PaperFormat::dir($note) }}">{{ \App\Core\Papers\PaperFormat::bidi($note) }}</td></tr>
+                    <tr><td colspan="2" class="s-sub" dir="{{ \App\Core\Papers\PaperFormat::dir($note) }}">{{ \App\Core\Papers\PaperFormat::bidi($note, \App\Core\Papers\PaperFormat::dir($note)) }}</td></tr>
                 @endforeach
                 @if (isset($row['qty']) || isset($row['total']))
                     <tr>
@@ -80,7 +80,7 @@
     @foreach ($panels as $panel)
         <div class="s-rule"></div>
         <div class="b">{{ $panel['caption'] }}</div>
-        @if (filled($panel['text'] ?? null))<div dir="{{ \App\Core\Papers\PaperFormat::dir($panel['text']) }}" style="white-space:pre-line">{{ \App\Core\Papers\PaperFormat::bidi($panel['text']) }}</div>@endif
+        @if (filled($panel['text'] ?? null))<div dir="{{ \App\Core\Papers\PaperFormat::dir($panel['text']) }}" style="white-space:pre-line">{{ \App\Core\Papers\PaperFormat::bidi($panel['text'], \App\Core\Papers\PaperFormat::dir($panel['text'])) }}</div>@endif
         @if (count($panel['rows'] ?? []) > 0)
             <table class="s-rows">
                 @foreach ($panel['rows'] as $r)
@@ -97,7 +97,8 @@
     @endif
     @if ($footer !== '')
         <div class="s-rule"></div>
-        <div class="s-foot">{{ $footer }}</div>
+        {{-- Each line centred in its own direction: an English line ends with its full stop, not before it. --}}
+        <div class="s-foot">@foreach (preg_split('/\R/u', \App\Core\Papers\PaperFormat::printable($footer)) as $line)<div dir="{{ \App\Core\Papers\PaperFormat::dir($line) }}">{{ $line === '' ? "\u{00A0}" : \App\Core\Papers\PaperFormat::bidi($line, \App\Core\Papers\PaperFormat::dir($line)) }}</div>@endforeach</div>
     @endif
     <div class="s-center s-sub" style="margin-top:4pt" dir="ltr">{{ $doc['number'] }}</div>
 </div>

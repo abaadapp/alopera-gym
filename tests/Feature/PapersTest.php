@@ -203,13 +203,15 @@ class PapersTest extends TestCase
             $record = $latest ?? $payroll[$type];
             $values = ['header' => 'ترويسة '.$type, 'footer' => 'تذييل '.$type, 'font' => 'large'] + PaperTypes::settings($club->fresh(), $type);
             $faces = isset($values['strip']) ? ['sheet', 'strip'] : ['sheet'];
+            // The footer as a paper draws typed text (a run like «credit_note» kept left to right).
+            $foot = PaperFormat::bidi('تذييل '.$type)->toHtml();
 
             foreach ($faces as $face) {
                 $preview = $this->actingAs($owner)->postJson(route('club.settings.papers.preview', $type), $values + ['face' => $face])->assertOk()->json('html');
-                $this->assertStringContainsString('تذييل '.$type, $preview, "$type $face: the preview draws the unsaved template");
+                $this->assertStringContainsString($foot, $preview, "$type $face: the preview draws the unsaved template");
                 $this->actingAs($owner)->put(route('club.settings.papers.update', $type), $values)->assertSessionHasNoErrors();
                 $printed = $this->actingAs($owner)->get(route('club.papers.show', ['type' => $type, 'id' => $record->id, 'face' => $face]))->assertOk()->getContent();
-                $this->assertStringContainsString('تذييل '.$type, $printed, "$type $face: the print page draws the saved template");
+                $this->assertStringContainsString($foot, $printed, "$type $face: the print page draws the saved template");
                 $latest !== null
                     ? $this->assertSame($preview, $printed, "$type $face: the preview is the printed paper")
                     : $this->assertSame($style($preview), $style($printed), "$type $face: the sample is drawn with the printed paper's own stylesheet");

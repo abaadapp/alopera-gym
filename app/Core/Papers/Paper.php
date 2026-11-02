@@ -2,7 +2,9 @@
 
 namespace App\Core\Papers;
 
+use App\Core\Audit\AuditLogger;
 use App\Models\Tenant;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Mpdf\Config\ConfigVariables;
@@ -19,6 +21,7 @@ final class Paper
      * @param  array<string, mixed>  $doc  what to print (see papers/sheet.blade.php)
      * @param  array<string, mixed>  $tpl  the club's settings for this paper
      * @param  array<string, string>  $issuer  the club identity printed on it
+     * @param  Model|null  $record  the document drawn (none for a sample or a test page)
      */
     public function __construct(
         public readonly Tenant $tenant,
@@ -28,6 +31,7 @@ final class Paper
         public readonly array $issuer,
         public readonly string $size,
         public readonly string $filename,
+        public readonly ?Model $record = null,
     ) {}
 
     public function isStrip(): bool
@@ -90,11 +94,32 @@ final class Paper
     {
         if ($request->string('format')->toString() === 'pdf') {
             abort_unless($request->user()?->can('papers.print'), 403, 'ملف PDF يحتاج صلاحية «طباعة المستندات».');
+            $this->printed('pdf', $request->boolean('download'));
 
             return $this->pdf($request->boolean('download'));
         }
 
-        return $this->page($request->has('print') ? $request->boolean('print') : $print);
+        $autoprint = $request->has('print') ? $request->boolean('print') : $print;
+        if ($autoprint) {
+            $this->printed('page');
+        }
+
+        return $this->page($autoprint);
+    }
+
+    /**
+     * Who printed which document, in the audit trail: a sheet sent to the print dialog or taken as a PDF. Reading the
+     * paper on screen is not printing; a till's receipt strip has the print log of its device instead.
+     */
+    public function printed(string $format, bool $download = false): void
+    {
+        if ($this->record === null || $this->isStrip()) {
+            return;
+        }
+
+        app(AuditLogger::class)->log('paper.printed', $this->record, [
+            'paper' => $this->type, 'number' => $this->doc['number'] ?? null, 'size' => $this->size, 'format' => $format, 'download' => $download,
+        ]);
     }
 
     private function sheetBytes(): string

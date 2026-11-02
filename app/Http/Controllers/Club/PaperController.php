@@ -31,6 +31,7 @@ class PaperController extends Controller
     {
         $paper = $this->paper($request, $type, $id);
         abort_unless($request->user()->can('papers.print'), 403, 'ملف PDF يحتاج صلاحية «طباعة المستندات».');
+        $paper->printed('pdf', $request->boolean('download'));
 
         return $paper->pdf($request->boolean('download'));
     }

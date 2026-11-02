@@ -61,7 +61,7 @@ final class Papers
             $tpl = $builder::tailor($record, $tpl);
         }
 
-        return new Paper($tenant, $type, $builder::document($record, $tpl, $tenant), $tpl, $builder::issuer($record, $tenant), self::size($tpl, $face, $size), $builder::filename($record));
+        return new Paper($tenant, $type, $builder::document($record, $tpl, $tenant), $tpl, $builder::issuer($record, $tenant), self::size($tpl, $face, $size), $builder::filename($record), $record);
     }
 
     /**

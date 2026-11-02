@@ -12,10 +12,11 @@ import { failureMessage, insideApp, printDocument, stageMessage, testPrinter } f
 import type { PrinterLike, PrintOutcome, PrintStage } from '@/lib/printing/types';
 
 interface Peripheral { id: number; type: string; name: string; brand: string | null; model: string | null; connection: string; address: string | null; port: number | null; paper_width: number | null; paper: string | null; direct: boolean; printing: PrinterLike | null; is_default: boolean; auto_print: boolean; print_website_orders: boolean; is_active: boolean; notes: string | null; last_status: string | null; last_error: string | null; last_checked_at: string | null }
+interface Warning { level: 'certain' | 'check'; code: string; message: string; peripheral: number | null }
 interface PrintLog { id: number; at: string; document: string; number: string | null; trigger: string; via: string | null; status: 'claimed' | 'printed' | 'opened' | 'failed'; message: string | null; may_have_printed: boolean; printer: string | null; by: string | null }
 interface Device {
     id: number; name: string; status: 'pending' | 'active' | 'revoked'; branch_id: number; branch: string | null; settlement_account_id: number | null; settlement_account: string | null; sales_count: number; revoke_reason: string | null;
-    activated_by: string | null; activated_at: string | null; last_seen: string | null; last_seen_at: string | null; code_expires_at: string | null; code_expired: boolean; is_this: boolean; auto_print: boolean; errors: string[]; peripherals: Peripheral[]; logs: PrintLog[];
+    activated_by: string | null; activated_at: string | null; last_seen: string | null; last_seen_at: string | null; code_expires_at: string | null; code_expired: boolean; is_this: boolean; auto_print: boolean; errors: string[]; warnings: Warning[]; peripherals: Peripheral[]; logs: PrintLog[];
 }
 interface Props {
     devices: Device[];
@@ -90,6 +91,11 @@ export default function PosDevices({ devices, code, branches, accounts, policy, 
                                                     <p className="font-medium text-ink">{d.name}{d.is_this && <span className="ms-2 rounded-full bg-[#eef2ff] px-2 py-0.5 text-[11px] text-[#4338ca]">هذا الجهاز</span>}</p>
                                                     {d.settlement_account && <p className="text-[11px] text-[#9ca3af]">جهاز البطاقات يودع في: {d.settlement_account}</p>}
                                                     {d.errors.length > 0 && <p className="flex items-center gap-1 text-[11px] text-red-700"><AlertTriangle className="size-3" />{d.errors[0]}</p>}
+                                                    {d.warnings.length > 0 && (
+                                                        <button type="button" onClick={() => setHardware(d)} className="flex items-center gap-1 text-start text-[11px] text-amber-700 hover:underline">
+                                                            <AlertTriangle className="size-3 shrink-0" />{d.warnings.some((w) => w.level === 'certain') ? 'في إعداد الطابعات ما يمنع الإيصال' : 'في إعداد الطابعات ما يحتاج مراجعة'}{d.warnings.length > 1 && ` (${number(d.warnings.length)})`}
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         </td>
@@ -183,6 +189,7 @@ function PeripheralsDialog({ device, options, onClose }: { device: Device; optio
                             <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={cn('flex-1 rounded-[8px] px-3 py-1.5 font-medium', tab === k ? 'bg-white text-ink shadow-sm' : 'text-muted')}>{label}</button>
                         ))}
                     </div>
+                    {tab === 'hardware' && <PrinterWarnings warnings={device.warnings} />}
                     {tab === 'log' ? <PrintLogList logs={device.logs} /> : device.peripherals.length === 0 ? (
                         <p className="py-6 text-center text-[13px] text-muted">لا ملحقات بعد.</p>
                     ) : (
@@ -258,6 +265,22 @@ function PrinterCheck({ device, printer }: { device: Device; printer: Peripheral
                 <p className="flex items-start gap-1.5 text-[#b91c1c]" role="alert"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" />{outcome.connected ? 'تم الاتصال بالطابعة، ' : ''}{failureMessage(outcome.code)}</p>
             ))}
         </div>
+    );
+}
+
+/** What keeps this device's receipts from coming out as its settings say: told here, mended by the manager. */
+function PrinterWarnings({ warnings }: { warnings: Warning[] }) {
+    if (warnings.length === 0) return null;
+
+    return (
+        <ul className="mb-3 space-y-1.5" aria-label="تنبيهات الطابعات">
+            {warnings.map((w, i) => (
+                <li key={`${w.code}-${w.peripheral ?? i}`} className={cn('flex gap-2 rounded-[10px] border px-3 py-2 text-[12px] leading-5', w.level === 'certain' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-line bg-[#f7f7f5] text-[#4b4b4b]')}>
+                    <AlertTriangle className={cn('mt-0.5 size-3.5 shrink-0', w.level === 'certain' ? 'text-amber-600' : 'text-[#9ca3af]')} />
+                    <span>{w.message}</span>
+                </li>
+            ))}
+        </ul>
     );
 }
 

@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Core\Papers\PaperFormat;
+use App\Core\Papers\Papers;
 use App\Models\Branch;
 use App\Models\Role;
 use App\Models\Tenant;
@@ -13,9 +15,11 @@ use App\Modules\Inventory\Models\Sale;
 use App\Modules\Inventory\Rules\PrinterAddress;
 use App\Modules\Inventory\Services\PosDevices;
 use App\Modules\Inventory\Services\PosService;
+use App\Modules\Inventory\Services\PrinterHealth;
 use App\Modules\Inventory\Services\StockService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
 
@@ -227,5 +231,102 @@ class PrintingTest extends TestCase
         $this->asTenant($club, function () use ($legacy) {
             $this->assertSame(['browser', '58mm', 58, false], [$legacy->forPrinting()['connection'], $legacy->paperSize(), $legacy->forPrinting()['paper_width'], $legacy->printsDirect()]);
         });
+    }
+
+    public function test_typed_text_prints_what_the_font_draws_in_the_order_it_was_written(): void
+    {
+        // Emoji and pictographs come out as empty boxes on the PDF and the receipt printer: the paper leaves them out.
+        $this->assertSame('شكرًا لزيارتكم', PaperFormat::printable('شكرًا لزيارتكم 🌹 💪'));
+        $this->assertSame("خلود\nتابعونا", PaperFormat::printable("خلود 👍🏽\nتابعونا"));
+        $this->assertSame('تَمْرِينٌ ـ © ± ←', PaperFormat::printable('تَمْرِينٌ ـ © ± ←'), 'Arabic marks, tatweel and the symbols the font has stay');
+        // A handle, a phone number with its groups, an e-mail and a date are each kept left to right, whole.
+        $html = PaperFormat::bidi("تابعونا @alopera.gym أو اتصل +968 9123 4567\ninfo@alopera.om · 2026-11-03")->toHtml();
+        $this->assertStringContainsString('<bdo dir="ltr">@alopera.gym</bdo>', $html);
+        $this->assertStringContainsString('<bdo dir="ltr">+968 9123 4567</bdo>', $html);
+        $this->assertStringContainsString('<br>', $html, 'a line break is a <br>: the PDF engine ignores pre-line');
+        $this->assertStringContainsString('<bdo dir="ltr">info@alopera.om · 2026-11-03</bdo>', $html);
+        // A lone word or number needs nothing; what was typed is escaped once.
+        $this->assertSame('باقة 8 جلسات Gold', PaperFormat::bidi('باقة 8 جلسات Gold')->toHtml());
+        $this->assertSame('<bdo dir="ltr">A&amp;B Co</bdo>', PaperFormat::bidi('A&B Co')->toHtml());
+        $this->assertSame('عرض &lt;script&gt;', PaperFormat::bidi('عرض <script>')->toHtml());
+        $this->assertSame('اشتراك، <bdo dir="ltr">Visa / Master</bdo>', PaperFormat::bidi('اشتراك، Visa / Master')->toHtml());
+        // In a left-to-right element the runs read right already: nothing is wrapped there.
+        $this->assertSame('Instagram: @alopera.gym', PaperFormat::bidi('Instagram: @alopera.gym 📸', 'ltr')->toHtml());
+
+        // On the receipt: each footer line in its own direction, emoji gone, the same in the print page and the PDF.
+        $club = $this->club();
+        $sale = $this->sale($club, $this->main($club));
+        $this->asTenant($club, function () use ($club, $sale) {
+            $club->forceFill(['settings' => array_replace_recursive($club->settings ?? [], ['papers' => ['sale' => ['footer' => "شكرًا لزيارتكم 🌹\nIf you can read this, the printer is ready."]]])])->save();
+            foreach ([false, true] as $pdf) {
+                $html = Papers::for('sale', $sale->fresh(), null, 'strip')->html(pdf: $pdf);
+                $this->assertStringContainsString('<div dir="rtl">شكرًا لزيارتكم</div><div dir="ltr">If you can read this, the printer is ready.</div>', $html);
+                $this->assertStringNotContainsString('🌹', $html);
+            }
+        });
+    }
+
+    public function test_a_document_sent_to_print_is_in_the_audit_trail_and_reading_it_is_not(): void
+    {
+        $club = $this->club();
+        $main = $this->main($club);
+        $sale = $this->sale($club, $main);
+        $owner = $this->owner($club);
+        $printed = fn () => $this->asTenant($club, fn () => DB::table('audit_logs')->where('event', 'paper.printed')->orderBy('id')->get());
+
+        // Reading the paper on screen, and a till's receipt strip (it has its device's print log), are not.
+        $this->actingAs($owner)->get(route('club.papers.show', ['type' => 'invoice', 'id' => $sale->invoice_id]))->assertOk();
+        $this->actingAs($owner)->get(route('club.sales.receipt', [$sale, 'format' => 'pdf']))->assertOk();
+        $this->assertCount(0, $printed());
+
+        // The print page with its dialog, the PDF the app prints, and the PDF taken away are, with who and what.
+        $this->actingAs($owner)->get(route('club.invoices.print', $sale->invoice_id))->assertOk();
+        $this->actingAs($owner)->get(route('club.papers.show', ['type' => 'invoice', 'id' => $sale->invoice_id, 'format' => 'pdf']))->assertOk();
+        $this->actingAs($owner)->get(route('club.papers.pdf', ['type' => 'invoice', 'id' => $sale->invoice_id, 'download' => 1]))->assertOk();
+        $rows = $printed();
+        $this->assertCount(3, $rows);
+        $number = $this->asTenant($club, fn () => $sale->invoice->number);
+        $this->assertSame(['page', 'pdf', 'pdf'], $rows->map(fn ($r) => json_decode($r->properties, true)['format'])->all());
+        $this->assertSame([$number, 'invoice', true], [json_decode($rows[2]->properties, true)['number'], json_decode($rows[2]->properties, true)['paper'], json_decode($rows[2]->properties, true)['download']]);
+        $this->assertSame([$owner->id, $sale->invoice_id, $club->id], [(int) $rows[0]->actor_id, (int) $rows[0]->subject_id, (int) $rows[0]->tenant_id]);
+    }
+
+    public function test_the_devices_screen_says_what_keeps_a_receipt_from_coming_out_and_mends_nothing(): void
+    {
+        $club = $this->club();
+        $main = $this->main($club);
+        [$device] = $this->device($club, $main);
+        $owner = $this->owner($club);
+        $codes = fn () => collect($this->actingAs($owner)->get(route('club.settings.pos-devices'))->assertOk()->viewData('page')['props']['devices'])
+            ->firstWhere('id', $device->id)['warnings'];
+
+        // Two printers and none default: receipts go to the older one, always, and the screen asks to choose.
+        $first = $this->printer($club, $device, ['is_default' => false, 'auto_print' => false]);
+        $second = $this->printer($club, $device, ['name' => 'طابعة المكتب', 'address' => '192.168.1.60', 'is_default' => false, 'auto_print' => true]);
+        $this->asTenant($club, fn () => $this->assertSame($first->id, $device->fresh()->load('peripherals')->printer()->id));
+        $warnings = $codes();
+        $this->assertSame(['no_default', 'auto_elsewhere'], array_column($warnings, 'code'));
+        $this->assertSame([PrinterHealth::CHECK, PrinterHealth::CERTAIN], array_column($warnings, 'level'));
+
+        // Choosing a default from the screen leaves one default; then a stopped default, an address the app refuses
+        // (a row saved before the rule), the same printer twice and two of one name are each said.
+        $form = fn (PosPeripheral $p, array $over) => $over + ['type' => 'printer', 'name' => $p->name, 'connection' => 'network', 'address' => $p->address, 'port' => $p->port, 'paper' => '80mm', 'is_default' => $p->is_default, 'auto_print' => $p->auto_print, 'is_active' => true];
+        $this->actingAs($owner)->put(route('club.settings.pos-devices.peripherals.update', [$device, $second]), $form($second, ['is_default' => true]))->assertSessionHasNoErrors();
+        $this->actingAs($owner)->put(route('club.settings.pos-devices.peripherals.update', [$device, $first]), $form($first, ['is_default' => true]))->assertSessionHasNoErrors();
+        $this->asTenant($club, fn () => $this->assertSame([$first->id], $device->peripherals()->where('is_default', true)->pluck('id')->all()));
+        $this->asTenant($club, function () use ($first, $second, $device) {
+            $first->forceFill(['is_active' => false])->save();
+            $second->forceFill(['auto_print' => false, 'address' => '8.8.8.8'])->save();
+            $device->peripherals()->create(['type' => 'printer', 'name' => 'طابعة المكتب', 'connection' => 'network', 'address' => '8.8.8.8', 'port' => null, 'paper' => '80mm', 'is_active' => true]);
+        });
+        $this->assertSame(['default_stopped', 'no_default', 'bad_address', 'bad_address', 'duplicate'], array_column($codes(), 'code'));
+
+        // A device without a printer while a stopped device of its branch holds one; nothing is moved.
+        [$replacement] = $this->device($club, $main);
+        $this->asTenant($club, fn () => $device->forceFill(['status' => PosDevice::REVOKED])->save());
+        $page = collect($this->actingAs($owner)->get(route('club.settings.pos-devices'))->viewData('page')['props']['devices']);
+        $this->assertSame(['printer_on_revoked'], array_column($page->firstWhere('id', $replacement->id)['warnings'], 'code'));
+        $this->assertSame([], $page->firstWhere('id', $device->id)['warnings'], 'a stopped device is not assessed');
+        $this->asTenant($club, fn () => $this->assertSame(3, $device->peripherals()->count()));
     }
 }

@@ -55,15 +55,47 @@ final class PaperFormat
     }
 
     /**
-     * Text a person typed, escaped, with every date or number run that contains a dash or slash kept left-to-right.
-     * After an Arabic word the bidi rules read «2027-01-31» as three Arabic numbers and print «31-01-2027»; the
-     * <bdo> keeps it as written, on screen and in the PDF alike.
+     * A run read left to right: from a Latin letter or a digit (or the @, # or + before it) to the last letter or digit
+     * before the next Arabic word, whole — a date, a number, an English phrase, a handle, an e-mail, a link, a phone
+     * number with its groups. After an Arabic word the bidi rules read «2027-01-31» as three numbers and print
+     * «31-01-2027», put the @ of «@alopera.gym» after it, and turn «+968 9123 4567» into «968+ 4567 9123». The Arabic
+     * comma, semicolon, question mark and tatweel end a run like an Arabic letter.
      */
-    public static function bidi(?string $text): HtmlString
-    {
-        $safe = e((string) $text);
+    private const LTR_RUN = '/([@#+]?[A-Za-z0-9](?:[^\p{Arabic}\x{060C}\x{061B}\x{061F}\x{0640}\r\n]*[A-Za-z0-9])?)/u';
 
-        return new HtmlString((string) preg_replace('/\d+(?:[\-\/:]\d+)+/', '<bdo dir="ltr">$0</bdo>', $safe));
+    /**
+     * Text a person typed, ready for a paper: escaped, without what the paper's font cannot draw, each left-to-right
+     * run kept as written in a <bdo>, and each line break a <br> (the PDF engine ignores white-space: pre-line, so a
+     * footer of two lines came out as one on the PDF and the receipt printer, though two in the print page).
+     *
+     * $dir is the direction of the element the text sits in: a left-to-right element reads its runs right already.
+     */
+    public static function bidi(?string $text, string $dir = 'rtl'): HtmlString
+    {
+        $lines = preg_split('/\R/u', self::printable($text)) ?: [];
+
+        return new HtmlString(implode('<br>', array_map(function (string $line) use ($dir) {
+            if ($dir === 'ltr') {
+                return e($line);
+            }
+            // Split on the raw text, then escape: escaping first would make «&amp;» a run of its own. A lone word or
+            // number reads right as it is; only a run with a separator in it (- / : . @ + a space) is reordered.
+            $parts = preg_split(self::LTR_RUN, $line, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$line];
+
+            return implode('', array_map(fn (string $part, int $i) => $i % 2 === 1 && preg_match('/[^A-Za-z0-9]/', $part) ? '<bdo dir="ltr">'.e($part).'</bdo>' : e($part), $parts, array_keys($parts)));
+        }, $lines)));
+    }
+
+    /**
+     * What the paper's font draws. Emoji, pictographs and the joiners and selectors that build them come out as empty
+     * boxes on the PDF and on the receipt printer, so the paper leaves them out; the setting keeps what the club typed.
+     */
+    public static function printable(?string $text): string
+    {
+        $kept = preg_replace('/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{FE00}-\x{FE0F}\x{200D}\x{20E3}\x{E0020}-\x{E007F}]/u', '', (string) $text) ?? (string) $text;
+
+        // The space a symbol stood in is not left doubled, nor at the end of a line.
+        return trim((string) preg_replace(['/[ \t]{2,}/u', '/[ \t]+(?=\R)/u'], [' ', ''], $kept));
     }
 
     /**

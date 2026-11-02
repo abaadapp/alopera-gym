@@ -17,10 +17,12 @@ use App\Modules\Inventory\Models\PosPeripheral;
 use App\Modules\Inventory\Models\PosPrintLog;
 use App\Modules\Inventory\Rules\PrinterAddress;
 use App\Modules\Inventory\Services\PosDevices;
+use App\Modules\Inventory\Services\PrinterHealth;
 use App\Modules\Inventory\Services\ShopSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -39,6 +41,8 @@ class PosDeviceController extends Controller
         $current = $this->devices->current($request);
         $devices = PosDevice::with(['branch:id,name', 'activator:id,name', 'settlementAccount:id,name', 'peripherals'])->withCount('sales')->orderBy('name')->get();
         // The print log of each device: its latest results, errors included, with who printed what.
+        // What keeps a device's receipts from coming out as its settings say — told, never mended here.
+        $health = PrinterHealth::assess($devices);
         $logs = PosPrintLog::with(['user:id,name', 'printer:id,name'])->whereIn('pos_device_id', $devices->pluck('id'))->latest('id')->limit(40 * max(1, $devices->count()))->get()->groupBy('pos_device_id');
 
         return Inertia::render('Club/Settings/PosDevices', [
@@ -49,6 +53,7 @@ class PosDeviceController extends Controller
                 'code_expired' => $d->status === PosDevice::PENDING && ! $d->pairing_expires_at?->isFuture(),
                 'is_this' => $current?->id === $d->id, 'auto_print' => (bool) $d->setting('auto_print', false),
                 'errors' => $d->peripherals->where('last_status', 'error')->pluck('last_error')->filter()->values(),
+                'warnings' => $health[$d->id] ?? [],
                 'peripherals' => $d->peripherals->map(fn (PosPeripheral $p) => $p->only('id', 'type', 'name', 'brand', 'model', 'connection', 'address', 'port', 'paper_width', 'is_default', 'auto_print', 'print_website_orders', 'is_active', 'notes', 'last_status', 'last_error') + [
                     'last_checked_at' => $p->last_checked_at?->format('Y-m-d H:i'), 'paper' => $p->type === 'printer' ? $p->paperSize() : null,
                     'direct' => $p->printsDirect(), 'printing' => $p->type === 'printer' ? $p->forPrinting() : null,
@@ -135,8 +140,10 @@ class PosDeviceController extends Controller
 
     public function storePeripheral(Request $request, PosDevice $device): RedirectResponse
     {
-        $device->peripherals()->create($this->peripheral($request));
-        $this->singleDefault($device, $request);
+        $data = $this->peripheral($request);
+        DB::transaction(function () use ($device, $request, $data) {
+            $this->singleDefault($device, $request, $device->peripherals()->create($data));
+        });
 
         return back()->with('success', 'أُضيف الملحق.');
     }
@@ -144,8 +151,11 @@ class PosDeviceController extends Controller
     public function updatePeripheral(Request $request, PosDevice $device, PosPeripheral $peripheral): RedirectResponse
     {
         abort_unless($peripheral->pos_device_id === $device->id, 404);
-        $peripheral->update($this->peripheral($request));
-        $this->singleDefault($device, $request, $peripheral);
+        $data = $this->peripheral($request);
+        DB::transaction(function () use ($device, $request, $peripheral, $data) {
+            $peripheral->update($data);
+            $this->singleDefault($device, $request, $peripheral);
+        });
 
         return back()->with('success', 'حُفظ الملحق.');
     }
@@ -233,12 +243,12 @@ class PosDeviceController extends Controller
         return $data;
     }
 
-    /** One default printer per device. */
-    private function singleDefault(PosDevice $device, Request $request, ?PosPeripheral $keep = null): void
+    /** One default printer per device: the one just saved as default takes the place of the other (two saves at once queue on the device's row). */
+    private function singleDefault(PosDevice $device, Request $request, PosPeripheral $keep): void
     {
         if ($request->boolean('is_default') && $request->input('type') === 'printer') {
-            $id = $keep?->id ?? $device->peripherals()->latest('id')->value('id');
-            $device->peripherals()->where('type', 'printer')->whereKeyNot($id)->update(['is_default' => false]);
+            PosDevice::whereKey($device->id)->lockForUpdate()->first();
+            $device->peripherals()->where('type', 'printer')->whereKeyNot($keep->id)->update(['is_default' => false]);
         }
     }
 }

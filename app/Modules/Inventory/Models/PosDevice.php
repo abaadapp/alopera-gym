@@ -65,10 +65,14 @@ class PosDevice extends Model implements BranchOwned
         return $this->hasMany(Sale::class);
     }
 
-    /** The printer receipts go to: the default active one, else the first active one. */
+    /**
+     * The printer receipts go to: the default active one, else the oldest active one — by id, not by the order the
+     * database happens to return rows in, so a device with two printers and none default always prints on the same one
+     * (the devices screen says it, PrinterHealth).
+     */
     public function printer(): ?PosPeripheral
     {
-        $printers = $this->peripherals->where('type', 'printer')->where('is_active', true);
+        $printers = $this->peripherals->where('type', 'printer')->where('is_active', true)->sortBy('id');
 
         return $printers->firstWhere('is_default', true) ?? $printers->first();
     }

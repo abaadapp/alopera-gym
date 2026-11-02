@@ -35,6 +35,7 @@ const QUICK = [
     { key: 'cash_shift.', label: 'الصندوق' },
     { key: 'employee.', label: 'الموظفون والرواتب' },
     { key: 'backup.', label: 'النسخ الاحتياطي' },
+    { key: 'paper.', label: 'الطباعة' },
 ];
 
 /** The events read in words; any other shows its key. */
@@ -47,7 +48,7 @@ const EVENTS: Record<string, string> = {
     'journal.posted': 'قيد يدوي', 'journal.reversed': 'عكس قيد', 'money.transferred': 'تحويل بين الحسابات',
     'payment.refunded': 'رد مبلغ', 'payment.refund_requested': 'طلب رد بانتظار التنفيذ', 'payment.cancelled': 'إلغاء دفعة', 'payment.credit_applied': 'تخصيص رصيد عميل', 'payment.gateway_overpayment': 'دفعة إلكترونية زائدة',
     'cash_shift.opened': 'فتح وردية صندوق', 'cash_shift.moved': 'نقل نقد من الدرج أو إليه', 'cash_shift.closed': 'إقفال وردية صندوق',
-    'invoice.credited': 'إشعار دائن', 'report.exported': 'تصدير تقرير',
+    'invoice.credited': 'إشعار دائن', 'report.exported': 'تصدير تقرير', 'paper.printed': 'طباعة مستند أو تنزيله PDF',
     'user.created': 'إضافة مستخدم', 'user.updated': 'تعديل مستخدم', 'user.deactivated': 'إيقاف مستخدم', 'user.access_updated': 'تعديل صلاحيات الدخول', 'user.password_reset': 'إعادة تعيين كلمة مرور',
     'employee.created': 'إضافة موظف', 'employee.updated': 'تعديل موظف', 'payroll.approved': 'اعتماد مسيرة رواتب', 'payroll.paid': 'صرف رواتب',
     'role.created': 'إضافة دور', 'role.updated': 'تعديل دور', 'role.deleted': 'حذف دور',
