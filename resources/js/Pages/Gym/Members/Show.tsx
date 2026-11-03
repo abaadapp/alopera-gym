@@ -1,4 +1,4 @@
-import { Link, router, useForm } from '@inertiajs/react';
+import { Link, useForm } from '@inertiajs/react';
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import QRCode from 'react-qr-code';
 import {
@@ -15,6 +15,7 @@ import { bookingStatus, checkinReason, invoiceStatus, invoiceType, label, member
 import type { Option } from '@/types';
 import { SOURCES } from './Form';
 import { PrintLink } from '@/Components/Printing/PrintButton';
+import useDialogRequest from '@/hooks/useDialogRequest';
 
 /* ───────────────────────── types ───────────────────────── */
 
@@ -155,7 +156,6 @@ export default function MemberShow(props: Props) {
     const currency = useCurrency();
     const [tab, setTab] = useState<TabKey>('memberships');
     const [deleting, setDeleting] = useState(false);
-    const [busy, setBusy] = useState(false);
     const [sellOpen, setSellOpen] = useState(false);
     const [qrOpen, setQrOpen] = useState(false);
     const [portalOpen, setPortalOpen] = useState(false);
@@ -180,7 +180,8 @@ export default function MemberShow(props: Props) {
         return list;
     }, [can, memberships.length, props]);
 
-    const deleteMember = () => router.delete(route('club.members.destroy', member.id), { onStart: () => setBusy(true), onFinish: () => { setBusy(false); setDeleting(false); } });
+    const removal = useDialogRequest();
+    const deleteMember = () => removal.send('delete', route('club.members.destroy', member.id), () => setDeleting(false));
     const contact: [string, ReactNode][] = [
         ['الهاتف', <a href={`tel:+${member.phone}`} className="num hover:underline">{member.phone_display}</a>],
         ['هاتف إضافي', member.phone_alt ? <span className="num">{member.phone_alt}</span> : '—'],
@@ -220,7 +221,7 @@ export default function MemberShow(props: Props) {
                                         {can('members.delete') && (
                                             <>
                                                 <DropdownSeparator />
-                                                <DropdownItem destructive onClick={() => { close(); setDeleting(true); }}><Trash2 /> حذف العضو</DropdownItem>
+                                                <DropdownItem destructive onClick={() => { close(); removal.clear(); setDeleting(true); }}><Trash2 /> حذف العضو</DropdownItem>
                                             </>
                                         )}
                                     </>
@@ -296,7 +297,7 @@ export default function MemberShow(props: Props) {
 
             <SellModal open={sellOpen} onClose={() => setSellOpen(false)} member={member} current={current} plans={props.plans} hasMemberships={memberships.length > 0} />
 
-            <Modal open={qrOpen} onClose={() => setQrOpen(false)} title="رمز الدخول QR" size="sm">
+            <Modal open={qrOpen} onClose={() => setQrOpen(false)} title="رمز الدخول QR" size="compact">
                 {member.qr_token && (
                     <div className="flex flex-col items-center gap-4 py-2">
                         <div className="card p-4">
@@ -316,8 +317,9 @@ export default function MemberShow(props: Props) {
                 )}
             </Modal>
 
-            <Modal open={deleting} onClose={() => setDeleting(false)} size="xs" title="حذف العضو" footer={<><Button variant="outline" onClick={() => setDeleting(false)} disabled={busy}>إلغاء</Button><Button variant="danger" loading={busy} onClick={deleteMember}>حذف</Button></>}>
+            <Modal open={deleting} onClose={() => setDeleting(false)} size="confirm" title="حذف العضو" footer={<><Button variant="outline" onClick={() => setDeleting(false)} disabled={removal.busy}>إلغاء</Button><Button variant="danger" loading={removal.busy} onClick={deleteMember}>حذف</Button></>}>
                 <p className="text-sm text-[#4b4b4b]">سيُحذف ملف {member.full_name}. لا يمكن حذف عضو لديه عضوية سارية.</p>
+                {removal.error && <p className="mt-2 text-sm text-red-600" role="alert">{removal.error}</p>}
             </Modal>
 
             <PortalPasswordModal open={portalOpen} onClose={() => setPortalOpen(false)} memberId={member.id} hasAccess={member.has_portal_access} />
@@ -486,8 +488,7 @@ function FreezeModal({ membership, onClose }: { membership: MembershipItem | nul
         <Modal
             open={membership !== null}
             onClose={onClose}
-            title="تجميد العضوية"
-            size="sm"
+            title="تجميد العضوية" size="compact"
             footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>تجميد</Button></>}
         >
             <form onSubmit={submit} className="space-y-4">
@@ -590,8 +591,7 @@ function SellModal({ open, onClose, member, current, plans, hasMemberships }: { 
         <Modal
             open={open}
             onClose={onClose}
-            title="بيع / تجديد عضوية"
-            size="lg"
+            title="بيع / تجديد عضوية" size="large"
             footer={
                 <>
                     <Button variant="outline" onClick={onClose}>إلغاء</Button>
@@ -696,8 +696,7 @@ function PortalPasswordModal({ open, onClose, memberId, hasAccess }: { open: boo
         <Modal
             open={open}
             onClose={onClose}
-            title={hasAccess ? 'تغيير كلمة مرور البوابة' : 'تفعيل بوابة العضو'}
-            size="sm"
+            title={hasAccess ? 'تغيير كلمة مرور البوابة' : 'تفعيل بوابة العضو'} size="compact"
             footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}
         >
             <form onSubmit={submit} className="space-y-3">
@@ -806,8 +805,7 @@ function RecordPaymentModal({ invoice, onClose }: { invoice: { id: number; numbe
         <Modal
             open={invoice !== null}
             onClose={onClose}
-            title={`تحصيل دفعة — ${invoice?.number ?? ''}`}
-            size="sm"
+            title={`تحصيل دفعة — ${invoice?.number ?? ''}`} size="compact"
             footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>تسجيل الدفعة</Button></>}
         >
             <form onSubmit={submit} className="space-y-4">

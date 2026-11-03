@@ -31,7 +31,7 @@ export function AdjustModal({ product, onClose }: { product: Target; onClose: ()
     const diff = Number(form.data.counted || 0) - onShelf;
 
     return (
-        <Modal open onClose={onClose} size="sm" title={`جرد: ${product.name}`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="adjust-form" loading={form.processing}>حفظ الجرد</Button></>}>
+        <Modal open onClose={onClose} size="compact" title={`جرد: ${product.name}`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="adjust-form" loading={form.processing}>حفظ الجرد</Button></>}>
             <form id="adjust-form" onSubmit={submit} className="space-y-4">
                 <p className="text-sm text-muted">الرصيد في النظام لهذا الفرع: <span className="font-medium text-ink num">{number(onShelf, 3)}</span></p>
                 <Field label="الكمية الفعلية على الرف" error={form.errors.counted} required>
@@ -61,7 +61,7 @@ export function MovementsModal({ product, onClose, currency }: { product: Target
     }, [product]);
 
     return (
-        <Modal open={product !== null} onClose={onClose} size="lg" title={`حركة المخزون: ${product?.name ?? ''}`}>
+        <Modal open={product !== null} onClose={onClose} size="wide" title={`حركة المخزون: ${product?.name ?? ''}`}>
             {rows === null ? (
                 <p className="py-6 text-center text-sm text-muted">جارٍ التحميل…</p>
             ) : rows.length === 0 ? (

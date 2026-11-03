@@ -163,20 +163,17 @@ final class ReportCatalog
     }
 
     /**
-     * The cards this user is offered: each opens its page, and exports (with its opening period) when allowed.
+     * The cards this user is offered: each opens its page, and the page exports it with its period and filters for whoever
+     * may (canExport there).
      *
-     * @return list<array{key: string, category: string, title: string, desc: string, icon: string, href: string, export: string|null, scope: string}>
+     * @return list<array{key: string, category: string, title: string, desc: string, icon: string, href: string}>
      */
     public function for(User $user): array
     {
-        $exports = $user->can('reports.export');
-
         return array_values(array_map(
             fn (array $r) => [
                 'key' => $r['key'], 'category' => $r['category'], 'title' => $r['title'], 'desc' => $r['desc'], 'icon' => $r['icon'],
                 'href' => route('club.reports.show', $r['key']),
-                'export' => $exports ? route('club.reports.export', $r['key']) : null,
-                'scope' => $r['mode'] === 'snapshot' ? 'الوضع الحالي' : ($r['preset'] === 'year' ? 'هذه السنة' : 'هذا الشهر'),
             ],
             array_filter(self::all(), fn (array $r) => $this->allowsEntry($user, $r)),
         ));

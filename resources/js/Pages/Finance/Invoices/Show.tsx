@@ -669,8 +669,7 @@ function CreditRefundModal({ note, invoice, onClose, currency, gateway }: { note
         <Modal
             open={note !== null}
             onClose={onClose}
-            title="رد مبلغ"
-            size="sm"
+            title="رد مبلغ" size="compact"
             footer={
                 <>
                     <Button variant="outline" onClick={onClose}>إلغاء</Button>
@@ -714,7 +713,7 @@ function CreditApplyModal({ payment, targets, onClose, currency }: { payment: Pa
     };
 
     return (
-        <Modal open onClose={onClose} title="تخصيص الرصيد لفاتورة" size="sm"
+        <Modal open onClose={onClose} title="تخصيص الرصيد لفاتورة" size="compact"
             footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="credit-apply" loading={form.processing} icon={<ArrowLeftRight />}>تخصيص</Button></>}>
             <form id="credit-apply" onSubmit={submit} className="space-y-4">
                 <p className="text-sm text-muted">الرصيد المتاح: <span className="num font-medium text-ink">{money(payment.credit_left, currency)}</span>. تُسدَّد به فاتورة أخرى للعميل نفسه كأي دفعة، وتُفعَّل عضويتها إن اكتمل سدادها.</p>
@@ -745,7 +744,7 @@ function CreditPayBackModal({ payment, onClose, currency }: { payment: PaymentRo
     };
 
     return (
-        <Modal open onClose={onClose} title="رد الرصيد الدائن" size="sm"
+        <Modal open onClose={onClose} title="رد الرصيد الدائن" size="compact"
             footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="credit-payback" variant="danger" loading={form.processing}>تسجيل الرد</Button></>}>
             <form id="credit-payback" onSubmit={submit} className="space-y-4">
                 <p className="text-sm text-muted">الرصيد المتاح: <span className="num font-medium text-ink">{money(payment.credit_left, currency)}</span></p>

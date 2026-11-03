@@ -182,8 +182,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
             <Modal
                 open={open}
                 onClose={() => setOpen(false)}
-                title={editing ? `تعديل: ${editing.name}` : 'برنامج جديد'}
-                size="lg"
+                title={editing ? `تعديل: ${editing.name}` : 'برنامج جديد'} size="large"
                 footer={
                     <>
                         <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>

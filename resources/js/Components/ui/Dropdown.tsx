@@ -129,7 +129,9 @@ export function Dropdown({ trigger, children, label, hover = false, className, p
                 {trigger({ open })}
             </button>
             {open && createPortal(
-                <div className={cn(admin && 'admin-ui')} dir={box.current ? getComputedStyle(box.current).direction : undefined}>
+                // A layer of its own (data-layer): opened from a dialog it is not «outside» it, and it takes the pointer
+                // the dialog withholds from the page.
+                <div data-layer className={cn('pointer-events-auto', admin && 'admin-ui')} dir={box.current ? getComputedStyle(box.current).direction : undefined}>
                     <div
                         ref={panel}
                         role="menu"

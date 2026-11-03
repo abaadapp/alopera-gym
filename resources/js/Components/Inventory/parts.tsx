@@ -99,7 +99,7 @@ export function ReasonDialog({ open, title, message, url, confirm, tone = 'dange
     const submit = () => router.post(url, { reason, ...extra }, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => setBusy(false), onSuccess: () => { setReason(''); onClose(); }, onError: (e) => setError(e.reason ?? Object.values(e)[0]) });
 
     return (
-        <Modal open onClose={onClose} size="sm" title={title} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button variant={tone === 'danger' ? 'danger' : 'primary'} loading={busy} onClick={submit}>{confirm}</Button></>}>
+        <Modal open onClose={onClose} size="compact" title={title} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button variant={tone === 'danger' ? 'danger' : 'primary'} loading={busy} onClick={submit}>{confirm}</Button></>}>
             {message && <p className="mb-3 text-sm leading-7 text-[#4b4b4b]">{message}</p>}
             <Field label="السبب" error={error} required>
                 <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={255} autoFocus />

@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import { router, useForm } from '@inertiajs/react';
+import { useForm } from '@inertiajs/react';
 import { Check, Plus, UserRound, UserX } from 'lucide-react';
 import { SettingsScreen } from '@/Components/Settings';
 import { Badge, Button, Card, DataTable, Field, Input, Modal, RowActions, Select, Toggle, type Column } from '@/Components/ui';
 import { useShared } from '@/hooks/useShared';
 import type { Option } from '@/types';
+import useDialogRequest from '@/hooks/useDialogRequest';
 
 interface StaffRow {
     id: number;
@@ -32,7 +33,6 @@ export default function Users({ users, roles, branches }: Props) {
     const { auth } = useShared();
     const [editing, setEditing] = useState<StaffRow | 'new' | null>(null);
     const [stopping, setStopping] = useState<StaffRow | null>(null);
-    const [busy, setBusy] = useState(false);
     const me = (u: StaffRow) => u.id === auth?.user.id;
 
     const columns: Column<StaffRow>[] = [
@@ -70,7 +70,8 @@ export default function Users({ users, roles, branches }: Props) {
         },
     ];
 
-    const stop = () => stopping && router.delete(route('club.users.destroy', stopping.id), { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => { setBusy(false); setStopping(null); } });
+    const stopRequest = useDialogRequest();
+    const stop = () => stopping && stopRequest.send('delete', route('club.users.destroy', stopping.id), () => setStopping(null));
 
     return (
         <SettingsScreen title="المستخدمون" width="full">
@@ -85,8 +86,9 @@ export default function Users({ users, roles, branches }: Props) {
                 <DataTable rows={users} columns={columns} rowKey={(u) => u.id} params={{}} empty="لا توجد حسابات" />
             </Card>
             {editing && <UserModal user={editing === 'new' ? null : editing} roles={roles} branches={branches} onClose={() => setEditing(null)} />}
-            <Modal open={stopping !== null} onClose={() => setStopping(null)} size="xs" title="إيقاف الحساب" footer={<><Button variant="outline" onClick={() => setStopping(null)} disabled={busy}>إلغاء</Button><Button variant="danger" loading={busy} onClick={stop}>إيقاف</Button></>}>
+            <Modal open={stopping !== null} onClose={() => setStopping(null)} size="confirm" title="إيقاف الحساب" footer={<><Button variant="outline" onClick={() => setStopping(null)} disabled={stopRequest.busy}>إلغاء</Button><Button variant="danger" loading={stopRequest.busy} onClick={stop}>إيقاف</Button></>}>
                 <p className="text-sm text-[#4b4b4b]">إيقاف حساب {stopping?.name}؟ لن يتمكن من الدخول، ويبقى سجله كما هو.</p>
+                {stopRequest.error && <p className="mt-2 text-sm text-red-600" role="alert">{stopRequest.error}</p>}
             </Modal>
         </SettingsScreen>
     );

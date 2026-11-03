@@ -338,7 +338,7 @@ export default function DevicesIntegration({ devices, status, events, simulation
                 </Card>
             </div>
 
-            <Modal open={open} onClose={() => setOpen(false)} title={editing ? `تعديل: ${editing.name}` : 'جهاز جديد'} size="lg" footer={
+            <Modal open={open} onClose={() => setOpen(false)} title={editing ? `تعديل: ${editing.name}` : 'جهاز جديد'} size="large" footer={
                 <>
                     <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
                     <Button type="submit" form="device-form" loading={form.processing}>{editing ? 'حفظ' : 'إضافة وإصدار رمز'}</Button>

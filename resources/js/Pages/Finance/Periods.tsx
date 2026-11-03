@@ -199,7 +199,7 @@ function CloseDialog({ month, months, checks, onClose }: { month: Month; months:
     const blocked = !checks || checks.errors.length > 0;
 
     return (
-        <Modal open onClose={onClose} size="lg" title={`إقفال ${month.label}`} description="بعد الإقفال لا يُرحَّل قيد بتاريخ في هذا الشهر أو قبله، ولا يُعدَّل مصروف أو سند بتاريخه."
+        <Modal open onClose={onClose} size="large" title={`إقفال ${month.label}`} description="بعد الإقفال لا يُرحَّل قيد بتاريخ في هذا الشهر أو قبله، ولا يُعدَّل مصروف أو سند بتاريخه."
             footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={processing} disabled={blocked} icon={<Lock className="size-4" />}>إقفال الفترة</Button></>}>
             <div className="space-y-4">
                 {before.length > 0 && <Notice tone="blue">سيُقفل معه كل شهر مفتوح قبله، ويُفحص كل منها بالقواعد نفسها: {before.join('، ')}.</Notice>}

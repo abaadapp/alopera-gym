@@ -245,8 +245,7 @@ function CategoryModal({ open, onClose }: { open: boolean; onClose: () => void }
         <Modal
             open={open}
             onClose={onClose}
-            title="تصنيف مصروفات جديد"
-            size="sm"
+            title="تصنيف مصروفات جديد" size="compact"
             footer={
                 <>
                     <Button variant="outline" onClick={onClose}>إلغاء</Button>

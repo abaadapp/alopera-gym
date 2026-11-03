@@ -241,7 +241,7 @@ function AddonDialog({ addon, products, categories, currency, onClose }: { addon
     };
 
     return (
-        <Modal open onClose={onClose} size="md" title={addon ? 'تعديل إضافة' : 'إضافة جديدة'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="addon-form" loading={form.processing}>حفظ</Button></>}>
+        <Modal open onClose={onClose} title={addon ? 'تعديل إضافة' : 'إضافة جديدة'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="addon-form" loading={form.processing}>حفظ</Button></>}>
             <form id="addon-form" onSubmit={submit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                     <Field label="الاسم" error={form.errors.name} required>

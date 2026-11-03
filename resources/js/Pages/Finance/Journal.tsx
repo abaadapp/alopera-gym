@@ -130,7 +130,7 @@ function EntryForm({ accounts, onClose }: { accounts: Props['accounts']; onClose
     const errors = form.errors as Record<string, string>;
 
     return (
-        <Modal open onClose={onClose} size="xl" title="قيد يدوي جديد" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing} disabled={diff !== 0 || sum('debit') === 0}>ترحيل القيد</Button></>}>
+        <Modal open onClose={onClose} size="wide" title="قيد يدوي جديد" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing} disabled={diff !== 0 || sum('debit') === 0}>ترحيل القيد</Button></>}>
             <form onSubmit={submit} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
                     <Field label="التاريخ" error={form.errors.date}><Input type="date" value={form.data.date} onChange={(e) => form.setData('date', e.target.value)} /></Field>

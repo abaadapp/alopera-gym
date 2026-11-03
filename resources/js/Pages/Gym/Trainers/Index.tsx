@@ -199,8 +199,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
             <Modal
                 open={open}
                 onClose={() => setOpen(false)}
-                title={editing ? `تعديل: ${editing.name}` : 'مدرب جديد'}
-                size="lg"
+                title={editing ? `تعديل: ${editing.name}` : 'مدرب جديد'} size="large"
                 footer={
                     <>
                         <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
@@ -274,8 +273,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
             <Modal
                 open={availabilityFor !== null}
                 onClose={() => setAvailabilityFor(null)}
-                title={`أوقات توفر ${availabilityFor?.name ?? ''}`}
-                size="lg"
+                title={`أوقات توفر ${availabilityFor?.name ?? ''}`} size="large"
                 footer={
                     <>
                         <Button variant="outline" onClick={() => setAvailabilityFor(null)}>إلغاء</Button>

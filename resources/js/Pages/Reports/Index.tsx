@@ -4,7 +4,6 @@ import {
     PackageCheck, PackageX, Receipt, Scale, Search, ShoppingBag, ShoppingCart, Ticket, Truck, Users, Vault, Wallet, X, type LucideIcon,
 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import ExportMenu from '@/Components/Reports/ExportMenu';
 import { PageHeader, ReportCard } from '@/Components/ui';
 import { cn } from '@/lib/cn';
 import { fold } from '@/lib/format';
@@ -16,10 +15,6 @@ interface Report {
     desc: string;
     icon: string;
     href: string;
-    /** The report's export address, or null when this user may not export. */
-    export: string | null;
-    /** What the card's export covers: the period the report opens with, or its state today. */
-    scope: string;
 }
 
 /* The icon names the server gives (App\Modules\Reports\Services\ReportCatalog), mapped one by one. */
@@ -33,8 +28,8 @@ const ICONS: Record<string, LucideIcon> = {
 
 /**
  * The reports page — the one place for the club's reports: a large search, the categories with how many reports each
- * holds, and the reports in groups of equal cards, three to a row on a wide screen. Each card opens its report or
- * exports it (Excel or CSV, for the period it opens with). Only the reports this user may open arrive here, and the
+ * holds, and the reports in groups of equal cards, three to a row on a wide screen. Each card is one link to its
+ * report, whose own header exports it with its period and filters. Only the reports this user may open arrive here, and the
  * counts are of what arrived, so a category never promises more than it shows. The search reads the title and the
  * description, whatever form of alef, yaa or taa marbuta was typed.
  */
@@ -57,7 +52,7 @@ export default function ReportsIndex({ reports, categories }: { reports: Report[
 
     return (
         <ClubLayout title="التقارير">
-            <PageHeader title="التقارير" subtitle="كل تقارير النادي في مكان واحد: افتح التقرير لتحليله بالفترة والفرع، أو صدّره مباشرة إلى Excel أو CSV." />
+            <PageHeader title="التقارير" subtitle="كل تقارير النادي في مكان واحد: افتح التقرير لتحليله بالفترة والفرع وتصديره." />
 
             <div className="relative mb-4">
                 <Search className="pointer-events-none absolute start-4 top-1/2 size-[18px] -translate-y-1/2 text-[#9ca3af]" />
@@ -114,16 +109,9 @@ export default function ReportsIndex({ reports, categories }: { reports: Report[
                                 </h2>
                                 <span className="num flex size-7 items-center justify-center rounded-full border border-line bg-white text-[12px] text-[#9ca3af]">{g.items.length}</span>
                             </div>
-                            <div className="grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 {g.items.map((r) => (
-                                    <ReportCard
-                                        key={r.key}
-                                        href={r.href}
-                                        icon={ICONS[r.icon] ?? BarChart3}
-                                        title={r.title}
-                                        description={r.desc}
-                                        actions={<ExportMenu href={r.export} title={r.title} scope={r.scope} />}
-                                    />
+                                    <ReportCard key={r.key} href={r.href} icon={ICONS[r.icon] ?? BarChart3} title={r.title} description={r.desc} />
                                 ))}
                             </div>
                         </section>

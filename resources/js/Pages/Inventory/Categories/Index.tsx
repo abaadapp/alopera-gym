@@ -101,7 +101,7 @@ export default function CategoriesIndex({ categories, uncategorised }: { categor
                 onClose={() => setDeleting(null)}
             />
             {deleting && (deleting.products > 0 || deleting.addons > 0) && (
-                <Modal open onClose={() => setDeleting(null)} size="sm" title={`لا يمكن حذف «${deleting.name}»`} footer={<><Button variant="outline" onClick={() => setDeleting(null)}>حسنًا</Button>{deleting.products > 0 && <Button href={route('club.products.index', { category: deleting.id })}>عرض منتجاته</Button>}</>}>
+                <Modal open onClose={() => setDeleting(null)} size="compact" title={`لا يمكن حذف «${deleting.name}»`} footer={<><Button variant="outline" onClick={() => setDeleting(null)}>حسنًا</Button>{deleting.products > 0 && <Button href={route('club.products.index', { category: deleting.id })}>عرض منتجاته</Button>}</>}>
                     <p className="text-sm leading-7 text-[#4b4b4b]">
                         التصنيف مستخدم في {[deleting.products ? `${number(deleting.products)} منتج` : '', deleting.addons ? `${number(deleting.addons)} إضافة` : ''].filter(Boolean).join(' و')}.
                         انقل المنتجات إلى تصنيف آخر وغيّر الإضافات المرتبطة به أولًا، حتى لا تفقد المنتجات تصنيفها.
@@ -122,7 +122,7 @@ function CategoryModal({ category, onClose }: { category: Category | null; onClo
     };
 
     return (
-        <Modal open onClose={onClose} size="sm" title={category ? 'تعديل التصنيف' : 'تصنيف جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="category-form" loading={form.processing}>حفظ</Button></>}>
+        <Modal open onClose={onClose} size="compact" title={category ? 'تعديل التصنيف' : 'تصنيف جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="category-form" loading={form.processing}>حفظ</Button></>}>
             <form id="category-form" onSubmit={submit}>
                 <Field label="اسم التصنيف" error={form.errors.name} required>
                     <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} maxLength={80} placeholder="مثل: المكملات الغذائية" autoFocus />

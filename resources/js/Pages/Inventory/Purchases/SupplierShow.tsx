@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Link, router } from '@inertiajs/react';
+import { Link } from '@inertiajs/react';
 import { Banknote, CalendarClock, CalendarDays, ClipboardList, FilePlus2, History, Mail, MapPin, MoreVertical, Pencil, Phone, Receipt, ShoppingCart, Trash2, UserRound, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, Modal, PageHeader, StatCard, Tabs, BackLink } from '@/Components/ui';
@@ -9,6 +9,7 @@ import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { dayCount, money, number } from '@/lib/format';
 import { SupplierDialog, type SupplierRow } from './Suppliers';
+import useDialogRequest from '@/hooks/useDialogRequest';
 
 type Order = { id: number; number: string; status: string; status_label: string; total: string; items_count: number; date: string; branch: string | null };
 type Bill = { id: number; number: string; reference: string; status: string; total: string; paid_total: string; balance: string; state: string | null; issue_date: string; due_date: string | null };
@@ -39,6 +40,7 @@ export default function SupplierShow({ supplier, may, orders = [], bills = [], p
     const m = (v: string | number) => money(v, currency);
     const [editing, setEditing] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const removal = useDialogRequest();
     const [tab, setTab] = useState<Tab>('orders');
 
     const contact: { icon: ReactNode; label: string; value: ReactNode; ltr?: boolean }[] = [
@@ -191,8 +193,9 @@ export default function SupplierShow({ supplier, may, orders = [], bills = [], p
             </div>
 
             {editing && <SupplierDialog supplier={supplier} onClose={() => setEditing(false)} />}
-            <Modal open={deleting} onClose={() => setDeleting(false)} size="xs" title="تأكيد الحذف" footer={<><Button variant="outline" onClick={() => setDeleting(false)}>إلغاء</Button><Button variant="danger" onClick={() => router.delete(route('club.purchases.suppliers.destroy', supplier.id))}>حذف</Button></>}>
+            <Modal open={deleting} onClose={() => setDeleting(false)} size="confirm" title="تأكيد الحذف" footer={<><Button variant="outline" onClick={() => setDeleting(false)} disabled={removal.busy}>إلغاء</Button><Button variant="danger" loading={removal.busy} onClick={() => removal.send('delete', route('club.purchases.suppliers.destroy', supplier.id), () => setDeleting(false))}>حذف</Button></>}>
                 <p className="text-sm text-[#4b4b4b]">حذف «{supplier.name}»؟ لا أوامر شراء ولا سندات له.</p>
+                {removal.error && <p className="mt-2 text-sm text-red-600" role="alert">{removal.error}</p>}
             </Modal>
         </ClubLayout>
     );

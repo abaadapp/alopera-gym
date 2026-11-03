@@ -145,7 +145,7 @@ function OpeningForm({ account, onClose }: { account: Account; onClose: () => vo
     };
 
     return (
-        <Modal open onClose={onClose} size="sm" title={`الرصيد الافتتاحي — ${account.name}`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
+        <Modal open onClose={onClose} size="compact" title={`الرصيد الافتتاحي — ${account.name}`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
             <form onSubmit={submit} className="space-y-4">
                 <p className="text-[13px] text-muted">يُسجَّل قيدًا مقابل «الأرصدة الافتتاحية». تعديله لاحقًا يعكس القيد السابق ويسجّل الجديد، فيبقى السجل كاملًا.</p>
                 <Field label="المبلغ" error={form.errors.amount} required><Input type="number" step="0.001" min="0" dir="ltr" value={form.data.amount} onChange={(e) => form.setData('amount', e.target.value)} autoFocus /></Field>

@@ -210,8 +210,7 @@ export default function ScheduleIndex({ slots, programs, trainers, branches }: {
             <Modal
                 open={open}
                 onClose={() => setOpen(false)}
-                title={editing ? 'تعديل حصة الجدول' : 'حصة جديدة في الجدول'}
-                size="lg"
+                title={editing ? 'تعديل حصة الجدول' : 'حصة جديدة في الجدول'} size="large"
                 footer={
                     <div className="flex w-full flex-wrap items-center justify-between gap-2">
                         <div>

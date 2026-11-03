@@ -5,6 +5,7 @@ import { Badge, Button, Modal } from '@/Components/ui';
 import { Dropdown, DropdownItem, DropdownLabel, DropdownSeparator } from '@/Components/ui/Dropdown';
 import { cn } from '@/lib/cn';
 import { number } from '@/lib/format';
+import useDialogRequest from '@/hooks/useDialogRequest';
 
 /*
  * The pieces of the products section's lists (products, add-ons): a toolbar row of a borderless search, status tabs,
@@ -175,13 +176,14 @@ export function Stepper({ value, onChange, min = 0, max = Infinity, label, size 
 
 /** A delete confirmation opened from a row's menu (the menu closes, so the dialog lives on the page). */
 export function ConfirmDelete({ target, url, title, message, onClose }: { target: unknown; url: string | null; title: string; message: ReactNode; onClose: () => void }) {
-    const [busy, setBusy] = useState(false);
+    const { busy, error, send } = useDialogRequest();
     if (!target || !url) return null;
-    const confirm = () => router.delete(url, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => { setBusy(false); onClose(); } });
+    const confirm = () => send('delete', url, onClose);
 
     return (
-        <Modal open onClose={onClose} size="xs" title={title} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button variant="danger" loading={busy} onClick={confirm}>حذف</Button></>}>
+        <Modal open onClose={onClose} size="confirm" title={title} footer={<><Button variant="outline" onClick={onClose} disabled={busy}>إلغاء</Button><Button variant="danger" loading={busy} onClick={confirm}>حذف</Button></>}>
             <p className="text-sm text-[#4b4b4b]">{message}</p>
+            {error && <p className="mt-2 text-sm text-red-600" role="alert">{error}</p>}
         </Modal>
     );
 }

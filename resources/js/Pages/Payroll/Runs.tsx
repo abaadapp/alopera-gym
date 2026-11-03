@@ -151,7 +151,7 @@ function OpenRun({ months, onClose }: { months: { value: string; label: string }
         form.post(route('club.payroll.store'), { onSuccess: onClose });
     };
     return (
-        <Modal open onClose={onClose} size="sm" title="مسيرة جديدة" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>فتح المسيرة</Button></>}>
+        <Modal open onClose={onClose} size="compact" title="مسيرة جديدة" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>فتح المسيرة</Button></>}>
             <form onSubmit={submit} className="space-y-4">
                 <Field label="الشهر" error={form.errors.month}><Select value={form.data.month} onChange={(e) => form.setData('month', e.target.value)}>{months.map((mo) => <option key={mo.value} value={mo.value}>{mo.label}</option>)}</Select></Field>
                 <p className="text-[13px] text-muted">تُنسخ الرواتب والبدلات من ملفات الموظفين على رأس العمل، مع أيام الحضور وساعاته في الشهر.</p>

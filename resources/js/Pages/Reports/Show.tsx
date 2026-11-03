@@ -96,7 +96,7 @@ export default function ReportShow({ kind, title, description, mode, compare, fi
                 back={<BackLink href={route('club.reports.index')}>كل التقارير</BackLink>}
                 title={title}
                 subtitle={description}
-                actions={<ExportMenu href={canExport ? route('club.reports.export', kind) : null} params={exportParams} title={title} size="md" />}
+                actions={<ExportMenu href={canExport ? route('club.reports.export', kind) : null} params={exportParams} title={title} />}
             />
 
             {mode === 'period' && (

@@ -30,7 +30,7 @@ use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
 
 /**
- * The reports page is the one place for the club's reports: every card opens a real report page and exports a real
+ * The reports page is the one place for the club's reports: every card opens a real report page, which exports a real
  * Excel and CSV file of the same figures, each only for those allowed, within the club and the user's branch. The
  * sections keep their working screens and lose their report tabs.
  */
@@ -95,7 +95,7 @@ class ReportsCatalogTest extends TestCase
         return [$club, $owner, $khoud, $member];
     }
 
-    public function test_every_card_opens_its_report_and_exports_a_real_excel_and_csv_file(): void
+    public function test_every_card_opens_its_report_whose_page_exports_a_real_excel_and_csv_file(): void
     {
         [$club, $owner] = $this->busyClub();
         $reports = $this->catalog($owner);
@@ -109,16 +109,17 @@ class ReportsCatalogTest extends TestCase
             $key = $card['key'];
             $this->assertNotEmpty($card['desc'], $key);
             $this->assertSame(route('club.reports.show', $key), $card['href']);
-            $this->assertSame(route('club.reports.export', $key), $card['export'], "{$key}: the card exports");
+            $this->assertArrayNotHasKey('export', $card, "{$key}: the card only opens its report; the export is in the report");
+            $export = route('club.reports.export', $key);
 
             $this->actingAs($owner)->get($card['href'])->assertOk()
                 ->assertInertia(fn ($page) => $page->component('Reports/Show')->where('kind', $key)->where('title', $card['title'])->where('canExport', true)->has('data.empty')->missing('key'));
 
-            $xlsx = $this->actingAs($owner)->get($card['export'].'?format=xlsx')->assertOk()->assertHeader('content-type', self::XLSX);
+            $xlsx = $this->actingAs($owner)->get($export.'?format=xlsx')->assertOk()->assertHeader('content-type', self::XLSX);
             $this->assertStringStartsWith('PK', $xlsx->streamedContent(), "{$key}: a real xlsx (zip) file");
             $this->assertMatchesRegularExpression('/filename="?'.preg_quote($key, '/').'-[0-9_-]+\.xlsx/', $xlsx->headers->get('content-disposition'), "{$key}: named by key and dates only");
 
-            $csv = $this->actingAs($owner)->get($card['export'].'?format=csv')->assertOk();
+            $csv = $this->actingAs($owner)->get($export.'?format=csv')->assertOk();
             $body = $csv->streamedContent();
             $this->assertStringStartsWith("\xEF\xBB\xBF", $body, "{$key}: Excel-friendly CSV");
             $this->assertStringContainsString($card['title'], $body, "{$key}: the file names its report");
@@ -204,7 +205,7 @@ class ReportsCatalogTest extends TestCase
         // Opening without exporting: the page says so and the file is refused.
         $viewer = $this->roleWith($club, ['reports.view']);
         $cards = $this->catalog($viewer);
-        $this->assertNull($cards[0]['export'], 'no export without reports.export');
+        $this->assertArrayNotHasKey('export', $cards[0], 'a card never exports');
         $this->actingAs($viewer)->get(route('club.reports.show', 'members'))->assertOk()->assertInertia(fn ($page) => $page->where('canExport', false));
         $this->actingAs($viewer)->get(route('club.reports.export', ['report' => 'members', 'format' => 'csv']))->assertForbidden();
         $this->actingAs($viewer)->get(route('club.reports.show', 'branches'))->assertNotFound();
@@ -235,7 +236,7 @@ class ReportsCatalogTest extends TestCase
         // it already sees), no club money, no salaries, no files.
         $reception = array_column($this->catalog($this->staff($club, 'reception')), 'key');
         $this->assertEqualsCanonicalizing(['checkins', 'expiring', 'member-statement'], $reception);
-        $this->assertNull($this->catalog($this->staff($club, 'reception'))[0]['export']);
+        $this->actingAs($this->staff($club, 'reception'))->get(route('club.reports.show', 'checkins'))->assertInertia(fn ($page) => $page->where('canExport', false));
 
         // The finance role: money, books, sales and payroll, not documents or attendance.
         $finance = array_column($this->catalog($this->staff($club, 'finance')), 'key');

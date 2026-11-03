@@ -1,8 +1,9 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { router, useForm } from '@inertiajs/react';
+import { useForm } from '@inertiajs/react';
 import { Building2, Check, CircleCheck, CirclePause, Plus, PowerOff } from 'lucide-react';
 import { SettingsScreen } from '@/Components/Settings';
 import { Badge, Button, Card, DataTable, Field, Input, Modal, RowActions, Toggle, type Column } from '@/Components/ui';
+import useDialogRequest from '@/hooks/useDialogRequest';
 
 interface Branch {
     id: number;
@@ -17,7 +18,6 @@ interface Branch {
 export default function Branches({ branches }: { branches: Branch[] }) {
     const [editing, setEditing] = useState<Branch | 'new' | null>(null);
     const [stopping, setStopping] = useState<Branch | null>(null);
-    const [busy, setBusy] = useState(false);
     const active = branches.filter((b) => b.is_active).length;
 
     const columns: Column<Branch>[] = [
@@ -44,7 +44,8 @@ export default function Branches({ branches }: { branches: Branch[] }) {
         },
     ];
 
-    const stop = () => stopping && router.delete(route('club.branches.destroy', stopping.id), { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => { setBusy(false); setStopping(null); } });
+    const stopRequest = useDialogRequest();
+    const stop = () => stopping && stopRequest.send('delete', route('club.branches.destroy', stopping.id), () => setStopping(null));
 
     return (
         <SettingsScreen title="الفروع" width="full">
@@ -64,8 +65,9 @@ export default function Branches({ branches }: { branches: Branch[] }) {
                 <DataTable rows={branches} columns={columns} rowKey={(b) => b.id} params={{}} empty="لا توجد فروع" />
             </Card>
             {editing && <BranchModal branch={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
-            <Modal open={stopping !== null} onClose={() => setStopping(null)} size="xs" title="إيقاف الفرع" footer={<><Button variant="outline" onClick={() => setStopping(null)} disabled={busy}>إلغاء</Button><Button variant="danger" loading={busy} onClick={stop}>إيقاف</Button></>}>
+            <Modal open={stopping !== null} onClose={() => setStopping(null)} size="confirm" title="إيقاف الفرع" footer={<><Button variant="outline" onClick={() => setStopping(null)} disabled={stopRequest.busy}>إلغاء</Button><Button variant="danger" loading={stopRequest.busy} onClick={stop}>إيقاف</Button></>}>
                 <p className="text-sm text-[#4b4b4b]">إيقاف فرع «{stopping?.name}»؟ تبقى بياناته محفوظة.</p>
+                {stopRequest.error && <p className="mt-2 text-sm text-red-600" role="alert">{stopRequest.error}</p>}
             </Modal>
         </SettingsScreen>
     );

@@ -11,6 +11,7 @@ import { lineTotal, type AddonOption, type ChosenAddon } from '@/lib/addons';
 import { currencyLabel, money } from '@/lib/format';
 import { postJson } from '@/lib/http';
 import { cn } from '@/lib/cn';
+import useDialogRequest from '@/hooks/useDialogRequest';
 
 interface Product {
     id: number;
@@ -138,6 +139,7 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
     const [pickingAddon, setPickingAddon] = useState(false);
     const [editing, setEditing] = useState<number | null>(null);
     const [discarding, setDiscarding] = useState(false);
+    const discard = useDialogRequest();
     const [kept, setKept] = useState(draft?.attachments ?? []);
     const dueRef = useRef<HTMLInputElement>(null);
 
@@ -623,13 +625,12 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
             {draft && (
                 <Modal
                     open={discarding}
-                    onClose={() => setDiscarding(false)}
-                    size="xs"
+                    onClose={() => setDiscarding(false)} size="confirm"
                     title="حذف المسودة"
                     description="تُحذف المسودة وبنودها ومرفقاتها. لم تصدر فاتورة، فلا قيد ولا رقم يتأثر."
-                    footer={<><Button variant="outline" onClick={() => setDiscarding(false)}>إلغاء</Button><Button variant="danger" onClick={() => router.delete(route('club.invoices.drafts.discard', draft.id))}>حذف المسودة</Button></>}
+                    footer={<><Button variant="outline" onClick={() => setDiscarding(false)} disabled={discard.busy}>إلغاء</Button><Button variant="danger" loading={discard.busy} onClick={() => discard.send('delete', route('club.invoices.drafts.discard', draft.id), () => setDiscarding(false))}>حذف المسودة</Button></>}
                 >
-                    <span />
+                    {discard.error && <p className="mt-2 text-sm text-red-600" role="alert">{discard.error}</p>}
                 </Modal>
             )}
         </ClubLayout>
@@ -764,8 +765,7 @@ function ProductDialog({ open, onClose, products, truncated, picked, addonsOf, r
     return (
         <Modal
             open={open}
-            onClose={onClose}
-            size="wide"
+            onClose={onClose} size="large"
             title={choosing ? choosing.name : 'منتج من الكتالوج'}
             description={choosing ? 'اختر الإضافات لكل قطعة — أو أضف المنتج بدونها.' : 'ابحث بالاسم أو رمز الصنف أو الباركود — والنافذة تبقى مفتوحة لتضيف أكثر من بند.'}
             footer={choosing ? (
@@ -840,7 +840,6 @@ function LineAddonsDialog({ line, options, room, onClose, onSave }: { line: Line
         <Modal
             open
             onClose={onClose}
-            size="md"
             title={`إضافات «${line.description || 'البند'}»`}
             description={<>لكل قطعة من <span className="num">{N(line.quantity)}</span> — وكل إضافة بند مستقل تحت المنتج في الفاتورة.</>}
             footer={<>
@@ -932,8 +931,7 @@ function AddonsDialog({ open, onClose, addons, products, lines, productOf, room,
     return (
         <Modal
             open={open}
-            onClose={onClose}
-            size="wide"
+            onClose={onClose} size="large"
             title={addon ? addon.name : 'إضافة من الإضافات'}
             description={addon ? <>{addon.scope} · <span className="num">{money(addon.price, currency)}</span> للواحدة · {addon.max > 1 ? <>حتى <span className="num">{addon.max}</span> لكل قطعة</> : 'واحدة لكل قطعة'}</> : 'الإضافات المفعّلة في نقطة البيع — كل إضافة تُباع مع صنف من الكتالوج.'}
             footer={addon ? (

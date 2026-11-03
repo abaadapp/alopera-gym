@@ -68,8 +68,7 @@ export default function ConfirmAction({
             <Modal
                 open={open}
                 onClose={() => setOpen(false)}
-                title={title}
-                size="xs"
+                title={title} size="confirm"
                 footer={
                     <>
                         {/* «إلغاء» beside «إلغاء العملية» reads as the action itself: the way back is then «تراجع». */}

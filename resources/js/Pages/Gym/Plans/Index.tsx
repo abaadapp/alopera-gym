@@ -142,8 +142,7 @@ function PlanModal({ open, plan, programs, types, onClose }: { open: boolean; pl
         <Modal
             open={open}
             onClose={onClose}
-            title={plan ? `تعديل: ${plan.name}` : 'باقة جديدة'}
-            size="xl"
+            title={plan ? `تعديل: ${plan.name}` : 'باقة جديدة'} size="wide"
             footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}
         >
             <form onSubmit={submit} className="grid gap-6 md:grid-cols-2">

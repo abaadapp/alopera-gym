@@ -206,8 +206,7 @@ function TemplateModal({ template, onClose }: { template: Template | null; onClo
     return (
         <Modal
             open
-            onClose={onClose}
-            size="lg"
+            onClose={onClose} size="large"
             title={template ? `قالب: ${template.label}` : 'قالب تسويقي جديد'}
             footer={
                 <>

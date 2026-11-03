@@ -181,7 +181,7 @@ function OpenDialog({ drawers, onClose }: { drawers: Props['drawers']; onClose: 
     };
 
     return (
-        <Modal open onClose={onClose} title="فتح وردية" size="sm"
+        <Modal open onClose={onClose} title="فتح وردية" size="compact"
             footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="shift-open" loading={form.processing}>فتح الوردية</Button></>}>
             <form id="shift-open" onSubmit={submit} className="space-y-4">
                 <Field label="الصندوق" error={form.errors.account_id} required>
@@ -210,7 +210,7 @@ function MoveDialog({ shift, direction, accounts, onClose }: { shift: OpenShift;
     };
 
     return (
-        <Modal open onClose={onClose} title={direction === 'out' ? 'نقل نقد من الدرج' : 'إضافة نقد إلى الدرج'} size="sm" description="تحويل بين حسابين، لا إيراد ولا مصروف."
+        <Modal open onClose={onClose} title={direction === 'out' ? 'نقل نقد من الدرج' : 'إضافة نقد إلى الدرج'} size="compact" description="تحويل بين حسابين، لا إيراد ولا مصروف."
             footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="shift-move" loading={form.processing}>تسجيل</Button></>}>
             <form id="shift-move" onSubmit={submit} className="space-y-4">
                 {direction === 'out' && <p className="text-[13px] text-muted">المتوقع في الدرج: <span className="num font-medium text-ink">{money(shift.summary.expected, currency)}</span></p>}

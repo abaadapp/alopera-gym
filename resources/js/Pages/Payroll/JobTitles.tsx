@@ -56,7 +56,7 @@ function TitleForm({ title, onClose }: { title: Title | null; onClose: () => voi
         title ? form.put(route('club.job-titles.update', title.id), opts) : form.post(route('club.job-titles.store'), opts);
     };
     return (
-        <Modal open onClose={onClose} size="sm" title={title ? 'تعديل المسمى' : 'مسمى جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
+        <Modal open onClose={onClose} size="compact" title={title ? 'تعديل المسمى' : 'مسمى جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
             <form onSubmit={submit} className="space-y-4">
                 <Field label="المسمى" error={form.errors.name} required><Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} autoFocus /></Field>
                 <Field label="الوصف" error={form.errors.description}><Input value={form.data.description} onChange={(e) => form.setData('description', e.target.value)} /></Field>

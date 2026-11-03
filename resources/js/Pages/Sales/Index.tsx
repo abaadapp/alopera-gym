@@ -177,7 +177,7 @@ export default function SalesIndex({ sales, period, filters, totals, options, ca
                 title="المبيعات"
                 subtitle={allowed.websiteOnly ? 'طلبات الموقع الإلكتروني: التجهيز والتسليم والإلغاء' : 'متابعة عمليات البيع من نقطة البيع والموقع الإلكتروني'}
                 actions={<>
-                    <ExportMenu href={allowed.export ? route('club.sales.export') : null} params={exportParams} title="عمليات البيع" size="md" />
+                    <ExportMenu href={allowed.export ? route('club.sales.export') : null} params={exportParams} title="عمليات البيع" />
                     {allowed.pos && <Button href={route('club.pos.index')} icon={<ShoppingBag />}>نقطة البيع</Button>}
                 </>}
             />

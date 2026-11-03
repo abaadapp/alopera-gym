@@ -1,39 +1,32 @@
 import { useState } from 'react';
-import { ChevronDown, Download, FileSpreadsheet, FileText, FileType2, LoaderCircle, Lock } from 'lucide-react';
+import { Download, FileDown, FileSpreadsheet, FileText, LoaderCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { Dropdown, DropdownItem, DropdownLabel } from '@/Components/ui/Dropdown';
+import { Dropdown, DropdownItem } from '@/Components/ui/Dropdown';
 import { cn } from '@/lib/cn';
 
 const FORMATS = [
     { key: 'xlsx', label: 'تصدير كملف إكسل', icon: FileSpreadsheet },
-    { key: 'csv', label: 'تصدير كملف CSV', icon: FileText },
-    { key: 'pdf', label: 'تصدير كملف PDF', icon: FileType2 },
+    { key: 'pdf', label: 'تصدير كملف PDF', icon: FileText },
+    { key: 'csv', label: 'تصدير كملف CSV', icon: FileDown },
 ] as const;
 
 /**
- * A report's «تصدير» button: a menu of Excel, CSV and PDF. The file is fetched in the background so the page can say
- * what happened — a file of headings only when there is no data, no permission, too many exports in a minute — and
- * is then saved under the name the server gave it (the report's key and dates, nothing personal).
+ * A screen's «تصدير» button, in its header beside the page's other buttons: a menu of Excel, PDF and CSV, as the
+ * reference's. The file is fetched in the background so the page can say what happened — a file of headings only when
+ * there is no data, no permission, too many exports in a minute — and is then saved under the name the server gave it
+ * (the report's key and dates, nothing personal). While it is on its way the button says so and takes no second click.
  *
- * `href` is the report's export address; `params` its filters (the page's address, or nothing for the card's
- * opening period, which `scope` names). Without `href` the button is shown locked: the user may not export.
+ * `href` is the export address and `params` the screen's filters (its period, branch, comparison…), so the file holds
+ * what the screen shows. Without `href` the user may not export, and there is no button at all: one that answers 403
+ * makes its user think the system broken. The server checks the permission again either way.
  */
-export default function ExportMenu({ href, params, title, scope, size = 'sm' }: { href: string | null; params?: Record<string, string>; title: string; scope?: string; size?: 'sm' | 'md' }) {
+export default function ExportMenu({ href, params, title }: { href: string | null; params?: Record<string, string>; title: string }) {
     const [busy, setBusy] = useState(false);
-    // Beside the page's other header buttons it is one of them: 40px, outlined, «تصدير» with the download mark.
-    const box = cn('inline-flex items-center rounded-[10px] border border-[#dcdcdc] bg-white font-medium text-[#111] transition-colors', size === 'sm' ? 'h-8 gap-1.5 px-2.5 text-[12px] [&_svg]:size-3.5' : 'h-10 gap-2 px-4 text-sm [&_svg]:size-[18px]');
 
-    if (!href) {
-        return (
-            <span className={cn(box, 'cursor-not-allowed text-[#9ca3af]')} title="تحتاج صلاحية «تصدير التقارير»" aria-disabled="true">
-                <Lock className="size-3.5" />
-                تصدير
-                <span className="sr-only">: تحتاج صلاحية «تصدير التقارير»</span>
-            </span>
-        );
-    }
+    if (!href) return null;
 
     const download = async (format: string) => {
+        if (busy) return;
         setBusy(true);
         try {
             const url = `${href}?${new URLSearchParams({ ...(params ?? {}), format }).toString()}`;
@@ -70,24 +63,19 @@ export default function ExportMenu({ href, params, title, scope, size = 'sm' }: 
             label={`تصدير ${title}`}
             panelClassName="w-56"
             trigger={({ open }) => (
-                <span className={cn(box, open ? 'bg-[#fafafa]' : 'hover:bg-[#fafafa]')}>
+                // The reference's outline button: 40px (44px on a touch screen), «تصدير» with the download mark.
+                <span aria-busy={busy} className={cn('inline-flex h-10 items-center gap-2 rounded-[10px] border border-[#dcdcdc] bg-white px-4 text-sm font-medium text-[#111] transition-colors touch:h-11 [&_svg]:size-[18px]', busy && 'pointer-events-none opacity-50', open ? 'bg-[#fafafa]' : 'hover:bg-[#fafafa]')}>
                     {busy ? <LoaderCircle className="animate-spin" /> : <Download />}
-                    تصدير
-                    {size === 'sm' && <ChevronDown className={cn('text-[#9ca3af] transition-transform', open && 'rotate-180')} />}
+                    {busy ? 'جاري التصدير…' : 'تصدير'}
                 </span>
             )}
         >
-            {(close) => (
-                <>
-                    {scope && <DropdownLabel>الفترة: {scope}</DropdownLabel>}
-                    {FORMATS.map((f) => (
-                        <DropdownItem key={f.key} onClick={() => { close(); void download(f.key); }}>
-                            <f.icon />
-                            {f.label}
-                        </DropdownItem>
-                    ))}
-                </>
-            )}
+            {(close) => FORMATS.map((f) => (
+                <DropdownItem key={f.key} onClick={() => { close(); void download(f.key); }}>
+                    <f.icon className="text-[#9ca3af]" />
+                    {f.label}
+                </DropdownItem>
+            ))}
         </Dropdown>
     );
 }

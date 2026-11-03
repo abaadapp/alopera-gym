@@ -121,8 +121,7 @@ export default function Classes({ site, seo, sessions, membership, cutoffHours, 
             <Modal
                 open={cancelling !== null}
                 onClose={() => setCancelling(null)}
-                title="إلغاء الحجز"
-                size="sm"
+                title="إلغاء الحجز" size="compact"
                 footer={
                     <>
                         <Button variant="outline" onClick={() => setCancelling(null)}>تراجع</Button>

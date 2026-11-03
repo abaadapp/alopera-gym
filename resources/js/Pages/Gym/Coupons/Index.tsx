@@ -112,7 +112,7 @@ function CouponModal({ open, coupon, plans, onClose }: { open: boolean; coupon: 
     const togglePlan = (id: number) => form.setData('plan_ids', form.data.plan_ids.includes(id) ? form.data.plan_ids.filter((x) => x !== id) : [...form.data.plan_ids, id]);
 
     return (
-        <Modal open={open} onClose={onClose} title={coupon ? `تعديل ${coupon.code}` : 'كود خصم جديد'} size="lg" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
+        <Modal open={open} onClose={onClose} title={coupon ? `تعديل ${coupon.code}` : 'كود خصم جديد'} size="large" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
                 <Field label="الكود" error={err.code} required hint="أحرف إنجليزية وأرقام">
                     <Input dir="ltr" value={form.data.code} onChange={(e) => form.setData('code', e.target.value.toUpperCase().replace(/\s/g, ''))} placeholder="RAMADAN25" />

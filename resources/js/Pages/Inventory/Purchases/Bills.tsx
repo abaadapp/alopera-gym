@@ -120,7 +120,7 @@ function NewBill({ suppliers, orders, taxRate, preselect, canApprove, onClose }:
     };
 
     return (
-        <Modal open onClose={onClose} size="lg" title="سند مورد جديد" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="new-bill" loading={form.processing}>{form.data.approve ? 'تسجيل واعتماد' : 'تسجيل السند'}</Button></>}>
+        <Modal open onClose={onClose} size="large" title="سند مورد جديد" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="new-bill" loading={form.processing}>{form.data.approve ? 'تسجيل واعتماد' : 'تسجيل السند'}</Button></>}>
             <form id="new-bill" onSubmit={submit} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="المورد" error={form.errors.supplier_id} required>

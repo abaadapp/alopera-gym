@@ -77,8 +77,7 @@ export function VoidDialog({ sale, onClose }: { sale: Pick<SaleRow, 'id' | 'numb
     return (
         <Modal
             open
-            onClose={onClose}
-            size="xs"
+            onClose={onClose} size="confirm"
             title={`إلغاء عملية البيع ${sale.number}`}
             description="تعود المنتجات إلى المخزون، ويصدر إشعار دائن ويُسجَّل رد المبلغ بطريقة الدفع نفسها. تسجيل الرد لا ينفّذ تحويلًا فعليًا."
             footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button variant="danger" loading={busy} disabled={reason.trim() === ''} onClick={() => submit()}>إلغاء البيع</Button></>}
@@ -139,8 +138,7 @@ export function CancelOrderDialog({ sale, onClose }: { sale: Pick<SaleRow, 'id' 
     return (
         <Modal
             open
-            onClose={onClose}
-            size="sm"
+            onClose={onClose} size="compact"
             title={`إلغاء الطلب ${sale.number}`}
             description={<>تعود الكميات إلى المخزون. {sale.paid ? 'الطلب مدفوع: يصدر إشعار دائن بكامل المبلغ ويُسجَّل رده. تسجيل الرد لا ينفّذ تحويلًا فعليًا؛ نفّذه من Paymob أو الصندوق.' : 'تُلغى فاتورة الطلب غير المدفوعة.'}</>}
             footer={<><Button variant="outline" onClick={onClose}>تراجع</Button><Button variant="danger" loading={form.processing} disabled={form.data.reason.trim() === ''} onClick={() => submit()}>إلغاء الطلب</Button></>}

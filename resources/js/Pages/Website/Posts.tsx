@@ -110,8 +110,7 @@ function PostModal({ post, onClose }: { post: Post | null; onClose: () => void }
     return (
         <Modal
             open
-            onClose={onClose}
-            size="lg"
+            onClose={onClose} size="large"
             title={post ? 'تعديل' : 'خبر أو عرض جديد'}
             footer={
                 <>

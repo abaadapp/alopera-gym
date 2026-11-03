@@ -363,7 +363,7 @@ function QuickBookModal({ open, onClose, memberId, sessions }: { open: boolean; 
     };
 
     return (
-        <Modal open={open} onClose={onClose} title="حجز حصة اليوم" size="sm" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={busy} disabled={!sessionId}>حجز</Button></>}>
+        <Modal open={open} onClose={onClose} title="حجز حصة اليوم" size="compact" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={busy} disabled={!sessionId}>حجز</Button></>}>
             {upcoming.length === 0 ? (
                 <p className="text-sm text-muted">لا توجد حصص متبقية اليوم. للحجز في أيام أخرى افتح «الحصص والحجوزات».</p>
             ) : (
@@ -405,8 +405,7 @@ function QuickPayModal({ invoice, onClose }: { invoice: { id: number; number: st
         <Modal
             open={invoice !== null}
             onClose={onClose}
-            title={`تحصيل — ${invoice?.number ?? ''}`}
-            size="sm"
+            title={`تحصيل — ${invoice?.number ?? ''}`} size="compact"
             footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>تسجيل الدفعة</Button></>}
         >
             <form onSubmit={submit} className="space-y-4">

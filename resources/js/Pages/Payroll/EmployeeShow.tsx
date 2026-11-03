@@ -312,7 +312,7 @@ function AccessModal({ employeeId, account, access, onClose }: { employeeId: num
     };
 
     return (
-        <Modal open onClose={onClose} size="xl" title="الدور والصلاحيات" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
+        <Modal open onClose={onClose} size="wide" title="الدور والصلاحيات" footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
             <form onSubmit={submit} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="الدور" error={form.errors.role_id} required>

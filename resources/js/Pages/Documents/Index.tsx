@@ -191,7 +191,7 @@ function DocumentModal({ document, props, onClose }: { document: DocumentRow | n
     };
 
     return (
-        <Modal open onClose={onClose} size="lg" title={document ? `تعديل «${document.name}»` : 'مستند جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button loading={form.processing} onClick={submit}>حفظ</Button></>}>
+        <Modal open onClose={onClose} size="large" title={document ? `تعديل «${document.name}»` : 'مستند جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button loading={form.processing} onClick={submit}>حفظ</Button></>}>
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
                 <Field label="اسم المستند" error={form.errors.name} required className="sm:col-span-2">
                     <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} maxLength={160} placeholder="مثال: السجل التجاري — الفرع الرئيسي" />

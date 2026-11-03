@@ -594,7 +594,8 @@ function PaymentDialog({ total, cart, member, guest, discount, basketKey, device
     return (
         <Modal
             open
-            onClose={busy ? () => undefined : onClose}
+            onClose={onClose}
+            dismissible={!busy}
             title={result ? 'تمت العملية' : 'إتمام الدفع'}
             footer={
                 result ? undefined : (
@@ -693,7 +694,7 @@ function PaymentDialog({ total, cart, member, guest, discount, basketKey, device
                 </div>
             )}
             {preview && (
-                <Modal open onClose={() => setPreview(null)} size="xl" title="معاينة الإيصال">
+                <Modal open onClose={() => setPreview(null)} size="wide" title="معاينة الإيصال">
                     <iframe src={`${preview}${preview.includes('?') ? '&' : '?'}print=0`} title="الإيصال" className="h-[70vh] w-full rounded-[12px] border border-[#e8e8e8] bg-white" />
                 </Modal>
             )}
@@ -712,7 +713,7 @@ function ItemOptions({ product, room, currency, onClose, onAdd }: { product: Pro
         <Modal
             open
             onClose={onClose}
-            size="md"
+            size="compact"
             title={product.name}
             footer={
                 <div className="w-full">

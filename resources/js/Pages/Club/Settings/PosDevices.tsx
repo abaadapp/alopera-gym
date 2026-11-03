@@ -10,6 +10,7 @@ import { number } from '@/lib/format';
 import { recordPrint } from '@/lib/printing/print-log';
 import { failureMessage, insideApp, printDocument, stageMessage, testPrinter } from '@/lib/printing/printer-service';
 import type { PrinterLike, PrintOutcome, PrintStage } from '@/lib/printing/types';
+import useDialogRequest from '@/hooks/useDialogRequest';
 
 interface Peripheral { id: number; type: string; name: string; brand: string | null; model: string | null; connection: string; address: string | null; port: number | null; paper_width: number | null; paper: string | null; direct: boolean; printing: PrinterLike | null; is_default: boolean; auto_print: boolean; print_website_orders: boolean; is_active: boolean; notes: string | null; last_status: string | null; last_error: string | null; last_checked_at: string | null }
 interface Warning { level: 'certain' | 'check'; code: string; message: string; peripheral: number | null }
@@ -48,8 +49,8 @@ export default function PosDevices({ devices, code, branches, accounts, policy, 
     const [deleting, setDeleting] = useState<Device | null>(null);
     // Asked in the system's own dialog, not the browser's.
     const [revoking, setRevoking] = useState<Device | null>(null);
-    const [busy, setBusy] = useState(false);
-    const revoke = (d: Device) => setRevoking(d);
+    const revocation = useDialogRequest();
+    const revoke = (d: Device) => { revocation.clear(); setRevoking(d); };
     const shown = code ? devices.find((d) => d.id === code.device) : null;
     const current = hardware ? devices.find((d) => d.id === hardware.id) ?? null : null;
 
@@ -131,12 +132,12 @@ export default function PosDevices({ devices, code, branches, accounts, policy, 
             {current && <PeripheralsDialog device={current} options={options} onClose={() => setHardware(null)} />}
             <Modal
                 open={revoking !== null}
-                onClose={() => setRevoking(null)}
-                size="xs"
+                onClose={() => setRevoking(null)} size="confirm"
                 title={`إلغاء تفعيل «${revoking?.name ?? ''}»`}
-                footer={<><Button variant="outline" onClick={() => setRevoking(null)}>تراجع</Button><Button variant="danger" loading={busy} onClick={() => revoking && router.post(route('club.settings.pos-devices.revoke', revoking.id), {}, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => { setBusy(false); setRevoking(null); } })}>إلغاء التفعيل</Button></>}
+                footer={<><Button variant="outline" onClick={() => setRevoking(null)} disabled={revocation.busy}>تراجع</Button><Button variant="danger" loading={revocation.busy} onClick={() => revoking && revocation.send('post', route('club.settings.pos-devices.revoke', revoking.id), () => setRevoking(null))}>إلغاء التفعيل</Button></>}
             >
                 <p className="text-sm text-[#4b4b4b]">{revoking?.is_this ? 'هذا هو الجهاز الذي تستخدمه الآن. ' : ''}لن يستطيع البيع حتى يُربط من جديد.</p>
+                {revocation.error && <p className="mt-2 text-sm text-red-600" role="alert">{revocation.error}</p>}
             </Modal>
             <ConfirmDelete target={deleting} url={deleting && route('club.settings.pos-devices.destroy', deleting.id)} title={`حذف «${deleting?.name}»`} message="جهاز لم تُسجَّل عليه أي عملية بيع؛ يُحذف سجله وملحقاته." onClose={() => setDeleting(null)} />
         </SettingsScreen>
@@ -179,7 +180,7 @@ function PeripheralsDialog({ device, options, onClose }: { device: Device; optio
     const connectionLabel = (p: Peripheral) => (p.type === 'printer' ? (p.connection === 'network' ? 'شبكة (IP)' : 'حوار الطباعة') : connections[p.connection]);
 
     return (
-        <Modal open onClose={onClose} size="lg" title={`ملحقات «${device.name}»`} footer={editing === null ? <><Button variant="outline" onClick={onClose}>إغلاق</Button><Button icon={<Plus />} onClick={() => setEditing('new')}>إضافة ملحق</Button></> : undefined}>
+        <Modal open onClose={onClose} size="large" title={`ملحقات «${device.name}»`} footer={editing === null ? <><Button variant="outline" onClick={onClose}>إغلاق</Button><Button icon={<Plus />} onClick={() => setEditing('new')}>إضافة ملحق</Button></> : undefined}>
             {editing !== null ? (
                 <PeripheralForm device={device} peripheral={editing === 'new' ? null : editing} options={options} onDone={() => setEditing(null)} />
             ) : (

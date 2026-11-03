@@ -130,8 +130,7 @@ function RoleModal({ role, groups, grantable, requires, onClose }: { role: Role 
     return (
         <Modal
             open
-            onClose={onClose}
-            size="xl"
+            onClose={onClose} size="wide"
             title={role ? role.name : 'دور مخصص جديد'}
             footer={locked ? <Button variant="outline" onClick={onClose}>إغلاق</Button> : <><Button variant="outline" onClick={onClose}>إلغاء</Button><Button icon={<Check />} onClick={submit} loading={form.processing}>حفظ</Button></>}
         >

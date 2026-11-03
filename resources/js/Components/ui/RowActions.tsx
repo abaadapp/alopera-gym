@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react';
-import { router } from '@inertiajs/react';
 import { Eye, MoreVertical, Pencil, Trash2 } from 'lucide-react';
 import Button from './Button';
 import Modal from './Modal';
 import { Dropdown, DropdownItem, DropdownSeparator } from './Dropdown';
+import useDialogRequest from '@/hooks/useDialogRequest';
 
 export interface RowAction {
     label: string;
@@ -20,9 +20,9 @@ export interface RowAction {
  */
 export default function RowActions({ label, show, edit, destroy, extra = [] }: { label: string; show?: string; edit?: () => void; destroy?: { url: string; message?: string }; extra?: RowAction[] }) {
     const [confirming, setConfirming] = useState(false);
-    const [busy, setBusy] = useState(false);
+    const { busy, error, send, clear } = useDialogRequest();
     if (!show && !edit && !destroy && extra.length === 0) return null;
-    const remove = () => destroy && router.delete(destroy.url, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => { setBusy(false); setConfirming(false); } });
+    const remove = () => destroy && send('delete', destroy.url, () => setConfirming(false));
 
     return (
         <>
@@ -37,14 +37,15 @@ export default function RowActions({ label, show, edit, destroy, extra = [] }: {
                         {destroy && (
                             <>
                                 <DropdownSeparator />
-                                <DropdownItem destructive onClick={() => { close(); setConfirming(true); }}><Trash2 /> حذف</DropdownItem>
+                                <DropdownItem destructive onClick={() => { close(); clear(); setConfirming(true); }}><Trash2 /> حذف</DropdownItem>
                             </>
                         )}
                     </>
                 )}
             </Dropdown>
-            <Modal open={confirming} onClose={() => setConfirming(false)} size="xs" title="تأكيد الحذف" footer={<><Button variant="outline" onClick={() => setConfirming(false)} disabled={busy}>إلغاء</Button><Button variant="danger" loading={busy} onClick={remove}>حذف</Button></>}>
+            <Modal open={confirming} onClose={() => setConfirming(false)} size="confirm" title="تأكيد الحذف" footer={<><Button variant="outline" onClick={() => setConfirming(false)} disabled={busy}>إلغاء</Button><Button variant="danger" loading={busy} onClick={remove}>حذف</Button></>}>
                 <p className="text-sm text-[#4b4b4b]">{destroy?.message ?? 'سيُحذف هذا السجل نهائيًا. هل تريد المتابعة؟'}</p>
+                {error && <p className="mt-2 text-sm text-red-600" role="alert">{error}</p>}
             </Modal>
         </>
     );

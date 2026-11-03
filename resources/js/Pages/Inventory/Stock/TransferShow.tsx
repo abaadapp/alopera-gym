@@ -79,10 +79,11 @@ function Resolve({ transfer, line, onClose }: { transfer: Transfer; line: Line; 
     const [quantity, setQuantity] = useState(String(line.outstanding));
     const [reason, setReason] = useState('');
     const [errors, setErrors] = useState<Record<string, string>>({});
-    const submit = () => router.post(route('club.inventory.transfers.step', { transfer: transfer.id, step: 'resolve' }), { line_id: line.id, outcome, quantity, reason }, { preserveScroll: true, onSuccess: onClose, onError: setErrors });
+    const [busy, setBusy] = useState(false);
+    const submit = () => router.post(route('club.inventory.transfers.step', { transfer: transfer.id, step: 'resolve' }), { line_id: line.id, outcome, quantity, reason }, { preserveScroll: true, onStart: () => setBusy(true), onSuccess: onClose, onError: setErrors, onFinish: () => setBusy(false) });
 
     return (
-        <Modal open onClose={onClose} size="sm" title={`تسوية الناقص: ${line.product}`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit}>تسجيل</Button></>}>
+        <Modal open onClose={onClose} size="compact" title={`تسوية الناقص: ${line.product}`} footer={<><Button variant="outline" onClick={onClose} disabled={busy}>إلغاء</Button><Button onClick={submit} loading={busy}>تسجيل</Button></>}>
             <div className="space-y-4">
                 <Field label="ما حدث للكمية" error={errors.outcome}>
                     <Select value={outcome} onChange={(e) => setOutcome(e.target.value)}>
