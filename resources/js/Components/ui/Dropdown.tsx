@@ -1,105 +1,70 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { Link } from '@inertiajs/react';
+import * as Menu from '@radix-ui/react-dropdown-menu';
+import { ChevronLeft } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useAdmin } from './AdminScope';
 
+type Align = 'start' | 'end';
+
 /**
- * A menu that opens under its trigger: click (or Enter/Space) toggles it, Escape and a click outside close it, and
- * with `hover` it also opens while the pointer is over the trigger or the menu (closing a moment after it leaves,
- * so moving from one to the other does not drop it). Aligned to the end of the trigger (the left in Arabic), or to its
- * start when it would not fit that way.
+ * The menu of the system, on Radix's dropdown menu as the reference's: a white panel 12px rounded with a #e8e8e8
+ * hairline and a soft shadow, 6px under its trigger; items are 8px-rounded rows that turn light grey under the pointer
+ * and the keyboard. It appears and goes at once, as the reference's does in the browser. Click (or Enter, Space, the
+ * down arrow) opens it; the arrows, Home, End and a first letter move through its items; Escape, a click outside or a
+ * choice close it and the trigger has the focus again. While it is open the page behind holds still and takes no
+ * pointer (as the reference's) — except a `hover` menu, which also opens while the pointer is over the trigger or the
+ * menu (closing a moment after it leaves, so moving from one to the other does not drop it) and leaves the page live.
  *
- * The panel is 12px-rounded, white, with a soft shadow; items are 8px-rounded rows that turn light grey on hover
- * and focus. `DropdownItem` renders a link, a button, or a destructive (red) action.
- *
- * The panel is drawn over the page (portalled), placed from its trigger: a row's menu in a table that scrolls sideways
- * is never cut off, and near the bottom of the screen it opens upwards. The arrow keys move through its items.
+ * Its edge is the trigger's end edge (the left in Arabic), or its start edge (`align`) — the other one when the menu
+ * would run off the screen that way (a button at the right of a phone's screen: the menu under it, edge to edge, as the
+ * reference's). Near the bottom of the screen it opens upwards. `DropdownItem` is a link, a button or a destructive
+ * (red) action; `DropdownSub` a row that opens its own list beside the menu.
  */
-export function Dropdown({ trigger, children, label, hover = false, className, panelClassName }: {
+export function Dropdown({ trigger, children, label, hover = false, align = 'end', className, panelClassName }: {
     trigger: (state: { open: boolean }) => ReactNode;
     children: ReactNode | ((close: () => void) => ReactNode);
     label: string;
     hover?: boolean;
+    align?: Align;
     className?: string;
     panelClassName?: string;
 }) {
     const [open, setOpen] = useState(false);
     const admin = useAdmin();
-    const box = useRef<HTMLDivElement>(null);
-    const panel = useRef<HTMLDivElement>(null);
-    // Fixed from the first frame (as wide as its items, not the page), hidden until it is placed.
-    const hidden: CSSProperties = { position: 'fixed', top: 0, left: 0, visibility: 'hidden' };
-    const [place, setPlace] = useState<CSSProperties>(hidden);
+    const button = useRef<HTMLButtonElement>(null);
+    const dir = typeof document !== 'undefined' && document.documentElement.dir === 'ltr' ? 'ltr' : 'rtl';
+    const [edge, setEdge] = useState<Align>(align);
     const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
     // Opened by the pointer coming over it: the click that usually follows keeps it open instead of closing it.
     const byHover = useRef(false);
-    const button = useRef<HTMLButtonElement>(null);
-    // An item chosen: the focus goes back to the trigger first, so a dialog the item opens returns it there too
-    // (the item itself is gone once the menu closes).
-    const close = () => {
-        button.current?.focus({ preventScroll: true });
-        setOpen(false);
-    };
-
-    useEffect(() => {
-        if (!open) return;
-        const onDown = (e: PointerEvent) => !box.current?.contains(e.target as Node) && !panel.current?.contains(e.target as Node) && setOpen(false);
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') close();
-        };
-        document.addEventListener('pointerdown', onDown);
-        document.addEventListener('keydown', onKey);
-        return () => {
-            document.removeEventListener('pointerdown', onDown);
-            document.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
 
     useEffect(() => () => clearTimeout(timer.current), []);
 
-    // Under the trigger at its end edge (the left in Arabic) — at its start edge when the menu would run off the screen
-    // that way (a button at the right of a phone's screen: the menu under it, edge to edge, as the reference's) — kept
-    // on the screen, upwards when there is no room below; placed again as the page or a table scrolls.
-    useLayoutEffect(() => {
-        if (!open) {
-            setPlace(hidden);
-            return;
+    const change = (next: boolean) => {
+        if (!next) {
+            byHover.current = false;
+            setEdge(align);
         }
-        const put = () => {
-            const trigger = box.current?.getBoundingClientRect();
-            const menu = panel.current;
-            if (!trigger || !menu) return;
-            const width = menu.offsetWidth;
-            const height = menu.offsetHeight;
-            const rtl = getComputedStyle(box.current!).direction === 'rtl';
-            const vw = window.innerWidth;
-            const vh = window.innerHeight;
-            let left = rtl ? trigger.left : trigger.right - width;
-            if (rtl && left + width > vw - 8) left = trigger.right - width;
-            if (!rtl && left < 8) left = trigger.left;
-            left = Math.min(Math.max(8, left), vw - width - 8);
-            const below = trigger.bottom + 6;
-            const top = below + height > vh - 8 && trigger.top - height - 6 > 8 ? trigger.top - height - 6 : below;
-            setPlace({ position: 'fixed', top, left, visibility: 'visible' });
-        };
-        put();
-        window.addEventListener('scroll', put, true);
-        window.addEventListener('resize', put);
-        return () => {
-            window.removeEventListener('scroll', put, true);
-            window.removeEventListener('resize', put);
-        };
-    }, [open]);
-
-    // Down and up move through the items, Home and End to the first and last.
-    const keys = (e: ReactKeyboardEvent) => {
-        const items = [...(panel.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
-        if (!items.length || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
-        e.preventDefault();
-        const at = items.indexOf(document.activeElement as HTMLElement);
-        const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : e.key === 'ArrowDown' ? (at + 1) % items.length : (at - 1 + items.length) % items.length;
-        items[next].focus();
+        setOpen(next);
+    };
+    // An item chosen: the menu is gone and the focus back on the trigger before the item acts, so a dialog the item
+    // opens gives the focus back there too (the item itself is gone by then).
+    const close = () => {
+        flushSync(() => change(false));
+        button.current?.focus({ preventScroll: true });
+    };
+    // The edge it hangs from, once its width is known: the other one when it would not fit on the screen that way.
+    const fit = (panel: HTMLDivElement | null) => {
+        const t = button.current?.getBoundingClientRect();
+        if (!panel || !t) return;
+        const width = panel.offsetWidth;
+        const room = window.innerWidth - 8;
+        const fromLeft = (dir === 'rtl') === (align === 'end');
+        const fits = fromLeft ? t.left + width <= room : t.right - width >= 8;
+        const want = fits ? align : align === 'end' ? 'start' : 'end';
+        if (want !== edge) setEdge(want);
     };
 
     const enter = () => {
@@ -111,66 +76,113 @@ export function Dropdown({ trigger, children, label, hover = false, className, p
     const leave = () => {
         if (!hover) return;
         clearTimeout(timer.current);
-        timer.current = setTimeout(() => {
-            byHover.current = false;
-            setOpen(false);
-        }, 180);
-    };
-    const toggle = () => {
-        if (byHover.current) {
-            byHover.current = false;
-            setOpen(true);
-            return;
-        }
-        setOpen((v) => !v);
+        timer.current = setTimeout(() => change(false), 140);
     };
 
     return (
-        <div ref={box} className={cn('relative', className)} onMouseEnter={enter} onMouseLeave={leave}>
-            <button ref={button} type="button" aria-haspopup="menu" aria-expanded={open} aria-label={label} onClick={toggle}
-                onKeyDown={(e) => e.key === 'ArrowDown' && open && (e.preventDefault(), panel.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus())}
-                className="block rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-[#111]/15">
-                {trigger({ open })}
-            </button>
-            {open && createPortal(
-                // A layer of its own (data-layer): opened from a dialog it is not «outside» it, and it takes the pointer
-                // the dialog withholds from the page.
-                <div data-layer className={cn('pointer-events-auto', admin && 'admin-ui')} dir={box.current ? getComputedStyle(box.current).direction : undefined}>
-                    <div
-                        ref={panel}
-                        role="menu"
+        <div className={cn('relative', className)} onMouseEnter={enter} onMouseLeave={leave}>
+            <Menu.Root open={open} onOpenChange={change} modal={!hover} dir={dir}>
+                <Menu.Trigger asChild>
+                    <button
+                        ref={button}
+                        type="button"
                         aria-label={label}
-                        style={place}
-                        onKeyDown={keys}
+                        onPointerDown={(e) => {
+                            if (!byHover.current) return;
+                            byHover.current = false;
+                            e.preventDefault();
+                        }}
+                        className="block rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-[#111]/15"
+                    >
+                        {trigger({ open })}
+                    </button>
+                </Menu.Trigger>
+                <Menu.Portal>
+                    <Menu.Content
+                        ref={fit}
+                        // A layer of its own (data-layer): opened from a dialog it is not «outside» it.
+                        data-layer
+                        aria-label={label}
+                        align={edge}
+                        sideOffset={6}
+                        collisionPadding={8}
                         onMouseEnter={enter}
                         onMouseLeave={leave}
+                        // The trigger is not «outside»: a click on it is its own (it opens, closes, or keeps a hover menu).
+                        onInteractOutside={(e) => button.current?.contains(e.target as Node) && e.preventDefault()}
+                        onCloseAutoFocus={(e) => {
+                            e.preventDefault();
+                            // A dialog an item opened keeps the focus; otherwise the trigger has it again.
+                            const covered = [...document.querySelectorAll('[role=dialog][data-state=open]')].some((d) => !d.contains(button.current));
+                            if (!covered) button.current?.focus({ preventScroll: true });
+                        }}
                         className={cn(
-                            'z-[60] min-w-[10rem] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)]',
+                            // Portalled out of the page, so it carries the control panel's look along (see AdminScope).
+                            admin && 'admin-ui',
+                            'z-[60] min-w-[10rem] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white p-1.5 text-start shadow-[0_8px_30px_rgba(0,0,0,0.10)] outline-none',
                             panelClassName,
                         )}
                     >
                         {typeof children === 'function' ? children(close) : children}
-                    </div>
-                </div>,
-                document.body,
-            )}
+                    </Menu.Content>
+                </Menu.Portal>
+            </Menu.Root>
         </div>
     );
 }
 
-const itemClass = 'relative flex w-full cursor-pointer select-none items-center gap-2.5 rounded-[8px] px-3 py-2 text-start text-sm outline-none transition-colors [&_svg]:size-4 [&_svg]:shrink-0';
+const itemClass = 'relative flex w-full cursor-pointer select-none items-center gap-2.5 rounded-[8px] px-3 py-2 text-start text-sm outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0';
 
 export function DropdownItem({ href, onClick, destructive, external, children, className }: { href?: string; onClick?: () => void; destructive?: boolean; external?: boolean; children: ReactNode; className?: string }) {
-    const cls = cn(itemClass, destructive ? 'text-[#b91c1c] hover:bg-[#fef2f2] focus-visible:bg-[#fef2f2]' : 'text-[#111] hover:bg-[#f2f2f0] focus-visible:bg-[#f2f2f0]', className);
-    if (href && external) return <a role="menuitem" href={href} target="_blank" rel="noreferrer" className={cls} onClick={onClick}>{children}</a>;
-    if (href) return <Link role="menuitem" href={href} className={cls} onClick={onClick}>{children}</Link>;
-    return <button role="menuitem" type="button" className={cls} onClick={onClick}>{children}</button>;
+    const cls = cn(itemClass, destructive ? 'text-[#b91c1c] focus:bg-[#fef2f2]' : 'text-[#111] focus:bg-[#f2f2f0]', className);
+    return (
+        <Menu.Item asChild onSelect={() => onClick?.()}>
+            {href && external ? (
+                <a href={href} target="_blank" rel="noreferrer" className={cls}>{children}</a>
+            ) : href ? (
+                <Link href={href} className={cls}>{children}</Link>
+            ) : (
+                <button type="button" className={cls}>{children}</button>
+            )}
+        </Menu.Item>
+    );
+}
+
+/**
+ * A button or link of a menu's own look (a notification, «تعليم الكل كمقروء»), reached with the arrows like any item:
+ * choosing it closes the menu, unless `keepOpen` (an action whose answer the menu itself shows).
+ */
+export function DropdownAction({ children, keepOpen = false }: { children: ReactNode; keepOpen?: boolean }) {
+    return <Menu.Item asChild onSelect={(e) => keepOpen && e.preventDefault()}>{children}</Menu.Item>;
+}
+
+/** A row that opens its own list beside the menu (to the left in Arabic), as the reference's filters do. */
+export function DropdownSub({ label, children, className }: { label: ReactNode; children: ReactNode; className?: string }) {
+    const admin = useAdmin();
+    return (
+        <Menu.Sub>
+            <Menu.SubTrigger className="flex w-full cursor-default select-none items-center gap-2 rounded-[8px] px-3 py-2 text-start text-sm text-[#111] outline-none focus:bg-[#f2f2f0] data-[state=open]:bg-[#f2f2f0]">
+                {label}
+                <ChevronLeft className="ms-auto size-4 ltr:rotate-180" />
+            </Menu.SubTrigger>
+            <Menu.Portal>
+                <Menu.SubContent
+                    data-layer
+                    collisionPadding={8}
+                    // 8rem at least, as the reference's — narrower only where the screen has less room beside the menu (a 360px phone).
+                    className={cn(admin && 'admin-ui', 'z-[60] min-w-[min(8rem,var(--radix-dropdown-menu-content-available-width))] max-w-[var(--radix-dropdown-menu-content-available-width)] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white p-1.5 text-start shadow-[0_8px_30px_rgba(0,0,0,0.10)] outline-none', className)}
+                >
+                    {children}
+                </Menu.SubContent>
+            </Menu.Portal>
+        </Menu.Sub>
+    );
 }
 
 export function DropdownLabel({ children, className }: { children: ReactNode; className?: string }) {
-    return <div className={cn('px-3 py-1.5 text-[12px] font-semibold text-[#9ca3af]', className)}>{children}</div>;
+    return <Menu.Label className={cn('px-3 py-1.5 text-[12px] font-semibold text-[#9ca3af]', className)}>{children}</Menu.Label>;
 }
 
 export function DropdownSeparator() {
-    return <div role="separator" className="-mx-1.5 my-1.5 h-px bg-[#e8e8e8]" />;
+    return <Menu.Separator className="-mx-1.5 my-1.5 h-px bg-[#e8e8e8]" />;
 }

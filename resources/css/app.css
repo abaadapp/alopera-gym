@@ -154,11 +154,12 @@ html:has(.admin-ui)::-webkit-scrollbar-thumb:hover {
 }
 
 /*
- * A dialog (Components/ui/Modal) is portalled out of the panel, as the reference's: its text is not drawn tighter and
- * its colour is the page's, not the panel's.
+ * A dialog (Components/ui/Modal) and a menu (Components/ui/Dropdown) are portalled out of the panel, as the reference's:
+ * their text is not drawn tighter and a dialog's colour is the page's, not the panel's.
  */
 [role='dialog'].admin-ui,
-[role='dialog'].admin-ui :is(h1, h2, h3, .font-display) {
+[role='dialog'].admin-ui :is(h1, h2, h3, .font-display),
+[role='menu'].admin-ui {
     letter-spacing: normal;
 }
 [role='dialog'].admin-ui {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { router } from '@inertiajs/react';
 import { Check, LayoutGrid, ListFilter, Minus, MoreHorizontal, Package, Plus, Rows3, Search, X } from 'lucide-react';
 import { Badge, Button, Modal } from '@/Components/ui';
-import { Dropdown, DropdownItem, DropdownLabel, DropdownSeparator } from '@/Components/ui/Dropdown';
+import { Dropdown, DropdownItem, DropdownSub } from '@/Components/ui/Dropdown';
 import { cn } from '@/lib/cn';
 import { number } from '@/lib/format';
 import useDialogRequest from '@/hooks/useDialogRequest';
@@ -68,7 +68,7 @@ export function StatusTabs({ value, counts, onChange, labels = ['مفعّل', '�
 
 export type FilterDef = { key: string; label: string; options: { value: string; label: string }[] };
 
-/** «أضف فلتر»: a menu of each filter's choices; a chosen one shows as a chip with ✕. */
+/** «أضف فلتر»: each filter by name, its choices beside the menu (the reference's filters); a chosen one shows as a chip with ✕. */
 export function FilterMenu({ filters, values, onChange }: { filters: FilterDef[]; values: Record<string, string>; onChange: (key: string, value: string) => void }) {
     const chosen = filters.flatMap((f) => {
         const option = f.options.find((o) => o.value === values[f.key]);
@@ -83,20 +83,18 @@ export function FilterMenu({ filters, values, onChange }: { filters: FilterDef[]
                     <button type="button" onClick={() => onChange(c.key, '')} className="grid size-5 place-items-center rounded-full text-[#6b7280] hover:bg-white hover:text-ink" aria-label={`إزالة ${c.text}`}><X className="size-3.5" /></button>
                 </span>
             ))}
-            <Dropdown label="أضف فلتر" panelClassName="w-64 max-h-[70vh] overflow-y-auto" trigger={() => (
+            <Dropdown label="أضف فلتر" align="start" panelClassName="min-w-52" trigger={() => (
                 <span className="inline-flex h-9 items-center gap-1.5 rounded-[10px] px-3 text-[13px] font-medium text-[#4b4b4b] hover:bg-ink/[0.045] hover:text-ink"><ListFilter className="size-4" /> أضف فلتر</span>
             )}>
-                {(close) => filters.map((f, i) => (
-                    <div key={f.key}>
-                        {i > 0 && <DropdownSeparator />}
-                        <DropdownLabel>{f.label}</DropdownLabel>
+                {(close) => filters.map((f) => (
+                    <DropdownSub key={f.key} label={f.label} className="max-h-72 overflow-y-auto">
                         {f.options.map((o) => (
                             <DropdownItem key={o.value} onClick={() => { onChange(f.key, values[f.key] === o.value ? '' : o.value); close(); }}>
                                 <span className="flex-1">{o.label}</span>
                                 {values[f.key] === o.value && <Check className="text-ink" />}
                             </DropdownItem>
                         ))}
-                    </div>
+                    </DropdownSub>
                 ))}
             </Dropdown>
         </>

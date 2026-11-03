@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { router } from '@inertiajs/react';
-import { ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ListFilter, Search, X } from 'lucide-react';
-import { Dropdown, DropdownItem, DropdownLabel, DropdownSeparator } from './Dropdown';
+import { ArrowUpDown, ChevronDown, ChevronUp, ListFilter, Search, X } from 'lucide-react';
+import { Dropdown, DropdownItem, DropdownSeparator, DropdownSub } from './Dropdown';
 import Tabs from './Tabs';
 import { cn } from '@/lib/cn';
 
@@ -121,7 +121,7 @@ export default function DataTable<T>({ rows, columns, card, rowKey, params, pagi
                         </label>
                     )}
                     {unapplied.length > 0 && (
-                        <Dropdown label="أضف فلتر" panelClassName="min-w-52 max-h-80 overflow-y-auto" trigger={() => <span className={ghost}><ListFilter /> أضف فلتر</span>}>
+                        <Dropdown label="أضف فلتر" align="start" panelClassName="min-w-52" trigger={() => <span className={ghost}><ListFilter /> أضف فلتر</span>}>
                             {(close) => <FilterChoices filters={unapplied} onPick={(param, v) => { close(); go({ [param]: v }); }} />}
                         </Dropdown>
                     )}
@@ -242,31 +242,16 @@ export default function DataTable<T>({ rows, columns, card, rowKey, params, pagi
     );
 }
 
-/** «أضف فلتر»: the filters by name; one opens its choices in the same menu (and «رجوع» comes back). */
+/** «أضف فلتر»: the filters by name, each opening its choices beside the menu (scrolling past 288px), as the reference's. */
 function FilterChoices({ filters, onPick }: { filters: TableFilter[]; onPick: (param: string, value: string) => void }) {
-    const [open, setOpen] = useState<TableFilter | null>(filters.length === 1 ? filters[0] : null);
-    if (!open) {
-        return filters.map((f) => (
-            <DropdownItem key={f.param} onClick={() => setOpen(f)}>
-                <span className="flex-1">{f.label}</span>
-                <ChevronLeft className="text-[#9ca3af]" />
-            </DropdownItem>
-        ));
-    }
-
-    return (
-        <>
-            {filters.length > 1 ? (
-                <button type="button" onClick={() => setOpen(null)} className="flex w-full items-center gap-1 px-3 py-1.5 text-[12px] font-semibold text-[#9ca3af] hover:text-ink"><ChevronRight className="size-3.5" />{open.label}</button>
-            ) : (
-                <DropdownLabel>{open.label}</DropdownLabel>
-            )}
-            {(open.options ?? []).filter((o) => !o.hidden).map((o) => (
-                <DropdownItem key={o.value} onClick={() => onPick(open.param, o.value)}>
+    return filters.map((f) => (
+        <DropdownSub key={f.param} label={f.label} className="max-h-72 overflow-y-auto">
+            {(f.options ?? []).filter((o) => !o.hidden).map((o) => (
+                <DropdownItem key={o.value} onClick={() => onPick(f.param, o.value)}>
                     {o.dot && <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: o.dot }} />}
                     <span className="flex-1">{o.label}</span>
                 </DropdownItem>
             ))}
-        </>
-    );
+        </DropdownSub>
+    ));
 }

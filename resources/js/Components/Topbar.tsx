@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, router } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
 import { Bell, Blocks, Building2, Check, CheckCheck, ChevronDown, Clock, CreditCard, FileText, Globe, LoaderCircle, Lock, LogOut, Mail, Menu, MessageCircle, Search, Settings, ShoppingBag, Store, Ticket, UserRound, X } from 'lucide-react';
-import { Dropdown, DropdownItem, DropdownLabel, DropdownSeparator } from '@/Components/ui/Dropdown';
+import { Dropdown, DropdownAction, DropdownItem, DropdownLabel, DropdownSeparator } from '@/Components/ui/Dropdown';
 import { useCan, useShared } from '@/hooks/useShared';
 import { NAV } from '@/lib/nav';
 import { cn } from '@/lib/cn';
@@ -135,9 +135,12 @@ function BranchPicker() {
 /** One notification row: kind icon, text and time; opening it marks it read and leads to its screen. */
 export function NotificationRow({ n, onOpen, compact = false }: { n: StaffNotification; onOpen?: () => void; compact?: boolean }) {
     const Icon = NOTIFICATION_ICONS[n.kind] ?? Bell;
+    // In the bell's menu (compact) the link and the tick are its items, reached with the arrows; on the list page, links.
+    const Item = compact ? DropdownAction : Plain;
     return (
-        <div className={cn('group flex items-start gap-1 rounded-[8px] px-1 transition-colors hover:bg-[#f5f5f4]', !n.read && 'bg-[#fafaf9]')}>
-            <Link href={route('club.notifications.open', n.id)} onClick={onOpen} className={cn('flex min-w-0 flex-1 items-start gap-2.5 px-2', compact ? 'py-2' : 'py-3')}>
+        <div className={cn('group flex items-start gap-1 rounded-[8px] px-1 transition-colors hover:bg-[#f5f5f4] focus-within:bg-[#f5f5f4]', !n.read && 'bg-[#fafaf9]')}>
+            <Item>
+            <Link href={route('club.notifications.open', n.id)} onClick={onOpen} className={cn('flex min-w-0 flex-1 items-start gap-2.5 px-2 outline-none', compact ? 'py-2' : 'py-3')}>
                 <span className={cn('relative mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-[#f2f2f0]', n.read ? 'text-[#9ca3af]' : 'text-[#111]')}>
                     <Icon className="size-4" />
                     {!n.read && <span className="absolute -end-0.5 -top-0.5 size-2.5 rounded-full border-2 border-white bg-[#dc2626]" />}
@@ -148,7 +151,9 @@ export function NotificationRow({ n, onOpen, compact = false }: { n: StaffNotifi
                     {!n.read && <span className="sr-only">غير مقروء</span>}
                 </span>
             </Link>
+            </Item>
             {!n.read && (
+                <Item keepOpen>
                 <button
                     type="button"
                     onClick={() => router.post(route('club.notifications.read', n.id), {}, { preserveScroll: true })}
@@ -158,9 +163,14 @@ export function NotificationRow({ n, onOpen, compact = false }: { n: StaffNotifi
                 >
                     <Check className="size-3.5" />
                 </button>
+                </Item>
             )}
         </div>
     );
+}
+
+function Plain({ children }: { children: ReactNode; keepOpen?: boolean }) {
+    return children;
 }
 
 /** The bell: a red badge with the unread count, the latest notifications, «mark all read» and the full list. */
@@ -218,7 +228,7 @@ function NotificationBell({ bell }: { bell: Bell }) {
     return (
         <Dropdown
             label="الإشعارات"
-            panelClassName="w-[21rem] max-w-[calc(100vw-1.5rem)] max-sm:fixed max-sm:inset-x-3 max-sm:top-[4.25rem] max-sm:w-auto"
+            panelClassName="w-[21rem] max-w-[calc(100vw-1.5rem)]"
             trigger={() => (
                 <span className={iconButton}>
                     <Bell />
@@ -235,13 +245,15 @@ function NotificationBell({ bell }: { bell: Bell }) {
                     <div className="flex items-center justify-between gap-2 px-3 py-1.5">
                         <span className="text-sm font-semibold text-[#111]">الإشعارات</span>
                         {unread > 0 && (
-                            <button
-                                type="button"
-                                onClick={() => router.post(route('club.notifications.read-all'), {}, { preserveScroll: true })}
-                                className="inline-flex items-center gap-1 text-[12px] text-[#6b7280] transition-colors hover:text-[#111]"
-                            >
-                                <CheckCheck className="size-3.5" /> تعليم الكل كمقروء
-                            </button>
+                            <DropdownAction keepOpen>
+                                <button
+                                    type="button"
+                                    onClick={() => router.post(route('club.notifications.read-all'), {}, { preserveScroll: true })}
+                                    className="inline-flex items-center gap-1 rounded-[6px] text-[12px] text-[#6b7280] outline-none transition-colors hover:text-[#111] focus:text-[#111] focus-visible:ring-2 focus-visible:ring-[#111]/15"
+                                >
+                                    <CheckCheck className="size-3.5" /> تعليم الكل كمقروء
+                                </button>
+                            </DropdownAction>
                         )}
                     </div>
                     <DropdownSeparator />
@@ -256,9 +268,11 @@ function NotificationBell({ bell }: { bell: Bell }) {
                         </div>
                     )}
                     <DropdownSeparator />
-                    <Link href={route('club.notifications.index')} onClick={close} className="block rounded-[8px] px-3 py-2 text-center text-[13px] font-medium text-[#111] transition-colors hover:bg-[#f2f2f0]">
-                        عرض كل الإشعارات
-                    </Link>
+                    <DropdownAction>
+                        <Link href={route('club.notifications.index')} onClick={close} className="block rounded-[8px] px-3 py-2 text-center text-[13px] font-medium text-[#111] outline-none transition-colors hover:bg-[#f2f2f0] focus:bg-[#f2f2f0]">
+                            عرض كل الإشعارات
+                        </Link>
+                    </DropdownAction>
                 </>
             )}
         </Dropdown>
