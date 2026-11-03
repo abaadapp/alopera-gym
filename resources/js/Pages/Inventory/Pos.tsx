@@ -718,7 +718,7 @@ function ItemOptions({ product, room, currency, onClose, onAdd }: { product: Pro
             footer={
                 <div className="w-full">
                     <div className="mb-3 flex items-center justify-between text-sm"><span className="text-gray-600">الإجمالي</span><span className="text-base font-bold text-gray-900 num">{money(total, currency)}</span></div>
-                    <Button size="lg" className="w-full" disabled={room < quantity} onClick={() => onAdd(quantity, addons)} icon={<Check />}>إضافة للسلة</Button>
+                    <Button size="lg" className="w-full" disabled={room < quantity} onClick={() => onAdd(quantity, addons)}>إضافة للسلة</Button>
                 </div>
             }
         >

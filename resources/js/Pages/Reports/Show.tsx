@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { router, usePage } from '@inertiajs/react';
 import { Info } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import PeriodTabs, { PeriodButton, type Range } from '@/Components/PeriodTabs';
+import PeriodTabs, { PeriodButton, periodLabel, type Range } from '@/Components/PeriodTabs';
 import ExportMenu from '@/Components/Reports/ExportMenu';
 import { DuesBody, FinanceBody, MovementBody, StatementsBody, type Dues, type Movement, type PeriodReport, type Statements } from '@/Components/Reports/Finance';
 import { CheckinsBody, ClassesBody, ExpiringBody, MembersBody, StaffBody, TrainersBody, type Checkins, type Expiring, type StaffAttendance, type Trainers } from '@/Components/Reports/People';
@@ -60,7 +60,7 @@ function Chip({ on, onClick, children, small }: { on: boolean; onClick: () => vo
 /** A filter of the filter card: a 12px caption over its 40px field. */
 function Captioned({ label, children }: { label: string; children: ReactNode }) {
     return (
-        <label className="flex min-w-[10rem] flex-1 flex-col gap-1 sm:max-w-[16rem]">
+        <label className="flex min-w-[10rem] flex-1 flex-col gap-1">
             <span className="text-[12px] text-[#6b7280]">{label}</span>
             {children}
         </label>
@@ -100,7 +100,7 @@ export default function ReportShow({ kind, title, description, mode, compare, fi
                 actions={
                     <>
                         {/* The period beside «تصدير»: what is shown is what the file holds. A report without a period has no button. */}
-                        {mode === 'period' && <PeriodButton label={filters.from === filters.to ? date(filters.from) : `${date(filters.from)} – ${date(filters.to)}`} onClick={() => setPicking(true)} />}
+                        {mode === 'period' && <PeriodButton label={periodLabel(filters.range, filters.from, filters.to)} onClick={() => setPicking(true)} />}
                         <ExportMenu href={canExport ? route('club.reports.export', kind) : null} params={exportParams} title={title} />
                     </>
                 }

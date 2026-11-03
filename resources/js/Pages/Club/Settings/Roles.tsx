@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
-import { Check, Lock, Pencil, Plus, ShieldCheck, Trash2, Users } from 'lucide-react';
+import { Lock, Pencil, Plus, ShieldCheck, Trash2, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { togglePermission } from '@/lib/permissions';
 import { SettingsScreen } from '@/Components/Settings';
@@ -132,7 +132,7 @@ function RoleModal({ role, groups, grantable, requires, onClose }: { role: Role 
             open
             onClose={onClose} size="wide"
             title={role ? role.name : 'دور مخصص جديد'}
-            footer={locked ? <Button variant="outline" onClick={onClose}>إغلاق</Button> : <><Button variant="outline" onClick={onClose}>إلغاء</Button><Button icon={<Check />} onClick={submit} loading={form.processing}>حفظ</Button></>}
+            footer={locked ? <Button variant="outline" onClick={onClose}>إغلاق</Button> : <><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}
         >
             {locked && <p className="mb-4 rounded-[10px] bg-[#eff6ff] px-3 py-2 text-[12px] leading-relaxed text-[#1d4ed8]">دور صاحب النشاط يملك كل الصلاحيات ولا يمكن تعديله، حتى لا يُغلق النظام على نفسه.</p>}
             {!locked && groups.some((g) => g.permissions.some((p) => !mine(p.key))) && <p className="mb-4 rounded-[10px] bg-[#fffbeb] px-3 py-2 text-[12px] leading-relaxed text-[#b45309]">الصلاحيات الباهتة لا تملكها أنت، فلا تمنحها ولا تسحبها؛ تبقى على حالها في الدور.</p>}

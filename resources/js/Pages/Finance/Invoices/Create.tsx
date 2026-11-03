@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { router, useForm } from '@inertiajs/react';
-import { Check, Info, Paperclip, Plus, PlusCircle, RefreshCw, Save, Search, Send, Settings2, Trash2, UserPlus, UserRound, Users, X } from 'lucide-react';
+import { Info, Paperclip, Plus, PlusCircle, RefreshCw, Save, Search, Send, Settings2, Trash2, UserPlus, UserRound, Users, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PaperFrame from '@/Components/Papers/PaperFrame';
 import { clientKey } from '@/Components/Inventory/parts';
@@ -772,7 +772,7 @@ function ProductDialog({ open, onClose, products, truncated, picked, addonsOf, r
                 <>
                     <span className="me-auto text-[13px] text-[#6b7280]">الإجمالي <span className="font-bold text-ink num">{money(lineTotal(choosing.price, quantity, picks, options), currency)}</span></span>
                     <Button variant="outline" onClick={() => setChoosing(null)}>رجوع</Button>
-                    <Button icon={<Check />} onClick={() => add(choosing, quantity, picks)}>إضافة للفاتورة</Button>
+                    <Button onClick={() => add(choosing, quantity, picks)}>إضافة للفاتورة</Button>
                 </>
             ) : (
                 <>{added > 0 && <span className="me-auto text-[12px] text-[#047857]">أُضيف <span className="num">{added}</span> بندًا</span>}<Button variant="outline" onClick={onClose}>تمّ</Button></>
@@ -845,7 +845,7 @@ function LineAddonsDialog({ line, options, room, onClose, onSave }: { line: Line
             footer={<>
                 <span className="me-auto text-[13px] text-[#6b7280]">الإضافات <span className="font-bold text-ink num">{money(total, currency)}</span></span>
                 <Button variant="outline" onClick={onClose}>إلغاء</Button>
-                <Button icon={<Check />} onClick={() => onSave(picks)}>حفظ الإضافات</Button>
+                <Button onClick={() => onSave(picks)}>حفظ الإضافات</Button>
             </>}
         >
             <AddonChoices options={options} chosen={chosen} onChange={setChosen} room={room} />
@@ -938,7 +938,7 @@ function AddonsDialog({ open, onClose, addons, products, lines, productOf, room,
                 <>
                     <span className="me-auto text-[13px] text-[#6b7280]">{target ? <>الإضافة <span className="font-bold text-ink num">{money(addonAmount(addon.price, units(pieces, Math.min(qty, cap))), currency)}</span></> : 'اختر الصنف أولًا'}</span>
                     <Button variant="outline" onClick={() => setAddon(null)}>رجوع</Button>
-                    <Button icon={<Check />} disabled={!target || cap < 1} onClick={confirm}>{already > 0 ? 'تحديث الإضافة' : 'إضافة للفاتورة'}</Button>
+                    <Button disabled={!target || cap < 1} onClick={confirm}>{already > 0 ? 'تحديث الإضافة' : 'إضافة للفاتورة'}</Button>
                 </>
             ) : (
                 <>{added > 0 && <span className="me-auto text-[12px] text-[#047857]">أُضيفت <span className="num">{added}</span></span>}<Button variant="outline" onClick={onClose}>تمّ</Button></>

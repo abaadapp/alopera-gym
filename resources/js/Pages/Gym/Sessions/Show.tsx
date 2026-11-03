@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, router, useForm } from '@inertiajs/react';
-import { Ban, Check, Clock, MapPin, Pencil, Phone, UserCheck, UserRound, Users, UserX, X } from 'lucide-react';
+import { Ban, Clock, MapPin, Pencil, Phone, UserCheck, UserRound, Users, UserX, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, MemberPicker, Modal, PageHeader, Select, Stat, BackLink } from '@/Components/ui';
 import { useCan } from '@/hooks/useShared';
@@ -206,7 +206,7 @@ export default function SessionShow({ session, bookings, trainers }: { session: 
                 footer={
                     <>
                         <Button variant="outline" onClick={() => setEditOpen(false)}>إلغاء</Button>
-                        <Button type="submit" form="session-edit" loading={form.processing} icon={<Check className="size-4" />}>حفظ</Button>
+                        <Button type="submit" form="session-edit" loading={form.processing}>حفظ</Button>
                     </>
                 }
             >

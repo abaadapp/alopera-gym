@@ -267,7 +267,7 @@ function RenewModal({ document, maxKb, onClose }: { document: DocumentRow; maxKb
     };
 
     return (
-        <Modal open onClose={onClose} title={`تجديد «${document.name}»`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button loading={form.processing} icon={<RefreshCw />} onClick={submit}>تسجيل التجديد</Button></>}>
+        <Modal open onClose={onClose} title={`تجديد «${document.name}»`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button loading={form.processing} onClick={submit}>تسجيل التجديد</Button></>}>
             <form onSubmit={submit} className="space-y-4">
                 <p className="text-sm text-muted">
                     {document.expiry_date ? <>ينتهي حاليًا في <span className="num">{date(document.expiry_date)}</span>. </> : null}

@@ -244,7 +244,7 @@ function CloseDialog({ shift, onClose }: { shift: OpenShift; onClose: () => void
 
     return (
         <Modal open onClose={onClose} title={`إقفال الوردية ${shift.number}`} description="اعدد النقد في الدرج وأدخله. تُقفل الوردية مرة واحدة، ويُقيَّد أي فرق في الدفاتر."
-            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="shift-close" loading={form.processing} disabled={difference !== null && difference !== 0 && form.data.close_note.trim() === ''} icon={<Lock className="size-4" />}>إقفال الوردية</Button></>}>
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="shift-close" loading={form.processing} disabled={difference !== null && difference !== 0 && form.data.close_note.trim() === ''}>إقفال الوردية</Button></>}>
             <form id="shift-close" onSubmit={submit} className="space-y-4">
                 <ShiftFigures shift={shift} summary={shift.summary} />
                 <Field label="النقد المعدود" error={form.errors.counted_cash} required>

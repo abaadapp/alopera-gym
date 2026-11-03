@@ -180,7 +180,7 @@ function PeripheralsDialog({ device, options, onClose }: { device: Device; optio
     const connectionLabel = (p: Peripheral) => (p.type === 'printer' ? (p.connection === 'network' ? 'شبكة (IP)' : 'حوار الطباعة') : connections[p.connection]);
 
     return (
-        <Modal open onClose={onClose} size="large" title={`ملحقات «${device.name}»`} footer={editing === null ? <><Button variant="outline" onClick={onClose}>إغلاق</Button><Button icon={<Plus />} onClick={() => setEditing('new')}>إضافة ملحق</Button></> : undefined}>
+        <Modal open onClose={onClose} size="large" title={`ملحقات «${device.name}»`} footer={editing === null ? <><Button variant="outline" icon={<Plus />} onClick={() => setEditing('new')}>إضافة ملحق</Button><span className="flex-1" /><Button variant="outline" onClick={onClose}>إغلاق</Button></> : undefined}>
             {editing !== null ? (
                 <PeripheralForm device={device} peripheral={editing === 'new' ? null : editing} options={options} onDone={() => setEditing(null)} />
             ) : (

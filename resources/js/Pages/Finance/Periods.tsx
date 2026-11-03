@@ -200,7 +200,7 @@ function CloseDialog({ month, months, checks, onClose }: { month: Month; months:
 
     return (
         <Modal open onClose={onClose} size="large" title={`إقفال ${month.label}`} description="بعد الإقفال لا يُرحَّل قيد بتاريخ في هذا الشهر أو قبله، ولا يُعدَّل مصروف أو سند بتاريخه."
-            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={processing} disabled={blocked} icon={<Lock className="size-4" />}>إقفال الفترة</Button></>}>
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={processing} disabled={blocked}>إقفال الفترة</Button></>}>
             <div className="space-y-4">
                 {before.length > 0 && <Notice tone="blue">سيُقفل معه كل شهر مفتوح قبله، ويُفحص كل منها بالقواعد نفسها: {before.join('، ')}.</Notice>}
                 {!checks ? (
@@ -236,7 +236,7 @@ function CloseYearDialog({ year, onClose }: { year: Year; onClose: () => void })
 
     return (
         <Modal open onClose={onClose} title={`إقفال سنة ${year.year}`} description="تُحفظ أرقام السنة مع إقفالها. لا يُعاد فتح أي شهر منها إلا بعد إعادة فتح السنة."
-            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing} icon={<Lock className="size-4" />}>إقفال السنة</Button></>}>
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>إقفال السنة</Button></>}>
             {form.errors.year ? <Notice tone="red">{form.errors.year}</Notice> : <p className="text-[13px] text-muted">كل أشهر السنة مقفلة. لا تُرحَّل قيود إقفال، فتبقى الحسابات كما هي وتُقرأ لكل فترة.</p>}
         </Modal>
     );
@@ -251,7 +251,7 @@ function ReopenDialog({ target, onClose }: { target: { month?: Month; year?: Yea
 
     return (
         <Modal open onClose={onClose} title={`إعادة فتح ${label}`} description="يُسجَّل السبب واسمك ووقت الفتح في سجل التدقيق. بعد التصحيح أقفل الفترة مجددًا."
-            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button variant="danger" onClick={submit} loading={form.processing} disabled={form.data.reason.trim().length < 10} icon={<LockOpen className="size-4" />}>إعادة الفتح</Button></>}>
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button variant="danger" onClick={submit} loading={form.processing} disabled={form.data.reason.trim().length < 10}>إعادة الفتح</Button></>}>
             <div className="space-y-3">
                 {scopeError && <Notice tone="red">{scopeError}</Notice>}
                 <Field label="سبب إعادة الفتح" error={form.errors.reason} required hint="عشرة أحرف على الأقل.">

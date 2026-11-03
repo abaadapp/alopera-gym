@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, router, useForm } from '@inertiajs/react';
-import { CalendarPlus, ChevronLeft, ChevronRight, Plus, RefreshCw, Users } from 'lucide-react';
+import { CalendarPlus, ChevronLeft, ChevronRight, RefreshCw, Users } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, cardActive, Field, Input, Modal, PageHeader, Select } from '@/Components/ui';
 import { useCan } from '@/hooks/useShared';
@@ -173,7 +173,7 @@ export default function SessionsIndex({ week, sessions, programs, trainers, filt
                 footer={
                     <>
                         <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
-                        <Button type="submit" form="session-form" loading={form.processing} icon={<Plus className="size-4" />}>إضافة</Button>
+                        <Button type="submit" form="session-form" loading={form.processing}>إضافة</Button>
                     </>
                 }
             >

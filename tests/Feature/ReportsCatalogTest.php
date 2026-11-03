@@ -95,11 +95,11 @@ class ReportsCatalogTest extends TestCase
         return [$club, $owner, $khoud, $member];
     }
 
-    public function test_every_card_opens_its_report_whose_page_exports_a_real_excel_and_csv_file(): void
+    public function test_every_card_opens_its_report_whose_page_exports_a_real_excel_pdf_and_csv_file(): void
     {
         [$club, $owner] = $this->busyClub();
         $reports = $this->catalog($owner);
-        // 32 files in a row: past the ten-a-minute limit, which ExportsAuditSecurityTest covers.
+        // Three files for each report in a row: past the ten-a-minute limit, which ExportsAuditSecurityTest covers.
         $this->withoutMiddleware(ThrottleRequests::class);
 
         $this->assertEqualsCanonicalizing(ReportCatalog::keys(), array_column($reports, 'key'), 'the owner of a club with two branches sees every report');
@@ -119,6 +119,10 @@ class ReportsCatalogTest extends TestCase
             $this->assertStringStartsWith('PK', $xlsx->streamedContent(), "{$key}: a real xlsx (zip) file");
             $this->assertMatchesRegularExpression('/filename="?'.preg_quote($key, '/').'-[0-9_-]+\.xlsx/', $xlsx->headers->get('content-disposition'), "{$key}: named by key and dates only");
 
+            // Every report gives all three formats its menu offers.
+            $pdf = $this->actingAs($owner)->get($export.'?format=pdf')->assertOk()->assertHeader('content-type', 'application/pdf');
+            $this->assertStringStartsWith('%PDF', $pdf->streamedContent() ?: $pdf->getContent(), "{$key}: a real PDF file");
+
             $csv = $this->actingAs($owner)->get($export.'?format=csv')->assertOk();
             $body = $csv->streamedContent();
             $this->assertStringStartsWith("\xEF\xBB\xBF", $body, "{$key}: Excel-friendly CSV");
@@ -128,7 +132,7 @@ class ReportsCatalogTest extends TestCase
             $this->assertContains($csv->headers->get('x-report-empty'), ['0', '1']);
         }
 
-        $this->assertSame(count($reports) * 2, $this->asTenant($club, fn () => AuditLog::where('event', 'report.exported')->count()), 'every export is audited');
+        $this->assertSame(count($reports) * 3, $this->asTenant($club, fn () => AuditLog::where('event', 'report.exported')->count()), 'every export is audited');
     }
 
     public function test_exports_carry_the_reports_figures_in_arabic_with_three_decimal_amounts(): void
@@ -296,6 +300,22 @@ class ReportsCatalogTest extends TestCase
 
         $csv = $this->actingAs($owner)->get(route('club.reports.export', ['report' => 'trainers', 'preset' => 'today', 'format' => 'csv']))->assertOk()->streamedContent();
         $this->assertStringContainsString('ريم', $csv);
+    }
+
+    public function test_the_staff_report_compares_with_a_previous_period_that_has_attendance(): void
+    {
+        [$club, $owner] = $this->busyClub();
+        // Two punches yesterday too: the comparison (the day before a one-day period) has records of its own whose people
+        // it names — loaded with them, not one query a record (which a strict model refuses for more than one).
+        $this->asTenant($club, function () use ($owner) {
+            StaffAttendance::create(['user_id' => $owner->id, 'method' => 'manual', 'clock_in_at' => now()->subDay()->startOfDay()->addHours(7), 'clock_out_at' => now()->subDay()->startOfDay()->addHours(10)]);
+            StaffAttendance::create(['user_id' => $owner->id, 'method' => 'manual', 'clock_in_at' => now()->subDay()->startOfDay()->addHours(14), 'clock_out_at' => now()->subDay()->startOfDay()->addHours(16)]);
+        });
+        $today = ['report' => 'staff-attendance', 'range' => 'custom', 'from' => today()->toDateString(), 'to' => today()->toDateString()];
+
+        $this->actingAs($owner)->get(route('club.reports.show', $today))->assertOk()
+            ->assertInertia(fn ($page) => $page->where('data.summary.0.user', $owner->name)->where('data.empty', false));
+        $this->assertStringContainsString($owner->name, $this->actingAs($owner)->get(route('club.reports.export', [...$today, 'format' => 'csv']))->assertOk()->streamedContent());
     }
 
     public function test_the_branch_report_adds_up_to_the_club_with_records_without_a_branch_in_the_main_one(): void

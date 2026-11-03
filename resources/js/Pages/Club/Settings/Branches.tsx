@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useForm } from '@inertiajs/react';
-import { Building2, Check, CircleCheck, CirclePause, Plus, PowerOff } from 'lucide-react';
+import { Building2, CircleCheck, CirclePause, Plus, PowerOff } from 'lucide-react';
 import { SettingsScreen } from '@/Components/Settings';
 import { Badge, Button, Card, DataTable, Field, Input, Modal, RowActions, Toggle, type Column } from '@/Components/ui';
 import useDialogRequest from '@/hooks/useDialogRequest';
@@ -97,7 +97,7 @@ function BranchModal({ branch, onClose }: { branch: Branch | null; onClose: () =
     };
 
     return (
-        <Modal open onClose={onClose} title={branch ? 'تعديل الفرع' : 'فرع جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button icon={<Check />} onClick={submit} loading={form.processing}>حفظ</Button></>}>
+        <Modal open onClose={onClose} title={branch ? 'تعديل الفرع' : 'فرع جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
                 <Field label="اسم الفرع" error={form.errors.name} required className="sm:col-span-2">
                     <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} />

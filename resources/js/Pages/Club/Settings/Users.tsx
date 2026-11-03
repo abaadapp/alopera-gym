@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
-import { Check, Plus, UserRound, UserX } from 'lucide-react';
+import { Plus, UserRound, UserX } from 'lucide-react';
 import { SettingsScreen } from '@/Components/Settings';
 import { Badge, Button, Card, DataTable, Field, Input, Modal, RowActions, Select, Toggle, type Column } from '@/Components/ui';
 import { useShared } from '@/hooks/useShared';
@@ -113,7 +113,7 @@ function UserModal({ user, roles, branches, onClose }: { user: StaffRow | null; 
     };
 
     return (
-        <Modal open onClose={onClose} title={user ? `تعديل: ${user.name}` : 'مستخدم جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button icon={<Check />} onClick={submit} loading={form.processing}>حفظ</Button></>}>
+        <Modal open onClose={onClose} title={user ? `تعديل: ${user.name}` : 'مستخدم جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
                 <Field label="الاسم" error={form.errors.name} required className="sm:col-span-2">
                     <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} />

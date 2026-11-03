@@ -1,8 +1,9 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { router } from '@inertiajs/react';
-import { CalendarRange } from 'lucide-react';
+import { CalendarRange, X } from 'lucide-react';
 import { Button, Field, Input, Modal, Tabs } from '@/Components/ui';
 import { cn } from '@/lib/cn';
+import { date } from '@/lib/format';
 
 export type Range = 'today' | 'week' | 'month' | 'year' | 'all' | 'custom';
 
@@ -30,10 +31,24 @@ export function periodParams(period: Period): Record<string, string> {
         : { range: period.range };
 }
 
+const QUICK: Partial<Record<Range, string>> = { today: 'اليوم', week: 'هذا الأسبوع', month: 'هذا الشهر', year: 'هذه السنة' };
+
+/**
+ * A period in words, as the reference words it over a report and in its file: a quick period by its name and dates
+ * «هذا الشهر (2026-11-01 — 2026-11-03)», dates of one's own «1 أكتوبر 2026 – 31 أكتوبر 2026», all of it «كل الفترات».
+ */
+export function periodLabel(range: Range, from: string | null, to: string | null): string {
+    if (range === 'custom') {
+        if (from && to) return from === to ? date(from) : `${date(from)} – ${date(to)}`;
+        return from ? `من ${date(from)}` : to ? `حتى ${date(to)}` : 'كل الفترات';
+    }
+    return range === 'all' || !QUICK[range] ? 'كل الفترات' : `${QUICK[range]} (${from} — ${to})`;
+}
+
 /**
  * A report's period in its header, beside «تصدير» (the file holds what the screen shows), as the reference's: an
- * outline button that says the period in words — «الفترة: 1 نوفمبر 2026 – 3 نوفمبر 2026» — and opens the same dates
- * dialog as the tabs under it (`PeriodTabs` with `open`/`onOpenChange`).
+ * outline button that says the period in words — «الفترة: هذا الشهر (2026-11-01 — 2026-11-03)» — and opens the same
+ * dates dialog as the tabs under it (`PeriodTabs` with `open`/`onOpenChange`).
  */
 export function PeriodButton({ label, onClick }: { label: string; onClick: () => void }) {
     const text = `الفترة: ${label}`;
@@ -49,7 +64,8 @@ export function PeriodButton({ label, onClick }: { label: string; onClick: () =>
  * the month, the year, all of it — 14px underline tabs, the current one underlined in black. Dates of one's own are a
  * button at the row's end, «اختيار فترة», that opens the from–to dates in a dialog (as the reference's period picker);
  * while they are in force no tab is current and the button shows them. A report holds the dialog's `open` itself and
- * opens it from its header (`PeriodButton`): the row then has the tabs only.
+ * opens it from its header (`PeriodButton`): the row then has the tabs only, and dates of one's own are said under
+ * them with a way back to the default period («مسح الفترة»), as the reference's report screen.
  *
  * The period lives in the address (?range=, and ?range=custom&from&to): it survives reload, back and a shared link, and
  * the server reads it for the list, its totals and its export alike. Changing it keeps the screen's other filters
@@ -138,9 +154,20 @@ export default function PeriodTabs({ period, params = {}, ranges, only, classNam
             {/* Dates of one's own leave every tab unmarked: the button at the end says what is shown. A report's tabs
                 (its button in the header) stand alone, their line as wide as they are, as the reference's report screen. */}
             {controlled ? (
-                <div className="flex flex-wrap items-center gap-2">
-                    <Tabs tabs={tabs} value={(custom ? '' : period.range) as Range} onChange={(key) => go({ range: key })} />
-                </div>
+                <>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Tabs tabs={tabs} value={(custom ? '' : period.range) as Range} onChange={(key) => go({ range: key })} />
+                    </div>
+                    {custom && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-[#eef2ff] px-3 py-1 text-[12.5px] font-medium text-[#3730a3]">الفترة: {periodLabel('custom', period.from, period.to)}</span>
+                            <button type="button" onClick={() => go({})} className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[12px] text-[#6b7280] hover:bg-[#f3f4f6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#6366f1]">
+                                <X className="size-3.5" aria-hidden="true" />
+                                مسح الفترة
+                            </button>
+                        </div>
+                    )}
+                </>
             ) : (
                 <Tabs tabs={tabs} value={(custom ? '' : period.range) as Range} onChange={(key) => go({ range: key })} dense trailing={picker} />
             )}

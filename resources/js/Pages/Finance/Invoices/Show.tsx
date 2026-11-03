@@ -714,7 +714,7 @@ function CreditApplyModal({ payment, targets, onClose, currency }: { payment: Pa
 
     return (
         <Modal open onClose={onClose} title="تخصيص الرصيد لفاتورة" size="compact"
-            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="credit-apply" loading={form.processing} icon={<ArrowLeftRight />}>تخصيص</Button></>}>
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="credit-apply" loading={form.processing}>تخصيص</Button></>}>
             <form id="credit-apply" onSubmit={submit} className="space-y-4">
                 <p className="text-sm text-muted">الرصيد المتاح: <span className="num font-medium text-ink">{money(payment.credit_left, currency)}</span>. تُسدَّد به فاتورة أخرى للعميل نفسه كأي دفعة، وتُفعَّل عضويتها إن اكتمل سدادها.</p>
                 <Field label="الفاتورة" error={form.errors.invoice_id} required>

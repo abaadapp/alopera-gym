@@ -26,7 +26,7 @@ final class StaffAttendanceReport extends Report
     public function page(ReportFilters $f, User $user): array
     {
         $summary = $this->summary($this->base($f)->with('user:id,name')->get());
-        $comparison = $this->compare($this->totals($summary), $this->totals($this->summary($this->base($f, $f->prevFrom, $f->prevTo)->get())));
+        $comparison = $this->compare($this->totals($summary), $this->totals($this->summary($this->base($f, $f->prevFrom, $f->prevTo)->with('user:id,name')->get())));
 
         return [
             'comparison' => $comparison,
@@ -45,7 +45,7 @@ final class StaffAttendanceReport extends Report
     public function export(ReportFilters $f, User $user): array
     {
         $summary = $this->summary($this->base($f)->with('user:id,name')->get());
-        $comparison = $this->compare($this->totals($summary), $this->totals($this->summary($this->base($f, $f->prevFrom, $f->prevTo)->get())));
+        $comparison = $this->compare($this->totals($summary), $this->totals($this->summary($this->base($f, $f->prevFrom, $f->prevTo)->with('user:id,name')->get())));
         $person = $f->integer('user_id') ? User::where('tenant_id', app(TenantContext::class)->require()->id)->whereKey($f->integer('user_id'))->value('name') : null;
 
         return [
