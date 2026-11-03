@@ -234,15 +234,14 @@ h1, h2, h3, .font-display {
     .admin-ui .input {
         @apply rounded-[10px] px-3;
     }
-    /* Fields stand 40px high, level with the buttons beside them (44px on a touch screen). */
-    .admin-ui input.input:not([type='file'], [type='checkbox'], [type='radio']),
-    .admin-ui select.input {
+    /* Fields stand 40px high, level with the buttons beside them (44px on a touch screen). A list to choose from is
+       the Select's own button (Components/ui/Form). */
+    .admin-ui input.input:not([type='file'], [type='checkbox'], [type='radio']) {
         height: 2.5rem;
         padding-block: 0;
     }
     @media (pointer: coarse) {
-        .admin-ui input.input:not([type='file'], [type='checkbox'], [type='radio']),
-        .admin-ui select.input {
+        .admin-ui input.input:not([type='file'], [type='checkbox'], [type='radio']) {
             height: 2.75rem;
             font-size: 16px;
         }

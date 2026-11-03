@@ -1,5 +1,6 @@
-import { cloneElement, isValidElement, useId, type ComponentProps, type InputHTMLAttributes, type ReactElement, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
-import { Paperclip, X } from 'lucide-react';
+import { Children, cloneElement, Fragment, isValidElement, useId, type ComponentProps, type InputHTMLAttributes, type ReactElement, type ReactNode, type TextareaHTMLAttributes } from 'react';
+import * as SelectPrimitive from '@radix-ui/react-select';
+import { Check, ChevronDown, ChevronUp, Paperclip, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useAdmin } from './AdminScope';
 
@@ -69,13 +70,126 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
     return <textarea className={cn('input min-h-20', className)} {...props} />;
 }
 
-export function Select({ className, children, placeholder, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { placeholder?: string }) {
+type Choice = { value: string; label: string; disabled?: boolean };
+
+/** A node's words, as an option's label reads them («أحمد — مرتبط بموظف آخر» from `{name}{note}`). */
+function textOf(node: ReactNode): string {
+    return Children.toArray(node)
+        .map((c) => (typeof c === 'string' || typeof c === 'number' ? String(c) : isValidElement<{ children?: ReactNode }>(c) ? textOf(c.props.children) : ''))
+        .join('');
+}
+
+/** The `<option>`s written inside a Select (in arrays, fragments and conditions), as the choices of its list. */
+function choicesOf(children: ReactNode): Choice[] {
+    const out: Choice[] = [];
+    Children.forEach(children, (child) => {
+        if (!isValidElement<{ children?: ReactNode; value?: string | number; disabled?: boolean }>(child)) return;
+        if (child.type === Fragment) out.push(...choicesOf(child.props.children));
+        else if (child.type === 'option') out.push({ value: String(child.props.value ?? textOf(child.props.children)), label: textOf(child.props.children), disabled: child.props.disabled });
+    });
+    return out;
+}
+
+// Radix keeps an empty value for «nothing chosen»; the empty choice a list offers («كل الفروع») goes by this one inside.
+const EMPTY = '__empty__';
+
+type SelectProps = {
+    value?: string | number | null;
+    /** As a native select's change event, so every caller reads `e.target.value` as before. */
+    onChange?: (event: { target: { value: string; name: string } }) => void;
+    /** The empty first choice: said on the button while nothing is chosen, and chosen again to clear it. */
+    placeholder?: string;
+    name?: string;
+    id?: string;
+    disabled?: boolean;
+    required?: boolean;
+    className?: string;
+    children?: ReactNode;
+    'aria-label'?: string;
+    'aria-invalid'?: boolean;
+    'aria-describedby'?: string;
+};
+
+/**
+ * A list to choose from, drawn in the page as the reference's (a Radix select) rather than by the system: it opens 6px
+ * under its field at the field's width, as high as the screen allows and scrolling inside, a long choice wrapping
+ * instead of being cut, the chosen one ticked; Escape, a click outside or a choice close it and the focus is back on
+ * the field. The choices are the `<option>`s written inside it; one with an empty value is the placeholder.
+ */
+export function Select({ value, onChange, placeholder, name, id, disabled, required, className, children, ...aria }: SelectProps) {
+    const admin = useAdmin();
+    const choices = choicesOf(children);
+    const hint = placeholder ?? choices.find((c) => c.value === '')?.label;
+    // Drawn over the page, the list takes the page's direction (Radix would draw it left to right).
+    const dir = typeof document !== 'undefined' && document.documentElement.dir === 'ltr' ? 'ltr' : 'rtl';
+
     return (
-        // The chevron sits at the end (left in Arabic); the text starts where an input's does.
-        <select className={cn('input appearance-none bg-[length:1rem] bg-[left_0.75rem_center] bg-no-repeat ps-3 pe-9', className)} style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")" }} {...props}>
-            {placeholder !== undefined && <option value="">{placeholder}</option>}
-            {children}
-        </select>
+        <SelectPrimitive.Root
+            dir={dir}
+            // The empty value is passed as it is: undefined would leave Radix holding its own choice, and clearing would not stick.
+            value={value === null || value === undefined ? '' : String(value)}
+            onValueChange={(next) => onChange?.({ target: { value: next === EMPTY ? '' : next, name: name ?? '' } })}
+            name={name}
+            disabled={disabled}
+            required={required}
+        >
+            <SelectPrimitive.Trigger
+                id={id}
+                {...aria}
+                className={cn(
+                    admin
+                        ? 'flex h-10 w-full items-center justify-between gap-2 rounded-[10px] border border-[#e8e8e8] bg-white px-3 text-start text-sm text-[#111] outline-none transition-[border-color,box-shadow] focus:border-[#d1d5db] focus:shadow-[0_0_0_3px_rgba(0,0,0,0.05)] disabled:cursor-not-allowed disabled:opacity-60 data-[placeholder]:text-[#9ca3af]'
+                        : 'input flex items-center justify-between gap-2 text-start data-[placeholder]:text-muted/70',
+                    // A long choice is cut on the button only; the open list shows it whole.
+                    '[&>span]:min-w-0 [&>span]:truncate',
+                    className,
+                )}
+            >
+                <SelectPrimitive.Value placeholder={hint} />
+                <SelectPrimitive.Icon asChild>
+                    <ChevronDown className="size-4 shrink-0 text-[#6b7280]" />
+                </SelectPrimitive.Icon>
+            </SelectPrimitive.Trigger>
+            <SelectPrimitive.Portal>
+                <SelectPrimitive.Content
+                    position="popper"
+                    sideOffset={6}
+                    className="relative z-[60] max-h-[var(--radix-select-content-available-height)] w-[var(--radix-select-trigger-width)] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white text-[#111] shadow-[0_8px_30px_rgba(0,0,0,0.10)]"
+                >
+                    <SelectPrimitive.ScrollUpButton className="flex cursor-default items-center justify-center py-1 text-[#6b7280]">
+                        <ChevronUp className="size-4" />
+                    </SelectPrimitive.ScrollUpButton>
+                    <SelectPrimitive.Viewport className="p-1.5">
+                        {hint !== undefined && <SelectChoice value={EMPTY}>{hint}</SelectChoice>}
+                        {choices.filter((c) => c.value !== '').map((c) => (
+                            <SelectChoice key={c.value} value={c.value} disabled={c.disabled}>
+                                {c.label}
+                            </SelectChoice>
+                        ))}
+                    </SelectPrimitive.Viewport>
+                    <SelectPrimitive.ScrollDownButton className="flex cursor-default items-center justify-center py-1 text-[#6b7280]">
+                        <ChevronDown className="size-4" />
+                    </SelectPrimitive.ScrollDownButton>
+                </SelectPrimitive.Content>
+            </SelectPrimitive.Portal>
+        </SelectPrimitive.Root>
+    );
+}
+
+function SelectChoice({ value, disabled, children }: { value: string; disabled?: boolean; children: ReactNode }) {
+    return (
+        <SelectPrimitive.Item
+            value={value}
+            disabled={disabled}
+            className="relative flex w-full cursor-pointer select-none items-start gap-2 rounded-[8px] py-2 pe-8 ps-3 text-start text-sm leading-snug break-words outline-none transition-colors focus:bg-[#f2f2f0] data-[state=checked]:font-semibold data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+        >
+            <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+            <span className="absolute end-2 top-2 flex size-4 items-center justify-center">
+                <SelectPrimitive.ItemIndicator>
+                    <Check className="size-4" />
+                </SelectPrimitive.ItemIndicator>
+            </span>
+        </SelectPrimitive.Item>
     );
 }
 
