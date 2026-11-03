@@ -31,18 +31,38 @@ export function periodParams(period: Period): Record<string, string> {
 }
 
 /**
+ * A report's period in its header, beside «تصدير» (the file holds what the screen shows), as the reference's: an
+ * outline button that says the period in words — «الفترة: 1 نوفمبر 2026 – 3 نوفمبر 2026» — and opens the same dates
+ * dialog as the tabs under it (`PeriodTabs` with `open`/`onOpenChange`).
+ */
+export function PeriodButton({ label, onClick }: { label: string; onClick: () => void }) {
+    const text = `الفترة: ${label}`;
+    return (
+        <Button type="button" variant="outline" onClick={onClick} className="max-w-full sm:max-w-[22rem]" aria-label={`تغيير فترة التقرير — ${text}`} title="تغيير فترة التقرير" icon={<CalendarRange className="size-4" />}>
+            <span className="min-w-0 truncate">{text}</span>
+        </Button>
+    );
+}
+
+/**
  * The period of a screen, the same on every screen that has one, drawn as the reference's period tabs: today, the week,
  * the month, the year, all of it — 14px underline tabs, the current one underlined in black. Dates of one's own are a
  * button at the row's end, «اختيار فترة», that opens the from–to dates in a dialog (as the reference's period picker);
- * while they are in force no tab is current and the button shows them.
+ * while they are in force no tab is current and the button shows them. A report holds the dialog's `open` itself and
+ * opens it from its header (`PeriodButton`): the row then has the tabs only.
  *
  * The period lives in the address (?range=, and ?range=custom&from&to): it survives reload, back and a shared link, and
  * the server reads it for the list, its totals and its export alike. Changing it keeps the screen's other filters
  * (`params`) and starts the list from its first page. `ranges` drops periods a screen does not offer.
  */
-export default function PeriodTabs({ period, params = {}, ranges, only, className }: { period: Period; params?: Params; ranges?: Range[]; only?: string[]; className?: string }) {
+export default function PeriodTabs({ period, params = {}, ranges, only, className, open, onOpenChange }: {
+    period: Period; params?: Params; ranges?: Range[]; only?: string[]; className?: string; open?: boolean; onOpenChange?: (open: boolean) => void;
+}) {
     const [dates, setDates] = useState({ from: period.from ?? '', to: period.to ?? '' });
-    const [picking, setPicking] = useState(false);
+    const [own, setOwn] = useState(false);
+    const controlled = open !== undefined;
+    const picking = controlled ? open : own;
+    const setPicking = (next: boolean) => (controlled ? onOpenChange?.(next) : setOwn(next));
     const formId = useId();
 
     // A new period from the server (a tab, back, forward): the dates follow it and the picker closes.
@@ -69,7 +89,31 @@ export default function PeriodTabs({ period, params = {}, ranges, only, classNam
     const tabs = RANGES.filter((r) => !ranges || ranges.includes(r.key));
     const custom = period.range === 'custom';
     const day = (d: string | null) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '…');
-    const picker = (!ranges || ranges.includes('custom')) && (
+    const pickable = !ranges || ranges.includes('custom');
+    const dialog = pickable && (
+        <Modal
+            open={picking}
+            onClose={() => setPicking(false)}
+            size="compact"
+            title="اختيار فترة"
+            footer={
+                <>
+                    <Button type="button" variant="outline" onClick={() => setPicking(false)}>إلغاء</Button>
+                    <Button type="submit" form={formId} disabled={!dates.from && !dates.to}>عرض</Button>
+                </>
+            }
+        >
+            <form id={formId} onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
+                <Field label="من">
+                    <Input type="date" dir="ltr" value={dates.from} max={dates.to || undefined} onChange={(e) => setDates({ ...dates, from: e.target.value })} aria-label="من تاريخ" />
+                </Field>
+                <Field label="إلى">
+                    <Input type="date" dir="ltr" value={dates.to} min={dates.from || undefined} onChange={(e) => setDates({ ...dates, to: e.target.value })} aria-label="إلى تاريخ" />
+                </Field>
+            </form>
+        </Modal>
+    );
+    const picker = pickable && !controlled && (
         <div className="py-1.5">
             <button
                 type="button"
@@ -86,34 +130,21 @@ export default function PeriodTabs({ period, params = {}, ranges, only, classNam
                 <CalendarRange />
                 {custom ? <span className="num" dir="ltr">{day(period.from)} – {day(period.to)}</span> : <span className="hidden sm:inline">اختيار فترة</span>}
             </button>
-            <Modal
-                open={picking}
-                onClose={() => setPicking(false)}
-                size="compact"
-                title="اختيار فترة"
-                footer={
-                    <>
-                        <Button type="button" variant="outline" onClick={() => setPicking(false)}>إلغاء</Button>
-                        <Button type="submit" form={formId} disabled={!dates.from && !dates.to}>عرض</Button>
-                    </>
-                }
-            >
-                <form id={formId} onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
-                    <Field label="من">
-                        <Input type="date" dir="ltr" value={dates.from} max={dates.to || undefined} onChange={(e) => setDates({ ...dates, from: e.target.value })} aria-label="من تاريخ" />
-                    </Field>
-                    <Field label="إلى">
-                        <Input type="date" dir="ltr" value={dates.to} min={dates.from || undefined} onChange={(e) => setDates({ ...dates, to: e.target.value })} aria-label="إلى تاريخ" />
-                    </Field>
-                </form>
-            </Modal>
         </div>
     );
 
     return (
         <div className={cn('mb-4', className)}>
-            {/* Dates of one's own leave every tab unmarked: the button at the end says what is shown. */}
-            <Tabs tabs={tabs} value={(custom ? '' : period.range) as Range} onChange={(key) => go({ range: key })} dense trailing={picker} />
+            {/* Dates of one's own leave every tab unmarked: the button at the end says what is shown. A report's tabs
+                (its button in the header) stand alone, their line as wide as they are, as the reference's report screen. */}
+            {controlled ? (
+                <div className="flex flex-wrap items-center gap-2">
+                    <Tabs tabs={tabs} value={(custom ? '' : period.range) as Range} onChange={(key) => go({ range: key })} />
+                </div>
+            ) : (
+                <Tabs tabs={tabs} value={(custom ? '' : period.range) as Range} onChange={(key) => go({ range: key })} dense trailing={picker} />
+            )}
+            {dialog}
         </div>
     );
 }

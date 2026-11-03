@@ -153,47 +153,16 @@ html:has(.admin-ui)::-webkit-scrollbar-thumb:hover {
     }
 }
 
-/* A dialog (Components/ui/Modal): the page dims in, the card fades and grows from 95%; and back out on closing. */
-@keyframes overlay-in {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
+/*
+ * A dialog (Components/ui/Modal) is portalled out of the panel, as the reference's: its text is not drawn tighter and
+ * its colour is the page's, not the panel's.
+ */
+[role='dialog'].admin-ui,
+[role='dialog'].admin-ui :is(h1, h2, h3, .font-display) {
+    letter-spacing: normal;
 }
-@keyframes dialog-in {
-    from {
-        opacity: 0;
-        transform: scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: none;
-    }
-}
-@keyframes overlay-out {
-    to {
-        opacity: 0;
-    }
-}
-@keyframes dialog-out {
-    to {
-        opacity: 0;
-        transform: scale(0.95);
-    }
-}
-
-/* Menus of the panel's top bar (Components/ui/Dropdown): a short fade and scale in. */
-@keyframes menu-in {
-    from {
-        opacity: 0;
-        transform: scale(0.96);
-    }
-    to {
-        opacity: 1;
-        transform: none;
-    }
+[role='dialog'].admin-ui {
+    color: #1f2937;
 }
 
 html {
@@ -291,6 +260,7 @@ h1, h2, h3, .font-display {
     }
     .admin-ui .label {
         font-size: 13px;
+        line-height: 1.5;
         color: #4b4b4b;
     }
     .admin-ui .table-base tbody tr:hover {

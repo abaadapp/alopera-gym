@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { router, usePage } from '@inertiajs/react';
 import { Info } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import PeriodTabs, { type Range } from '@/Components/PeriodTabs';
+import PeriodTabs, { PeriodButton, type Range } from '@/Components/PeriodTabs';
 import ExportMenu from '@/Components/Reports/ExportMenu';
 import { DuesBody, FinanceBody, MovementBody, StatementsBody, type Dues, type Movement, type PeriodReport, type Statements } from '@/Components/Reports/Finance';
 import { CheckinsBody, ClassesBody, ExpiringBody, MembersBody, StaffBody, TrainersBody, type Checkins, type Expiring, type StaffAttendance, type Trainers } from '@/Components/Reports/People';
@@ -73,6 +73,7 @@ export default function ReportShow({ kind, title, description, mode, compare, fi
     const [compareFrom, setCompareFrom] = useState(filters.compare_from);
     const [compareTo, setCompareTo] = useState(filters.compare_to);
     const [customCompare, setCustomCompare] = useState(filters.compare === 'custom');
+    const [picking, setPicking] = useState(false);
 
     // A filter changed: the others kept, back to the first page of any list.
     const go = (patch: Record<string, string | null>) => {
@@ -96,11 +97,22 @@ export default function ReportShow({ kind, title, description, mode, compare, fi
                 back={<BackLink href={route('club.reports.index')}>كل التقارير</BackLink>}
                 title={title}
                 subtitle={description}
-                actions={<ExportMenu href={canExport ? route('club.reports.export', kind) : null} params={exportParams} title={title} />}
+                actions={
+                    <>
+                        {/* The period beside «تصدير»: what is shown is what the file holds. A report without a period has no button. */}
+                        {mode === 'period' && <PeriodButton label={filters.from === filters.to ? date(filters.from) : `${date(filters.from)} – ${date(filters.to)}`} onClick={() => setPicking(true)} />}
+                        <ExportMenu href={canExport ? route('club.reports.export', kind) : null} params={exportParams} title={title} />
+                    </>
+                }
             />
 
             {mode === 'period' && (
-                <PeriodTabs period={{ range: filters.range, from: filters.from, to: filters.to }} params={Object.fromEntries(Object.entries(query).filter(([k]) => !['preset', 'range', 'from', 'to', 'page'].includes(k)))} />
+                <PeriodTabs
+                    period={{ range: filters.range, from: filters.from, to: filters.to }}
+                    params={Object.fromEntries(Object.entries(query).filter(([k]) => !['preset', 'range', 'from', 'to', 'page'].includes(k)))}
+                    open={picking}
+                    onOpenChange={setPicking}
+                />
             )}
 
             <ReportFilters kind={kind} data={data} option={option} go={go} branch={branchFilter && (

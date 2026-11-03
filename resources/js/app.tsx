@@ -4,6 +4,7 @@ import { createInertiaApp, router } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
 import type { ComponentType } from 'react';
 import ErrorBoundary from './Components/ErrorBoundary';
+import { watchOnScreenKeyboard } from './lib/keyboard';
 
 const pages = import.meta.glob<{ default: ComponentType }>('./Pages/**/*.tsx');
 
@@ -35,6 +36,7 @@ createInertiaApp({
     },
     setup({ el, App, props }) {
         applyBrand(props.initialPage.props as Record<string, unknown>);
+        watchOnScreenKeyboard();
         router.on('navigate', (event) => applyBrand(event.detail.page.props as Record<string, unknown>));
         router.on('error', revealFirstError);
         createRoot(el).render(

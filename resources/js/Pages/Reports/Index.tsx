@@ -94,7 +94,6 @@ export default function ReportsIndex({ reports, categories }: { reports: Report[
 
             {groups.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-line bg-white py-16 text-center">
-                    <BarChart3 className="mx-auto mb-3 size-6 text-[#9ca3af]" />
                     <p className="text-[14px] font-medium text-[#111]">{reports.length ? 'لا تقرير بهذا الاسم' : 'لا تقارير متاحة لحسابك'}</p>
                     <p className="mt-1 text-[13px] text-[#9ca3af]">{reports.length ? 'جرّب كلمة أخرى، أو اعرض الكل.' : 'تظهر هنا التقارير التي تسمح بها صلاحياتك.'}</p>
                 </div>

@@ -73,12 +73,13 @@ export function PageHeader({ title, subtitle, actions, back }: { title: ReactNod
     return (
         <div className="mb-5">
             {back}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* The buttons wrap rather than push the page: what fits beside the title stays there, the rest goes under it. */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <div className="min-w-0">
                     <h1 className="truncate text-[22px] font-bold tracking-tight text-ink">{title}</h1>
                     {subtitle && <p className="mt-0.5 text-[13px] text-muted">{subtitle}</p>}
                 </div>
-                {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+                {actions && <div className="flex min-w-0 flex-wrap items-center gap-2">{actions}</div>}
             </div>
             <BranchNote />
             <SectionTabs className="mt-5" />

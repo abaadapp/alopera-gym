@@ -12,17 +12,17 @@ import { useAdmin } from './AdminScope';
  * - form (512px, the default): adding or editing a record;
  * - large (672px): choosing products, members or customers, or a form in two columns;
  * - wide (896px): a table, or a long form;
- * - full: the whole screen less a margin, for what needs it (a paper at its size).
- * A phone (under 640px) gets every dialog across its whole width, never a card with a sliver of page at its sides; a
- * tablet narrower than a wide dialog keeps a 24px margin each side rather than a card flush with its edges.
+ * - full (1024px, the reference's widest, and the height of the screen): a paper at its size.
+ * As the reference's, a screen narrower than the width has the dialog across all of it, and a slightly wider one
+ * shows the page in the sliver left at its sides (a confirmation on a 390px phone: 3px each side).
  */
 export const MODAL_SIZES = {
-    confirm: 'sm:max-w-sm',
-    compact: 'sm:max-w-md',
-    form: 'sm:max-w-lg',
-    large: 'sm:max-w-[min(42rem,calc(100vw-3rem))]',
-    wide: 'sm:max-w-[min(56rem,calc(100vw-3rem))]',
-    full: 'sm:max-w-[min(1200px,calc(100vw-3rem))] h-[calc(100dvh-var(--kb,0px)-1.5rem)]',
+    confirm: 'max-w-sm',
+    compact: 'max-w-md',
+    form: 'max-w-lg',
+    large: 'max-w-2xl',
+    wide: 'max-w-4xl',
+    full: 'max-w-5xl h-[calc(100dvh-var(--kb,0px)-1.5rem)]',
 } as const;
 
 export type ModalSize = keyof typeof MODAL_SIZES;
@@ -30,24 +30,21 @@ export type ModalSize = keyof typeof MODAL_SIZES;
 /** Layers that live outside the dialog but belong to it — a menu opened from it, the notices — are not «outside». */
 const OWN_LAYERS = '[data-layer], [data-sonner-toaster]';
 
-const FIELD = 'input:not([type="hidden"]):not([disabled]):not([type="checkbox"]):not([type="radio"]), select:not([disabled]), textarea:not([disabled])';
+const TABBABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])';
 
 /**
  * The one dialog of the system, on Radix Dialog as the reference's: a white card 16px rounded with a #e8e8e8 hairline
  * and a soft shadow, on a page dimmed to black/20 and slightly blurred; the title 17px semibold and an optional 13px
- * grey line under it, 20px in, the ✕ in the corner; the buttons at the end, cancel first and the action last. It fades
- * and grows from 95% in, and back out.
+ * grey line under it, 20px in, the ✕ in the corner; the buttons at the end, 20px under what is above them, cancel
+ * first and the action last. It appears and goes at once, as the reference's does in the browser.
  *
- * It sits in the middle of what is visible: on a phone the keyboard's height is taken off, so the fields and buttons
- * stay above it. It is never taller than that; a long one scrolls as a whole, buttons included (the full size keeps its
- * title in place over a body that scrolls). Escape, the dimmed page and ✕ close it — but not while a form inside it is
- * being sent, nor when `dismissible` is false. A form inside it cannot be sent again while the first sending is on its
- * way. Focus stays inside it (dialogs over dialogs each in turn), the first field takes it on a desktop (the card on a
- * touch screen, so no keyboard is thrown over it), and the element that opened it gets it back on closing — the page
- * when that element is gone (a deleted row's). The page behind does not scroll.
- *
- * What it showed stays on it while it fades out: callers clear their state as it closes (editing → null), and the
- * card must not flash empty or read a record that is gone.
+ * It sits in the middle of what is visible: the on-screen keyboard's height (--kb, see lib/keyboard) is taken off, so
+ * the fields and buttons stay above it. It is never taller than that; a long one scrolls as a whole, buttons included
+ * (the full size keeps its title in place over a body that scrolls). Escape, the dimmed page and ✕ close it — but not
+ * while a form inside it is being sent, nor when `dismissible` is false. A form inside it cannot be sent again while
+ * the first sending is on its way. Focus goes to its first field or button and stays inside it (dialogs over dialogs
+ * each in turn); the element that opened it gets it back on closing — the page when that element is gone (a deleted
+ * row's). The page behind does not scroll.
  */
 export default function Modal({
     open,
@@ -71,9 +68,6 @@ export default function Modal({
 }) {
     const admin = useAdmin();
     const card = useRef<HTMLDivElement>(null);
-    const shown = useRef({ title, description, children, footer });
-    if (open) shown.current = { title, description, children, footer };
-    const view = shown.current;
 
     // The element that had the focus before the dialog took it, read as the dialog first renders open.
     const opener = useRef<HTMLElement | null>(null);
@@ -98,16 +92,9 @@ export default function Modal({
             busy.current = false;
             setSending(false);
         });
-
-        // On a phone the keyboard takes the bottom of the screen: the card is centred on, and fits in, what is left.
-        const viewport = window.visualViewport;
-        const fit = () => card.current?.style.setProperty('--kb', `${Math.max(0, window.innerHeight - (viewport?.height ?? window.innerHeight))}px`);
-        viewport?.addEventListener('resize', fit);
-
         return () => {
             offStart();
             offFinish();
-            viewport?.removeEventListener('resize', fit);
             busy.current = false;
             setSending(false);
         };
@@ -133,10 +120,10 @@ export default function Modal({
     return (
         <DialogPrimitive.Root open={open} onOpenChange={(next) => !next && !locked && onClose()}>
             <DialogPrimitive.Portal>
-                <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm data-[state=open]:animate-[overlay-in_0.15s_ease-out] data-[state=closed]:animate-[overlay-out_0.15s_ease-in_forwards]" />
+                <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm" />
                 <DialogPrimitive.Content
                     ref={card}
-                    {...(view.description ? {} : { 'aria-describedby': undefined })}
+                    {...(description ? {} : { 'aria-describedby': undefined })}
                     onSubmitCapture={guard}
                     onClickCapture={guard}
                     aria-busy={sending || undefined}
@@ -144,12 +131,11 @@ export default function Modal({
                     onPointerDownOutside={outside}
                     onInteractOutside={outside}
                     onOpenAutoFocus={(e) => {
-                        e.preventDefault();
-                        const panel = card.current;
-                        if (!panel) return;
-                        const touch = window.matchMedia('(pointer: coarse)').matches;
-                        const field = touch ? null : panel.querySelector<HTMLElement>('[data-modal-body]')?.querySelector<HTMLElement>(FIELD);
-                        (field ?? panel).focus({ preventScroll: true });
+                        // A paper's frame first would take the focus, and Escape with it: the card holds it instead.
+                        if (card.current?.querySelector(TABBABLE)?.tagName === 'IFRAME') {
+                            e.preventDefault();
+                            card.current.focus({ preventScroll: true });
+                        }
                     }}
                     onCloseAutoFocus={(e) => {
                         e.preventDefault();
@@ -162,16 +148,15 @@ export default function Modal({
                         'fixed left-1/2 top-[calc(50%-var(--kb,0px)/2)] z-50 w-full -translate-x-1/2 -translate-y-1/2',
                         'max-h-[calc(100dvh-var(--kb,0px)-1.5rem)] rounded-2xl border border-[#e8e8e8] bg-white text-start shadow-[0_20px_60px_rgba(0,0,0,0.15)] focus:outline-none',
                         whole ? 'overflow-y-auto overscroll-contain' : 'flex flex-col',
-                        'data-[state=open]:animate-[dialog-in_0.15s_ease-out] data-[state=closed]:pointer-events-none data-[state=closed]:animate-[dialog-out_0.15s_ease-in_forwards]',
                         MODAL_SIZES[size],
                     )}
                 >
                     <div className="shrink-0 p-5 pb-3 pe-12">
-                        <DialogPrimitive.Title className="text-[17px] font-semibold text-[#111]">{view.title}</DialogPrimitive.Title>
-                        {view.description && <DialogPrimitive.Description className="mt-1.5 text-[13px] text-[#6b7280]">{view.description}</DialogPrimitive.Description>}
+                        <DialogPrimitive.Title className="text-[17px] font-semibold text-[#111]">{title}</DialogPrimitive.Title>
+                        {description && <DialogPrimitive.Description className="mt-1.5 text-[13px] text-[#6b7280]">{description}</DialogPrimitive.Description>}
                     </div>
-                    <div data-modal-body className={cn(!whole && 'min-h-0 flex-1 overflow-y-auto overscroll-contain', 'px-5', view.footer ? 'pb-1' : 'pb-5')}>{view.children}</div>
-                    {view.footer && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 px-5 pt-3 pb-5">{view.footer}</div>}
+                    <div data-modal-body className={cn(!whole && 'min-h-0 flex-1 overflow-y-auto overscroll-contain', 'px-5', footer ? 'pb-1' : 'pb-5')}>{children}</div>
+                    {footer && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 px-5 pt-4 pb-5">{footer}</div>}
                     <DialogPrimitive.Close
                         disabled={locked}
                         aria-label="إغلاق"

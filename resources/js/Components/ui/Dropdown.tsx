@@ -7,7 +7,8 @@ import { useAdmin } from './AdminScope';
 /**
  * A menu that opens under its trigger: click (or Enter/Space) toggles it, Escape and a click outside close it, and
  * with `hover` it also opens while the pointer is over the trigger or the menu (closing a moment after it leaves,
- * so moving from one to the other does not drop it). Aligned to the end of the trigger: the left in Arabic.
+ * so moving from one to the other does not drop it). Aligned to the end of the trigger (the left in Arabic), or to its
+ * start when it would not fit that way.
  *
  * The panel is 12px-rounded, white, with a soft shadow; items are 8px-rounded rows that turn light grey on hover
  * and focus. `DropdownItem` renders a link, a button, or a destructive (red) action.
@@ -57,8 +58,9 @@ export function Dropdown({ trigger, children, label, hover = false, className, p
 
     useEffect(() => () => clearTimeout(timer.current), []);
 
-    // Under the trigger at its end edge (the left in Arabic), kept on the screen, upwards when there is no room below;
-    // placed again as the page or a table scrolls.
+    // Under the trigger at its end edge (the left in Arabic) — at its start edge when the menu would run off the screen
+    // that way (a button at the right of a phone's screen: the menu under it, edge to edge, as the reference's) — kept
+    // on the screen, upwards when there is no room below; placed again as the page or a table scrolls.
     useLayoutEffect(() => {
         if (!open) {
             setPlace(hidden);
@@ -74,6 +76,8 @@ export function Dropdown({ trigger, children, label, hover = false, className, p
             const vw = window.innerWidth;
             const vh = window.innerHeight;
             let left = rtl ? trigger.left : trigger.right - width;
+            if (rtl && left + width > vw - 8) left = trigger.right - width;
+            if (!rtl && left < 8) left = trigger.left;
             left = Math.min(Math.max(8, left), vw - width - 8);
             const below = trigger.bottom + 6;
             const top = below + height > vh - 8 && trigger.top - height - 6 > 8 ? trigger.top - height - 6 : below;
@@ -142,7 +146,6 @@ export function Dropdown({ trigger, children, label, hover = false, className, p
                         onMouseLeave={leave}
                         className={cn(
                             'z-[60] min-w-[10rem] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)]',
-                            'origin-top-left animate-[menu-in_.14s_ease-out]',
                             panelClassName,
                         )}
                     >
