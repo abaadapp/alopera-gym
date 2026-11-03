@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, router } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
-import { Bell, Blocks, Building2, Check, CheckCheck, ChevronDown, Clock, CreditCard, FileText, Globe, LoaderCircle, Lock, LogOut, Mail, Menu, MessageCircle, Search, Settings, ShoppingBag, Store, Ticket, UserRound, X } from 'lucide-react';
+import { Bell, Blocks, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, Clock, CreditCard, FileText, FolderOpen, Globe, LayoutGrid, LoaderCircle, Lock, LogOut, Mail, Menu, MessageCircle, Package, PlusCircle, Search, Settings, ShoppingBag, Store, Ticket, UserRound, Users, Wallet, X } from 'lucide-react';
 import { Dropdown, DropdownAction, DropdownItem, DropdownLabel, DropdownSeparator } from '@/Components/ui/Dropdown';
 import { useCan, useShared } from '@/hooks/useShared';
 import { NAV } from '@/lib/nav';
@@ -352,7 +352,10 @@ function UserMenu({ unread }: { unread: number }) {
     );
 }
 
-type Hit = { key: string; label: string; hint?: string; href: string };
+type Hit = { key: string; label: string; hint?: string; href: string; icon?: LucideIcon };
+
+// Each group's mark, beside its heading and each of its rows (as the reference's search); a page shows its own.
+const GROUP_ICONS: Record<string, LucideIcon> = { pages: LayoutGrid, members: Users, products: Package, addons: PlusCircle, sales: ShoppingBag, invoices: FileText, payments: Wallet, employees: BriefcaseBusiness, documents: FolderOpen };
 type Group = { key: string; label: string; items: { label: string; hint?: string; url: string }[] };
 
 /**
@@ -378,6 +381,7 @@ function TopSearch({ className, autoFocus, onDone }: { className?: string; autoF
             key: `page-${t.route}-${JSON.stringify(t.params ?? {})}`,
             label: t.label === s.label ? s.label : `${s.label} · ${t.label}`,
             href: String(route(t.route, t.params ?? {})),
+            icon: s.icon,
         }))));
     }, [auth?.permissions]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -428,8 +432,8 @@ function TopSearch({ className, autoFocus, onDone }: { className?: string; autoF
     }, []);
 
     const sections = [
-        { key: 'pages', label: 'الصفحات', hits: pageHits },
-        ...groups.map((g) => ({ key: g.key, label: g.label, hits: g.items.map((i, n): Hit => ({ key: `${g.key}-${n}`, label: i.label, hint: i.hint, href: i.url })) })),
+        { key: 'pages', label: 'الصفحات', icon: LayoutGrid, hits: pageHits },
+        ...groups.map((g) => ({ key: g.key, label: g.label, icon: GROUP_ICONS[g.key] ?? Package, hits: g.items.map((i, n): Hit => ({ key: `${g.key}-${n}`, label: i.label, hint: i.hint, href: i.url, icon: GROUP_ICONS[g.key] ?? Package })) })),
     ].filter((s) => s.hits.length > 0);
     const hits = sections.flatMap((s) => s.hits);
     useEffect(() => setIndex(0), [term, groups]);
@@ -469,13 +473,14 @@ function TopSearch({ className, autoFocus, onDone }: { className?: string; autoF
             )}
 
             {open && term && (
-                <div className="absolute start-0 top-full z-40 mt-2 max-h-[70vh] w-full overflow-y-auto rounded-[14px] border border-[#e8e8e8] bg-white shadow-lg" role="listbox" aria-label="نتائج البحث">
+                // On a phone the list takes the screen's width under the top bar, not the narrow field's (as the reference's).
+                <div className="fixed inset-x-4 top-[4.25rem] z-40 max-h-[60vh] overflow-y-auto rounded-[14px] border border-[#e8e8e8] bg-white shadow-lg sm:absolute sm:inset-x-auto sm:start-0 sm:top-full sm:mt-2 sm:max-h-[70vh] sm:w-full" role="listbox" aria-label="نتائج البحث">
                     {hits.length === 0 ? (
                         <p className="px-4 py-8 text-center text-sm text-[#9ca3af]">{loading ? 'جارٍ البحث…' : 'لا نتائج'}</p>
                     ) : (
                         sections.map((section) => (
                             <div key={section.key}>
-                                <div className="border-b border-[#e8e8e8] bg-[#fbfbfa] px-4 py-2 text-[12px] font-semibold text-[#6b7280]">{section.label}</div>
+                                <div className="flex items-center gap-2 border-b border-[#e8e8e8] bg-[#fbfbfa] px-4 py-2 text-[12px] font-semibold text-[#6b7280]"><section.icon className="size-3.5" />{section.label}</div>
                                 {section.hits.map((hit) => {
                                     const active = hits[index]?.key === hit.key;
                                     return (
@@ -486,9 +491,12 @@ function TopSearch({ className, autoFocus, onDone }: { className?: string; autoF
                                             aria-selected={active}
                                             onMouseEnter={() => setIndex(hits.indexOf(hit))}
                                             onClick={() => go(hit)}
-                                            className={cn('flex w-full items-center justify-between gap-3 px-4 py-2.5 text-start', active ? 'bg-[#f5f5f4]' : 'hover:bg-[#fafafa]')}
+                                            className={cn('flex w-full items-center justify-between gap-3 border-b border-[#f2f2f0] px-4 py-2.5 text-start transition-colors', active ? 'bg-[#f5f5f4]' : 'hover:bg-[#fafafa]')}
                                         >
-                                            <span className="truncate text-sm text-[#111]">{hit.label}</span>
+                                            <span className="flex min-w-0 items-center gap-2.5">
+                                                {hit.icon && <hit.icon className="size-4 shrink-0 text-[#9ca3af]" />}
+                                                <span className="truncate text-sm text-[#111]">{hit.label}</span>
+                                            </span>
                                             {hit.hint && <span className="shrink-0 truncate text-[12px] text-[#9ca3af]" dir="auto">{hit.hint}</span>}
                                         </button>
                                     );
