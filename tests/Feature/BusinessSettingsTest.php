@@ -87,7 +87,11 @@ class BusinessSettingsTest extends TestCase
 
         // on a 58mm receipt each value sits on its own line under its label, so a long account wraps within the strip
         $strip = $this->html($club, PaperSize::T58);
-        $this->assertMatchesRegularExpression('#<tr><td class="s-sub">[^<]+</td></tr>\s*<tr><td dir="ltr">[^<]*OM810180000001234567890#u', $strip);
+        $this->assertMatchesRegularExpression('#<tr><td class="s-sub">[^<]+</td></tr>\s*<tr><td class="words" dir="ltr">[^<]*OM810180000001234567890#u', $strip);
+
+        // an account number is one long word: it may break rather than run past the paper
+        $this->assertStringContainsString('<td class="words" dir="ltr">', $strip);
+        $this->assertStringContainsString('.words { overflow-wrap: anywhere;', $strip);
 
         $this->save($club, ['governorate' => 'مكان آخر'])->assertSessionHasErrors('rules.governorate');
         $this->save($club, ['bank_iban' => 'OM81<script>'])->assertSessionHasErrors('rules.bank_iban');

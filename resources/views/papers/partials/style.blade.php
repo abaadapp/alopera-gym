@@ -98,5 +98,6 @@
     .s-sub { color: {{ $tokens['second'] }}; font-size: {{ $pt(8.5) }}; }
     .s-grand td { font-weight: bold; font-size: {{ $pt(11) }}; }
     .s-foot { text-align: center; color: {{ $tokens['second'] }}; white-space: pre-line; margin-top: {{ $fx(6) }}; }
+    .words { overflow-wrap: anywhere; word-break: break-word; }
     @media print { .no-print { display: none !important; } }
 </style>

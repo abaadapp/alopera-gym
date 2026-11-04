@@ -196,7 +196,7 @@
                                     <td class="lbl2" style="width:{{ ($panel['words'] ?? false) ? '40' : '70' }}%">{{ $r['label'] }}@if (filled($r['sub'] ?? null))<div style="text-align:{{ $ltr ? 'left' : 'right' }}"><span dir="{{ \App\Core\Papers\PaperFormat::dir($r['sub']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['sub'], \App\Core\Papers\PaperFormat::dir($r['sub'])) }}</span></div>@endif</td>
                                     @if ($panel['words'] ?? false)
                                         {{-- Words, not an amount: they may wrap rather than run past the page. --}}
-                                        <td style="width:60%; text-align:{{ $end }}" dir="{{ \App\Core\Papers\PaperFormat::dir($r['value']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['value']) }}</td>
+                                        <td class="words" style="width:60%; text-align:{{ $end }}" dir="{{ \App\Core\Papers\PaperFormat::dir($r['value']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['value']) }}</td>
                                     @else
                                         <td class="amt" style="width:30%"><span dir="ltr" class="{{ ($r['strong'] ?? false) ? 'b' : '' }}">{{ $r['value'] }}</span></td>
                                     @endif

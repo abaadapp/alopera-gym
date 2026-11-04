@@ -201,7 +201,7 @@ export default function DataTable<T>({ rows, columns, card, rowKey, params, pagi
                                 return (
                                     <th key={c.key} aria-sort={on ? (dir === 'asc' ? 'ascending' : 'descending') : undefined} className={cn('h-11 py-0 align-middle text-[12px] text-[#6b7280]', c.align === 'end' && 'text-end', c.align === 'center' && 'text-center', c.className)}>
                                         {sorts ? (
-                                            <button type="button" onClick={() => go({ sort: c.key, dir: on && dir === 'asc' ? 'desc' : 'asc' })} className="inline-flex items-center gap-1 font-[inherit] transition-colors hover:text-ink">
+                                            <button type="button" onClick={() => go({ sort: c.key, dir: on && dir === 'asc' ? 'desc' : 'asc' })} className="inline-flex items-center gap-1 font-[inherit] [text-rendering:inherit] transition-colors hover:text-ink">
                                                 {c.header}
                                                 {on && (dir === 'asc' ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />)}
                                             </button>

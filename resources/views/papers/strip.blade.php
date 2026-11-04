@@ -86,7 +86,8 @@
                 @foreach ($panel['rows'] as $r)
                     @if ($panel['words'] ?? false)
                         <tr><td class="s-sub">{{ $r['label'] }}</td></tr>
-                        <tr><td dir="{{ \App\Core\Papers\PaperFormat::dir($r['value']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['value']) }}</td></tr>
+                        {{-- An IBAN is one long word: it may break anywhere rather than run past the strip. --}}
+                        <tr><td class="words" dir="{{ \App\Core\Papers\PaperFormat::dir($r['value']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['value']) }}</td></tr>
                     @else
                         <tr><td class="s-sub">{{ $r['label'] }}@if (filled($r['sub'] ?? null)) <span dir="ltr">{{ $r['sub'] }}</span>@endif</td><td class="v"><span dir="ltr">{{ $r['value'] }}</span></td></tr>
                     @endif
