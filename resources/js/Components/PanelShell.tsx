@@ -61,8 +61,9 @@ export default function PanelShell({ identity, groups, topbar, children }: {
                 aria-modal={open ? true : undefined}
                 aria-label={open ? 'القائمة' : undefined}
             >
-                {/* The club's mark and name, centred in a 64px head — who the user is sits in the top bar. */}
-                <div className="flex h-16 shrink-0 items-center justify-center gap-2.5 px-5">{identity}</div>
+                {/* The logo alone, centred, as the reference's: the name is already in the tab, the top bar and the logo itself.
+                    80px rather than its 64: the club's logo is nearly square, and its name inside must stay readable. */}
+                <div className="flex h-20 shrink-0 items-center justify-center px-5">{identity}</div>
 
                 <ScrollIntoActive className="flex flex-1 flex-col overflow-y-auto overscroll-contain px-3 pb-4" label="القائمة الرئيسية">
                     {groups.map((group, gi) => (
