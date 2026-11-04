@@ -39,7 +39,7 @@ export function IntegrationMark({ service, size = 48 }: { service: string; size?
     const Icon = mark.icon;
     return (
         <span className="grid shrink-0 place-items-center rounded-[12px] text-white" style={{ width: size, height: size, backgroundColor: mark.tint }}>
-            <Icon aria-hidden style={{ width: size * 0.46, height: size * 0.46 }} strokeWidth={1.75} />
+            <Icon aria-hidden style={{ width: size * 0.46, height: size * 0.46 }} />
         </span>
     );
 }
