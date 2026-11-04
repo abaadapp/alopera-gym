@@ -21,6 +21,7 @@ use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\MembershipEvent;
 use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Models\PtPackage;
+use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Gym\Models\Trainer;
 use App\Modules\Gym\Services\MemberService;
 use App\Modules\Messaging\Models\Message;
@@ -183,6 +184,14 @@ class MemberController extends Controller
     {
         if ($member->memberships()->whereIn('status', [Membership::ACTIVE, Membership::FROZEN, Membership::SCHEDULED])->exists()) {
             return back()->with('error', 'لا يمكن حذف عضو لديه عضوية سارية. ألغِ العضوية أولًا.');
+        }
+        // A sale waiting for payment (its invoice and payment link stay live) or training still ahead would outlive
+        // the file: they are settled first.
+        if ($member->memberships()->where('status', Membership::PENDING)->exists()) {
+            return back()->with('error', 'للعضو اشتراك بانتظار الدفع. أكمل دفعه أو ألغِه قبل حذف العضو.');
+        }
+        if (PtSubscription::where('member_id', $member->id)->whereIn('status', [PtSubscription::PENDING, PtSubscription::ACTIVE])->exists()) {
+            return back()->with('error', 'للعضو باقة تدريب شخصي قائمة. أنهِها أو ألغِها قبل حذف العضو.');
         }
         $member->delete();
 
