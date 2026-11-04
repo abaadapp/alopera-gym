@@ -1,6 +1,6 @@
-import { useMemo, type FormEvent, type ReactNode } from 'react';
+import { type FormEvent, type ReactNode } from 'react';
 import { useForm } from '@inertiajs/react';
-import { Building2, CalendarClock, Globe, ImageIcon, Palette, Receipt } from 'lucide-react';
+import { Building2, CalendarClock, Globe, Palette, Receipt } from 'lucide-react';
 import { PageActions, SettingsScreen, SettingsSection } from '@/Components/Settings';
 import { Field, Input, Textarea, Toggle } from '@/Components/ui';
 
@@ -16,7 +16,7 @@ interface Club {
     latitude: string | null;
     longitude: string | null;
     domain: string | null;
-    logo_url: string | null;
+    logo_url: string;
 }
 
 type Rules = {
@@ -47,7 +47,6 @@ type SettingsForm = {
     longitude: string;
     primary_color: string;
     secondary_color: string;
-    logo: File | null;
     rules: Rules;
 };
 
@@ -63,7 +62,6 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
         longitude: club.longitude ?? '',
         primary_color: club.primary_color,
         secondary_color: club.secondary_color,
-        logo: null,
         rules: {
             booking_window_days: Number(rules.booking_window_days),
             booking_cancel_cutoff_hours: Number(rules.booking_cancel_cutoff_hours),
@@ -84,19 +82,10 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
 
     const errors = form.errors as Record<string, string | undefined>;
     const setRule = <K extends keyof Rules>(key: K, value: Rules[K]) => form.setData('rules', { ...form.data.rules, [key]: value });
-    const logoPreview = useMemo(() => (form.data.logo ? URL.createObjectURL(form.data.logo) : club.logo_url), [form.data.logo, club.logo_url]);
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        const options = { preserveScroll: true, onSuccess: () => form.setData('logo', null) };
-        if (form.data.logo) {
-            // Files need a multipart POST; Laravel reads the intended PUT from _method.
-            form.transform((d) => ({ ...d, _method: 'put' }));
-            form.post(route('club.settings.update'), { ...options, forceFormData: true });
-        } else {
-            form.transform((d) => d);
-            form.put(route('club.settings.update'), options);
-        }
+        form.put(route('club.settings.update'), { preserveScroll: true });
     };
 
     return (
@@ -134,13 +123,12 @@ export default function GeneralSettings({ club, rules }: { club: Club; rules: Ru
 
                     <SettingsSection icon={Palette} title="الهوية البصرية" description="الشعار والألوان على الموقع وبوابة الأعضاء والأوراق المطبوعة">
                         <div className="flex flex-wrap items-start gap-5">
-                            <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-[14px] border border-[#e8e8e8] bg-[#fafafa]">
-                                {logoPreview ? <img src={logoPreview} alt="" className="h-full w-full object-cover" /> : <ImageIcon className="size-8 text-[#d1d5db]" />}
+                            <div className="flex h-24 w-32 shrink-0 items-center justify-center rounded-[14px] border border-[#e8e8e8] bg-[#fafafa] p-2">
+                                <img src={club.logo_url} alt="شعار Alopera Gym" className="h-full w-auto object-contain" />
                             </div>
                             <div className="min-w-0 flex-1">
-                                <Field label="شعار النادي" error={errors.logo} hint="صورة مربعة PNG أو JPG، حتى 4 ميغابايت">
-                                    <input type="file" accept="image/*" className="input h-auto py-2 file:me-3 file:rounded-lg file:border-0 file:bg-[#111] file:px-4 file:py-2 file:text-white" onChange={(e) => form.setData('logo', e.target.files?.[0] ?? null)} />
-                                </Field>
+                                <p className="text-[13px] font-medium text-[#111]">الشعار الرسمي للنادي</p>
+                                <p className="mt-1 text-[12px] text-[#6b7280]">معتمد وثابت في النظام: يظهر في الدخول والقائمة والموقع والفواتير والتقارير وملفات PDF.</p>
                             </div>
                         </div>
                         <div className="mt-5 grid grid-cols-2 gap-3">

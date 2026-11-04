@@ -16,11 +16,7 @@ export default function ClubLayout({ title, children }: { title: string; childre
                 groups={groups.map((group) => ({ footer: group.footer, links: group.sections.map((s) => ({ label: s.label, href: s.href, icon: s.icon, active: s.active })) }))}
                 identity={
                     <>
-                        {tenant?.logo_url ? (
-                            <img src={tenant.logo_url} alt="" className="size-7 shrink-0 rounded-lg object-cover" />
-                        ) : (
-                            <div className="grid size-7 shrink-0 place-items-center rounded-lg bg-brand font-display text-[13px] text-white">{tenant?.name?.[0] ?? 'A'}</div>
-                        )}
+                        {tenant?.logo_url && <img src={tenant.logo_url} alt="" className="h-12 w-auto shrink-0 object-contain" />}
                         <p className="min-w-0 truncate font-display text-[15px] font-semibold text-[#111]">{tenant?.name}</p>
                     </>
                 }

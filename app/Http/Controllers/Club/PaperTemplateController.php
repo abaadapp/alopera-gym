@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Club;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Branding\OfficialLogo;
 use App\Core\Papers\Papers;
 use App\Core\Papers\PaperTypes;
 use App\Core\Tenancy\TenantContext;
@@ -35,7 +36,7 @@ class PaperTemplateController extends Controller
         return Inertia::render('Club/Settings/PaperEditor', [
             'paper' => PaperTypes::describe($tenant, $type),
             'others' => array_values(array_filter(PaperTypes::cards($tenant), fn ($c) => $c['key'] !== $type)),
-            'brand' => ['logo' => $tenant->logoUrl(), 'color' => $tenant->primary_color, 'vat_number' => $tenant->setting('vat_number'), 'cr_number' => $tenant->setting('cr_number')],
+            'brand' => ['logo' => $tenant->logoUrl(), 'color' => OfficialLogo::COLOR, 'vat_number' => $tenant->setting('vat_number'), 'cr_number' => $tenant->setting('cr_number')],
         ]);
     }
 

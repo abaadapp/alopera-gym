@@ -17,7 +17,7 @@ export interface SiteInfo {
     map_url: string | null;
     working_hours: { days: string; hours: string }[];
     social_links: Record<string, string | null>;
-    logo_url: string | null;
+    logo_url: string;
     signup_enabled: boolean;
     /** The club shows products in its website shop (sales module on, shop on, a product shown). */
     shop_open: boolean;
@@ -57,7 +57,7 @@ export default function SiteLayout({ site, children, seoTitle }: { site: SiteInf
                 <header className="sticky top-0 z-30 border-b border-line/70 bg-white/90 backdrop-blur">
                     <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:gap-4">
                         <Link href={route('site.home')} className="flex min-w-0 items-center gap-2.5">
-                            {site.logo_url ? <img src={site.logo_url} alt={tenant?.name} className="size-10 rounded-xl object-cover" width={40} height={40} /> : <span className="grid size-10 place-items-center rounded-xl bg-brand font-display text-white">{tenant?.name?.[0]}</span>}
+                            <img src={site.logo_url} alt={tenant?.name} className="h-12 w-auto object-contain" width={64} height={48} />
                             <span className="truncate font-display text-lg font-semibold text-ink">{tenant?.name}</span>
                         </Link>
                         <nav className="hidden items-center gap-1 lg:flex" aria-label="القائمة الرئيسية">

@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
+use App\Core\Branding\OfficialLogo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * The gym: its name, brand, contact details and business settings. The system runs one gym; its tables keep a
@@ -74,9 +74,9 @@ class Tenant extends Model
         return array_replace(self::DEFAULT_SETTINGS, $this->settings ?? []);
     }
 
-    public function logoUrl(): ?string
+    public function logoUrl(): string
     {
-        return $this->logo_path ? Storage::disk('public')->url($this->logo_path) : null;
+        return OfficialLogo::url();
     }
 
     public function users(): HasMany

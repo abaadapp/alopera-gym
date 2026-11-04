@@ -2,6 +2,8 @@
 
 namespace App\Modules\Reports\Support;
 
+use App\Core\Branding\OfficialLogo;
+use App\Core\Papers\PaperSize;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
 use Mpdf\Mpdf;
@@ -64,11 +66,16 @@ final class ReportPdf
     public function html(): string
     {
         $css = 'body{font-family:ibmplexsansarabic;font-size:9pt;color:#111}h1{font-size:15pt;margin:0 0 2pt}h2{font-size:11pt;margin:12pt 0 4pt}'
-            .'.club{color:#6b7280;font-size:9pt}table.meta td{padding:1pt 6pt 1pt 0;font-size:8.5pt}table.meta td.k{color:#6b7280}'
+            .'.club{color:#6b7280;font-size:9pt}table.top{width:100%;margin-bottom:6pt}table.top td{vertical-align:top;padding:0}'
+            .'table.meta td{padding:1pt 6pt 1pt 0;font-size:8.5pt;vertical-align:top}table.meta td.k{color:#6b7280}'
             .'table.data{width:100%;border-collapse:collapse;margin-top:4pt}table.data th{background:#f2f2f0;font-weight:bold;text-align:right;padding:4pt;border-bottom:0.6pt solid #d4d4d4;font-size:8.5pt}'
             .'table.data td{padding:3pt 4pt;border-bottom:0.3pt solid #ececec;font-size:8.5pt}.note{color:#92400e;font-size:8pt;margin-top:3pt}';
         $out = '<html dir="rtl"><head><style>'.$css.'</style></head><body>';
-        $out .= ($this->club ? '<div class="club">'.e($this->club).'</div>' : '').'<h1>'.e($this->title).'</h1><table class="meta">';
+        // In the page, not a running header: once, at the head of the first page.
+        $box = OfficialLogo::box(PaperSize::A5);
+        $out .= '<table class="top"><tr><td>'.($this->club ? '<div class="club">'.e($this->club).'</div>' : '').'<h1>'.e($this->title).'</h1></td>'
+            .'<td style="width:'.$box['width'].'pt;text-align:left"><img src="'.e(OfficialLogo::forPaper(PaperSize::A4, true)).'" alt="" style="width:'.$box['width'].'pt;height:'.$box['height'].'pt"></td></tr></table>';
+        $out .= '<table class="meta">';
         foreach ($this->meta as [$label, $value]) {
             $out .= '<tr><td class="k">'.e($label).'</td>'.$this->cell((string) $value).'</tr>';
         }

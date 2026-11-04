@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Club;
 
 use App\Core\Audit\AuditLogger;
-use App\Core\Support\ImageStore;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
@@ -56,7 +55,6 @@ class SettingsController extends Controller
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'primary_color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'secondary_color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
-            'logo' => ['nullable', 'image', 'max:'.config('gym.max_image_kb')],
             'rules' => ['array'],
             'rules.booking_window_days' => ['integer', 'between:1,90'],
             'rules.booking_cancel_cutoff_hours' => ['integer', 'between:0,72'],
@@ -74,14 +72,9 @@ class SettingsController extends Controller
             'rules.member_signup_enabled' => ['boolean'],
         ]);
 
-        if ($request->hasFile('logo')) {
-            ImageStore::delete($tenant->logo_path);
-            $tenant->logo_path = ImageStore::store($request->file('logo'), 'branding', 600);
-        }
-
         // Notification rules have their own screen; this form never touches them.
         $rules = Arr::except(array_intersect_key($data['rules'] ?? [], $tenant::DEFAULT_SETTINGS), self::NOTIFICATION_RULES);
-        unset($data['logo'], $data['rules']);
+        unset($data['rules']);
 
         $snapshot = fn () => $tenant->only(array_keys($data)) + Arr::only($tenant->settings ?? [], array_keys($rules));
         $before = $snapshot();
