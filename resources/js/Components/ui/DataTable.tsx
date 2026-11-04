@@ -245,7 +245,7 @@ export default function DataTable<T>({ rows, columns, card, rowKey, params, pagi
 /** «أضف فلتر»: the filters by name, each opening its choices beside the menu (scrolling past 288px), as the reference's. */
 function FilterChoices({ filters, onPick }: { filters: TableFilter[]; onPick: (param: string, value: string) => void }) {
     return filters.map((f) => (
-        <DropdownSub key={f.param} label={f.label} className="max-h-72 overflow-y-auto">
+        <DropdownSub key={f.param} label={f.label} className="max-h-[min(18rem,var(--radix-dropdown-menu-content-available-height))]">
             {(f.options ?? []).filter((o) => !o.hidden).map((o) => (
                 <DropdownItem key={o.value} onClick={() => onPick(f.param, o.value)}>
                     {o.dot && <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: o.dot }} />}

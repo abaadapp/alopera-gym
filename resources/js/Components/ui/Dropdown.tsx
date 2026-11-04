@@ -84,7 +84,8 @@ export function Dropdown({ trigger, children, label, hover = false, align = 'end
                         className={cn(
                             // Portalled out of the page, so it carries the control panel's look along (see AdminScope).
                             admin && 'admin-ui',
-                            'z-50 min-w-[10rem] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)] outline-none',
+                            // Never taller than the room beside its trigger: on a phone on its side a long menu scrolls within itself.
+                            'z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[10rem] overflow-y-auto overflow-x-hidden rounded-[12px] border border-[#e8e8e8] bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)] outline-none',
                             panelClassName,
                         )}
                     >
@@ -151,7 +152,7 @@ export function DropdownSub({ label, children, className }: { label: ReactNode; 
                 <Menu.SubContent
                     data-layer
                     // 8rem at least, as the reference's — narrower only where the screen has less room beside the menu (a 360px phone).
-                    className={cn(admin && 'admin-ui', 'z-50 min-w-[min(8rem,var(--radix-dropdown-menu-content-available-width))] max-w-[var(--radix-dropdown-menu-content-available-width)] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)] outline-none', className)}
+                    className={cn(admin && 'admin-ui', 'z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[min(8rem,var(--radix-dropdown-menu-content-available-width))] max-w-[var(--radix-dropdown-menu-content-available-width)] overflow-y-auto overflow-x-hidden rounded-[12px] border border-[#e8e8e8] bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)] outline-none', className)}
                 >
                     {children}
                 </Menu.SubContent>
