@@ -29,6 +29,12 @@ class Message extends Model
 
     public const SKIPPED = 'skipped';
 
+    /** Why a message was skipped, as staff are told. */
+    public const SKIP_REASONS = [
+        'template_missing' => 'القالب غير موجود', 'template_not_approved' => 'القالب لم يُعتمد من Meta بعد', 'opted_out' => 'العضو لم يوافق على رسائل الخدمة',
+        'no_phone' => 'لا رقم هاتف', 'no_marketing_consent' => 'بلا موافقة تسويقية',
+    ];
+
     protected $guarded = ['id', 'tenant_id'];
 
     protected $attributes = ['attempts' => 0, 'channel' => 'whatsapp'];

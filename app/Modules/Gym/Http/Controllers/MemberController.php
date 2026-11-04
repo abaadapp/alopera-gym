@@ -30,10 +30,12 @@ use App\Modules\Payments\Services\OnlinePaymentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class MemberController extends Controller
 {
@@ -170,12 +172,24 @@ class MemberController extends Controller
     public function update(Request $request, Member $member): RedirectResponse
     {
         $data = $this->validated($request, $member);
+        // The old photo goes only once the edit is saved: a refused edit (a phone already taken) keeps it.
+        $old = $member->photo_path;
         if ($request->hasFile('photo')) {
-            ImageStore::delete($member->photo_path);
             $member->photo_path = ImageStore::store($request->file('photo'), 'members', 600);
         }
         unset($data['photo']);
-        $this->members->update($member, $data);
+        try {
+            $this->members->update($member, $data);
+        } catch (Throwable $e) {
+            if ($member->photo_path !== $old) {
+                ImageStore::delete($member->photo_path);
+                $member->photo_path = $old;
+            }
+            throw $e;
+        }
+        if ($member->photo_path !== $old) {
+            ImageStore::delete($old);
+        }
 
         return redirect()->route('club.members.show', $member)->with('success', 'تم حفظ بيانات العضو.');
     }
@@ -233,6 +247,11 @@ class MemberController extends Controller
     /** @return array<string, mixed> */
     private function validated(Request $request, ?Member $member = null): array
     {
+        // Compared as stored: in lower case.
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => Str::lower(trim($request->input('email')))]);
+        }
+
         return $request->validate([
             'full_name' => ['required', 'string', 'max:160'],
             'phone' => ['required', 'string', 'max:32', 'regex:/^[+0-9٠-٩\s-]{8,20}$/u'],

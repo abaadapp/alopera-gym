@@ -69,10 +69,11 @@ final class MembershipService
         $today = CarbonImmutable::today();
         $start = $latest && $latest->ends_on->gte($today) ? $latest->ends_on->addDay() : $today;
 
-        return $this->create($member, $plan, $latestAny ? Membership::KIND_RENEWAL : Membership::KIND_NEW, $options + [
+        // A renewal starts where the current period ends, whatever start date the request still carries.
+        return $this->create($member, $plan, $latestAny ? Membership::KIND_RENEWAL : Membership::KIND_NEW, [
             'starts_on' => $start->toDateString(),
             'previous_membership_id' => $latestAny?->id,
-        ]);
+        ] + $options);
     }
 
     /**

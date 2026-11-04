@@ -19,6 +19,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -49,6 +50,7 @@ class PortalAuthController extends Controller
     {
         abort_unless($tenants->require()->setting('member_signup_enabled', true), 404);
 
+        $this->lowerEmail($request);
         $data = $request->validate([
             'membership_plan_id' => ['required', TenantRule::exists('gym_membership_plans')->where('is_public', true)->where('is_active', true)->whereNull('deleted_at')],
             'full_name' => ['required', 'string', 'max:160'],
@@ -118,7 +120,7 @@ class PortalAuthController extends Controller
         $value = $field === 'phone' ? Phone::normalize($data['login']) : strtolower($data['login']);
 
         // Member::where is tenant-scoped: a member can only sign in to her own club's portal.
-        $member = Member::where($field, $value)->first();
+        $member = $field === 'email' ? Member::whereRaw('lower(email) = ?', [$value])->first() : Member::where($field, $value)->first();
 
         if (! $member || ! $member->password || $member->status === Member::BLOCKED || DemoAccounts::blocked($member->email)
             || ! Auth::guard('member')->attempt(['id' => $member->id, 'password' => $data['password']], $request->boolean('remember'))) {
@@ -138,5 +140,13 @@ class PortalAuthController extends Controller
         Inertia::clearHistory();
 
         return redirect()->route('site.home');
+    }
+
+    /** Compared as stored: in lower case. */
+    private function lowerEmail(Request $request): void
+    {
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => Str::lower(trim($request->input('email')))]);
+        }
     }
 }

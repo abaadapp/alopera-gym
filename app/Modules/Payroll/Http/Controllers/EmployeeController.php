@@ -419,6 +419,9 @@ class EmployeeController extends Controller
 
             return ['mode' => 'link', 'user_id' => $target->id];
         }
+        if (is_string($request->input('account_email'))) {
+            $request->merge(['account_email' => strtolower(trim($request->input('account_email')))]);
+        }
         $data = $request->validate([
             'account_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'account_role_id' => ['required', TenantRule::exists('roles')],

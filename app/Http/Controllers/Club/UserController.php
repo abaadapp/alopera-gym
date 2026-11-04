@@ -144,6 +144,11 @@ class UserController extends Controller
     /** @return array<string, mixed> */
     private function validated(Request $request, ?User $user = null): array
     {
+        // Checked as it is saved, in lower case: another case of a taken address is a field error, not a server error.
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => strtolower(trim($request->input('email')))]);
+        }
+
         return $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user?->id), DemoAccounts::rule()],

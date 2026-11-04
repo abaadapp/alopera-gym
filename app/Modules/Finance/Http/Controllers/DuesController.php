@@ -23,10 +23,7 @@ use Inertia\Response;
 class DuesController extends Controller
 {
     /** Why a reminder was not sent, in words. */
-    private const SKIPS = [
-        'template_missing' => 'القالب غير موجود', 'template_not_approved' => 'القالب لم يُعتمد من Meta بعد', 'opted_out' => 'العضو لم يوافق على رسائل الخدمة',
-        'no_phone' => 'لا رقم هاتف', 'no_marketing_consent' => 'بلا موافقة تسويقية',
-    ];
+    private const SKIPS = Message::SKIP_REASONS;
 
     public function __invoke(Request $request, TenantContext $tenants): Response
     {

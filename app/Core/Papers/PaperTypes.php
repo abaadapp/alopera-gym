@@ -258,13 +258,23 @@ final class PaperTypes
     public static function save(Tenant $tenant, string $type, array $data): void
     {
         $values = [];
+        $inherited = $type === 'invoice' ? trim((string) $tenant->setting('invoice_footer')) : '';
+        $current = (array) ($tenant->settings['papers'][$type] ?? []);
         foreach (self::defaults($type) as $key => $default) {
             if (array_key_exists($key, $data)) {
-                $values[$key] = self::cast($type, $key, $data[$key] ?? '', $default);
+                $value = self::cast($type, $key, $data[$key] ?? '', $default);
+                // The footer the editor shows because the club settings give it is not one written here: left unsaved,
+                // it keeps following the club settings.
+                if ($key === 'footer' && $inherited !== '' && $value === $inherited) {
+                    unset($current['footer']);
+
+                    continue;
+                }
+                $values[$key] = $value;
             }
         }
         $settings = $tenant->settings ?? [];
-        $settings['papers'][$type] = array_replace((array) ($settings['papers'][$type] ?? []), $values);
+        $settings['papers'][$type] = array_replace($current, $values);
         $tenant->forceFill(['settings' => $settings])->save();
     }
 
