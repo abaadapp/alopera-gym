@@ -8,6 +8,7 @@ use App\Http\Middleware\EnforceBranchAccess;
 use App\Http\Middleware\EnsureClubFinance;
 use App\Http\Middleware\EnsureModuleEnabled;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\KeepFlashForThePage;
 use App\Http\Middleware\NormalizeNumbers;
 use App\Http\Middleware\ResolveCustomDomain;
 use App\Http\Middleware\ResolveSiteTenant;
@@ -31,6 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
+            KeepFlashForThePage::class,
             HandleInertiaRequests::class,
         ]);
         $middleware->prepend(ResolveCustomDomain::class);
