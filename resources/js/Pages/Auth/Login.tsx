@@ -22,7 +22,7 @@ export default function Login() {
                 </Field>
                 <div className="flex items-center justify-between">
                     <Checkbox label="تذكّرني" checked={form.data.remember} onChange={(e) => form.setData('remember', e.target.checked)} />
-                    <a href={route('password.request')} className="text-sm text-brand hover:underline">نسيت كلمة المرور؟</a>
+                    <a href={route('password.request')} className="text-[13px] font-medium text-[#111] hover:underline">نسيت كلمة المرور؟</a>
                 </div>
                 <Button type="submit" className="w-full" loading={form.processing}>دخول</Button>
             </form>

@@ -28,7 +28,7 @@ export default function ForgotPassword() {
                 <Button type="submit" className="w-full" loading={form.processing}>إرسال رابط الاستعادة</Button>
             </form>
             <p className="mt-6 text-center text-sm">
-                <Link href={route('login')} className="text-brand hover:underline">العودة لتسجيل الدخول</Link>
+                <Link href={route('login')} className="font-medium text-[#111] hover:underline">العودة لتسجيل الدخول</Link>
             </p>
         </AuthLayout>
     );
