@@ -84,7 +84,12 @@
         @if (count($panel['rows'] ?? []) > 0)
             <table class="s-rows">
                 @foreach ($panel['rows'] as $r)
-                    <tr><td class="s-sub">{{ $r['label'] }}@if (filled($r['sub'] ?? null)) <span dir="ltr">{{ $r['sub'] }}</span>@endif</td><td class="v"><span dir="ltr">{{ $r['value'] }}</span></td></tr>
+                    @if ($panel['words'] ?? false)
+                        <tr><td class="s-sub">{{ $r['label'] }}</td></tr>
+                        <tr><td dir="{{ \App\Core\Papers\PaperFormat::dir($r['value']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['value']) }}</td></tr>
+                    @else
+                        <tr><td class="s-sub">{{ $r['label'] }}@if (filled($r['sub'] ?? null)) <span dir="ltr">{{ $r['sub'] }}</span>@endif</td><td class="v"><span dir="ltr">{{ $r['value'] }}</span></td></tr>
+                    @endif
                 @endforeach
             </table>
         @endif

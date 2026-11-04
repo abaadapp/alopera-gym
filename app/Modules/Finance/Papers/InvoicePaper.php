@@ -243,6 +243,7 @@ final class InvoicePaper extends PaperBuilder
             ['label' => $w('رقم الحساب'), 'value' => trim((string) $tenant->setting('bank_iban', ''))],
         ], fn ($r) => $r['value'] !== ''));
 
-        return $rows === [] ? null : ['caption' => 'التحويل البنكي', 'rows' => $rows];
+        // Words, not amounts: they wrap, and on a receipt each value takes the strip's whole width under its label.
+        return $rows === [] ? null : ['caption' => 'التحويل البنكي', 'rows' => $rows, 'text' => null, 'words' => true];
     }
 }

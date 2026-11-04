@@ -85,6 +85,10 @@ class BusinessSettingsTest extends TestCase
         $this->assertStringContainsString('بنك مسقط', $html);
         $this->assertStringContainsString('OM810180000001234567890', $html);
 
+        // on a 58mm receipt each value sits on its own line under its label, so a long account wraps within the strip
+        $strip = $this->html($club, PaperSize::T58);
+        $this->assertMatchesRegularExpression('#<tr><td class="s-sub">[^<]+</td></tr>\s*<tr><td dir="ltr">[^<]*OM810180000001234567890#u', $strip);
+
         $this->save($club, ['governorate' => 'مكان آخر'])->assertSessionHasErrors('rules.governorate');
         $this->save($club, ['bank_iban' => 'OM81<script>'])->assertSessionHasErrors('rules.bank_iban');
     }
