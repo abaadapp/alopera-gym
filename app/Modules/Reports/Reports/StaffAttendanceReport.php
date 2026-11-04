@@ -25,18 +25,19 @@ final class StaffAttendanceReport extends Report
 
     public function page(ReportFilters $f, User $user): array
     {
-        $summary = $this->summary($this->base($f)->with('user:id,name')->get());
-        $comparison = $this->compare($this->totals($summary), $this->totals($this->summary($this->base($f, $f->prevFrom, $f->prevTo)->with('user:id,name')->get())));
+        $summary = $this->summary($this->base($f)->with(['user:id,name', 'user.employee:id,user_id,name'])->get());
+        $comparison = $this->compare($this->totals($summary), $this->totals($this->summary($this->base($f, $f->prevFrom, $f->prevTo)->with(['user:id,name', 'user.employee:id,user_id,name'])->get())));
 
         return [
             'comparison' => $comparison,
             'summary' => $summary,
-            'records' => $this->base($f)->with(['user:id,name', 'device:id,name'])->latest('clock_in_at')->paginate(50)->withQueryString()
+            'records' => $this->base($f)->with(['user:id,name', 'user.employee:id,user_id,name', 'device:id,name'])->latest('clock_in_at')->paginate(50)->withQueryString()
                 ->through(fn (StaffAttendance $a) => [
-                    'id' => $a->id, 'user' => $a->user?->name, 'method' => self::METHODS[$a->method] ?? $a->method, 'device' => $a->device?->name,
+                    'id' => $a->id, 'user' => $a->user?->staffName(), 'method' => self::METHODS[$a->method] ?? $a->method, 'device' => $a->device?->name,
                     'date' => $a->clock_in_at->toDateString(), 'in' => $a->clock_in_at->format('H:i'), 'out' => $a->clock_out_at?->format('H:i'), 'hours' => $this->hours($a),
                 ]),
-            'staff' => User::where('tenant_id', app(TenantContext::class)->require()->id)->orderBy('name')->get(['id', 'name']),
+            'staff' => User::where('tenant_id', app(TenantContext::class)->require()->id)->with('employee:id,user_id,name')->get(['id', 'name'])
+                ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->staffName()])->sortBy('name')->values(),
             'options' => ['user_id' => $f->integer('user_id')],
             'empty' => $summary->isEmpty(),
         ];
@@ -44,9 +45,9 @@ final class StaffAttendanceReport extends Report
 
     public function export(ReportFilters $f, User $user): array
     {
-        $summary = $this->summary($this->base($f)->with('user:id,name')->get());
-        $comparison = $this->compare($this->totals($summary), $this->totals($this->summary($this->base($f, $f->prevFrom, $f->prevTo)->with('user:id,name')->get())));
-        $person = $f->integer('user_id') ? User::where('tenant_id', app(TenantContext::class)->require()->id)->whereKey($f->integer('user_id'))->value('name') : null;
+        $summary = $this->summary($this->base($f)->with(['user:id,name', 'user.employee:id,user_id,name'])->get());
+        $comparison = $this->compare($this->totals($summary), $this->totals($this->summary($this->base($f, $f->prevFrom, $f->prevTo)->with(['user:id,name', 'user.employee:id,user_id,name'])->get())));
+        $person = $f->integer('user_id') ? User::where('tenant_id', app(TenantContext::class)->require()->id)->with('employee:id,user_id,name')->find($f->integer('user_id'))?->staffName() : null;
 
         return [
             'empty' => $summary->isEmpty(),
@@ -57,8 +58,8 @@ final class StaffAttendanceReport extends Report
                     $summary->map(fn ($s) => [$s['user'], $s['days'], $s['hours'], $s['records'], $s['open']])->all()),
                 new S('السجلات', [['الموظف', S::TEXT], ['التاريخ', S::TEXT], ['الحضور', S::TEXT], ['الانصراف', S::TEXT], ['الساعات', S::NUMBER], ['الطريقة', S::TEXT], ['الجهاز', S::TEXT]],
                     (function () use ($f) {
-                        foreach ($this->base($f)->with(['user:id,name', 'device:id,name'])->orderBy('clock_in_at')->orderBy('id')->lazy(500) as $a) {
-                            yield [$a->user?->name, $a->clock_in_at->toDateString(), $a->clock_in_at->format('H:i'), $a->clock_out_at?->format('H:i') ?? 'لم ينصرف', $this->hours($a), self::METHODS[$a->method] ?? $a->method, $a->device?->name];
+                        foreach ($this->base($f)->with(['user:id,name', 'user.employee:id,user_id,name', 'device:id,name'])->orderBy('clock_in_at')->orderBy('id')->lazy(500) as $a) {
+                            yield [$a->user?->staffName(), $a->clock_in_at->toDateString(), $a->clock_in_at->format('H:i'), $a->clock_out_at?->format('H:i') ?? 'لم ينصرف', $this->hours($a), self::METHODS[$a->method] ?? $a->method, $a->device?->name];
                         }
                     })()),
             ],
@@ -81,7 +82,7 @@ final class StaffAttendanceReport extends Report
     private function summary(Collection $records): Collection
     {
         return $records->groupBy('user_id')->map(fn ($rows) => [
-            'user' => $rows->first()->user?->name ?? '—',
+            'user' => $rows->first()->user?->staffName() ?? '—',
             'days' => $rows->map(fn ($a) => $a->clock_in_at->toDateString())->unique()->count(),
             'hours' => round($rows->sum(fn ($a) => $a->clock_out_at ? $a->clock_in_at->diffInMinutes($a->clock_out_at) : 0) / 60, 2),
             'open' => $rows->whereNull('clock_out_at')->count(),

@@ -25,6 +25,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class AccessControlService
 {
+    /** A punch left open since the night before closes at the next punch within this many hours (a late shift). */
+    private const OVERNIGHT_SHIFT_HOURS = 14;
+
     public function __construct(private readonly TenantContext $tenants) {}
 
     public function evaluate(?Member $member, ?CarbonImmutable $today = null): AccessDecision
@@ -190,9 +193,12 @@ final class AccessControlService
                 return $last;
             }
 
+            // Open today, or open since last night within a shift's length: a shift that ends after midnight closes
+            // where it began instead of opening the next day's record (and leaving its own open).
+            $since = min(now()->startOfDay(), now()->subHours(self::OVERNIGHT_SHIFT_HOURS));
             $open = StaffAttendance::where('user_id', $user->id)
                 ->whereNull('clock_out_at')
-                ->where('clock_in_at', '>=', now()->startOfDay())
+                ->where('clock_in_at', '>=', $since)
                 ->lockForUpdate()
                 ->latest('clock_in_at')
                 ->first();

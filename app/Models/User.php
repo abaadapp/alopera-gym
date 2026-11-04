@@ -6,6 +6,7 @@ use App\Core\Auth\PermissionRegistry;
 use App\Core\Auth\SystemRoles;
 use App\Core\Tenancy\TenantScope;
 use App\Modules\Gym\Models\Trainer;
+use App\Modules\Payroll\Models\Employee;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -73,6 +74,18 @@ class User extends Authenticatable
     public function trainer(): HasOne
     {
         return $this->hasOne(Trainer::class);
+    }
+
+    /** Their staff file, when they have one. */
+    public function employee(): HasOne
+    {
+        return $this->hasOne(Employee::class);
+    }
+
+    /** The person as the club knows them: the staff file's name, or the account's own without a file. */
+    public function staffName(): string
+    {
+        return $this->employee?->name ?? $this->name;
     }
 
     public function scopeOfTenant(Builder $query, int $tenantId): Builder

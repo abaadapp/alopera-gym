@@ -97,11 +97,13 @@ final class PayrollService
             $run = $this->lockDraft($item->payroll_run_id);
             $item = PayrollItem::whereKey($item->id)->where('payroll_run_id', $run->id)->lockForUpdate()->firstOrFail();
 
+            // A field sent empty is emptied (zero); only a field not sent keeps its value.
+            $amount = fn (string $key) => array_key_exists($key, $data) ? ($data[$key] ?? 0) : $item->{$key};
             $item->fill([
-                'overtime_hours' => $data['overtime_hours'] ?? $item->overtime_hours,
-                'overtime' => Money::normalize($data['overtime'] ?? $item->overtime),
-                'allowances' => Money::normalize($data['allowances'] ?? $item->allowances),
-                'deductions' => Money::normalize($data['deductions'] ?? $item->deductions),
+                'overtime_hours' => $amount('overtime_hours'),
+                'overtime' => Money::normalize($amount('overtime')),
+                'allowances' => Money::normalize($amount('allowances')),
+                'deductions' => Money::normalize($amount('deductions')),
                 'deduction_notes' => array_key_exists('deduction_notes', $data) ? $data['deduction_notes'] : $item->deduction_notes,
                 'notes' => array_key_exists('notes', $data) ? $data['notes'] : $item->notes,
             ]);

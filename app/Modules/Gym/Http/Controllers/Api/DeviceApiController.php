@@ -45,7 +45,7 @@ class DeviceApiController extends Controller
             }
             $record = $access->staffPunch($holder, $device, $data['credential_type']);
 
-            return response()->json(['allowed' => true, 'reason' => 'staff', 'message' => $record->clock_out_at ? 'انصراف' : 'حضور', 'staff' => ['id' => $holder->id, 'name' => $holder->name]]);
+            return response()->json(['allowed' => true, 'reason' => 'staff', 'message' => $record->clock_out_at ? 'انصراف' : 'حضور', 'staff' => ['id' => $holder->id, 'name' => $holder->staffName()]]);
         }
 
         $decision = $access->checkIn($holder instanceof Member ? $holder : null, $data['credential_type'], $device, $hint);
@@ -67,6 +67,6 @@ class DeviceApiController extends Controller
 
         $record = $access->staffPunch($holder, $device, $data['credential_type']);
 
-        return response()->json(['ok' => true, 'type' => $record->clock_out_at ? 'out' : 'in', 'name' => $holder->name, 'at' => now()->toIso8601String()]);
+        return response()->json(['ok' => true, 'type' => $record->clock_out_at ? 'out' : 'in', 'name' => $holder->staffName(), 'at' => now()->toIso8601String()]);
     }
 }
