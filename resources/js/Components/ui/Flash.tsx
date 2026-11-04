@@ -30,8 +30,19 @@ export default function Flash() {
     }, []);
 
     useEffect(() => {
-        const first = errors && Object.values(errors)[0];
-        if (first && (errors.error || errors.booking || errors.starts_at)) toast.error(first);
+        const messages = Object.values(errors ?? {}).filter(Boolean) as string[];
+        if (!messages.length) return;
+        if (errors.error || errors.booking || errors.starts_at) {
+            toast.error(messages[0]);
+            return;
+        }
+        // A refusal the page shows nowhere (a key none of its fields renders: «items», «lines.2.account_id»…) would leave
+        // the person with a form that silently did nothing: it is said here instead. Read once the page has drawn it.
+        const frame = requestAnimationFrame(() => {
+            const page = document.body.textContent ?? '';
+            if (!messages.some((m) => page.includes(m))) toast.error(messages[0]);
+        });
+        return () => cancelAnimationFrame(frame);
     }, [errors]);
 
     // The panel's toasts rise from the bottom centre, above an on-screen keyboard; the public pages keep theirs on top.
