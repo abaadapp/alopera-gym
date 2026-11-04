@@ -88,9 +88,10 @@ class StockOperationsController extends Controller
             'counts.*.note' => ['nullable', 'string', 'max:200'],
             'approve' => ['boolean'],
         ]);
+        // Refused before anything is written: a request it cannot finish saves nothing.
+        abort_if($request->boolean('approve') && ! $request->user()->can('inventory.approve'), 403);
         $inventory->saveCounts($stocktake, $data['counts'] ?? []);
         if ($request->boolean('approve')) {
-            abort_unless($request->user()->can('inventory.approve'), 403);
             $inventory->approveCount($stocktake);
 
             return back()->with('success', 'اعتُمد الجرد '.$stocktake->number.' وسُجّلت الفروقات في سجل المخزون.');
