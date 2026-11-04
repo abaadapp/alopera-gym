@@ -57,8 +57,7 @@ export default function SiteLayout({ site, children, seoTitle }: { site: SiteInf
                 <header className="sticky top-0 z-30 border-b border-line/70 bg-white/90 backdrop-blur">
                     <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:gap-4">
                         <Link href={route('site.home')} className="flex min-w-0 items-center gap-2.5">
-                            <img src={site.logo_url} alt={tenant?.name} className="h-12 w-auto object-contain" width={64} height={48} />
-                            <span className="truncate font-display text-lg font-semibold text-ink">{tenant?.name}</span>
+                            <img src={site.logo_url} alt={tenant?.name} className="h-14 w-auto object-contain" width={75} height={56} />
                         </Link>
                         <nav className="hidden items-center gap-1 lg:flex" aria-label="القائمة الرئيسية">
                             {nav.map((l) => (
