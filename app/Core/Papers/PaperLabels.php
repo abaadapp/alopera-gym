@@ -124,6 +124,10 @@ final class PaperLabels
         'المعتمد' => 'Approved by',
         'أمين المخزن' => 'Storekeeper',
         'تعليمات الدفع' => 'Payment instructions',
+        'التحويل البنكي' => 'Bank transfer',
+        'البنك' => 'Bank',
+        'اسم الحساب' => 'Account name',
+        'رقم الحساب' => 'Account number',
         // fixed values
         'مسودة' => 'Draft',
         'عميل نقدي' => 'Walk-in customer',

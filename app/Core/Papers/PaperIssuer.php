@@ -14,7 +14,7 @@ use App\Models\Tenant;
  */
 final class PaperIssuer
 {
-    private const KEYS = ['name', 'legal_name', 'address', 'city', 'phone', 'email', 'vat_number', 'cr_number', 'currency'];
+    private const KEYS = ['name', 'legal_name', 'address', 'city', 'governorate', 'phone', 'email', 'vat_number', 'cr_number', 'currency'];
 
     /** @return array<string, string> */
     public static function stamp(Tenant $tenant): array
@@ -24,9 +24,11 @@ final class PaperIssuer
             'legal_name' => (string) ($tenant->legal_name ?? ''),
             'address' => (string) ($tenant->address ?? ''),
             'city' => (string) ($tenant->city ?? ''),
+            'governorate' => trim((string) $tenant->setting('governorate', '')),
             'phone' => (string) ($tenant->phone ?? ''),
             'email' => (string) ($tenant->email ?? ''),
-            'vat_number' => trim((string) $tenant->setting('vat_number', '')),
+            // A club not registered for VAT prints no VAT number, even one typed in before.
+            'vat_number' => $tenant->vatRegistered() ? trim((string) $tenant->setting('vat_number', '')) : '',
             'cr_number' => trim((string) $tenant->setting('cr_number', '')),
             'currency' => (string) ($tenant->currency ?: 'OMR'),
         ];

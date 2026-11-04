@@ -39,9 +39,16 @@ class Tenant extends Model
         'dues_reminder_overdue_days' => [1, 7, 14],
         'dues_reminder_max' => 3,
         'class_session_weeks_ahead' => 4,
+        // null until the owner says: then registered when a rate or a number is set, as the club ran before the switch.
+        'vat_registered' => null,
         'vat_rate' => 0,
         'vat_number' => null,
         'cr_number' => null,
+        'governorate' => null,
+        // Printed on a customer invoice under «where and how to pay» while something is owed.
+        'bank_name' => null,
+        'bank_account_name' => null,
+        'bank_iban' => null,
         'invoice_footer' => null,
         'invoice_due_days' => 0,
         'allow_pay_at_reception' => true,
@@ -76,7 +83,15 @@ class Tenant extends Model
 
     public function logoUrl(): string
     {
-        return OfficialLogo::url();
+        return OfficialLogo::url($this);
+    }
+
+    /** Registered for VAT: only then is a VAT number printed and a rate charged. */
+    public function vatRegistered(): bool
+    {
+        $said = $this->setting('vat_registered');
+
+        return $said === null ? (float) $this->setting('vat_rate', 0) > 0 || filled($this->setting('vat_number')) : (bool) $said;
     }
 
     public function users(): HasMany

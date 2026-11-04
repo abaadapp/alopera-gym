@@ -13,6 +13,7 @@ use App\Modules\Reports\Support\ReportPdf;
 use App\Modules\Reports\Support\ReportSheet;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
@@ -157,7 +158,7 @@ class OfficialLogoTest extends TestCase
         $this->assertSame(1, array_sum($pages));
     }
 
-    public function test_the_settings_no_longer_take_a_logo(): void
+    public function test_the_website_page_does_not_take_a_logo(): void
     {
         $club = $this->gym(['logo_path' => 'tenants/1/branding/kept.webp']);
         $owner = $this->owner($club);
@@ -168,7 +169,51 @@ class OfficialLogoTest extends TestCase
 
         $club->refresh();
         $this->assertSame('#111111', $club->primary_color);
-        $this->assertSame('tenants/1/branding/kept.webp', $club->logo_path);
+        $this->assertNull($club->setting('logo_file'));
+    }
+
+    /** As the reference's: the owner replaces the logo in the club's settings, and can go back to the approved one. */
+    public function test_the_owner_replaces_the_logo_in_the_settings_and_restores_the_official_one(): void
+    {
+        Storage::fake('public');
+        $club = $this->gym(['logo_path' => 'tenants/1/branding/old-logo.webp']);
+        $owner = $this->owner($club);
+        $form = fn (array $extra) => ['name' => $club->name, 'primary_color' => '#9d174d', 'secondary_color' => '#f9a8d4', '_method' => 'put'] + $extra;
+
+        $this->actingAs($owner)->post(route('club.settings.update'), $form(['logo' => UploadedFile::fake()->image('wide.png', 800, 200)]))->assertSessionHasNoErrors();
+        $club->refresh();
+        $file = $club->setting('logo_file');
+        $this->assertNotNull($file);
+        Storage::disk('public')->assertExists($file);
+        $this->assertStringEndsWith('.png', $file);
+        $this->assertStringContainsString($file, $club->logoUrl());
+
+        $paper = $this->paper($club, PaperSize::A4);
+        $html = $paper->html();
+        $this->assertSame(1, substr_count($html, '<img'));
+        $this->assertStringContainsString($file, $html);
+        $this->assertStringNotContainsString(OfficialLogo::ORIGINAL, $html);
+        // a wide logo keeps its proportions inside the room it has
+        $box = OfficialLogo::box(PaperSize::A4, $club);
+        $this->assertEqualsWithDelta(4.0, $box['width'] / $box['height'], 0.02);
+        $this->assertLessThanOrEqual(140.0, $box['width']);
+        $this->assertSame([1], array_values(array_filter($this->drawn($paper->pdf()->getContent()))));
+
+        $this->actingAs($owner)->put(route('club.settings.update'), $form(['remove_logo' => true]))->assertSessionHasNoErrors();
+        $club->refresh();
+        $this->assertNull($club->setting('logo_file'));
+        Storage::disk('public')->assertMissing($file);
+        $this->assertStringEndsWith(OfficialLogo::SCREEN, $club->logoUrl());
+    }
+
+    public function test_the_settings_refuse_a_file_that_is_not_an_image(): void
+    {
+        $club = $this->club();
+
+        $this->actingAs($this->owner($club))->post(route('club.settings.update'), [
+            'name' => $club->name, 'primary_color' => '#9d174d', 'secondary_color' => '#f9a8d4', '_method' => 'put', 'logo' => UploadedFile::fake()->create('logo.pdf', 10, 'application/pdf'),
+        ])->assertSessionHasErrors('logo');
+        $this->assertNull($club->refresh()->setting('logo_file'));
     }
 
     public function test_the_doors_carry_the_logo_and_its_icons(): void

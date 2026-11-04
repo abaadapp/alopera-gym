@@ -1,5 +1,5 @@
 import { type FormEvent } from 'react';
-import { useForm } from '@inertiajs/react';
+import { Link, useForm } from '@inertiajs/react';
 import { ExternalLink } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Card, CardHeader, Field, Input, PageHeader } from '@/Components/ui';
@@ -25,7 +25,7 @@ export default function WebsiteBranding({ club, siteUrl }: Props) {
             />
             <form onSubmit={submit} className="grid max-w-4xl gap-4 lg:grid-cols-2">
                 <Card>
-                    <CardHeader title="الشعار" subtitle="الشعار الرسمي للنادي، معتمد وثابت في النظام" />
+                    <CardHeader title="الشعار" subtitle="يُغيَّر من إعدادات النادي، ويظهر في الموقع ولوحة التحكم والفواتير" actions={<Link href={route('club.settings.edit')} className="text-[13px] font-medium text-[#111] hover:underline">تغيير الشعار</Link>} />
                     <div className="flex h-32 items-center justify-center rounded-2xl border border-line bg-canvas p-3">
                         <img src={club.logo_url} alt="شعار Alopera Gym" className="h-full w-auto object-contain" />
                     </div>

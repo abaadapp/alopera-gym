@@ -46,11 +46,11 @@ final class Paper
             'doc' => $this->doc,
             'tpl' => $this->tpl,
             'issuer' => $this->issuer,
-            'logo' => ($this->tpl['show_logo'] ?? true) ? OfficialLogo::forPaper($this->size, $pdf) : null,
-            'logoBox' => OfficialLogo::box($this->size),
+            'logo' => ($this->tpl['show_logo'] ?? true) ? OfficialLogo::forPaper($this->size, $pdf, $this->tenant) : null,
+            'logoBox' => OfficialLogo::box($this->size, $this->tenant),
             'tokens' => $this->isStrip()
-                ? PaperTheme::thermal(PaperTheme::tokens(OfficialLogo::COLOR, (string) ($this->tpl['font'] ?? 'normal')))
-                : PaperTheme::tokens(OfficialLogo::COLOR, (string) ($this->tpl['font'] ?? 'normal')),
+                ? PaperTheme::thermal(PaperTheme::tokens(OfficialLogo::color($this->tenant), (string) ($this->tpl['font'] ?? 'normal')))
+                : PaperTheme::tokens(OfficialLogo::color($this->tenant), (string) ($this->tpl['font'] ?? 'normal')),
             'size' => $this->size,
             'strip' => $this->isStrip(),
             'lang' => (string) ($this->tpl['lang'] ?? 'ar_en'),

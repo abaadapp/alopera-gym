@@ -115,6 +115,9 @@ final class InvoicePaper extends PaperBuilder
         if (in_array($invoice->status, [Invoice::ISSUED, Invoice::PARTIALLY_PAID], true) && filled($tpl['payment_note'] ?? null)) {
             $panels[] = ['caption' => 'تعليمات الدفع', 'text' => $w((string) $tpl['payment_note'])];
         }
+        if (in_array($invoice->status, [Invoice::ISSUED, Invoice::PARTIALLY_PAID], true) && ($bank = self::bank($tenant, $w))) {
+            $panels[] = $bank;
+        }
         if ($invoice->status === Invoice::VOID && filled($invoice->void_reason)) {
             $panels[] = ['caption' => 'ملاحظات', 'text' => $w('أُلغيت الفاتورة').': '.$invoice->void_reason];
         }
@@ -220,8 +223,26 @@ final class InvoicePaper extends PaperBuilder
                 ($tpl['show_payments'] ?? false) ? ['caption' => 'المدفوعات', 'rows' => [['label' => $w('نقدًا'), 'sub' => $start->format('Y-m-d').' · R-000311', 'value' => F::amount(40)]]] : null,
                 ($tpl['show_notes'] ?? true) ? ['caption' => 'ملاحظات', 'text' => 'يُرجى سداد المتبقي قبل تاريخ الاستحقاق.'] : null,
                 filled($tpl['payment_note'] ?? null) ? ['caption' => 'تعليمات الدفع', 'text' => $w((string) $tpl['payment_note'])] : null,
+                self::bank($tenant, $w),
             ])),
             'signatures' => ($tpl['show_signature'] ?? false) ? ['المحاسب', 'المستلم'] : [],
         ];
+    }
+
+    /**
+     * The club's bank account, from its settings, for a customer paying by transfer; none when nothing is filled in.
+     *
+     * @param  callable(string): string  $w
+     * @return array{caption: string, rows: list<array{label: string, value: string}>}|null
+     */
+    private static function bank(Tenant $tenant, callable $w): ?array
+    {
+        $rows = array_values(array_filter([
+            ['label' => $w('البنك'), 'value' => trim((string) $tenant->setting('bank_name', ''))],
+            ['label' => $w('اسم الحساب'), 'value' => trim((string) $tenant->setting('bank_account_name', ''))],
+            ['label' => $w('رقم الحساب'), 'value' => trim((string) $tenant->setting('bank_iban', ''))],
+        ], fn ($r) => $r['value'] !== ''));
+
+        return $rows === [] ? null : ['caption' => 'التحويل البنكي', 'rows' => $rows];
     }
 }

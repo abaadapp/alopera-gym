@@ -31,7 +31,8 @@
     $half = (int) ceil(count($meta) / 2);
     $parties = array_values(array_filter($doc['parties'] ?? [], fn ($p) => count(array_filter($p['lines'] ?? [])) > 0));
     $contact = array_values(array_filter([$issuer['address'] ?? '', ($issuer['phone'] ?? '') !== '' ? PaperLabels::word('هاتف', $lang).': '.$issuer['phone'] : '', $issuer['email'] ?? '']));
-    $sub = trim(implode(' — ', array_filter([($issuer['legal_name'] ?? '') !== ($issuer['name'] ?? '') ? ($issuer['legal_name'] ?? '') : '', $issuer['city'] ?? ''])));
+    $place = implode('، ', array_unique(array_filter([trim($issuer['city'] ?? ''), trim($issuer['governorate'] ?? '')])));
+    $sub = trim(implode(' — ', array_filter([($issuer['legal_name'] ?? '') !== ($issuer['name'] ?? '') ? ($issuer['legal_name'] ?? '') : '', $place])));
     $proof = array_values(array_filter([
         ['label' => 'الرقم الضريبي', 'value' => $issuer['vat_number'] ?? ''],
         ['label' => 'السجل التجاري', 'value' => $issuer['cr_number'] ?? ''],

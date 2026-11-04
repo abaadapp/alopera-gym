@@ -4,6 +4,7 @@ namespace App\Modules\Reports\Support;
 
 use App\Core\Branding\OfficialLogo;
 use App\Core\Papers\PaperSize;
+use App\Core\Tenancy\TenantContext;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
 use Mpdf\Mpdf;
@@ -72,9 +73,10 @@ final class ReportPdf
             .'table.data td{padding:3pt 4pt;border-bottom:0.3pt solid #ececec;font-size:8.5pt}.note{color:#92400e;font-size:8pt;margin-top:3pt}';
         $out = '<html dir="rtl"><head><style>'.$css.'</style></head><body>';
         // In the page, not a running header: once, at the head of the first page.
-        $box = OfficialLogo::box(PaperSize::A5);
+        $tenant = app(TenantContext::class)->get();
+        $box = OfficialLogo::box(PaperSize::A5, $tenant);
         $out .= '<table class="top"><tr><td>'.($this->club ? '<div class="club">'.e($this->club).'</div>' : '').'<h1>'.e($this->title).'</h1></td>'
-            .'<td style="width:'.$box['width'].'pt;text-align:left"><img src="'.e(OfficialLogo::forPaper(PaperSize::A4, true)).'" alt="" style="width:'.$box['width'].'pt;height:'.$box['height'].'pt"></td></tr></table>';
+            .'<td style="width:'.$box['width'].'pt;text-align:left"><img src="'.e(OfficialLogo::forPaper(PaperSize::A4, true, $tenant)).'" alt="" style="width:'.$box['width'].'pt;height:'.$box['height'].'pt"></td></tr></table>';
         $out .= '<table class="meta">';
         foreach ($this->meta as [$label, $value]) {
             $out .= '<tr><td class="k">'.e($label).'</td>'.$this->cell((string) $value).'</tr>';

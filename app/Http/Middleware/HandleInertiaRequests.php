@@ -35,7 +35,7 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'appName' => config('app.name'),
-            'logo' => OfficialLogo::url(),
+            'logo' => OfficialLogo::url(app(TenantContext::class)->get()),
             // The year from the server: a device's clock can be wrong.
             'year' => now()->year,
             'locale' => app()->getLocale(),

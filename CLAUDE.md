@@ -15,7 +15,7 @@ Read `docs/ARCHITECTURE.md` first.
 - WhatsApp messages go through `WhatsAppService::queueTemplate()` (consent, approval, dedupe, after-commit queueing).
 - Integration secrets live in `TenantIntegration::credentials` (encrypted) and are never sent to the browser.
 - Gym tables are prefixed `gym_`; each module keeps its own migrations and routes under `app/Modules/<Module>`.
-- The logo is `App\Core\Branding\OfficialLogo`: the owner's file in `public/brand`, unchanged, with the sizes scaled from it. Never add an upload for it, redraw it or stretch it.
+- The logo is `App\Core\Branding\OfficialLogo`: the owner's file in `public/brand`, unchanged, until the owner uploads another in the club settings (`settings.logo_file`). The old `logo_path` column is never read. Never redraw or stretch a logo.
 
 ## Commands
 - Tests: `php artisan test` (PostgreSQL database `alopera_gym_testing`)
