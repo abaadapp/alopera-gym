@@ -163,6 +163,24 @@ class PanelChromeTest extends TestCase
         $this->assertSame(0, $this->props($owner, 'club.notifications.index')['unread']);
     }
 
+    /** A link saved under another host (the app's URL) opens on the address the user is on, never another site. */
+    public function test_a_notification_opens_on_the_address_in_use_whatever_host_it_was_saved_with(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $this->websiteOrder($club);
+        $id = $this->asTenant($club, function () use ($owner) {
+            $row = StaffNotification::where('user_id', $owner->id)->firstOrFail();
+            $row->forceFill(['url' => 'https://elsewhere.example:8000/app/payments?status=pending'])->save();
+
+            return $row->id;
+        });
+
+        $to = $this->actingAs($owner)->get(route('club.notifications.open', $id))->assertRedirect()->headers->get('Location');
+        $this->assertSame(url('/app/payments?status=pending'), $to);
+        $this->assertStringNotContainsString('elsewhere.example', $to);
+    }
+
     public function test_notifications_stay_with_their_owner_and_their_club(): void
     {
         $a = $this->club('A');
