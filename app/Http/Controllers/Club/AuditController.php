@@ -6,6 +6,7 @@ use App\Core\Audit\AuditRedaction;
 use App\Core\Support\Period;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Modules\Documents\Models\BusinessDocument;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -16,7 +17,12 @@ class AuditController extends Controller
     public function index(Request $request): Response
     {
         $period = Period::fromRequest($request);
+        $user = $request->user();
+        // A confidential document's entries (its name, number, issuer) reach only someone who may see it.
+        $hidden = $user->can('documents.confidential') ? [] : BusinessDocument::withTrashed()->where('is_confidential', true)
+            ->where(fn ($q) => $q->whereNull('responsible_user_id')->orWhere('responsible_user_id', '!=', $user->id))->pluck('id')->all();
         $logs = AuditLog::query()
+            ->when($hidden, fn ($q) => $q->whereNot(fn ($w) => $w->where('subject_type', (new BusinessDocument)->getMorphClass())->whereIn('subject_id', $hidden)))
             ->when($request->string('event')->toString(), fn ($q, $e) => $q->where('event', 'like', $e.'%'))
             ->when($request->string('actor')->toString(), fn ($q, $a) => $q->where('actor_name', 'ilike', '%'.$a.'%'))
             ->tap(fn ($q) => $period->apply($q, 'created_at'))

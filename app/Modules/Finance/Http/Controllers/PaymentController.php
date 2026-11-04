@@ -122,6 +122,8 @@ class PaymentController extends Controller
             'client_key' => SubmittedOnce::RULE,
         ], [], ['invoice_id' => 'الفاتورة', 'amount' => 'المبلغ']);
         $invoice = Invoice::findOrFail($data['invoice_id']);
+        // The invoice comes in the body, not the address: it is held to the user's branch here, as the payment is.
+        abort_unless(app(BranchContext::class)->allows($request->user(), $invoice->owningBranchId()), 404);
         SubmittedOnce::run($data['client_key'] ?? null, 'credit-allocate:'.$payment->id, fn () => $this->payments->allocate($payment, $invoice, $data['amount'])->id);
 
         return back()->with('success', 'خُصّص '.Money::normalize($data['amount']).' من الرصيد للفاتورة '.$invoice->number.'.');
