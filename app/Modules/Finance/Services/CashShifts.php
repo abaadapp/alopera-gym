@@ -9,6 +9,7 @@ use App\Core\Support\NumberSequence;
 use App\Core\Tenancy\BranchContext;
 use App\Models\User;
 use App\Modules\Accounting\Models\Account;
+use App\Modules\Accounting\Models\JournalLine;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\Ledger;
 use App\Modules\Finance\Models\CashShift;
@@ -120,7 +121,7 @@ final class CashShifts
     /**
      * What passed through the shift so far, by method, and the cash the drawer should hold.
      *
-     * @return array{methods: array<string, array{received: string, refunded: string, count: int}>, cash_received: string, cash_refunded: string, cash_expenses: string, moved_in: string, moved_out: string, expected: string, pending: int, payments: int}
+     * @return array{methods: array<string, array{received: string, refunded: string, count: int}>, cash_received: string, cash_refunded: string, cash_expenses: string, moved_in: string, moved_out: string, other_in: string, other_out: string, expected: string, pending: int, payments: int}
      */
     public function summary(CashShift $shift): array
     {
@@ -143,6 +144,7 @@ final class CashShifts
         $moved = fn (string $direction) => Money::normalize(CashShiftMovement::where('cash_shift_id', $shift->id)->where('direction', $direction)->sum('amount'));
         $in = $moved('in');
         $out = $moved('out');
+        [$otherIn, $otherOut] = $this->otherMovements($shift);
 
         return [
             'methods' => $methods,
@@ -151,10 +153,30 @@ final class CashShifts
             'cash_expenses' => $expenses,
             'moved_in' => $in,
             'moved_out' => $out,
-            'expected' => Money::sub(Money::add($shift->opening_float, $cashIn, $in), Money::add($cashOut, $expenses, $out)),
+            'other_in' => $otherIn,
+            'other_out' => $otherOut,
+            'expected' => Money::sub(Money::add($shift->opening_float, $cashIn, $in, $otherIn), Money::add($cashOut, $expenses, $out, $otherOut)),
             'pending' => Payment::where('cash_shift_id', $shift->id)->where('status', Payment::PENDING)->count(),
             'payments' => $count,
         ];
+    }
+
+    /**
+     * Money that reached or left the drawer by another door while the shift was open — salaries paid from it, a
+     * supplier paid, a transfer to the bank, a journal entry — moves the cash it should hold just the same. Payments,
+     * expenses and the shift's own moves are counted above; an opening balance is the cash already there.
+     *
+     * @return array{0: string, 1: string} in, out
+     */
+    private function otherMovements(CashShift $shift): array
+    {
+        $sums = JournalLine::where('account_id', $shift->account_id)
+            ->whereHas('entry', fn ($q) => $q->where('created_at', '>=', $shift->opened_at)
+                ->when($shift->closed_at, fn ($q, $closed) => $q->where('created_at', '<=', $closed))
+                ->where(fn ($q) => $q->whereNull('source_type')->orWhereNotIn('source_type', ['payment', 'expense', 'cash_shift', 'cash_shift_movement', 'account'])))
+            ->selectRaw('coalesce(sum(debit), 0) as debit, coalesce(sum(credit), 0) as credit')->first();
+
+        return [Money::normalize($sums->debit ?? 0), Money::normalize($sums->credit ?? 0)];
     }
 
     public function close(CashShift $shift, string|float $counted, ?string $note, User $user): CashShift

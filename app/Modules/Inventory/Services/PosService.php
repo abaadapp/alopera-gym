@@ -130,7 +130,7 @@ final class PosService
             if ($invoice && ! Money::isZero($invoice->netTotal())) {
                 $payment = Payment::where('invoice_id', $invoice->id)->where('kind', Payment::KIND_PAYMENT)->where('status', Payment::COMPLETED)->first();
                 $method = $refundMethod ?? match ($payment?->method) {
-                    'card' => 'card', 'cash', null => 'cash', 'bank_transfer' => 'bank_transfer', default => 'other',
+                    'card' => 'card', 'cash', null => 'cash', 'bank_transfer' => 'bank_transfer', 'paymob' => 'paymob', default => 'other',
                 };
                 $this->credits->issue($invoice, $invoice->netTotal(), 'إلغاء عملية بيع '.$sale->number.': '.$reason,
                     ['method' => $method, 'reference' => $payment?->reference, 'account_id' => $this->payments->paidInto($invoice, $method)]);

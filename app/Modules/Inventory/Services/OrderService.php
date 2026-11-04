@@ -29,7 +29,8 @@ use Illuminate\Support\Str;
  */
 final class OrderService
 {
-    public const REFUND_METHODS = ['cash', 'card', 'bank_transfer', 'other'];
+    /** Paymob: made in Paymob's dashboard, out of the gateway's balance, and confirmed in finance once done. */
+    public const REFUND_METHODS = ['cash', 'card', 'bank_transfer', 'other', 'paymob'];
 
     public function __construct(
         private readonly SaleLines $lines,

@@ -130,7 +130,9 @@ class MoneyAccountController extends Controller
                 $this->ledger->reverse($previous, "تصحيح الرصيد الافتتاحي — {$account->name}", ['source_type' => 'account', 'source_id' => $account->id, 'event' => 'opening_fix', 'revision' => $previous->revision]);
             }
             if (Money::cmp($data['amount'], 0) > 0) {
-                $this->postOpening($account, $data['amount'], $data['date'], ($previous?->revision ?? 0) + 1);
+                // After every opening ever posted, reversed ones included (set to zero, then set again).
+                $revision = (int) JournalEntry::where(['source_type' => 'account', 'source_id' => $account->id, 'source_event' => 'opening'])->max('revision');
+                $this->postOpening($account, $data['amount'], $data['date'], $revision + 1);
             }
             app(AuditLogger::class)->log('accounting.opening_balance_set', $account, ['account' => $account->name, 'amount' => Money::normalize($data['amount']), 'date' => $data['date'], 'replaced' => $previous?->number]);
         });
