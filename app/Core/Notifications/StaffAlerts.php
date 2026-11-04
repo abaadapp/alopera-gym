@@ -6,10 +6,15 @@ use App\Core\Support\Money;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Models\StaffNotification;
+use App\Models\Tenant;
 use App\Models\TenantIntegration;
 use App\Models\User;
+use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Documents\Models\BusinessDocument;
 use App\Modules\Documents\Models\DocumentAlert;
+use App\Modules\Finance\Models\CreditNote;
+use App\Modules\Finance\Models\Expense;
+use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Inventory\Models\Sale;
@@ -17,6 +22,7 @@ use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Website\Models\ContactMessage;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * What goes into the bell, and to whom — the events of the club's own screens, worded once. A user tied to a
@@ -32,6 +38,7 @@ use Carbon\CarbonImmutable;
  * | an integration error (once a day)       | integrations.manage                   | the next successful check        |
  * | a contact-form message                  | website.manage                        | marked read                      |
  * | a WhatsApp message (once a day per chat)| whatsapp.inbox                        | the chat is opened               |
+ * | a finance record not in the books       | accounting.view, of its branch        | it reaches the books (the sync)  |
  */
 final class StaffAlerts
 {
@@ -119,6 +126,42 @@ final class StaffAlerts
         $who = $conversation->contact_name ?: ($conversation->member?->full_name ?? '…'.substr((string) $conversation->phone, -4));
         $this->notifier->notify('whatsapp.inbox', 'inbox:'.$conversation->id.':'.today()->toDateString(), 'inbox',
             'رسالة واتساب جديدة من '.$who, route('club.inbox.show', $conversation));
+    }
+
+    /**
+     * An invoice, payment, credit note or expense whose posting failed: the record stands and the books miss it until
+     * it is posted (accounting:sync, daily, retries). Said once per record, in the record's own club.
+     */
+    public function unposted(Model $record): void
+    {
+        [$type, $what] = match (true) {
+            $record instanceof Invoice => ['invoice', 'الفاتورة '.$record->number],
+            $record instanceof Payment => ['payment', 'الدفعة '.($record->receipt_number ?? '#'.$record->id)],
+            $record instanceof CreditNote => ['credit_note', 'الإشعار الدائن '.$record->number],
+            $record instanceof Expense => ['expense', 'المصروف '.$record->number],
+            default => [null, null],
+        };
+        if (! $type) {
+            return;
+        }
+
+        $send = fn () => $this->notifier->notify('accounting.view', 'ledger:'.$type.':'.$record->getKey(), 'ledger',
+            'لم يُقيَّد '.$what.' في الدفاتر بعد، وتُعاد المحاولة في المزامنة الليلية',
+            route('club.finance.journal'),
+            fn (User $u) => $this->branches->allows($u, $record->branch_id ? (int) $record->branch_id : null));
+
+        $this->tenants->id() === (int) $record->tenant_id ? $send() : $this->tenants->run(Tenant::findOrFail($record->tenant_id), $send);
+    }
+
+    /** The records the bell said were not in the books and that are now (the sync posted them, or a later save did). */
+    public function settleLedger(): void
+    {
+        StaffNotification::query()->unread()->where('key', 'like', 'ledger:%')->distinct()->pluck('key')->each(function (string $key) {
+            [, $type, $id] = explode(':', $key) + [null, null, null];
+            if (JournalEntry::where(['source_type' => $type, 'source_id' => (int) $id])->exists()) {
+                $this->notifier->resolve($key);
+            }
+        });
     }
 
     /**

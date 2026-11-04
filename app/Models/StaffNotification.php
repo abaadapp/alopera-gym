@@ -11,7 +11,7 @@ class StaffNotification extends Model
 {
     use BelongsToTenant;
 
-    public const KINDS = ['document', 'order', 'payment', 'membership', 'integration', 'contact', 'inbox'];
+    public const KINDS = ['document', 'order', 'payment', 'membership', 'integration', 'contact', 'inbox', 'ledger'];
 
     protected $guarded = ['id', 'tenant_id'];
 

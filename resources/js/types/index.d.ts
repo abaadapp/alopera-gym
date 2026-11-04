@@ -20,7 +20,7 @@ export interface BranchState {
 /** One notification of the bell / the notifications page (App\Http\Controllers\Club\NotificationController::row). */
 export interface StaffNotification {
     id: number;
-    kind: 'document' | 'order' | 'payment' | 'membership' | 'integration' | 'contact' | 'inbox';
+    kind: 'document' | 'order' | 'payment' | 'membership' | 'integration' | 'contact' | 'inbox' | 'ledger';
     kind_label: string;
     text: string;
     read: boolean;
