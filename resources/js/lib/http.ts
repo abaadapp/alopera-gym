@@ -5,9 +5,10 @@ export function xsrf(): string {
 }
 
 /** POST JSON to the panel and read JSON back (a live preview, say). */
-export function postJson(url: string, body: unknown): Promise<Response> {
+export function postJson(url: string, body: unknown, signal?: AbortSignal): Promise<Response> {
     return fetch(url, {
         method: 'POST',
+        signal,
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-XSRF-TOKEN': xsrf() },
         body: JSON.stringify(body),

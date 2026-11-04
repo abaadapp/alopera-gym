@@ -223,13 +223,17 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
     const [drawing, setDrawing] = useState(false);
     const ticket = useRef(0);
     const drawn = useRef(JSON.stringify(payload));
+    const inFlight = useRef<AbortController | null>(null);
+    const leaving = useRef(false);
     const draw = useCallback(async () => {
         const sent = JSON.stringify(payload);
-        if (sent === drawn.current) return;
+        if (sent === drawn.current || leaving.current) return;
         const mine = ++ticket.current;
+        inFlight.current?.abort();
+        const request = (inFlight.current = new AbortController());
         setDrawing(true);
         try {
-            const res = await postJson(route('club.invoices.preview'), { ...payload, internal_notes: null });
+            const res = await postJson(route('club.invoices.preview'), { ...payload, internal_notes: null }, request.signal);
             const body = await res.json();
             if (mine !== ticket.current || !res.ok) return;
             drawn.current = sent;
@@ -245,6 +249,30 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
         const id = window.setTimeout(draw, 400);
         return () => window.clearTimeout(id);
     }, [draw]);
+    // Leaving the page: no paper is asked for any more, and one on its way is called off. A request started while the
+    // page unloads is cut by the browser (Safari reports it as an error), and its answer has no screen to reach.
+    useEffect(() => {
+        const leave = () => {
+            leaving.current = true;
+            inFlight.current?.abort();
+        };
+        const back = (e: PageTransitionEvent) => e.persisted && (leaving.current = false);
+        // beforeunload comes as the page starts to go, while a preview may still be waiting; a download that leaves the
+        // page in place lets the next change ask again.
+        const going = () => {
+            leave();
+            window.setTimeout(() => (leaving.current = false), 3000);
+        };
+        window.addEventListener('beforeunload', going);
+        window.addEventListener('pagehide', leave);
+        window.addEventListener('pageshow', back);
+        return () => {
+            window.removeEventListener('beforeunload', going);
+            window.removeEventListener('pagehide', leave);
+            window.removeEventListener('pageshow', back);
+            inFlight.current?.abort();
+        };
+    }, []);
 
     const total = Number(totals?.total ?? 0);
     const paidNow = credit ? 0 : d.paid_amount === '' ? total : Math.min(N(d.paid_amount), total);
