@@ -80,7 +80,7 @@ export default function ReportShow({ kind, title, description, mode, compare, fi
         const next: Record<string, string> = { ...query };
         delete next.page;
         Object.entries(patch).forEach(([k, v]) => (v === null || v === '' ? delete next[k] : (next[k] = v)));
-        router.get(route('club.reports.show', kind), next, { preserveState: true, preserveScroll: true });
+        router.get(route('club.reports.show', kind), next, { preserveState: true, preserveScroll: true, replace: true });
     };
     const exportParams = Object.fromEntries(Object.entries(query).filter(([k]) => k !== 'page'));
     const option = (k: string) => (data.options as Record<string, unknown> | undefined)?.[k];

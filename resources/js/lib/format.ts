@@ -14,13 +14,14 @@ export function number(value: number | string | null | undefined, digits = 0): s
     return new Intl.NumberFormat('en-US', { maximumFractionDigits: digits }).format(Number(value ?? 0));
 }
 
-const dateFmt = new Intl.DateTimeFormat('ar-OM-u-nu-latn', { day: 'numeric', month: 'short', year: 'numeric' });
+export const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 const dayFmt = new Intl.DateTimeFormat('ar-OM-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
 
 export function date(value: string | null | undefined): string {
     if (!value) return '—';
     const d = new Date(value.length <= 10 ? `${value}T00:00:00` : value.replace(' ', 'T'));
-    return Number.isNaN(d.getTime()) ? value : dateFmt.format(d);
+    // Written out rather than by Intl: Safari's Arabic puts a comma before the year («1 أكتوبر، 2026») that Chrome does not.
+    return Number.isNaN(d.getTime()) ? value : `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 export function dayName(value: string): string {

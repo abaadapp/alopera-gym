@@ -96,7 +96,7 @@ final class ReportCatalog
             ['key' => 'adjustments', 'category' => 'finance', 'title' => 'التسويات المالية', 'icon' => 'scale', 'class' => Reports\AdjustmentsReport::class,
                 'desc' => 'كل تصحيح في الفترة: الفواتير الملغاة والإشعارات الدائنة والردود والدفعات الملغاة وتخصيص الأرصدة وفروقات الصندوق والقيود اليدوية والعكسية، بمن نفّذها وسببها.'] + ['compare' => false] + $period,
 
-            ['key' => 'sales', 'category' => 'sales', 'title' => 'تقرير المبيعات', 'icon' => 'shopping-bag', 'class' => Reports\SalesReport::class, 'module' => 'sales',
+            ['key' => 'sales', 'category' => 'sales', 'title' => 'ملخّص المبيعات', 'icon' => 'shopping-bag', 'class' => Reports\SalesReport::class, 'module' => 'sales',
                 'desc' => 'إجمالي المبيعات وعدد العمليات والملغى والمسترد، يوميًا وحسب المنتج وطريقة الدفع والمصدر والموظف.'] + $period,
 
             ['key' => 'stock-balance', 'category' => 'inventory', 'title' => 'المخزون والأرصدة', 'icon' => 'boxes', 'class' => Reports\Stock\StockBalanceReport::class, 'module' => 'inventory',
