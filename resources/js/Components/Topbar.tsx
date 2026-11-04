@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, router } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
-import { Bell, Blocks, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, Clock, CreditCard, FileText, FolderOpen, Globe, LayoutGrid, LoaderCircle, Lock, LogOut, Mail, Menu, MessageCircle, Package, PlusCircle, Search, Settings, ShoppingBag, Store, Ticket, UserRound, Users, Wallet, X } from 'lucide-react';
+import { Bell, Blocks, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, Clock, CreditCard, FileText, FolderOpen, Globe, LayoutGrid, LoaderCircle, Lock, Mail, Menu, MessageCircle, Package, PlusCircle, Search, ShoppingBag, Store, Ticket, Users, Wallet } from 'lucide-react';
 import { Dropdown, DropdownAction, DropdownItem, DropdownLabel, DropdownSeparator } from '@/Components/ui/Dropdown';
 import { useCan, useShared } from '@/hooks/useShared';
 import { NAV } from '@/lib/nav';
@@ -10,7 +10,7 @@ import { fold } from '@/lib/format';
 import type { StaffNotification } from '@/types';
 
 /* 40px square icon buttons with an 18px line icon, quiet grey that darkens on hover. */
-const iconButton = 'relative grid size-10 shrink-0 place-items-center rounded-[10px] text-[#4b4b4b] transition-colors hover:bg-[rgba(17,17,17,0.045)] hover:text-[#111] [&_svg]:size-[18px]';
+const iconButton = 'relative grid size-10 shrink-0 place-items-center rounded-[10px] text-[#4b4b4b] transition-colors hover:bg-[rgba(17,17,17,0.045)] hover:text-[#111] touch:size-11 [&_svg]:size-[18px]';
 
 const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'accounting.manage', 'documents.manage'];
 
@@ -47,8 +47,7 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
                 <Menu />
             </button>
 
-            <TopSearch className="max-w-sm max-md:hidden" />
-            <MobileSearch />
+            <TopSearch className="max-w-sm" />
 
             <div className="ms-auto flex shrink-0 items-center gap-1.5">
                 <BranchPicker />
@@ -103,12 +102,12 @@ function BranchPicker() {
     return (
         <Dropdown
             label="الفرع"
-            className="max-md:hidden"
             panelClassName="w-60"
             trigger={() => (
-                <span className="inline-flex h-9 max-w-[11rem] items-center gap-1.5 rounded-[10px] px-2 text-[13px] font-medium text-[#111] transition-colors hover:bg-[rgba(17,17,17,0.045)]">
+                // On a narrow screen a mark alone, as the reference's: the search and the account are not pushed off.
+                <span className="inline-flex h-9 max-w-[11rem] items-center gap-1.5 rounded-[10px] px-2 text-[13px] font-medium text-[#111] transition-colors hover:bg-[rgba(17,17,17,0.045)] touch:h-11 [&_svg]:size-[18px]">
                     <Building2 className="size-4 shrink-0 text-[#6b7280]" />
-                    <span className="truncate">{label}</span>
+                    <span className="hidden truncate sm:inline">{label}</span>
                     <ChevronDown className="size-3.5 shrink-0 opacity-50" />
                 </span>
             )}
@@ -279,12 +278,13 @@ function NotificationBell({ bell }: { bell: Bell }) {
     );
 }
 
+const accountRow = 'text-[14px] font-medium';
+
 /** The user: a 32px circle with initials, the name and the role beneath it; the menu opens on hover or click. */
 function UserMenu({ unread }: { unread: number }) {
     const { auth, tenant } = useShared();
     const can = useCan();
     const user = auth?.user;
-    const branchOptions: { id: number | null; name: string }[] = auth?.branch?.options ?? [];
     if (!user) return null;
 
     return (
@@ -313,38 +313,25 @@ function UserMenu({ unread }: { unread: number }) {
                             <p className="truncate text-[12px] text-[#9ca3af]">{[user.role, auth?.branch?.current?.name, tenant?.name].filter(Boolean).join(' · ')}</p>
                         </div>
                     </div>
-                    {/* On a phone the top bar has no room for the branch picker: the choice sits here. */}
-                    {branchOptions.length > 0 && (
-                        <div className="md:hidden">
-                            <DropdownSeparator />
-                            <DropdownLabel className="font-normal">الفرع</DropdownLabel>
-                            {[{ id: null, name: 'كل الفروع' }, ...branchOptions].map((b) => (
-                                <DropdownItem key={b.id ?? 'all'} onClick={() => { close(); router.post(route('club.branch.switch'), { branch_id: b.id }, { preserveScroll: true }); }}>
-                                    <Building2 /> <span className="flex-1 truncate">{b.name}</span>
-                                    {(auth?.branch?.current?.id ?? null) === b.id && <Check />}
-                                </DropdownItem>
-                            ))}
-                        </div>
-                    )}
                     <DropdownSeparator />
-                    <DropdownItem href={route('club.account.show')} onClick={close}>
-                        <UserRound /> حسابي
+                    <DropdownItem href={route('club.account.show')} className={accountRow} onClick={close}>
+                        حسابي
                     </DropdownItem>
-                    <DropdownItem href={route('club.notifications.index')} onClick={close}>
-                        <Bell /> <span className="flex-1">الإشعارات</span>
+                    <DropdownItem href={route('club.notifications.index')} className={accountRow} onClick={close}>
+                        <span className="flex-1">الإشعارات</span>
                         {unread > 0 && <span className="rounded-full bg-[#dc2626] px-1.5 text-[10px] font-semibold leading-4 text-white">{unread > 99 ? '99+' : unread}</span>}
                     </DropdownItem>
-                    <DropdownItem onClick={() => { close(); router.post(route('club.staff-attendance.punch'), {}, { preserveScroll: true }); }}>
-                        <Clock /> تسجيل حضور/انصراف
+                    <DropdownItem className={accountRow} onClick={() => { close(); router.post(route('club.staff-attendance.punch'), {}, { preserveScroll: true }); }}>
+                        تسجيل حضور/انصراف
                     </DropdownItem>
                     {SETTINGS_PERMISSIONS.some(can) && (
-                        <DropdownItem href={route('club.settings.index')} onClick={close}>
-                            <Settings /> الإعدادات
+                        <DropdownItem href={route('club.settings.index')} className={accountRow} onClick={close}>
+                            الإعدادات
                         </DropdownItem>
                     )}
                     <DropdownSeparator />
-                    <DropdownItem destructive className="justify-center font-semibold" onClick={() => router.post(route('logout'))}>
-                        <LogOut /> تسجيل الخروج
+                    <DropdownItem destructive className="justify-center text-[14px] font-semibold" onClick={() => router.post(route('logout'))}>
+                        تسجيل الخروج
                     </DropdownItem>
                 </>
             )}
@@ -364,7 +351,7 @@ type Group = { key: string; label: string; items: { label: string; hint?: string
  * whoever may open it. Arrow keys
  * move, Enter opens, Escape closes; on a computer «/» jumps into it.
  */
-function TopSearch({ className, autoFocus, onDone }: { className?: string; autoFocus?: boolean; onDone?: () => void }) {
+function TopSearch({ className }: { className?: string }) {
     const can = useCan();
     const { auth } = useShared();
     const [q, setQ] = useState('');
@@ -442,7 +429,6 @@ function TopSearch({ className, autoFocus, onDone }: { className?: string; autoF
         if (!hit) return;
         setOpen(false);
         setQ('');
-        onDone?.();
         router.visit(hit.href);
     };
 
@@ -451,7 +437,6 @@ function TopSearch({ className, autoFocus, onDone }: { className?: string; autoF
             <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[#9ca3af]" />
             <input
                 ref={input}
-                autoFocus={autoFocus}
                 type="search"
                 value={q}
                 onChange={(e) => { setQ(e.target.value); setOpen(true); }}
@@ -460,17 +445,13 @@ function TopSearch({ className, autoFocus, onDone }: { className?: string; autoF
                     if (e.key === 'ArrowDown') { e.preventDefault(); setIndex((i) => Math.min(i + 1, hits.length - 1)); }
                     if (e.key === 'ArrowUp') { e.preventDefault(); setIndex((i) => Math.max(i - 1, 0)); }
                     if (e.key === 'Enter') { e.preventDefault(); go(hits[index]); }
-                    if (e.key === 'Escape') { setOpen(false); input.current?.blur(); onDone?.(); }
+                    if (e.key === 'Escape') { setOpen(false); input.current?.blur(); }
                 }}
                 placeholder="ابحث عن عضو، فاتورة، دفعة، منتج، موظف أو صفحة…"
                 aria-label="بحث"
-                className="h-10 w-full rounded-[12px] border border-[#dcdcdc] bg-white pe-9 ps-9 text-sm text-[#111] outline-none transition placeholder:text-[#9ca3af] focus:border-[#111] focus:shadow-[0_0_0_4px_rgba(17,17,17,0.08)] [&::-webkit-search-cancel-button]:hidden"
+                className="input pe-9 ps-9 [&::-webkit-search-cancel-button]:hidden"
             />
-            {loading ? (
-                <LoaderCircle className="absolute end-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-[#9ca3af]" />
-            ) : (
-                !q && <kbd className="pointer-events-none absolute end-3 top-1/2 hidden -translate-y-1/2 rounded-[6px] border border-[#e8e8e8] px-1.5 text-[11px] text-[#9ca3af] lg:block">/</kbd>
-            )}
+            {loading && <LoaderCircle className="absolute end-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-[#9ca3af]" />}
 
             {open && term && (
                 // On a phone the list takes the screen's width under the top bar, not the narrow field's (as the reference's).
@@ -507,25 +488,5 @@ function TopSearch({ className, autoFocus, onDone }: { className?: string; autoF
                 </div>
             )}
         </div>
-    );
-}
-
-/** Phones: a search button that opens the same search across the top of the screen. */
-function MobileSearch() {
-    const [open, setOpen] = useState(false);
-    return (
-        <>
-            <button className={cn(iconButton, 'md:hidden')} onClick={() => setOpen(true)} aria-label="بحث">
-                <Search />
-            </button>
-            {open && (
-                <div className="fixed inset-x-0 top-0 z-40 flex items-center gap-2 border-b border-[#e8e8e8] bg-white px-3 py-3 shadow-sm md:hidden">
-                    <TopSearch autoFocus onDone={() => setOpen(false)} />
-                    <button className={cn(iconButton, 'shrink-0')} onClick={() => setOpen(false)} aria-label="إغلاق البحث">
-                        <X />
-                    </button>
-                </div>
-            )}
-        </>
     );
 }
