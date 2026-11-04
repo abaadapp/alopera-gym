@@ -1,7 +1,8 @@
 import { Link, router } from '@inertiajs/react';
-import { Download, UserPlus, UserRound } from 'lucide-react';
+import { UserPlus, UserRound } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, DataTable, PageHeader, type Column, type PageMeta, type TableFilter } from '@/Components/ui';
+import ExportMenu from '@/Components/Reports/ExportMenu';
 import { useCan } from '@/hooks/useShared';
 import { date } from '@/lib/format';
 import { label, memberStatus, membershipStatus } from '@/lib/labels';
@@ -79,7 +80,7 @@ export default function MembersIndex({ members, filters }: { members: Paginated<
                 subtitle={`${members.total} عضو`}
                 actions={
                     <>
-                        {can('members.export') && <Button variant="outline" href={route('club.members.export', { format: 'xlsx' })} external icon={<Download className="size-4" />}>تصدير Excel</Button>}
+                        <ExportMenu href={can('members.export') ? route('club.members.export') : null} title="الأعضاء" formats={['xlsx', 'csv']} />
                         {can('members.manage') && <Button href={route('club.members.create')} icon={<UserPlus className="size-4" />}>عضو جديد</Button>}
                     </>
                 }

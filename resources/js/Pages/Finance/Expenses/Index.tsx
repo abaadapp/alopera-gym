@@ -1,10 +1,11 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
-import { Download, Lock, Paperclip, Pencil, Plus, Trash2, Wallet } from 'lucide-react';
+import { Lock, Paperclip, Pencil, Plus, Trash2, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { clientKey } from '@/Components/Inventory/parts';
 import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
 import { Button, ConfirmAction, DataTable, Field, Input, Modal, PageHeader, Select, StatCard, FileInput, type Column, type PageMeta, type TableFilter } from '@/Components/ui';
+import ExportMenu from '@/Components/Reports/ExportMenu';
 import { useCurrency } from '@/hooks/useShared';
 import { date, money } from '@/lib/format';
 import { paymentMethod } from '@/lib/labels';
@@ -52,8 +53,7 @@ export default function ExpensesIndex({ expenses, total, categories, suppliers, 
     const [categoryOpen, setCategoryOpen] = useState(false);
     const params = { ...filters, ...periodParams(period) };
 
-    const exportUrl = (format: 'csv' | 'xlsx') =>
-        route('club.expenses.export', { ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)), ...periodParams(period), format });
+    const exportParams = { ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)), ...periodParams(period) } as Record<string, string>;
 
     const Actions = ({ e }: { e: ExpenseRow }) => (
         <div className="flex justify-end gap-1">
@@ -95,8 +95,7 @@ export default function ExpensesIndex({ expenses, total, categories, suppliers, 
                 subtitle="الإيجار والرواتب والصيانة وكل ما يُصرف، ومن أي صندوق أو حساب"
                 actions={
                     <>
-                        <Button variant="outline" href={exportUrl('xlsx')} external icon={<Download className="size-4" />}>Excel</Button>
-                        <Button variant="outline" href={exportUrl('csv')} external icon={<Download className="size-4" />}>CSV</Button>
+                        <ExportMenu href={route('club.expenses.export')} params={exportParams} title="المصروفات" formats={['xlsx', 'csv']} />
                         <Button icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>مصروف جديد</Button>
                     </>
                 }

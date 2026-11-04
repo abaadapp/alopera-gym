@@ -17,10 +17,11 @@ const FORMATS = [
  * (the report's key and dates, nothing personal). While it is on its way the button says so and takes no second click.
  *
  * `href` is the export address and `params` the screen's filters (its period, branch, comparison…), so the file holds
- * what the screen shows. Without `href` the user may not export, and there is no button at all: one that answers 403
- * makes its user think the system broken. The server checks the permission again either way.
+ * what the screen shows; `formats` the files that address gives (the reference's menu lists only those). Without `href`
+ * the user may not export, and there is no button at all: one that answers 403 makes its user think the system broken.
+ * The server checks the permission again either way.
  */
-export default function ExportMenu({ href, params, title }: { href: string | null; params?: Record<string, string>; title: string }) {
+export default function ExportMenu({ href, params, title, formats = ['xlsx', 'pdf', 'csv'] }: { href: string | null; params?: Record<string, string>; title: string; formats?: ('xlsx' | 'pdf' | 'csv')[] }) {
     const [busy, setBusy] = useState(false);
 
     if (!href) return null;
@@ -61,6 +62,7 @@ export default function ExportMenu({ href, params, title }: { href: string | nul
     return (
         <Dropdown
             label={`تصدير ${title}`}
+            disabled={busy}
             panelClassName="w-56"
             trigger={({ open }) => (
                 // The reference's outline button: 40px (44px on a touch screen), «تصدير» with the download mark.
@@ -70,7 +72,7 @@ export default function ExportMenu({ href, params, title }: { href: string | nul
                 </span>
             )}
         >
-            {(close) => FORMATS.map((f) => (
+            {(close) => FORMATS.filter((f) => formats.includes(f.key)).map((f) => (
                 <DropdownItem key={f.key} onClick={() => { close(); void download(f.key); }}>
                     <f.icon className="text-[#9ca3af]" />
                     {f.label}

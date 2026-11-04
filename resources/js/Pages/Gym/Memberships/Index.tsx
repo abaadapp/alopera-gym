@@ -1,7 +1,7 @@
 import { Link } from '@inertiajs/react';
-import { Download } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, DataTable, PageHeader, type Column, type PageMeta, type TableFilter } from '@/Components/ui';
+import { Badge, DataTable, PageHeader, type Column, type PageMeta, type TableFilter } from '@/Components/ui';
+import ExportMenu from '@/Components/Reports/ExportMenu';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, money, dayCount } from '@/lib/format';
 import { label, membershipKind, membershipStatus } from '@/lib/labels';
@@ -41,7 +41,7 @@ const FILTERS = [
 export default function MembershipsIndex({ memberships, counts, plans, filters }: { memberships: Paginated<Row>; counts: Record<string, number>; plans: Option[]; filters: Record<string, string | undefined> }) {
     const can = useCan();
     const currency = useCurrency();
-    const fileUrl = (format: string) => route('club.memberships.index', { ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)), format });
+    const exportParams = Object.fromEntries(Object.entries(filters).filter(([, v]) => v)) as Record<string, string>;
 
     const Member = ({ m }: { m: Row }) => (m.member ? (
         <Link href={route('club.members.show', m.member.id)} className="font-medium hover:underline">
@@ -84,12 +84,7 @@ export default function MembershipsIndex({ memberships, counts, plans, filters }
             <PageHeader
                 title="العضويات"
                 subtitle="متابعة الاشتراكات حسب الحالة: النشطة، القريبة من الانتهاء، المنتظرة للدفع، المجمّدة والمنتهية"
-                actions={can('members.export') && (
-                    <>
-                        <Button variant="outline" href={fileUrl('xlsx')} external icon={<Download className="size-4" />}>Excel</Button>
-                        <Button variant="outline" href={fileUrl('csv')} external icon={<Download className="size-4" />}>CSV</Button>
-                    </>
-                )}
+                actions={<ExportMenu href={can('members.export') ? route('club.memberships.index') : null} params={exportParams} title="العضويات" formats={['xlsx', 'csv']} />}
             />
 
             <DataTable
