@@ -319,7 +319,7 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
                                 <Input type="date" value={d.issue_date} max={today} onChange={(e) => setIssued(e.target.value)} />
                             </Field>
                             <Field label={<span className="flex items-center gap-1.5">رقم الفاتورة <Info className="size-3.5 text-[#9ca3af]" /></span>}>
-                                <div className="flex h-10 items-center rounded-[10px] border border-dashed border-line bg-[#fafafa] px-3 text-[13px] text-[#9ca3af]">يُنشأ رقم الفاتورة عند الإصدار</div>
+                                <div className="flex h-10 items-center rounded-[10px] border border-dashed border-line bg-[#fafafa] px-3 text-[13px] text-[#9ca3af]">سيتم إنشاء رقم الفاتورة عند الإصدار</div>
                             </Field>
                             <Field label="تاريخ الاستحقاق" required error={errors.due_date} hint={d.payment_terms_days === CUSTOM ? 'مكتوب يدويًا' : 'محسوب من شروط الدفع'}>
                                 <Input ref={dueRef} type="date" value={d.due_date} min={d.issue_date} onChange={(e) => form.setData((x) => ({ ...x, due_date: e.target.value, payment_terms_days: CUSTOM }))} />
@@ -373,7 +373,7 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
                             <h2 className="me-auto text-[15px] font-bold text-ink">الأصناف</h2>
                             {products.length > 0 && <Button variant="outline" size="sm" icon={<Search />} onClick={() => setPicking(true)}>منتج من الكتالوج</Button>}
                             {products.length > 0 && <Button variant="outline" size="sm" icon={<PlusCircle />} onClick={() => setPickingAddon(true)}>إضافة من الإضافات</Button>}
-                            <Button size="sm" icon={<Plus />} onClick={() => setLines((p) => [...p, blank()])} disabled={lines.length >= 50}>إضافة صنف</Button>
+                            <Button size="sm" icon={<Plus />} onClick={() => setLines((p) => [...p, blank()])} disabled={lines.length >= 50}>إضافة بند</Button>
                             <Button variant="outline" size="sm" className="text-[#b91c1c]" title="تفريغ كل البنود" aria-label="تفريغ كل البنود" icon={<Trash2 />} onClick={() => setLines([blank()])} />
                         </div>
                         {/* The lines fit the card at any width: one row each where there is room (a header over them), else
