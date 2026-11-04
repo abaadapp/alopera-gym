@@ -31,9 +31,6 @@
         <title inertia>{{ config('app.name') }}</title>
         <meta name="robots" content="noindex">
     @endif
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap" rel="stylesheet">
     <style>:root{--brand: {{ $brand }}; --brand-soft: {{ $brand2 }};}</style>
     @routes
     @viteReactRefresh

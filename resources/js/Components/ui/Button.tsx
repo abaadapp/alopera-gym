@@ -33,7 +33,7 @@ const adminVariants: Record<keyof typeof variants, string> = {
 /* The button sets its icon's size, whatever the page passed: 16px small, 18px medium, 20px large. On a touch screen
    small and medium buttons grow to 44px. */
 const adminSizes: Record<keyof typeof sizes, string> = {
-    sm: 'h-8 px-3 text-[13px] gap-1.5 rounded-[10px] [&_svg]:size-4 touch:h-11 touch:px-4',
+    sm: 'h-8 px-3 text-[13px] gap-2 rounded-[10px] [&_svg]:size-4 touch:h-11 touch:px-4',
     md: 'h-10 px-4 text-sm gap-2 rounded-[10px] [&_svg]:size-[18px] touch:h-11',
     lg: 'h-12 px-6 text-[15px] gap-2 rounded-[10px] [&_svg]:size-5',
     icon: 'size-10 rounded-[10px] [&_svg]:size-[18px] touch:size-11',

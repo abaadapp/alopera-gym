@@ -84,7 +84,7 @@ export function FilterMenu({ filters, values, onChange }: { filters: FilterDef[]
                 </span>
             ))}
             <Dropdown label="أضف فلتر" align="start" panelClassName="min-w-52" trigger={() => (
-                <span className="inline-flex h-8 items-center gap-1.5 rounded-[10px] px-3 text-[13px] font-medium text-[#4b4b4b] transition-colors hover:bg-ink/[0.045] hover:text-ink touch:h-11 touch:px-4"><ListFilter className="size-4" /> أضف فلتر</span>
+                <span className="inline-flex h-8 items-center gap-2 rounded-[10px] px-3 text-[13px] font-medium text-[#4b4b4b] transition-colors hover:bg-ink/[0.045] hover:text-ink touch:h-11 touch:px-4"><ListFilter className="size-4" /> أضف فلتر</span>
             )}>
                 {(close) => filters.map((f) => (
                     <DropdownSub key={f.key} label={f.label} className="max-h-72 overflow-y-auto">

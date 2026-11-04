@@ -64,9 +64,10 @@ class FinanceReportsTest extends TestCase
         $this->assertSame(['4.000', '3.000', '1.000', '0.000'], [$f['ضريبة المخرجات (بعد الإلغاء والإشعارات)'], $f['ضريبة المدخلات (المشتريات)'], $f['صافي الضريبة المستحقة للفترة'], $f['فرق المستندات عن الدفاتر']]);
         $page->assertInertia(fn (Assert $p) => $p->where('data.options.notes.1.text', fn ($t) => str_contains($t, 'OM1100223344')));
 
-        // As a PDF, the same report: a real PDF file.
+        // As a PDF, the same report: a real PDF file, shown in the tab its link opens.
         $pdf = $this->actingAs($owner)->get(route('club.reports.export', ['report' => 'tax', 'format' => 'pdf']));
         $pdf->assertOk()->assertHeader('content-type', 'application/pdf');
+        $this->assertStringStartsWith('inline;', $pdf->headers->get('Content-Disposition'));
         $this->assertStringStartsWith('%PDF', $pdf->streamedContent());
         $csv = $this->actingAs($owner)->get(route('club.reports.export', ['report' => 'tax', 'format' => 'csv']))->streamedContent();
         $this->assertStringContainsString('تقرير مساعد وليس إقرارًا رسميًا', $csv);

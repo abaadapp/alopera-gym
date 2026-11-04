@@ -56,7 +56,7 @@ export interface PageMeta {
 
 type Params = Record<string, string | number | null | undefined>;
 
-const ghost = 'inline-flex h-8 items-center gap-1.5 rounded-[10px] px-3 text-[13px] font-medium text-[#4b4b4b] transition-colors hover:bg-ink/[0.045] hover:text-ink touch:h-11 touch:px-4 [&_svg]:size-4 [&_svg]:shrink-0';
+const ghost = 'inline-flex h-8 items-center gap-2 rounded-[10px] px-3 text-[13px] font-medium text-[#4b4b4b] transition-colors hover:bg-ink/[0.045] hover:text-ink touch:h-11 touch:px-4 [&_svg]:size-4 [&_svg]:shrink-0';
 const pageButton = 'inline-flex h-8 items-center rounded-[8px] border border-line px-3 text-[13px] text-ink transition-colors hover:bg-[#fafafa] disabled:pointer-events-none disabled:opacity-50';
 
 export default function DataTable<T>({ rows, columns, card, rowKey, params, pagination, search, filters = [], sorts = [], toolbar, empty = 'لا توجد بيانات بعد', className }: {

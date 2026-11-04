@@ -46,6 +46,12 @@ export default function SiteLayout({ site, children, seoTitle }: { site: SiteInf
     return (
         <>
             {seoTitle && <Head title={seoTitle} />}
+            {/* The site's own faces come and go with it: loaded for the whole app they would reach the panel, which loads none. */}
+            <Head>
+                <link rel="preconnect" href="https://fonts.googleapis.com" />
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+                <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap" />
+            </Head>
             <div className="min-h-screen bg-[#fffafb]">
                 {site.announcement && <div className="bg-brand px-4 py-2 text-center text-sm text-white">{site.announcement}</div>}
                 <header className="sticky top-0 z-30 border-b border-line/70 bg-white/90 backdrop-blur">

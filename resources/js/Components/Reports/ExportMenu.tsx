@@ -12,9 +12,10 @@ const FORMATS = [
 
 /**
  * A screen's «تصدير» button, in its header beside the page's other buttons: a menu of Excel, PDF and CSV, as the
- * reference's. The file is fetched in the background so the page can say what happened — a file of headings only when
- * there is no data, no permission, too many exports in a minute — and is then saved under the name the server gave it
- * (the report's key and dates, nothing personal). While it is on its way the button says so and takes no second click.
+ * reference's. A PDF opens in a tab of its own. Excel and CSV are fetched in the background and saved under the name the
+ * server gave them (the report's key and dates, nothing personal), the menu staying open as the reference's; while one is
+ * on its way the button says so and takes no second click. What went wrong is said beside the button; a file of headings
+ * only, there being no data, in a notice.
  *
  * `href` is the export address and `params` the screen's filters (its period, branch, comparison…), so the file holds
  * what the screen shows; `formats` the files that address gives (the reference's menu lists only those). Without `href`
@@ -23,22 +24,25 @@ const FORMATS = [
  */
 export default function ExportMenu({ href, params, title, formats = ['xlsx', 'pdf', 'csv'] }: { href: string | null; params?: Record<string, string>; title: string; formats?: ('xlsx' | 'pdf' | 'csv')[] }) {
     const [busy, setBusy] = useState(false);
+    const [failed, setFailed] = useState<string | null>(null);
 
     if (!href) return null;
+
+    const address = (format: string) => `${href}?${new URLSearchParams({ ...(params ?? {}), format }).toString()}`;
 
     const download = async (format: string) => {
         if (busy) return;
         setBusy(true);
+        setFailed(null);
         try {
-            const url = `${href}?${new URLSearchParams({ ...(params ?? {}), format }).toString()}`;
-            const res = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/pdf' } });
+            const res = await fetch(address(format), { credentials: 'same-origin', headers: { Accept: 'text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } });
             const type = res.headers.get('content-type') ?? '';
-            if (!res.ok || !(type.includes('spreadsheetml') || type.includes('text/csv') || type.includes('application/pdf'))) {
-                toast.error(
+            if (!res.ok || !(type.includes('spreadsheetml') || type.includes('text/csv'))) {
+                setFailed(
                     res.status === 403 ? 'لا تملك صلاحية تصدير هذا التقرير.'
                         : res.status === 429 ? 'صدّرت تقارير كثيرة خلال دقيقة؛ حاول بعد قليل.'
                             : res.redirected || res.status === 401 || res.status === 419 ? 'انتهت الجلسة؛ أعد تحميل الصفحة ثم صدّر مرة أخرى.'
-                                : 'تعذّر تصدير التقرير؛ حاول مرة أخرى.',
+                                : 'تعذّر التصدير — حاول مرّة أخرى',
                 );
                 return;
             }
@@ -51,33 +55,35 @@ export default function ExportMenu({ href, params, title, formats = ['xlsx', 'pd
             link.remove();
             setTimeout(() => URL.revokeObjectURL(link.href), 1000);
             if (res.headers.get('x-report-empty') === '1') toast.info(`لا توجد بيانات في «${title}» لهذه الفترة والفلاتر؛ نزل الملف برؤوس الأعمدة فقط.`);
-            else toast.success(`نزل ملف «${title}».`);
         } catch {
-            toast.error('تعذّر الاتصال؛ تحقق من الشبكة ثم صدّر مرة أخرى.');
+            setFailed('تعذّر التصدير — حاول مرّة أخرى');
         } finally {
             setBusy(false);
         }
     };
 
     return (
-        <Dropdown
-            label={`تصدير ${title}`}
-            disabled={busy}
-            panelClassName="w-56"
-            trigger={({ open }) => (
-                // The reference's outline button: 40px (44px on a touch screen), «تصدير» with the download mark.
-                <span aria-busy={busy} className={cn('inline-flex h-10 items-center gap-2 rounded-[10px] border border-[#dcdcdc] bg-white px-4 text-sm font-medium text-[#111] transition-colors touch:h-11 [&_svg]:size-[18px]', busy && 'pointer-events-none opacity-50', open ? 'bg-[#fafafa]' : 'hover:bg-[#fafafa]')}>
-                    {busy ? <LoaderCircle className="animate-spin" /> : <Download />}
-                    {busy ? 'جاري التصدير…' : 'تصدير'}
-                </span>
-            )}
-        >
-            {(close) => FORMATS.filter((f) => formats.includes(f.key)).map((f) => (
-                <DropdownItem key={f.key} onClick={() => { close(); void download(f.key); }}>
-                    <f.icon className="text-[#9ca3af]" />
-                    {f.label}
-                </DropdownItem>
-            ))}
-        </Dropdown>
+        <>
+            <Dropdown
+                label={`تصدير ${title}`}
+                disabled={busy}
+                panelClassName="w-56"
+                trigger={({ open }) => (
+                    // The reference's outline button: 40px (44px on a touch screen), «تصدير» with the download mark.
+                    <span aria-busy={busy} className={cn('inline-flex h-10 items-center gap-2 rounded-[10px] border border-[#dcdcdc] bg-white px-4 text-sm font-medium text-[#111] transition-colors touch:h-11 [&_svg]:size-[18px]', busy && 'pointer-events-none opacity-50', open ? 'bg-[#fafafa]' : 'hover:bg-[#fafafa]')}>
+                        {busy ? <LoaderCircle className="animate-spin" /> : <Download />}
+                        {busy ? 'جاري التصدير…' : 'تصدير'}
+                    </span>
+                )}
+            >
+                {FORMATS.filter((f) => formats.includes(f.key)).map((f) => (
+                    <DropdownItem key={f.key} href={address(f.key)} external={f.key === 'pdf'} file={f.key !== 'pdf'} onClick={f.key === 'pdf' ? undefined : () => void download(f.key)}>
+                        <f.icon className="text-[#9ca3af]" />
+                        {f.label}
+                    </DropdownItem>
+                ))}
+            </Dropdown>
+            {failed && <span role="alert" className="text-[12px] text-[#b91c1c]">{failed}</span>}
+        </>
     );
 }

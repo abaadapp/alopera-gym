@@ -48,7 +48,7 @@ final class ReportDocument
 
             return response()->streamDownload(function () use ($bytes) {
                 echo $bytes;
-            }, $name.'.pdf', $headers + ['Content-Type' => 'application/pdf']);
+            }, $name.'.pdf', $headers + ['Content-Type' => 'application/pdf'], 'inline');
         }
 
         if ($format === 'xlsx') {

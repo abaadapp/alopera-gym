@@ -37,7 +37,7 @@ export default function RowActions({ label, show, edit, destroy, extra = [] }: {
                         {destroy && (
                             <>
                                 <DropdownSeparator />
-                                <DropdownItem className="text-[#b91c1c]" onClick={() => { close(); clear(); setConfirming(true); }}><Trash2 /> حذف</DropdownItem>
+                                <DropdownItem keepOpen className="text-[#b91c1c]" onClick={() => { clear(); setConfirming(true); }}><Trash2 /> حذف</DropdownItem>
                             </>
                         )}
                     </>

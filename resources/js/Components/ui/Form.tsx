@@ -156,7 +156,7 @@ export function Select({ value, onChange, placeholder, name, id, disabled, requi
                 <SelectPrimitive.Content
                     position="popper"
                     sideOffset={6}
-                    className="relative z-[60] max-h-[var(--radix-select-content-available-height)] w-[var(--radix-select-trigger-width)] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white text-[#111] shadow-[0_8px_30px_rgba(0,0,0,0.10)]"
+                    className="relative z-50 max-h-[var(--radix-select-content-available-height)] w-[var(--radix-select-trigger-width)] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white text-[#111] shadow-[0_8px_30px_rgba(0,0,0,0.10)]"
                 >
                     <SelectPrimitive.ScrollUpButton className="flex cursor-default items-center justify-center py-1 text-[#6b7280]">
                         <ChevronUp className="size-4" />

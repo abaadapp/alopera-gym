@@ -1,4 +1,4 @@
-import { Children, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { Link } from '@inertiajs/react';
 import * as Menu from '@radix-ui/react-dropdown-menu';
@@ -18,8 +18,9 @@ import { useAdmin } from './AdminScope';
  *
  * As the reference's it is given no direction, so Radix draws it left to right whatever the page's: `align` end hangs it
  * from the trigger's right edge, start from its left edge, Radix keeps it on the screen, rows start at the left and a
- * `DropdownSub` opens to the right. Only the words keep their own order (app.css). `DropdownItem` is a link, a button or
- * a destructive (red) action.
+ * `DropdownSub` opens to the right. `DropdownItem` is a link, a button or a destructive (red) action; a `file` link hands
+ * its click to `onClick` and, as the reference's, leaves the menu open; `keepOpen` holds it open behind the dialog an item
+ * opens, again as the reference's.
  */
 export function Dropdown({ trigger, children, label, hover = false, align = 'end', disabled = false, className, panelClassName }: {
     trigger: (state: { open: boolean }) => ReactNode;
@@ -46,7 +47,7 @@ export function Dropdown({ trigger, children, label, hover = false, align = 'end
     };
 
     const enter = () => {
-        if (!hover || !window.matchMedia('(hover: hover)').matches) return;
+        if (!hover) return;
         clearTimeout(timer.current);
         setOpen(true);
     };
@@ -83,7 +84,7 @@ export function Dropdown({ trigger, children, label, hover = false, align = 'end
                         className={cn(
                             // Portalled out of the page, so it carries the control panel's look along (see AdminScope).
                             admin && 'admin-ui',
-                            'z-[60] min-w-[10rem] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)] outline-none',
+                            'z-50 min-w-[10rem] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)] outline-none',
                             panelClassName,
                         )}
                     >
@@ -97,18 +98,33 @@ export function Dropdown({ trigger, children, label, hover = false, align = 'end
 
 const itemClass = 'relative flex w-full cursor-pointer select-none items-center gap-2.5 rounded-[8px] px-3 py-2 text-start text-sm outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0';
 
-export function DropdownItem({ href, onClick, destructive, external, children, className }: { href?: string; onClick?: () => void; destructive?: boolean; external?: boolean; children: ReactNode; className?: string }) {
+export function DropdownItem({ href, onClick, destructive, external, file, keepOpen, children, className }: { href?: string; onClick?: () => void; destructive?: boolean; external?: boolean; file?: boolean; keepOpen?: boolean; children: ReactNode; className?: string }) {
     const cls = cn(itemClass, destructive ? 'text-[#b91c1c] focus:bg-[#fef2f2]' : 'text-[#111] focus:bg-[#f2f2f0]', className);
-    // Words written straight in an item, in an element of their own, so they keep their order (app.css).
-    const row = Children.map(children, (c) => (typeof c === 'string' && c.trim() ? <span>{c.trim()}</span> : c));
     return (
-        <Menu.Item asChild onSelect={() => onClick?.()}>
-            {href && external ? (
-                <a href={href} target="_blank" rel="noreferrer" className={cls}>{row}</a>
+        <Menu.Item
+            asChild
+            onSelect={(e) => {
+                if (keepOpen) e.preventDefault();
+                onClick?.();
+            }}
+        >
+            {href && file ? (
+                <a
+                    href={href}
+                    className={cls}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        onClick?.();
+                    }}
+                >
+                    {children}
+                </a>
+            ) : href && external ? (
+                <a href={href} target="_blank" rel="noreferrer" className={cls}>{children}</a>
             ) : href ? (
-                <Link href={href} className={cls}>{row}</Link>
+                <Link href={href} className={cls}>{children}</Link>
             ) : (
-                <button type="button" className={cls}>{row}</button>
+                <button type="button" className={cls}>{children}</button>
             )}
         </Menu.Item>
     );
@@ -127,7 +143,7 @@ export function DropdownSub({ label, children, className }: { label: ReactNode; 
     const admin = useAdmin();
     return (
         <Menu.Sub>
-            <Menu.SubTrigger className="flex w-full cursor-default select-none items-center gap-2 rounded-[8px] px-3 py-2 text-start text-sm text-[#111] outline-none focus:bg-[#f2f2f0] data-[state=open]:bg-[#f2f2f0]">
+            <Menu.SubTrigger className="flex w-full cursor-default select-none items-center gap-2 rounded-[8px] px-3 py-2 text-start text-sm outline-none focus:bg-[#f2f2f0] data-[state=open]:bg-[#f2f2f0]">
                 {label}
                 <ChevronLeft className="ms-auto size-4" />
             </Menu.SubTrigger>
@@ -135,7 +151,7 @@ export function DropdownSub({ label, children, className }: { label: ReactNode; 
                 <Menu.SubContent
                     data-layer
                     // 8rem at least, as the reference's — narrower only where the screen has less room beside the menu (a 360px phone).
-                    className={cn(admin && 'admin-ui', 'z-[60] min-w-[min(8rem,var(--radix-dropdown-menu-content-available-width))] max-w-[var(--radix-dropdown-menu-content-available-width)] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)] outline-none', className)}
+                    className={cn(admin && 'admin-ui', 'z-50 min-w-[min(8rem,var(--radix-dropdown-menu-content-available-width))] max-w-[var(--radix-dropdown-menu-content-available-width)] overflow-hidden rounded-[12px] border border-[#e8e8e8] bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)] outline-none', className)}
                 >
                     {children}
                 </Menu.SubContent>
