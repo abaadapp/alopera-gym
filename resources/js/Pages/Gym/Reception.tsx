@@ -141,7 +141,7 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                                 <MemberPicker onSelect={(m) => { setSelected(m); setDecision(null); setScanError(null); }} autoFocus={false} />
                             </div>
                             {can('checkin.perform') && (
-                                <form onSubmit={onScan}>
+                                <form onSubmit={onScan} data-enter-submits>
                                     <p className="label">مسح رمز QR</p>
                                     <div className="relative">
                                         <QrCode className="pointer-events-none absolute top-1/2 start-3 size-4 -translate-y-1/2 text-muted" />

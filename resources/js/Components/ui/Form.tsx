@@ -48,7 +48,7 @@ export function asciiDigits(value: string): string {
  * typed. A number field is drawn as text with a numeric keyboard (a browser's number field drops what it cannot read);
  * the server checks its range.
  */
-export function Input({ className, onChange, type, inputMode, ...props }: ComponentProps<'input'>) {
+export function Input({ className, onChange, type, inputMode, enterKeyHint, ...props }: ComponentProps<'input'>) {
     const number = type === 'number';
     const numeric = number || type === 'tel' || inputMode === 'decimal' || inputMode === 'numeric' || inputMode === 'tel';
     const change: typeof onChange = numeric && onChange
@@ -61,9 +61,11 @@ export function Input({ className, onChange, type, inputMode, ...props }: Compon
     const fractional = number && props.step !== undefined && String(props.step) !== '1';
 
     // Figures, dates and times read left to right whatever the page's direction.
-    const ltr = number || type === 'date' || type === 'time' || type === 'datetime-local' || type === 'month';
+    const dated = type === 'date' || type === 'time' || type === 'datetime-local' || type === 'month' || type === 'week';
+    const ltr = number || dated;
 
-    return <input className={cn('input', className)} type={number ? 'text' : type} inputMode={number ? (fractional ? 'decimal' : 'numeric') : inputMode} autoComplete={number ? 'off' : props.autoComplete} dir={ltr ? 'ltr' : undefined} onChange={change} {...props} />;
+    // The keyboard's key says «تم», what it does here (lib/enter-key): left to itself it promises «go» or «next».
+    return <input className={cn('input', dated && 'min-w-0 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-70', className)} type={number ? 'text' : type} inputMode={number ? (fractional ? 'decimal' : 'numeric') : inputMode} enterKeyHint={enterKeyHint ?? 'done'} autoComplete={number ? 'off' : props.autoComplete} dir={ltr ? 'ltr' : undefined} onChange={change} {...props} />;
 }
 
 export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {

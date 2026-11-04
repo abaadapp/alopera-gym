@@ -13,7 +13,7 @@ export default function Login() {
 
     return (
         <AuthLayout title="تسجيل الدخول" subtitle="لوحة إدارة النادي والموظفين ونقطة البيع">
-            <form onSubmit={submit} className="space-y-4">
+            <form onSubmit={submit} data-enter-submits className="space-y-4">
                 <Field label="البريد الإلكتروني" error={form.errors.email}>
                     <Input type="email" dir="ltr" autoComplete="username" value={form.data.email} onChange={(e) => form.setData('email', e.target.value)} autoFocus required />
                 </Field>

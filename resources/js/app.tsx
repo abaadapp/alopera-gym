@@ -4,7 +4,9 @@ import { createInertiaApp, router } from '@inertiajs/react';
 import { createRoot } from 'react-dom/client';
 import type { ComponentType } from 'react';
 import ErrorBoundary from './Components/ErrorBoundary';
+import { enterEndsTypingOnTouch } from './lib/enter-key';
 import { watchOnScreenKeyboard } from './lib/keyboard';
+import { markTouchDevice } from './lib/touch';
 
 const pages = import.meta.glob<{ default: ComponentType }>('./Pages/**/*.tsx');
 
@@ -36,6 +38,8 @@ createInertiaApp({
     },
     setup({ el, App, props }) {
         applyBrand(props.initialPage.props as Record<string, unknown>);
+        markTouchDevice();
+        enterEndsTypingOnTouch();
         watchOnScreenKeyboard();
         router.on('navigate', (event) => applyBrand(event.detail.page.props as Record<string, unknown>));
         router.on('error', revealFirstError);

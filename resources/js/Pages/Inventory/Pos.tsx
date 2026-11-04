@@ -197,7 +197,7 @@ export default function Pos({ products, categories, plans, packages, can: allowe
                             <Input type="search" enterKeyHint="search" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={kind === 'products' ? 'ابحث باسم المنتج' : kind === 'memberships' ? 'ابحث باسم الباقة' : 'ابحث باسم باقة التدريب'} className="ps-9 touch:h-12" aria-label="بحث" />
                         </div>
                         {kind === 'products' && (
-                            <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); scan(code); }}>
+                            <form className="flex gap-2" data-enter-submits onSubmit={(e) => { e.preventDefault(); scan(code); }}>
                                 <div className="relative w-44 max-sm:flex-1">
                                     <ScanBarcode className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
                                     <Input ref={scanRef} value={code} onChange={(e) => setCode(e.target.value)} placeholder="الباركود" dir="ltr" autoFocus autoComplete="off" className="ps-9 touch:h-12" aria-label="الباركود" />
@@ -339,7 +339,7 @@ export default function Pos({ products, categories, plans, packages, can: allowe
                                 <button type="button" onClick={() => { setDiscount(''); setDiscountDraft(''); }} className="text-[#047857]" aria-label="إلغاء الخصم"><X className="size-4" /></button>
                             </div>
                         ) : (
-                            <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); setDiscount(discountDraft); }}>
+                            <form className="flex items-center gap-2" data-enter-submits onSubmit={(e) => { e.preventDefault(); setDiscount(discountDraft); }}>
                                 <div className="relative flex-1">
                                     <TicketPercent className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
                                     <Input type="number" min="0" step="0.001" dir="ltr" value={discountDraft} onChange={(e) => setDiscountDraft(e.target.value)} placeholder="خصم على المنتجات" className="h-9 ps-8 touch:h-12" aria-label="الخصم" />

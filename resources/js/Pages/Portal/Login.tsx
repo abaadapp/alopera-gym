@@ -24,7 +24,7 @@ export default function Login({ site, seo }: { site: SiteInfo; seo: { title: str
                         <h1 className="mt-4 text-center font-display text-2xl font-semibold">بوابة الأعضاء</h1>
                         <p className="mt-1 text-center text-sm text-muted">تابع اشتراكك واحجز حصصك في {tenant?.name}</p>
 
-                        <form onSubmit={submit} className="mt-8 space-y-4">
+                        <form onSubmit={submit} data-enter-submits className="mt-8 space-y-4">
                             <Field label="رقم الهاتف أو البريد الإلكتروني" error={form.errors.login}>
                                 <Input dir="ltr" value={form.data.login} onChange={(e) => form.setData('login', e.target.value)} autoComplete="username" placeholder="9XXXXXXX" autoFocus required />
                             </Field>

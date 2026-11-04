@@ -13,7 +13,7 @@ export default function ResetPassword({ token, email }: { token: string; email: 
 
     return (
         <AuthLayout title="تعيين كلمة مرور جديدة">
-            <form onSubmit={submit} className="space-y-4">
+            <form onSubmit={submit} data-enter-submits className="space-y-4">
                 <Field label="البريد الإلكتروني" error={form.errors.email}>
                     <Input type="email" dir="ltr" autoComplete="username" value={form.data.email} onChange={(e) => form.setData('email', e.target.value)} required />
                 </Field>
