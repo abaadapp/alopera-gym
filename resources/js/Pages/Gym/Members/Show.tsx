@@ -208,7 +208,7 @@ export default function MemberShow(props: Props) {
                             <Button icon={<CalendarPlus />} onClick={() => setSellOpen(true)}>{memberships.length > 0 ? 'تجديد / بيع عضوية' : 'بيع عضوية'}</Button>
                         )}
                         {(member.qr_token || can('members.manage') || can('members.delete')) && (
-                            <Dropdown label="المزيد" panelClassName="w-52" trigger={() => <span className="grid size-10 place-items-center rounded-[10px] border border-[#dcdcdc] bg-white text-[#111] hover:bg-[#fafafa]"><MoreVertical className="size-[18px]" /></span>}>
+                            <Dropdown label="المزيد" panelClassName="w-52" trigger={() => <span className="grid size-10 touch:size-11 place-items-center rounded-[10px] border border-[#dcdcdc] bg-white text-[#111] hover:bg-[#fafafa]"><MoreVertical className="size-[18px]" /></span>}>
                                 {(close) => (
                                     <>
                                         {member.qr_token && <DropdownItem onClick={() => { close(); setQrOpen(true); }}><QrCode className="text-[#6b7280]" /> رمز الدخول QR</DropdownItem>}

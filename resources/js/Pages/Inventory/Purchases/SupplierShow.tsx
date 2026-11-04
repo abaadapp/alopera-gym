@@ -64,7 +64,7 @@ export default function SupplierShow({ supplier, may, orders = [], bills = [], p
                     {may.purchases && <Button variant="outline" href={route('club.purchases.register', { supplier: supplier.id })} icon={<ShoppingCart />}>سجل المشتريات</Button>}
                     {may.order && supplier.is_active && <Button href={route('club.purchases.create', { supplier: supplier.id })} icon={<FilePlus2 />}>أمر شراء جديد</Button>}
                     {menu && (
-                        <Dropdown label="المزيد" panelClassName="w-52" trigger={() => <span className="grid size-10 place-items-center rounded-[10px] border border-[#dcdcdc] bg-white text-ink transition-colors hover:bg-[#fafafa]"><MoreVertical className="size-[18px]" /></span>}>
+                        <Dropdown label="المزيد" panelClassName="w-52" trigger={() => <span className="grid size-10 touch:size-11 place-items-center rounded-[10px] border border-[#dcdcdc] bg-white text-ink transition-colors hover:bg-[#fafafa]"><MoreVertical className="size-[18px]" /></span>}>
                             {(close) => <>
                                 {may.edit && <DropdownItem onClick={() => { close(); setEditing(true); }}><Pencil className="text-[#6b7280]" /> تعديل بيانات المورّد</DropdownItem>}
                                 {supplier.phone && <DropdownItem href={`tel:+${supplier.phone}`} external><Phone className="text-[#6b7280]" /> اتصال</DropdownItem>}

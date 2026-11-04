@@ -26,18 +26,18 @@ export default function RowActions({ label, show, edit, destroy, extra = [] }: {
 
     return (
         <>
-            <Dropdown label={`إجراءات ${label}`} panelClassName="w-44" trigger={() => <span className="grid size-8 place-items-center rounded-[10px] text-[#4b4b4b] transition-colors hover:bg-ink/[0.045] hover:text-ink"><MoreVertical className="size-4" /></span>}>
+            <Dropdown label={`إجراءات ${label}`} panelClassName="w-44" trigger={() => <span className="grid size-8 place-items-center rounded-[10px] text-[#4b4b4b] transition-colors hover:bg-ink/[0.045] hover:text-ink touch:size-11"><MoreVertical className="size-4" /></span>}>
                 {(close) => (
                     <>
                         {show && <DropdownItem href={show}><Eye /> عرض</DropdownItem>}
                         {edit && <DropdownItem onClick={() => { close(); edit(); }}><Pencil /> تعديل</DropdownItem>}
                         {extra.map((a) => (
-                            <DropdownItem key={a.label} href={a.href} external={a.external} destructive={a.danger} onClick={a.onSelect && (() => { close(); a.onSelect?.(); })}>{a.icon} {a.label}</DropdownItem>
+                            <DropdownItem key={a.label} href={a.href} external={a.external} className={a.danger ? 'text-[#b91c1c]' : undefined} onClick={a.onSelect && (() => { close(); a.onSelect?.(); })}>{a.icon} {a.label}</DropdownItem>
                         ))}
                         {destroy && (
                             <>
                                 <DropdownSeparator />
-                                <DropdownItem destructive onClick={() => { close(); clear(); setConfirming(true); }}><Trash2 /> حذف</DropdownItem>
+                                <DropdownItem className="text-[#b91c1c]" onClick={() => { close(); clear(); setConfirming(true); }}><Trash2 /> حذف</DropdownItem>
                             </>
                         )}
                     </>

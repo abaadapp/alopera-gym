@@ -166,6 +166,18 @@ html:has(.admin-ui)::-webkit-scrollbar-thumb:hover {
     color: #1f2937;
 }
 
+/*
+ * A menu is drawn left to right as the reference's (Components/ui/Dropdown), its rows starting at the left. A line of it
+ * keeps its own words' order, so Arabic with a Latin word or a figure reads as written: «تصدير كملف PDF», not «PDF
+ * تصدير كملف». Below the utilities: a centred line stays centred.
+ */
+@layer base {
+    [role='menu'] :where(span, p, div) {
+        unicode-bidi: plaintext;
+        text-align: left;
+    }
+}
+
 html {
     -webkit-tap-highlight-color: transparent;
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { router } from '@inertiajs/react';
-import { Check, LayoutGrid, ListFilter, Minus, MoreHorizontal, Package, Plus, Rows3, Search, X } from 'lucide-react';
+import { Check, LayoutGrid, ListFilter, Minus, MoreVertical, Package, Plus, Rows3, Search, X } from 'lucide-react';
 import { Badge, Button, Modal } from '@/Components/ui';
 import { Dropdown, DropdownItem, DropdownSub } from '@/Components/ui/Dropdown';
 import { cn } from '@/lib/cn';
@@ -84,7 +84,7 @@ export function FilterMenu({ filters, values, onChange }: { filters: FilterDef[]
                 </span>
             ))}
             <Dropdown label="أضف فلتر" align="start" panelClassName="min-w-52" trigger={() => (
-                <span className="inline-flex h-9 items-center gap-1.5 rounded-[10px] px-3 text-[13px] font-medium text-[#4b4b4b] hover:bg-ink/[0.045] hover:text-ink"><ListFilter className="size-4" /> أضف فلتر</span>
+                <span className="inline-flex h-8 items-center gap-1.5 rounded-[10px] px-3 text-[13px] font-medium text-[#4b4b4b] transition-colors hover:bg-ink/[0.045] hover:text-ink touch:h-11 touch:px-4"><ListFilter className="size-4" /> أضف فلتر</span>
             )}>
                 {(close) => filters.map((f) => (
                     <DropdownSub key={f.key} label={f.label} className="max-h-72 overflow-y-auto">
@@ -137,7 +137,7 @@ export function ViewToggle({ value, onChange }: { value: 'table' | 'grid'; onCha
 export function RowMenu({ label, children }: { label: string; children: ReactNode | ((close: () => void) => ReactNode) }) {
     return (
         <Dropdown label={label} panelClassName="w-48" trigger={() => (
-            <span className="grid size-8 place-items-center rounded-[8px] text-[#6b7280] hover:bg-ink/[0.045] hover:text-ink"><MoreHorizontal className="size-4" /></span>
+            <span className="grid size-8 place-items-center rounded-[10px] text-[#4b4b4b] transition-colors hover:bg-ink/[0.045] hover:text-ink touch:size-11"><MoreVertical className="size-4" /></span>
         )}>
             {children}
         </Dropdown>
