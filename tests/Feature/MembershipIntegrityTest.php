@@ -12,6 +12,7 @@ use App\Modules\Gym\Services\BookingService;
 use App\Modules\Gym\Services\MembershipService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
 
@@ -152,5 +153,22 @@ class MembershipIntegrityTest extends TestCase
             $this->assertTrue($m->starts_on->eq(CarbonImmutable::today()));
             $this->assertTrue($m->ends_on->eq(CarbonImmutable::today()->addDays(29)), 'thirty days, as sold');
         });
+    }
+
+    public function test_the_daily_run_starts_every_period_due_however_many_there_are(): void
+    {
+        $club = $this->club();
+        $member = $this->member($club);
+        $plan = $this->plan($club);
+        $row = ['tenant_id' => $club->id, 'member_id' => $member->id, 'membership_plan_id' => $plan->id, 'status' => Membership::SCHEDULED,
+            'starts_on' => today()->toDateString(), 'ends_on' => today()->addDays(29)->toDateString(), 'price' => 10, 'total' => 10, 'plan_snapshot' => '{}',
+            'created_at' => now(), 'updated_at' => now()];
+        // More than one page of the query: paging by offset while each row leaves the filter skipped every other page.
+        DB::table('gym_memberships')->insert(array_fill(0, 1205, $row));
+
+        $counts = $this->asTenant($club, fn () => $this->svc()->runDailyTransitions());
+
+        $this->assertSame(1205, $counts['started']);
+        $this->asTenant($club, fn () => $this->assertSame(0, Membership::where('status', Membership::SCHEDULED)->count()));
     }
 }

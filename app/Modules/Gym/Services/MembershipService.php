@@ -414,23 +414,24 @@ final class MembershipService
     {
         $today ??= CarbonImmutable::today();
         $counts = ['started' => 0, 'resumed' => 0, 'expired' => 0];
+        // By id, not by offset: each row leaves the filter as it is handled, and paging by offset skipped every other page.
 
         Membership::where('status', Membership::FROZEN)
             ->whereHas('openFreeze', fn ($q) => $q->whereNotNull('planned_end_on')->where('planned_end_on', '<=', $today))
-            ->each(function (Membership $m) use ($today, &$counts) {
+            ->eachById(function (Membership $m) use ($today, &$counts) {
                 $this->resume($m, $today);
                 $counts['resumed']++;
             });
 
         Membership::where('status', Membership::SCHEDULED)->where('starts_on', '<=', $today)
-            ->each(function (Membership $m) use (&$counts) {
+            ->eachById(function (Membership $m) use (&$counts) {
                 $m->forceFill(['status' => Membership::ACTIVE])->save();
                 $this->event($m, 'started');
                 $counts['started']++;
             });
 
         Membership::where('status', Membership::ACTIVE)->where('ends_on', '<', $today)
-            ->each(function (Membership $m) use (&$counts) {
+            ->eachById(function (Membership $m) use (&$counts) {
                 $m->forceFill(['status' => Membership::EXPIRED])->save();
                 $this->bookings->cancelFutureForMembership($m, 'انتهاء العضوية');
                 $this->event($m, 'expired');
