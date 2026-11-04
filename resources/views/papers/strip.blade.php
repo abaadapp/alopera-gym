@@ -26,7 +26,7 @@
 <div class="paper">
     <div class="s-center">
         @if (($tpl['show_logo'] ?? true) && $logo)
-            <img src="{{ $logo }}" alt="" style="max-height:34pt; max-width:70%; margin-bottom:4pt">
+            <img src="{{ $logo }}" alt="{{ $issuer['name'] ?? '' }}" style="width:{{ $logoBox['width'] }}pt; height:{{ $logoBox['height'] }}pt; margin-bottom:4pt">
         @endif
         <div class="s-club">{{ $issuer['name'] ?? '' }}</div>
         @if ($header !== '')<div class="s-sub">{{ $header }}</div>@endif

@@ -88,9 +88,9 @@
             <td style="width:3%"></td>
             <td style="width:27%; text-align:{{ $end }}">
                 @if (($tpl['show_logo'] ?? true) && $logo)
-                    <img src="{{ $logo }}" alt="" style="max-height:{{ \App\Core\Papers\PaperTheme::SIZES['logo'] }}pt; max-width:100%; margin-bottom:8pt">
+                    <img src="{{ $logo }}" alt="{{ $issuer['name'] ?? '' }}" style="width:{{ $logoBox['width'] }}pt; height:{{ $logoBox['height'] }}pt; margin-bottom:8pt">
                 @endif
-                <table class="fields end">
+                <table class="fields fieldsend">
                     @if (filled($doc['issuer_caption'] ?? null))
                         @php([$i1, $i2] = $cap($doc['issuer_caption']))
                         <tr><td class="lbl">{{ $i1 }}</td></tr>
@@ -103,21 +103,21 @@
                         <tr><td class="{{ $loop->last ? 'gap-after' : '' }}" dir="{{ \App\Core\Papers\PaperFormat::dir($line) }}">{{ $line }}</td></tr>
                     @endforeach
                 </table>
-                @include('papers.partials.fields', ['fields' => $proof, 'end' => true])
+                @include('papers.partials.fields', ['fields' => $proof, 'align' => 'end'])
             </td>
         </tr>
     </table>
 
     @if ($figure && filled($figure['value'] ?? null))
         @php([$f1, $f2] = $cap($figure['label']))
-        <table class="fields end figure">
+        <table class="fields fieldsend figure">
             <tr><td class="lbl">{{ $f1 }}</td></tr>
             @if ($f2 !== '')<tr><td class="lbl2">{{ $f2 }}</td></tr>@endif
             <tr><td class="fig"><span dir="ltr">{{ $figure['value'] }}</span>@if (filled($figure['currency'] ?? null)) <span class="fig-cur">{{ $figure['currency'] }}</span>@endif</td></tr>
             @if (filled($doc['status'] ?? null))<tr><td class="stamp">{{ $doc['status'] }}</td></tr>@endif
         </table>
     @elseif (filled($doc['status'] ?? null))
-        <table class="fields end figure"><tr><td class="stamp">{{ $doc['status'] }}</td></tr></table>
+        <table class="fields fieldsend figure"><tr><td class="stamp">{{ $doc['status'] }}</td></tr></table>
     @endif
 
     @if ($table)
@@ -221,7 +221,7 @@
         </table>
     @endif
 
-    <div class="spacer"></div>
+    <div class="spacer"></div><!--paper:close-->
     <div class="closezone">
         @if ($footer !== '')
             {{-- Each line in its own direction, aligned with the paper: an English line ends with its full stop. --}}

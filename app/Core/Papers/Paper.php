@@ -3,6 +3,7 @@
 namespace App\Core\Papers;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Branding\OfficialLogo;
 use App\Models\Tenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -45,10 +46,11 @@ final class Paper
             'doc' => $this->doc,
             'tpl' => $this->tpl,
             'issuer' => $this->issuer,
-            'logo' => ($this->tpl['show_logo'] ?? true) ? PaperIssuer::logo($this->tenant) : null,
+            'logo' => ($this->tpl['show_logo'] ?? true) ? OfficialLogo::forPaper($this->size, $pdf) : null,
+            'logoBox' => OfficialLogo::box($this->size),
             'tokens' => $this->isStrip()
-                ? PaperTheme::thermal(PaperTheme::tokens($this->tenant->primary_color, (string) ($this->tpl['font'] ?? 'normal')))
-                : PaperTheme::tokens($this->tenant->primary_color, (string) ($this->tpl['font'] ?? 'normal')),
+                ? PaperTheme::thermal(PaperTheme::tokens(OfficialLogo::COLOR, (string) ($this->tpl['font'] ?? 'normal')))
+                : PaperTheme::tokens(OfficialLogo::COLOR, (string) ($this->tpl['font'] ?? 'normal')),
             'size' => $this->size,
             'strip' => $this->isStrip(),
             'lang' => (string) ($this->tpl['lang'] ?? 'ar_en'),
@@ -133,9 +135,53 @@ final class Paper
         $mpdf->SetHTMLFooter('<table width="100%" style="font-family:ibmplexsansarabic;font-size:8pt;color:'.$second.';border-collapse:collapse"><tr>'
             .'<td style="text-align:'.($ltr ? 'left' : 'right').'">'.e($this->issuer['name'] ?? '').' · <span dir="ltr">'.e($this->doc['number']).'</span></td>'
             .'<td style="text-align:'.($ltr ? 'right' : 'left').'" dir="ltr">{PAGENO} / {nbpg}</td></tr></table>');
-        $mpdf->WriteHTML($this->html(pdf: true));
+        $this->writeAnchored($mpdf, $this->html(pdf: true), $p);
 
         return $mpdf->Output('', 'S');
+    }
+
+    /**
+     * The paper's closing lines at the foot of its last page, where the print page's flexible spacer puts them: the PDF
+     * engine has no flex, so the gap is measured when drawing. A close that does not fit starts a page of its own rather
+     * than being cut in two.
+     *
+     * @param  array{width: float, height: float|null, top: float, side: float, bottom: float}  $p
+     */
+    private function writeAnchored(Mpdf $mpdf, string $html, array $p): void
+    {
+        $parts = explode(self::CLOSE_MARK, $html, 2);
+        $mpdf->WriteHTML($parts[0]);
+        if (! isset($parts[1])) {
+            return;
+        }
+
+        $height = $this->closeHeight($html, $parts[1], $p);
+        $room = $mpdf->h - $mpdf->bMargin - $mpdf->y;
+        if ($height > 0.0 && $height > $room) {
+            $mpdf->AddPage();
+            $room = $mpdf->h - $mpdf->bMargin - $mpdf->y;
+        }
+        $gap = $room - $height - self::CLOSE_SLACK;
+        if ($height > 0.0 && $gap > self::MIN_GAP && $gap < $room) {
+            $mpdf->WriteHTML('<div style="height:'.round($gap, 2).'mm; font-size:0; line-height:0"></div>');
+        }
+        $mpdf->WriteHTML($parts[1]);
+    }
+
+    /** @param  array{width: float, height: float|null, top: float, side: float, bottom: float}  $p */
+    private function closeHeight(string $html, string $close, array $p): float
+    {
+        if (trim(strip_tags($close)) === '') {
+            return 0.0;
+        }
+        preg_match('#<style[^>]*>.*?</style>#si', $html, $css);
+        // Under a first block: at the very top of a page the engine drops a margin that it keeps in the paper itself.
+        $lead = 10.0;
+        $probe = $this->engine([$p['width'], self::PROBE], 0, $p['side'], 0);
+        $probe->WriteHTML(($css[0] ?? '').'<div style="height:'.$lead.'mm"></div>'.$close);
+        $height = $probe->page > 1 ? 0.0 : (float) $probe->y - $lead;
+
+        return $height > 0.0 && $height < (float) $p['height'] ? $height : 0.0;
     }
 
     /**
@@ -177,6 +223,15 @@ final class Paper
 
         return $mpdf->Output('', 'S');
     }
+
+    /** Where a sheet's template parts its body from its closing lines. */
+    private const CLOSE_MARK = '<!--paper:close-->';
+
+    /** A gap too small to see, which would only risk an extra page. */
+    private const MIN_GAP = 2.0;
+
+    /** Left under a close at the page's foot: to the exact millimetre, the engine rounds it onto a page of its own. */
+    private const CLOSE_SLACK = 1.5;
 
     /** The probe and the longest page of a strip, in millimetres (the PDF format stops at 200 inches). */
     private const PROBE = 2000;

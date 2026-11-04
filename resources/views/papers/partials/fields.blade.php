@@ -1,8 +1,10 @@
 @php
     $rows = array_values(array_filter($fields ?? [], fn ($f) => filled($f['value'] ?? null)));
+    // Named $align, not $end: an include sees the sheet's own $end, the side a paper ends on, and is always truthy.
+    $atEnd = ($align ?? 'start') === 'end';
 @endphp
 @if (count($rows) > 0)
-    <table class="fields{{ ($end ?? false) ? ' end' : '' }}">
+    <table class="fields{{ $atEnd ? ' fieldsend' : '' }}">
         @foreach ($rows as $field)
             @php([$a, $b] = \App\Core\Papers\PaperLabels::pair($field['label'], $lang))
             <tr><td class="lbl">{{ $a }}</td></tr>
