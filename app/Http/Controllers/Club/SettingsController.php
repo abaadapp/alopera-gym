@@ -108,7 +108,7 @@ class SettingsController extends Controller
             }
         }
         // Not registered for VAT: no rate is charged (the number typed in stays, unprinted, for the day it registers).
-        if (($rules['vat_registered'] ?? null) === false) {
+        if ((array_key_exists('vat_registered', $rules) ? $rules['vat_registered'] : $tenant->setting('vat_registered')) === false) {
             $rules['vat_rate'] = 0;
         }
         // The currency of every amount already recorded: it changes only before the first invoice or payment.

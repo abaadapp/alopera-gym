@@ -56,6 +56,10 @@ class BusinessSettingsTest extends TestCase
         $this->assertSame('OM1100223344', $club->setting('vat_number'));
         $this->assertStringNotContainsString('OM1100223344', $this->html($club));
         $this->assertStringNotContainsString('OM1100223344', $this->html($club, PaperSize::T80));
+
+        // a rate sent without the switch does not slip past it
+        $this->save($club, ['vat_rate' => 5])->assertSessionHasNoErrors();
+        $this->assertSame(0.0, (float) $club->refresh()->setting('vat_rate'));
     }
 
     /** A club that set a rate or a number before the switch existed is read as registered: nothing it prints changes. */
