@@ -6,7 +6,7 @@ import { Button, Card, CardHeader, Checkbox, Field, Input, Modal, Notice, PageHe
 import { BILL_STATES, clientKey, ORDER_TONES, Pill, RECEIPT_LABELS, ReasonDialog } from '@/Components/Inventory/parts';
 import { useCurrency, useCan } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
-import { money, number } from '@/lib/format';
+import { money, number, isoDate } from '@/lib/format';
 import PrintButton from '@/Components/Printing/PrintButton';
 
 interface Item { id: number; product: string | null; sku: string | null; quantity: string; received_quantity: string; pending: number; remaining: number; unit: string | null; unit_factor: string; unit_cost: string; line_total: string }
@@ -120,7 +120,7 @@ function Receive({ order, canApprove, onClose }: { order: Order; canApprove: boo
     const open = order.items.filter((i) => i.remaining - i.pending > 0);
     const form = useForm({
         lines: Object.fromEntries(open.map((i) => [i.id, { quantity: String(i.remaining - i.pending), note: '' }])) as Record<number, { quantity: string; note: string }>,
-        received_on: new Date().toISOString().slice(0, 10),
+        received_on: isoDate(),
         delivery_reference: '',
         notes: '',
         approve: canApprove,

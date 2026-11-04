@@ -4,7 +4,7 @@ import { Banknote, Clock, Printer, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Modal, PageHeader, Select, StatCard } from '@/Components/ui';
 import { useCurrency, useCan } from '@/hooks/useShared';
-import { date, money } from '@/lib/format';
+import { date, money, isoDate } from '@/lib/format';
 import { RunList, type RunDetail, type RunSummary } from './Runs';
 import { PrintLink } from '@/Components/Printing/PrintButton';
 
@@ -120,7 +120,7 @@ function PayForm({ run, ids, accounts, defaultAccount, onClose }: { run: RunDeta
     const currency = useCurrency();
     const items = run.items.filter((i) => ids.includes(i.id) && !i.paid_at);
     const total = items.reduce((t, i) => t + Math.round(Number(i.net) * 1000), 0) / 1000;
-    const form = useForm({ items: items.map((i) => i.id), account_id: String(defaultAccount ?? accounts[0]?.id ?? ''), paid_on: new Date().toISOString().slice(0, 10), reference: '' });
+    const form = useForm({ items: items.map((i) => i.id), account_id: String(defaultAccount ?? accounts[0]?.id ?? ''), paid_on: isoDate(), reference: '' });
     const errors = form.errors as Record<string, string>;
     const submit = (e: FormEvent) => {
         e.preventDefault();

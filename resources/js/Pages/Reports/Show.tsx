@@ -12,7 +12,7 @@ import { BranchesBody, SalesBody, type Branches, type Sales } from '@/Components
 import { TablesBody, type Tables } from '@/Components/Reports/Tables';
 import { BackLink, Button, Card, Checkbox, Input, MemberPicker, Notice, PageHeader, Select } from '@/Components/ui';
 import { cn } from '@/lib/cn';
-import { date } from '@/lib/format';
+import { date, isoDate } from '@/lib/format';
 
 type Data = Record<string, unknown> & { empty: boolean };
 
@@ -86,7 +86,7 @@ export default function ReportShow({ kind, title, description, mode, compare, fi
     const option = (k: string) => (data.options as Record<string, unknown> | undefined)?.[k];
 
     const subtitle = mode === 'snapshot'
-        ? `الوضع اليوم، ${date(new Date().toISOString().slice(0, 10))}`
+        ? `الوضع اليوم، ${date(isoDate())}`
         : kind === 'statements' && (data as unknown as Statements).view === 'trial'
             ? `الأرصدة حتى ${date(filters.to)}`
             : `من ${date(filters.from)} إلى ${date(filters.to)}${compare ? ` · مقارنة بـ ${date(filters.previous_from)} – ${date(filters.previous_to)}` : ''}`;

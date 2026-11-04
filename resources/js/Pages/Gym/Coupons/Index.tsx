@@ -4,7 +4,7 @@ import { BadgePercent, Pencil, Plus, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, Checkbox, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
-import { date, money } from '@/lib/format';
+import { date, money, isoDate } from '@/lib/format';
 import type { Option } from '@/types';
 
 interface Coupon {
@@ -24,7 +24,7 @@ interface Coupon {
 }
 
 function couponState(c: Coupon): [string, 'green' | 'gray' | 'red' | 'amber' | 'blue'] {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = isoDate();
     if (!c.is_active) return ['موقوف', 'gray'];
     if (c.valid_until && c.valid_until < today) return ['منتهي', 'red'];
     if (c.valid_from && c.valid_from > today) return ['لم يبدأ', 'blue'];

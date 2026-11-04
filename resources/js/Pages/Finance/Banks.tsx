@@ -6,7 +6,7 @@ import { clientKey } from '@/Components/Inventory/parts';
 import { Badge, Button, EmptyState, Field, Input, Modal, PageHeader, Select, StatCard, SummaryCard, Toggle } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
-import { date, money } from '@/lib/format';
+import { date, money, isoDate } from '@/lib/format';
 import { kindIcon } from './Summary';
 
 type Account = { id: number; code: string; name: string; kind: string; balance: string; bank_name: string | null; masked: string | null; is_active: boolean; system: boolean; opening: { amount: string; date: string } | null };
@@ -18,7 +18,7 @@ interface Props {
     canManage: boolean;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => isoDate();
 
 export default function FinanceBanks({ accounts, totals, kinds, canManage }: Props) {
     const currency = useCurrency();

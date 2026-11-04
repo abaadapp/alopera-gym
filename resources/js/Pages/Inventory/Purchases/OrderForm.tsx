@@ -5,7 +5,7 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Card, Field, Input, PageHeader, Select, Textarea, BackLink } from '@/Components/ui';
 import { clientKey } from '@/Components/Inventory/parts';
 import { useCurrency } from '@/hooks/useShared';
-import { money, number } from '@/lib/format';
+import { money, number, isoDate } from '@/lib/format';
 
 type Item = { product_id: string; quantity: string; unit_cost: string; unit: string; unit_factor: string };
 interface Props {
@@ -32,7 +32,7 @@ export default function OrderForm({ order, lines, suppliers, products, branches,
         // A new order opened from a supplier's file (?supplier=) starts with that supplier.
         supplier_id: order ? String(order.supplier_id) : (suppliers.find((x) => String(x.id) === new URLSearchParams(window.location.search).get('supplier'))?.id.toString() ?? ''),
         branch_id: String(order?.branch_id ?? defaultBranch ?? branches[0]?.id ?? ''),
-        order_date: order?.order_date ?? new Date().toISOString().slice(0, 10),
+        order_date: order?.order_date ?? isoDate(),
         expected_on: order?.expected_on ?? '',
         supplier_reference: order?.supplier_reference ?? '',
         payment_terms_days: order?.payment_terms_days != null ? String(order.payment_terms_days) : '',
