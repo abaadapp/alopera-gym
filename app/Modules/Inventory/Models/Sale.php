@@ -56,7 +56,7 @@ class Sale extends Model implements BranchOwned
 
     public function items(): HasMany
     {
-        return $this->hasMany(SaleItem::class);
+        return $this->hasMany(SaleItem::class)->orderBy('id');
     }
 
     public function invoice(): BelongsTo

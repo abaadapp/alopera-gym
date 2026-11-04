@@ -349,8 +349,8 @@ function PeripheralForm({ device, peripheral, options, onDone }: { device: Devic
             {form.data.type === 'scanner' && <Notice tone="gray">ماسح الباركود الذي يعمل كلوحة مفاتيح يعمل مباشرة في خانة البحث بنقطة البيع.</Notice>}
             {printer && (
                 <div className="space-y-2 rounded-[12px] border border-line p-4">
-                    <Checkbox label="الطابعة الافتراضية لهذا الجهاز" checked={form.data.is_default} onChange={(e) => form.setData('is_default', e.target.checked)} />
-                    <Checkbox label="طباعة الإيصال تلقائيًا بعد نجاح العملية (مرة واحدة لكل عملية)" checked={form.data.auto_print} onChange={(e) => form.setData('auto_print', e.target.checked)} />
+                    <Checkbox label="طابعة الإيصال لهذا الجهاز" checked={form.data.is_default} onChange={(e) => form.setData('is_default', e.target.checked)} />
+                    <Checkbox label="طباعة تلقائية بعد البيع (مرة واحدة لكل عملية)" checked={form.data.auto_print} onChange={(e) => form.setData('auto_print', e.target.checked)} />
                     <Checkbox label="طباعة طلب الموقع عند بدء تجهيزه" checked={form.data.print_website_orders} onChange={(e) => form.setData('print_website_orders', e.target.checked)} />
                 </div>
             )}

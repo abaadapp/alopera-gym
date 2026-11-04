@@ -31,7 +31,8 @@
     $half = (int) ceil(count($meta) / 2);
     $parties = array_values(array_filter($doc['parties'] ?? [], fn ($p) => count(array_filter($p['lines'] ?? [])) > 0));
     $contact = array_values(array_filter([$issuer['address'] ?? '', ($issuer['phone'] ?? '') !== '' ? PaperLabels::word('هاتف', $lang).': '.$issuer['phone'] : '', $issuer['email'] ?? '']));
-    $sub = trim(implode(' — ', array_filter([($issuer['legal_name'] ?? '') !== ($issuer['name'] ?? '') ? ($issuer['legal_name'] ?? '') : '', $issuer['city'] ?? ''])));
+    $place = implode('، ', array_unique(array_filter([trim($issuer['city'] ?? ''), trim($issuer['governorate'] ?? '')])));
+    $sub = trim(implode(' — ', array_filter([($issuer['legal_name'] ?? '') !== ($issuer['name'] ?? '') ? ($issuer['legal_name'] ?? '') : '', $place])));
     $proof = array_values(array_filter([
         ['label' => 'الرقم الضريبي', 'value' => $issuer['vat_number'] ?? ''],
         ['label' => 'السجل التجاري', 'value' => $issuer['cr_number'] ?? ''],
@@ -88,9 +89,9 @@
             <td style="width:3%"></td>
             <td style="width:27%; text-align:{{ $end }}">
                 @if (($tpl['show_logo'] ?? true) && $logo)
-                    <img src="{{ $logo }}" alt="" style="max-height:{{ \App\Core\Papers\PaperTheme::SIZES['logo'] }}pt; max-width:100%; margin-bottom:8pt">
+                    <img src="{{ $logo }}" alt="{{ $issuer['name'] ?? '' }}" style="width:{{ $logoBox['width'] }}pt; height:{{ $logoBox['height'] }}pt; margin-bottom:8pt">
                 @endif
-                <table class="fields end">
+                <table class="fields fieldsend">
                     @if (filled($doc['issuer_caption'] ?? null))
                         @php([$i1, $i2] = $cap($doc['issuer_caption']))
                         <tr><td class="lbl">{{ $i1 }}</td></tr>
@@ -103,21 +104,21 @@
                         <tr><td class="{{ $loop->last ? 'gap-after' : '' }}" dir="{{ \App\Core\Papers\PaperFormat::dir($line) }}">{{ $line }}</td></tr>
                     @endforeach
                 </table>
-                @include('papers.partials.fields', ['fields' => $proof, 'end' => true])
+                @include('papers.partials.fields', ['fields' => $proof, 'align' => 'end'])
             </td>
         </tr>
     </table>
 
     @if ($figure && filled($figure['value'] ?? null))
         @php([$f1, $f2] = $cap($figure['label']))
-        <table class="fields end figure">
+        <table class="fields fieldsend figure">
             <tr><td class="lbl">{{ $f1 }}</td></tr>
             @if ($f2 !== '')<tr><td class="lbl2">{{ $f2 }}</td></tr>@endif
             <tr><td class="fig"><span dir="ltr">{{ $figure['value'] }}</span>@if (filled($figure['currency'] ?? null)) <span class="fig-cur">{{ $figure['currency'] }}</span>@endif</td></tr>
             @if (filled($doc['status'] ?? null))<tr><td class="stamp">{{ $doc['status'] }}</td></tr>@endif
         </table>
     @elseif (filled($doc['status'] ?? null))
-        <table class="fields end figure"><tr><td class="stamp">{{ $doc['status'] }}</td></tr></table>
+        <table class="fields fieldsend figure"><tr><td class="stamp">{{ $doc['status'] }}</td></tr></table>
     @endif
 
     @if ($table)
@@ -192,8 +193,13 @@
                         <table class="rows" width="100%">
                             @foreach ($panel['rows'] as $r)
                                 <tr>
-                                    <td class="lbl2" style="width:70%">{{ $r['label'] }}@if (filled($r['sub'] ?? null))<div style="text-align:{{ $ltr ? 'left' : 'right' }}"><span dir="{{ \App\Core\Papers\PaperFormat::dir($r['sub']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['sub'], \App\Core\Papers\PaperFormat::dir($r['sub'])) }}</span></div>@endif</td>
-                                    <td class="amt" style="width:30%"><span dir="ltr" class="{{ ($r['strong'] ?? false) ? 'b' : '' }}">{{ $r['value'] }}</span></td>
+                                    <td class="lbl2" style="width:{{ ($panel['words'] ?? false) ? '40' : '70' }}%">{{ $r['label'] }}@if (filled($r['sub'] ?? null))<div style="text-align:{{ $ltr ? 'left' : 'right' }}"><span dir="{{ \App\Core\Papers\PaperFormat::dir($r['sub']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['sub'], \App\Core\Papers\PaperFormat::dir($r['sub'])) }}</span></div>@endif</td>
+                                    @if ($panel['words'] ?? false)
+                                        {{-- Words, not an amount: they may wrap rather than run past the page. --}}
+                                        <td class="words" style="width:60%; text-align:{{ $end }}" dir="{{ \App\Core\Papers\PaperFormat::dir($r['value']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['value']) }}</td>
+                                    @else
+                                        <td class="amt" style="width:30%"><span dir="ltr" class="{{ ($r['strong'] ?? false) ? 'b' : '' }}">{{ $r['value'] }}</span></td>
+                                    @endif
                                 </tr>
                             @endforeach
                         </table>
@@ -221,7 +227,7 @@
         </table>
     @endif
 
-    <div class="spacer"></div>
+    <div class="spacer"></div><!--paper:close-->
     <div class="closezone">
         @if ($footer !== '')
             {{-- Each line in its own direction, aligned with the paper: an English line ends with its full stop. --}}

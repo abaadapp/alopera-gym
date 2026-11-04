@@ -23,6 +23,9 @@ final class PaperSize
         self::T58 => ['strip' => true, 'width' => 58.0, 'height' => null, 'top' => 3.0, 'side' => 2.0, 'bottom' => 3.0],
     ];
 
+    /** Millimetres the line under a printed sheet takes, the same in the PDF's margin and the browser's page. */
+    private const FOOT_LINE = 7.0;
+
     /** @return array{strip: bool, width: float, height: float|null, top: float, side: float, bottom: float} */
     public static function of(?string $key): array
     {
@@ -67,19 +70,26 @@ final class PaperSize
         $p = self::of($key);
         $mm = fn (float $v) => rtrim(rtrim(number_format($v, 2, '.', ''), '0'), '.').'mm';
         $pad = $mm($p['top']).' '.$mm($p['side']).' '.$mm($p['bottom']);
+        // The PDF sets its club-and-number line in the bottom margin; a browser sets it in the page, so its page gives
+        // that line the same room and a paper that fills one PDF page fills one printed page.
+        $print = $mm($p['top']).' '.$mm($p['side']).' '.$mm($p['bottom'] - ($p['height'] !== null ? self::FOOT_LINE : 0));
         $size = $p['height'] !== null ? 'size: '.$mm($p['width']).' '.$mm($p['height']).';' : 'size: '.$mm($p['width']).' auto;';
-        $inner = $p['height'] !== null ? 'min-height: '.$mm($p['height'] - $p['top'] - $p['bottom']).';' : '';
+        // Two millimetres short of the page: a box exactly as tall can round over and print a blank page after it.
+        $inner = $p['height'] !== null ? 'min-height: '.$mm($p['height'] - $p['top'] - $p['bottom'] + self::FOOT_LINE - 2).';' : '';
         $outer = $p['height'] !== null ? 'min-height: '.$mm($p['height']).';' : '';
 
         // The PDF engine takes the page size and margins from its own settings; an @page rule there would also drop
         // its running footer (club, number, page x / y).
-        $page = $pdf ? '' : "@page { {$size} margin: {$pad}; }";
+        $page = $pdf ? '' : "@page { {$size} margin: {$print}; }";
+        // On A5 that line, which only repeats the head, is what would push a full sheet onto a second page.
+        $foot = $key === self::A5 ? '.docfoot { display: none; }' : '';
 
         return <<<CSS
             @media print {
                 {$page}
                 html, body { margin: 0; padding: 0; }
                 .paper { width: auto; padding: 0; {$inner} }
+                {$foot}
             }
             @media screen {
                 html, body { margin: 0; padding: 0; }

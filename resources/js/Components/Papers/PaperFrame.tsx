@@ -33,7 +33,7 @@ export default function PaperFrame({ html, paper = 'A4', height = 'min(78svh, 10
     const strip = size.height === null;
     const full = page > 0 ? Math.max(1, Math.ceil((content || page) / page)) * page : Math.max(content, mm(60));
     const pages = page > 0 ? Math.round(full / page) : 1;
-    const scale = avail > 0 ? Math.min(maxScale ?? (strip ? 1.6 : 1), avail / width) : 1;
+    const scale = avail > 0 ? Math.min(maxScale ?? (strip ? 2 : 1), avail / width) : 1;
 
     useLayoutEffect(() => {
         const el = box.current;

@@ -1,42 +1,34 @@
-import { useMemo, type FormEvent } from 'react';
-import { useForm } from '@inertiajs/react';
-import { ExternalLink, ImagePlus } from 'lucide-react';
+import { type FormEvent } from 'react';
+import { Link, useForm } from '@inertiajs/react';
+import { ExternalLink } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Card, CardHeader, Field, Input, PageHeader } from '@/Components/ui';
 
 interface Props {
-    club: { name: string; logo_url: string | null; primary_color: string; secondary_color: string };
+    club: { name: string; logo_url: string; primary_color: string; secondary_color: string };
     siteUrl: string;
 }
 
 export default function WebsiteBranding({ club, siteUrl }: Props) {
-    const form = useForm<{ primary_color: string; secondary_color: string; logo: File | null }>({ primary_color: club.primary_color, secondary_color: club.secondary_color, logo: null });
-    const preview = useMemo(() => (form.data.logo ? URL.createObjectURL(form.data.logo) : club.logo_url), [form.data.logo, club.logo_url]);
+    const form = useForm({ primary_color: club.primary_color, secondary_color: club.secondary_color });
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        form.post(route('club.website.branding.update'), { forceFormData: true, preserveScroll: true, onSuccess: () => form.setData('logo', null) });
+        form.post(route('club.website.branding.update'), { preserveScroll: true });
     };
 
     return (
         <ClubLayout title="الهوية والألوان">
             <PageHeader
                 title="الهوية والألوان"
-                subtitle="شعار النادي وألوانه كما تظهر في الموقع وبوابة الأعضاء ولوحة النادي"
+                subtitle="شعار النادي الرسمي وألوان الموقع وبوابة الأعضاء ولوحة النادي"
                 actions={<Button variant="outline" href={siteUrl} external icon={<ExternalLink className="size-4" />}>فتح الموقع</Button>}
             />
             <form onSubmit={submit} className="grid max-w-4xl gap-4 lg:grid-cols-2">
                 <Card>
-                    <CardHeader title="الشعار" subtitle="صورة مربعة، تُحوَّل إلى WebP ويُصغَّر حجمها تلقائيًا" />
-                    <div className="flex items-center gap-4">
-                        <div className="grid size-24 shrink-0 place-items-center overflow-hidden rounded-2xl border border-dashed border-line bg-canvas">
-                            {preview ? <img src={preview} alt="" className="size-full object-cover" /> : <span className="font-display text-3xl" style={{ color: form.data.primary_color }}>{club.name[0]}</span>}
-                        </div>
-                        <label className="inline-flex cursor-pointer items-center gap-2 rounded-[10px] border border-[#dcdcdc] bg-white px-3 py-2 text-sm hover:bg-[#fafafa]">
-                            <ImagePlus className="size-4" /> {preview ? 'تغيير الشعار' : 'رفع شعار'}
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => form.setData('logo', e.target.files?.[0] ?? null)} />
-                        </label>
+                    <CardHeader title="الشعار" subtitle="يُغيَّر من إعدادات النادي، ويظهر في الموقع ولوحة التحكم والفواتير" actions={<Link href={route('club.settings.edit')} className="text-[13px] font-medium text-[#111] hover:underline">تغيير الشعار</Link>} />
+                    <div className="flex h-32 items-center justify-center rounded-2xl border border-line bg-canvas p-3">
+                        <img src={club.logo_url} alt="شعار Alopera Gym" className="h-full w-auto object-contain" />
                     </div>
-                    {form.errors.logo && <p className="mt-2 text-xs font-medium text-red-600">{form.errors.logo}</p>}
                 </Card>
                 <Card>
                     <CardHeader title="الألوان" />

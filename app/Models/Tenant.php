@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
+use App\Core\Branding\OfficialLogo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * The gym: its name, brand, contact details and business settings. The system runs one gym; its tables keep a
@@ -39,9 +39,16 @@ class Tenant extends Model
         'dues_reminder_overdue_days' => [1, 7, 14],
         'dues_reminder_max' => 3,
         'class_session_weeks_ahead' => 4,
+        // null until the owner says: then registered when a rate or a number is set, as the club ran before the switch.
+        'vat_registered' => null,
         'vat_rate' => 0,
         'vat_number' => null,
         'cr_number' => null,
+        'governorate' => null,
+        // Printed on a customer invoice under «where and how to pay» while something is owed.
+        'bank_name' => null,
+        'bank_account_name' => null,
+        'bank_iban' => null,
         'invoice_footer' => null,
         'invoice_due_days' => 0,
         'allow_pay_at_reception' => true,
@@ -74,9 +81,17 @@ class Tenant extends Model
         return array_replace(self::DEFAULT_SETTINGS, $this->settings ?? []);
     }
 
-    public function logoUrl(): ?string
+    public function logoUrl(): string
     {
-        return $this->logo_path ? Storage::disk('public')->url($this->logo_path) : null;
+        return OfficialLogo::url($this);
+    }
+
+    /** Registered for VAT: only then is a VAT number printed and a rate charged. */
+    public function vatRegistered(): bool
+    {
+        $said = $this->setting('vat_registered');
+
+        return $said === null ? (float) $this->setting('vat_rate', 0) > 0 || filled($this->setting('vat_number')) : (bool) $said;
     }
 
     public function users(): HasMany

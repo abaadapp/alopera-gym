@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Core\Auth\PermissionRegistry;
+use App\Core\Branding\OfficialLogo;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Club\NotificationController;
@@ -34,6 +35,9 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'appName' => config('app.name'),
+            'logo' => OfficialLogo::url(app(TenantContext::class)->get()),
+            // The year from the server: a device's clock can be wrong.
+            'year' => now()->year,
             'locale' => app()->getLocale(),
             'dir' => app()->getLocale() === 'ar' ? 'rtl' : 'ltr',
             'auth' => fn () => $this->staff($request),

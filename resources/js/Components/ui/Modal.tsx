@@ -32,6 +32,18 @@ const OWN_LAYERS = '[data-layer], [data-sonner-toaster]';
 
 const TABBABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])';
 
+// Safari gives no focus to a button it presses, on a phone or a computer: what opened a dialog is known from the press,
+// and from the focus only when the keyboard opened it.
+let pressed: HTMLElement | null = null;
+if (typeof document !== 'undefined') {
+    document.addEventListener('pointerdown', (e) => {
+        pressed = e.target instanceof Element ? e.target.closest<HTMLElement>('button, a[href], [role="button"]') : null;
+    }, true);
+    document.addEventListener('keydown', () => {
+        pressed = null;
+    }, true);
+}
+
 /**
  * The one dialog of the system, on Radix Dialog as the reference's: a white card 16px rounded with a #e8e8e8 hairline
  * and a soft shadow, on a page dimmed to black/20 and slightly blurred; the title 17px semibold and an optional 13px
@@ -71,8 +83,8 @@ export default function Modal({
 
     // The element that had the focus before the dialog took it, read as the dialog first renders open.
     const opener = useRef<HTMLElement | null>(null);
-    if (open && opener.current === null && typeof document !== 'undefined' && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
-        opener.current = document.activeElement;
+    if (open && opener.current === null && typeof document !== 'undefined') {
+        opener.current = pressed?.isConnected ? pressed : document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
     }
 
     // A request this dialog started (a form sent, a button pressed) on its way to the server: sent once, and the dialog

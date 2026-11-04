@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Club;
 
 use App\Core\Audit\AuditLogger;
-use App\Core\Support\ImageStore;
+use App\Core\Branding\OfficialLogo;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
+use App\Modules\Finance\Models\Invoice;
+use App\Modules\Finance\Models\Payment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -23,6 +26,17 @@ class SettingsController extends Controller
 
     private const NOTIFICATION_RULES = ['expiry_reminder_days', 'expired_followup_days', 'notify_class_changes', 'class_reminder_hours', 'dues_reminders_enabled', 'dues_reminder_before_days', 'dues_reminder_overdue_days', 'dues_reminder_max'];
 
+    /** Oman's governorates, for the address printed on papers. */
+    public const GOVERNORATES = ['مسقط', 'ظفار', 'مسندم', 'البريمي', 'الداخلية', 'شمال الباطنة', 'جنوب الباطنة', 'جنوب الشرقية', 'شمال الشرقية', 'الظاهرة', 'الوسطى'];
+
+    public const CURRENCIES = ['OMR' => 'ر.ع — ريال عُماني', 'SAR' => 'ر.س — ريال سعودي', 'AED' => 'د.إ — درهم إماراتي', 'KWD' => 'د.ك — دينار كويتي', 'QAR' => 'ر.ق — ريال قطري', 'BHD' => 'د.ب — دينار بحريني'];
+
+    /** Any invoice or payment recorded: amounts are in the club's currency from then on. */
+    private function hasMoney(): bool
+    {
+        return Invoice::query()->exists() || Payment::query()->exists();
+    }
+
     public function index(Request $request): Response
     {
         abort_unless(collect(self::HUB_PERMISSIONS)->contains(fn (string $p) => $request->user()->can($p)), 403);
@@ -35,10 +49,14 @@ class SettingsController extends Controller
         $tenant = $tenants->require();
 
         return Inertia::render('Club/Settings/General', [
-            'club' => $tenant->only('name', 'legal_name', 'email', 'phone', 'address', 'city', 'primary_color', 'secondary_color', 'latitude', 'longitude', 'domain') + [
+            'club' => $tenant->only('name', 'legal_name', 'email', 'phone', 'address', 'city', 'primary_color', 'secondary_color', 'latitude', 'longitude', 'domain', 'currency') + [
                 'logo_url' => $tenant->logoUrl(),
+                'logo_custom' => OfficialLogo::uploaded($tenant) !== null,
+                'currency_locked' => $this->hasMoney(),
             ],
-            'rules' => $tenant->allSettings(),
+            'rules' => ['vat_registered' => $tenant->vatRegistered()] + $tenant->allSettings(),
+            'governorates' => self::GOVERNORATES,
+            'currencies' => self::CURRENCIES,
         ]);
     }
 
@@ -56,7 +74,9 @@ class SettingsController extends Controller
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'primary_color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'secondary_color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
-            'logo' => ['nullable', 'image', 'max:'.config('gym.max_image_kb')],
+            'currency' => ['sometimes', 'string', 'in:'.implode(',', array_keys(self::CURRENCIES))],
+            'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:'.config('gym.max_image_kb')],
+            'remove_logo' => ['boolean'],
             'rules' => ['array'],
             'rules.booking_window_days' => ['integer', 'between:1,90'],
             'rules.booking_cancel_cutoff_hours' => ['integer', 'between:0,72'],
@@ -65,7 +85,12 @@ class SettingsController extends Controller
             'rules.block_access_with_dues' => ['boolean'],
             'rules.auto_mark_no_show' => ['boolean'],
             'rules.class_session_weeks_ahead' => ['integer', 'between:1,12'],
+            'rules.vat_registered' => ['boolean'],
             'rules.vat_rate' => ['numeric', 'between:0,30'],
+            'rules.governorate' => ['nullable', 'string', 'in:'.implode(',', self::GOVERNORATES)],
+            'rules.bank_name' => ['nullable', 'string', 'max:80'],
+            'rules.bank_account_name' => ['nullable', 'string', 'max:120'],
+            'rules.bank_iban' => ['nullable', 'string', 'max:40', 'regex:/^[A-Za-z0-9 ]+$/'],
             'rules.vat_number' => ['nullable', 'string', 'max:40'],
             'rules.cr_number' => ['nullable', 'string', 'max:40'],
             'rules.invoice_footer' => ['nullable', 'string', 'max:500'],
@@ -74,21 +99,39 @@ class SettingsController extends Controller
             'rules.member_signup_enabled' => ['boolean'],
         ]);
 
-        if ($request->hasFile('logo')) {
-            ImageStore::delete($tenant->logo_path);
-            $tenant->logo_path = ImageStore::store($request->file('logo'), 'branding', 600);
-        }
-
         // Notification rules have their own screen; this form never touches them.
         $rules = Arr::except(array_intersect_key($data['rules'] ?? [], $tenant::DEFAULT_SETTINGS), self::NOTIFICATION_RULES);
-        unset($data['logo'], $data['rules']);
+        // A form with a file comes as multipart, where a switch reads «0» or «1»: kept as true or false either way.
+        foreach ($rules as $key => $value) {
+            if ($key === 'vat_registered' || is_bool($tenant::DEFAULT_SETTINGS[$key])) {
+                $rules[$key] = filter_var($value, FILTER_VALIDATE_BOOLEAN);
+            }
+        }
+        // Not registered for VAT: no rate is charged (the number typed in stays, unprinted, for the day it registers).
+        if ((array_key_exists('vat_registered', $rules) ? $rules['vat_registered'] : $tenant->setting('vat_registered')) === false) {
+            $rules['vat_rate'] = 0;
+        }
+        // The currency of every amount already recorded: it changes only before the first invoice or payment.
+        if (isset($data['currency']) && $data['currency'] !== $tenant->currency && $this->hasMoney()) {
+            throw ValidationException::withMessages(['currency' => 'لا يمكن تغيير العملة بعد تسجيل فواتير أو مدفوعات.']);
+        }
+        $logo = $request->file('logo');
+        $removeLogo = (bool) ($data['remove_logo'] ?? false);
+        unset($data['rules'], $data['logo'], $data['remove_logo']);
 
         $snapshot = fn () => $tenant->only(array_keys($data)) + Arr::only($tenant->settings ?? [], array_keys($rules));
         $before = $snapshot();
         $tenant->fill($data);
-        $tenant->settings = array_replace($tenant->settings ?? [], $rules);
+        $settings = array_replace($tenant->settings ?? [], $rules);
+        if ($logo) {
+            $settings['logo_file'] = OfficialLogo::store($logo, $tenant);
+        } elseif ($removeLogo) {
+            OfficialLogo::forget($tenant);
+            unset($settings['logo_file']);
+        }
+        $tenant->settings = $settings;
         $tenant->save();
-        app(AuditLogger::class)->logChanges('settings.club_updated', $tenant, $before, $snapshot(), $request->hasFile('logo') ? ['logo' => 'changed'] : []);
+        app(AuditLogger::class)->logChanges('settings.club_updated', $tenant, $before, $snapshot(), $logo ? ['logo' => 'uploaded'] : ($removeLogo ? ['logo' => 'official'] : []));
 
         return back()->with('success', 'تم حفظ إعدادات النادي.');
     }

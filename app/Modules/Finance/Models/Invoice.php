@@ -87,7 +87,7 @@ class Invoice extends Model implements BranchOwned
 
     public function items(): HasMany
     {
-        return $this->hasMany(InvoiceItem::class);
+        return $this->hasMany(InvoiceItem::class)->orderBy('id');
     }
 
     public function payments(): HasMany

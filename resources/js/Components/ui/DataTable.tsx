@@ -201,7 +201,7 @@ export default function DataTable<T>({ rows, columns, card, rowKey, params, pagi
                                 return (
                                     <th key={c.key} aria-sort={on ? (dir === 'asc' ? 'ascending' : 'descending') : undefined} className={cn('h-11 py-0 align-middle text-[12px] text-[#6b7280]', c.align === 'end' && 'text-end', c.align === 'center' && 'text-center', c.className)}>
                                         {sorts ? (
-                                            <button type="button" onClick={() => go({ sort: c.key, dir: on && dir === 'asc' ? 'desc' : 'asc' })} className="inline-flex items-center gap-1 font-[inherit] transition-colors hover:text-ink">
+                                            <button type="button" onClick={() => go({ sort: c.key, dir: on && dir === 'asc' ? 'desc' : 'asc' })} className="inline-flex items-center gap-1 font-[inherit] [text-rendering:inherit] transition-colors hover:text-ink">
                                                 {c.header}
                                                 {on && (dir === 'asc' ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />)}
                                             </button>
@@ -245,7 +245,7 @@ export default function DataTable<T>({ rows, columns, card, rowKey, params, pagi
 /** «أضف فلتر»: the filters by name, each opening its choices beside the menu (scrolling past 288px), as the reference's. */
 function FilterChoices({ filters, onPick }: { filters: TableFilter[]; onPick: (param: string, value: string) => void }) {
     return filters.map((f) => (
-        <DropdownSub key={f.param} label={f.label} className="max-h-72 overflow-y-auto">
+        <DropdownSub key={f.param} label={f.label} className="max-h-[min(18rem,var(--radix-dropdown-menu-content-available-height))]">
             {(f.options ?? []).filter((o) => !o.hidden).map((o) => (
                 <DropdownItem key={o.value} onClick={() => onPick(f.param, o.value)}>
                     {o.dot && <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: o.dot }} />}

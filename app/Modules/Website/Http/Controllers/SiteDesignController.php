@@ -3,7 +3,6 @@
 namespace App\Modules\Website\Http\Controllers;
 
 use App\Core\Audit\AuditLogger;
-use App\Core\Support\ImageStore;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Website\Models\SiteSetting;
@@ -57,15 +56,10 @@ class SiteDesignController extends Controller
         $data = $request->validate([
             'primary_color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'secondary_color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
-            'logo' => ['nullable', 'image', 'max:'.config('gym.max_image_kb')],
-        ], [], ['primary_color' => 'اللون الرئيسي', 'secondary_color' => 'اللون الثانوي', 'logo' => 'الشعار']);
+        ], [], ['primary_color' => 'اللون الرئيسي', 'secondary_color' => 'اللون الثانوي']);
 
         $tenant = $tenants->require();
         $before = $tenant->only('primary_color', 'secondary_color');
-        if ($request->hasFile('logo')) {
-            ImageStore::delete($tenant->logo_path);
-            $tenant->logo_path = ImageStore::store($request->file('logo'), 'branding', 600);
-        }
         $tenant->forceFill(['primary_color' => $data['primary_color'], 'secondary_color' => $data['secondary_color']])->save();
         $audit->log('website.branding_updated', $tenant, [], $before, $tenant->only('primary_color', 'secondary_color'));
 

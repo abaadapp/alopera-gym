@@ -63,7 +63,24 @@ class NotificationController extends Controller
         $row->read_at ??= now();
         $row->save();
 
-        return $row->url ? redirect()->to($row->url) : redirect()->route('club.notifications.index');
+        $path = $row->url ? self::path($row->url) : null;
+
+        return $path ? redirect()->to($path) : redirect()->route('club.notifications.index');
+    }
+
+    /**
+     * The address of a notification on this site, whatever host it was written with: a link saved under one address
+     * (the app's URL) and opened from another (the club's own domain) kept the user's session only on the first, and
+     * took them to the sign-in page. Only the path and query are followed, so a stored link never leaves the site.
+     */
+    private static function path(string $url): ?string
+    {
+        $parts = parse_url($url);
+        if ($parts === false || ! isset($parts['path'])) {
+            return null;
+        }
+
+        return '/'.ltrim($parts['path'], '/').(isset($parts['query']) ? '?'.$parts['query'] : '');
     }
 
     public function read(Request $request, int $notification): RedirectResponse

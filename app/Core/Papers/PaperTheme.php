@@ -27,7 +27,6 @@ final class PaperTheme
         'field_line' => 14.6,
         'field_gap' => 21.6,
         'section_gap' => 15.0,
-        'logo' => 40.0,
     ];
 
     public const FONTS = ['small' => 0.9, 'normal' => 1.0, 'large' => 1.14];

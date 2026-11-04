@@ -22,7 +22,7 @@ final class PaperTypes
 {
     /** The optional parts a paper may switch on or off. */
     public const FIELDS = [
-        'show_logo' => ['label' => 'شعار النادي', 'hint' => 'يظهر إن كان للنادي شعار محفوظ في الإعدادات العامة'],
+        'show_logo' => ['label' => 'شعار النادي', 'hint' => 'الشعار الرسمي للنادي، يظهر مرة واحدة في رأس الورقة'],
         'show_branch' => ['label' => 'اسم الفرع', 'hint' => 'الفرع الذي تمت فيه العملية — يفيد النادي متعدد الفروع'],
         'show_employee' => ['label' => 'اسم الموظف', 'hint' => 'من أصدر المستند أو استلم المبلغ'],
         'show_phone' => ['label' => 'هاتف العميل'],

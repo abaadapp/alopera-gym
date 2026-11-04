@@ -3,8 +3,6 @@
 namespace App\Core\Papers;
 
 use App\Models\Tenant;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * Who issues the paper: the club's name and contact lines, its tax and CR numbers, and its logo.
@@ -16,7 +14,7 @@ use Illuminate\Support\Facades\Storage;
  */
 final class PaperIssuer
 {
-    private const KEYS = ['name', 'legal_name', 'address', 'city', 'phone', 'email', 'vat_number', 'cr_number', 'currency'];
+    private const KEYS = ['name', 'legal_name', 'address', 'city', 'governorate', 'phone', 'email', 'vat_number', 'cr_number', 'currency'];
 
     /** @return array<string, string> */
     public static function stamp(Tenant $tenant): array
@@ -26,9 +24,11 @@ final class PaperIssuer
             'legal_name' => (string) ($tenant->legal_name ?? ''),
             'address' => (string) ($tenant->address ?? ''),
             'city' => (string) ($tenant->city ?? ''),
+            'governorate' => trim((string) $tenant->setting('governorate', '')),
             'phone' => (string) ($tenant->phone ?? ''),
             'email' => (string) ($tenant->email ?? ''),
-            'vat_number' => trim((string) $tenant->setting('vat_number', '')),
+            // A club not registered for VAT prints no VAT number, even one typed in before.
+            'vat_number' => $tenant->vatRegistered() ? trim((string) $tenant->setting('vat_number', '')) : '',
             'cr_number' => trim((string) $tenant->setting('cr_number', '')),
             'currency' => (string) ($tenant->currency ?: 'OMR'),
         ];
@@ -48,37 +48,5 @@ final class PaperIssuer
         }
 
         return array_map('strval', array_replace($live, array_intersect_key($stamped, array_flip(self::KEYS))));
-    }
-
-    /**
-     * The logo as a data: URI, so the same paper shows it in an isolated preview frame, a public link and the PDF
-     * engine, none of which share the panel's session. Stored logos are WebP; they are converted to PNG, which every
-     * one of the three reads.
-     */
-    public static function logo(Tenant $tenant): ?string
-    {
-        $path = $tenant->logo_path;
-        if (! $path || ! Storage::disk('public')->exists($path)) {
-            return null;
-        }
-        $disk = Storage::disk('public');
-
-        return Cache::remember('paper-logo:'.$tenant->id.':'.md5($path.$disk->lastModified($path)), now()->addDay(), function () use ($disk, $path) {
-            $bytes = $disk->get($path);
-            if ($bytes === null || strlen($bytes) > 3_000_000) {
-                return null;
-            }
-            $image = @imagecreatefromstring($bytes);
-            if ($image === false) {
-                return null;
-            }
-            imagesavealpha($image, true);
-            ob_start();
-            imagepng($image);
-            $png = (string) ob_get_clean();
-            imagedestroy($image);
-
-            return 'data:image/png;base64,'.base64_encode($png);
-        });
     }
 }

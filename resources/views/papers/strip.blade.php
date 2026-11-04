@@ -26,7 +26,7 @@
 <div class="paper">
     <div class="s-center">
         @if (($tpl['show_logo'] ?? true) && $logo)
-            <img src="{{ $logo }}" alt="" style="max-height:34pt; max-width:70%; margin-bottom:4pt">
+            <img src="{{ $logo }}" alt="{{ $issuer['name'] ?? '' }}" style="width:{{ $logoBox['width'] }}pt; height:{{ $logoBox['height'] }}pt; margin-bottom:4pt">
         @endif
         <div class="s-club">{{ $issuer['name'] ?? '' }}</div>
         @if ($header !== '')<div class="s-sub">{{ $header }}</div>@endif
@@ -84,7 +84,13 @@
         @if (count($panel['rows'] ?? []) > 0)
             <table class="s-rows">
                 @foreach ($panel['rows'] as $r)
-                    <tr><td class="s-sub">{{ $r['label'] }}@if (filled($r['sub'] ?? null)) <span dir="ltr">{{ $r['sub'] }}</span>@endif</td><td class="v"><span dir="ltr">{{ $r['value'] }}</span></td></tr>
+                    @if ($panel['words'] ?? false)
+                        <tr><td class="s-sub">{{ $r['label'] }}</td></tr>
+                        {{-- An IBAN is one long word: it may break anywhere rather than run past the strip. --}}
+                        <tr><td class="words" dir="{{ \App\Core\Papers\PaperFormat::dir($r['value']) }}">{{ \App\Core\Papers\PaperFormat::bidi($r['value']) }}</td></tr>
+                    @else
+                        <tr><td class="s-sub">{{ $r['label'] }}@if (filled($r['sub'] ?? null)) <span dir="ltr">{{ $r['sub'] }}</span>@endif</td><td class="v"><span dir="ltr">{{ $r['value'] }}</span></td></tr>
+                    @endif
                 @endforeach
             </table>
         @endif
