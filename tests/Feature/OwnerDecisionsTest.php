@@ -114,4 +114,33 @@ class OwnerDecisionsTest extends TestCase
         $this->actingAs($owner)->post(route('club.payroll.payouts.void', $payout), ['reason' => 'متأخر'])->assertSessionHasErrors();
         $this->asTenant($club, fn () => $this->assertNull($payout->fresh()->voided_at));
     }
+
+    public function test_a_payout_from_the_bank_voided_puts_the_bank_back_and_the_page_shows_it_void(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $bank = $this->asTenant($club, function () {
+            Employee::create(['name' => 'موظف', 'basic_salary' => 250, 'status' => 'active']);
+            $run = app(PayrollService::class)->open(now()->format('Y-m'));
+            app(PayrollService::class)->approve($run);
+            $bank = app(ChartOfAccounts::class)->account('bank');
+            app(PayrollService::class)->pay($run->fresh(), PayrollItem::pluck('id')->all(), $bank, today()->toDateString());
+
+            return $bank;
+        });
+        $payout = $this->asTenant($club, fn () => PayrollPayout::sole());
+        $balance = fn () => $this->asTenant($club, fn () => number_format((float) JournalEntry::join('gym_journal_lines as l', 'l.journal_entry_id', '=', 'gym_journal_entries.id')->where('l.account_id', $bank->id)->sum(\DB::raw('l.debit - l.credit')), 3, '.', ''));
+        $this->assertSame('-250.000', $balance());
+        $this->actingAs($owner)->get(route('club.payroll.payouts'))->assertInertia(fn (Assert $page) => $page->where('payouts.0.voidable', true)->where('payouts.0.voided', false));
+
+        $this->actingAs($owner)->post(route('club.payroll.payouts.void', $payout), ['reason' => 'تحويل لم يتم'])->assertSessionHasNoErrors()->assertSessionHas('success');
+
+        $this->assertSame('0.000', $balance(), 'the bank in the books is back where it was');
+        $this->actingAs($owner)->get(route('club.payroll.payouts'))->assertInertia(fn (Assert $page) => $page
+            ->where('payouts.0.voided', true)->where('payouts.0.voidable', false)->where('payouts.0.void_reason', 'تحويل لم يتم'));
+        // Who may not pay may not void, whatever they send.
+        $reports = $this->staff($club, 'finance');
+        $reports->role->update(['permissions' => ['payroll.reports', 'payroll.salaries']]);
+        $this->actingAs($reports->fresh())->post(route('club.payroll.payouts.void', $payout), ['reason' => 'x'])->assertForbidden();
+    }
 }

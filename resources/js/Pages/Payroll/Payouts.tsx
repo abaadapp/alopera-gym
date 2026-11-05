@@ -2,13 +2,13 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import { Banknote, Clock, Printer, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Modal, PageHeader, Select, StatCard } from '@/Components/ui';
+import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, StatCard } from '@/Components/ui';
 import { useCurrency, useCan } from '@/hooks/useShared';
 import { date, money, isoDate } from '@/lib/format';
 import { RunList, type RunDetail, type RunSummary } from './Runs';
 import { PrintLink } from '@/Components/Printing/PrintButton';
 
-type Payout = { id: number; number: string; paid_on: string; account: string | null; total: string; reference: string | null; items: number; by: string | null; period: string | null };
+type Payout = { id: number; number: string; paid_on: string; account: string | null; total: string; reference: string | null; items: number; by: string | null; period: string | null; voided: boolean; void_reason: string | null; voidable: boolean };
 type MoneyAccount = { id: number; name: string; kind: string; balance: string | null };
 
 interface Props {
@@ -89,14 +89,19 @@ export default function PayrollPayouts({ runs, run, payouts, waiting, accounts, 
                                             <tbody>
                                                 {payouts.map((p) => (
                                                     <tr key={p.id}>
-                                                        <td className="num">{p.number}</td>
+                                                        <td className="num">{p.number}{p.voided && <span title={p.void_reason ?? undefined}><Badge tone="red" className="ms-1">ملغى</Badge></span>}</td>
                                                         <td>{p.period}</td>
                                                         <td className="num">{date(p.paid_on)}</td>
                                                         <td>{p.account}</td>
                                                         <td className="num">{p.items}</td>
                                                         <td className="text-muted">{p.reference ?? '—'}</td>
-                                                        <td className="text-end font-medium num">{m(p.total)}</td>
-                                                        <td className="text-end">{mayPrint && <PrintLink url={route('club.papers.show', { type: 'payroll_payout', id: p.id, print: 1 })} title={p.number} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] text-muted hover:bg-ink/[0.045] hover:text-ink"><Printer className="size-3.5" /> السند</PrintLink>}</td>
+                                                        <td className={`text-end font-medium num ${p.voided ? 'text-muted line-through' : ''}`}>{m(p.total)}</td>
+                                                        <td className="text-end">{can.pay && p.voidable && (
+                                                            <ConfirmAction url={route('club.payroll.payouts.void', p.id)} title={`إلغاء الصرف ${p.number}`} confirmLabel="إلغاء الصرف" reason="سبب الإلغاء" variant="ghost"
+                                                                message={<>سيُلغى صرف <b className="num">{m(p.total)}</b> من «{p.account}» بقيد عكسي بتاريخ الصرف، وتعود رواتبه مستحقة الصرف. الإلغاء في الدفاتر لا يعكس تحويلًا بنكيًا نُفّذ فعلًا؛ استرجعه من البنك إن كان قد نُفّذ.</>}>
+                                                                إلغاء الصرف
+                                                            </ConfirmAction>
+                                                        )}{mayPrint && <PrintLink url={route('club.papers.show', { type: 'payroll_payout', id: p.id, print: 1 })} title={p.number} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] text-muted hover:bg-ink/[0.045] hover:text-ink"><Printer className="size-3.5" /> السند</PrintLink>}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
