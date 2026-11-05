@@ -46,6 +46,16 @@ final class CouponService
         return $coupon;
     }
 
+    /** A sale withdrawn before payment gives its coupon back: the member may use it on the sale that goes ahead. */
+    public function release(Membership $membership): void
+    {
+        $redemptions = CouponRedemption::where('membership_id', $membership->id)->get();
+        foreach ($redemptions as $redemption) {
+            Coupon::whereKey($redemption->coupon_id)->where('used_count', '>', 0)->decrement('used_count');
+            $redemption->delete();
+        }
+    }
+
     public function redeem(Coupon $coupon, Member $member, Membership $membership, string $amount): void
     {
         CouponRedemption::create([

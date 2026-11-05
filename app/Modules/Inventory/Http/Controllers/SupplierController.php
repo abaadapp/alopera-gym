@@ -4,6 +4,7 @@ namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Phone;
+use App\Core\Tenancy\BranchContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Inventory\Models\PurchaseOrder;
 use App\Modules\Inventory\Models\Supplier;
@@ -73,15 +74,18 @@ class SupplierController extends Controller
             return Inertia::render('Inventory/Purchases/SupplierShow', ['supplier' => $details, 'may' => $may]);
         }
 
-        $orders = PurchaseOrder::where('supplier_id', $supplier->id)->with('branch:id,name')->withCount('items')->latest('id')->limit(50)->get();
-        $bills = SupplierBill::where('supplier_id', $supplier->id)->latest('issue_date')->latest('id')->limit(50)->get();
-        $payments = SupplierPayment::where('supplier_id', $supplier->id)->with('bill:id,number,reference', 'account:id,name')->latest('paid_on')->latest('id')->limit(50)->get();
+        // A user tied to a branch sees their branch's dealings with the supplier, as on the purchases lists.
+        $ofBranch = fn ($q) => BranchContext::scope($q);
+        $orders = BranchContext::scope(PurchaseOrder::where('supplier_id', $supplier->id))->with('branch:id,name')->withCount('items')->latest('id')->limit(50)->get();
+        $bills = BranchContext::scope(SupplierBill::where('supplier_id', $supplier->id))->latest('issue_date')->latest('id')->limit(50)->get();
+        $payments = SupplierPayment::where('supplier_id', $supplier->id)->whereHas('bill', $ofBranch)->with('bill:id,number,reference', 'account:id,name')->latest('paid_on')->latest('id')->limit(50)->get();
         // What is bought from them: the products on their orders, with the last price paid.
         $products = DB::table('purchase_order_items as i')->join('purchase_orders as o', 'o.id', '=', 'i.purchase_order_id')->join('products as p', 'p.id', '=', 'i.product_id')
             ->where('o.tenant_id', $supplier->tenant_id)->where('o.supplier_id', $supplier->id)->where('o.status', '!=', PurchaseOrder::CANCELLED)
+            ->tap(fn ($q) => BranchContext::scope($q, 'o.branch_id'))
             ->groupBy('p.id', 'p.name')->selectRaw('p.id, p.name, sum(i.quantity * i.unit_factor) as quantity, max(o.order_date) as last_date, (array_agg(i.unit_cost order by o.order_date desc, i.id desc))[1] as last_cost')
             ->orderBy('p.name')->get();
-        $counted = PurchaseOrder::where('supplier_id', $supplier->id)->whereNotIn('status', [PurchaseOrder::CANCELLED, PurchaseOrder::DRAFT]);
+        $counted = BranchContext::scope(PurchaseOrder::where('supplier_id', $supplier->id))->whereNotIn('status', [PurchaseOrder::CANCELLED, PurchaseOrder::DRAFT]);
 
         // The record of dealings: orders, bills and payments in one line of dates, newest first.
         $log = collect()
@@ -101,8 +105,8 @@ class SupplierController extends Controller
             'totals' => [
                 'purchased' => round((float) $counted->sum('total'), 3),
                 'orders' => $counted->count(),
-                'paid' => round((float) $supplier->payments()->whereNull('reversed_at')->sum('amount'), 3),
-                'due' => round((float) SupplierBill::where('supplier_id', $supplier->id)->where('status', SupplierBill::APPROVED)->sum(DB::raw('total - paid_total')), 3),
+                'paid' => round((float) $supplier->payments()->whereNull('reversed_at')->whereHas('bill', $ofBranch)->sum('amount'), 3),
+                'due' => round((float) BranchContext::scope(SupplierBill::where('supplier_id', $supplier->id))->where('status', SupplierBill::APPROVED)->sum(DB::raw('total - paid_total')), 3),
             ],
         ]);
     }

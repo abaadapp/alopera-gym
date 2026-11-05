@@ -215,7 +215,8 @@ class MemberController extends Controller
     public function portalPassword(Request $request, Member $member, AuditLogger $audit): RedirectResponse
     {
         $data = $request->validate(['password' => ['required', Password::min(8)]]);
-        $member->forceFill(['password' => $data['password']])->save();
+        // A new password ends the sessions remembered with the old one.
+        $member->forceFill(['password' => $data['password'], 'remember_token' => Str::random(60)])->save();
         $audit->log('member.portal_password_set', $member);
 
         return back()->with('success', 'تم تعيين كلمة مرور بوابة العضو.');

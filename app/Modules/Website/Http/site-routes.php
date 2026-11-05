@@ -48,7 +48,7 @@ Route::prefix('portal')->name('portal.')->group(function () {
         Route::post('/login', [PortalAuthController::class, 'authenticate'])->middleware('throttle:login')->name('login.store');
     });
 
-    Route::middleware(['auth:member', 'throttle:portal'])->group(function () {
+    Route::middleware(['auth:member', 'member.active', 'throttle:portal'])->group(function () {
         Route::post('/logout', [PortalAuthController::class, 'logout'])->name('logout');
         Route::get('/', [PortalController::class, 'dashboard'])->name('dashboard');
         Route::get('/renew', [PortalController::class, 'renew'])->name('renew');

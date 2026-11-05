@@ -39,6 +39,13 @@ final class PtService
         $branchId ??= app(BranchContext::class)->assign() ?? $member->branch_id;
 
         return DB::transaction(function () use ($member, $package, $trainer, $branchId) {
+            // The same package waiting for payment is not sold again: a resent request (a double click) made two
+            // subscriptions and two invoices.
+            Member::whereKey($member->id)->lockForUpdate()->first();
+            $waiting = PtSubscription::with('invoice:id,number')->where('member_id', $member->id)->where('pt_package_id', $package->id)->where('status', PtSubscription::PENDING)->first();
+            if ($waiting) {
+                throw new BusinessRuleException('pt.pending', 'للعضو هذه الباقة بانتظار الدفع'.($waiting->invoice ? ' (الفاتورة '.$waiting->invoice->number.')' : '').'. أكمل دفعها أو ألغِها قبل بيعها مرة أخرى.', 'pt_package_id');
+            }
             $subscription = PtSubscription::create([
                 'member_id' => $member->id,
                 'pt_package_id' => $package->id,

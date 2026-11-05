@@ -382,6 +382,10 @@ final class MembershipService
             $membership->openFreeze?->update(['ended_on' => today(), 'days' => 0]);
             $this->bookings->cancelFutureForMembership($membership, 'إلغاء العضوية');
 
+            if ($wasPending) {
+                $this->coupons->release($membership);
+            }
+
             // An unpaid sale is simply withdrawn; money already taken is refunded by finance.
             if ($wasPending && $membership->invoice && Money::isZero($membership->invoice->paid_total) && Money::isZero($membership->invoice->credited_total) && $membership->invoice->isOpen()) {
                 $this->invoices->void($membership->invoice, 'إلغاء العضوية: '.$reason);
@@ -400,6 +404,7 @@ final class MembershipService
         Membership::where('invoice_id', $invoice->id)->where('status', Membership::PENDING)->get()
             ->each(function (Membership $m) {
                 $m->forceFill(['status' => Membership::CANCELLED, 'cancelled_at' => now(), 'cancel_reason' => 'invoice_voided'])->save();
+                $this->coupons->release($m);
                 $this->event($m, 'cancelled', ['reason' => 'invoice_voided']);
             });
     }
