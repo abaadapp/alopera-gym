@@ -13,6 +13,7 @@ use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
@@ -168,6 +169,16 @@ final class LedgerProjector
     }
 
     public function expense(Expense $expense, bool $deleted = false): void
+    {
+        DB::transaction(function () use ($expense, $deleted) {
+            // Edited by two hands at once, each request posts after its own commit with the amount it saved: the books
+            // follow the record as it stands now, read under a lock, whichever posting comes in last.
+            $now = Expense::withTrashed()->whereKey($expense->id)->lockForUpdate()->first();
+            $now ? $this->postExpense($now, $now->trashed()) : $this->postExpense($expense, $deleted);
+        });
+    }
+
+    private function postExpense(Expense $expense, bool $deleted): void
     {
         $current = JournalEntry::with('lines')->where(['source_type' => 'expense', 'source_id' => $expense->id, 'source_event' => 'record'])
             ->whereNull('reversed_at')->latest('revision')->first();
