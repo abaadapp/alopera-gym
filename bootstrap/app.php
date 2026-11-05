@@ -75,6 +75,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: ['webhooks/*']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // A refused form never carries a password back into the session, the account's new one included.
+        $exceptions->dontFlash(['current_password', 'password', 'password_confirmation', 'account_password', 'account_password_confirmation']);
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );

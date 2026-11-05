@@ -1,6 +1,6 @@
-import type { FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
-import { Check, KeyRound, Plus, ShieldCheck, Trash2, UserRound, Wallet } from 'lucide-react';
+import { Check, Eye, EyeOff, KeyRound, Plus, ShieldCheck, Sparkles, Trash2, UserRound, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Field, Input, PageHeader, Select, Textarea, BackLink } from '@/Components/ui';
 import { FormSection, Initials } from '@/Components/Payroll/parts';
@@ -52,6 +52,8 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
         account_email: employee?.email ?? '',
         account_role_id: '',
         account_branch_id: '',
+        account_password: '',
+        account_password_confirmation: '',
         account_custom: false,
         account_permissions: [] as string[],
     });
@@ -60,6 +62,15 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
         ? access?.roles.find((r) => String(r.id) === form.data.account_role_id)?.permissions ?? []
         : access?.users.find((u) => String(u.id) === form.data.account_user_id)?.permissions ?? [];
     const shownPermissions = form.data.account_custom ? form.data.account_permissions : roleList();
+    // The sign-in email follows the email above until it is changed here, so the two never disagree by accident.
+    const [ownLoginEmail, setOwnLoginEmail] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const setEmail = (email: string) => form.setData((d) => ({ ...d, email, account_email: ownLoginEmail ? d.account_email : email }));
+    const generate = () => {
+        const password = strongPassword();
+        form.setData((d) => ({ ...d, account_password: password, account_password_confirmation: password }));
+        setShowPassword(true);
+    };
     const setAllowance = (i: number, patch: Partial<Allowance>) => form.setData('allowances', form.data.allowances.map((a, j) => (j === i ? { ...a, ...patch } : a)));
 
     const submit = (e: FormEvent) => {
@@ -96,7 +107,7 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
                             </Select>
                         </Field>
                         <Field label="رقم الهاتف" error={form.errors.phone}><Input dir="ltr" value={form.data.phone} onChange={(e) => form.setData('phone', e.target.value)} /></Field>
-                        <Field label="البريد الإلكتروني" error={form.errors.email}><Input dir="ltr" type="email" value={form.data.email} onChange={(e) => form.setData('email', e.target.value)} /></Field>
+                        <Field label="البريد الإلكتروني" error={form.errors.email}><Input dir="ltr" type="email" value={form.data.email} onChange={(e) => setEmail(e.target.value)} /></Field>
                         <Field label="الفرع" error={form.errors.branch_id}>
                             <Select value={form.data.branch_id} onChange={(e) => form.setData('branch_id', e.target.value)} placeholder="الفرع الرئيسي">
                                 {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -120,7 +131,7 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
                 {access ? (
                     <FormSection icon={KeyRound} title="الدخول والأمان" hint="بالبريد وكلمة المرور يدخل الموظف اللوحة — الدور يحدد ما يفتحه">
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                            {([['none', 'بلا حساب', 'موظف لا يدخل اللوحة'], ['link', 'ربط حساب موجود', 'مستخدم أُنشئ من قبل'], ['new', 'فتح حساب جديد', 'تُعرض كلمة مرور مؤقتة مرة واحدة']] as const).map(([mode, title, hint]) => (
+                            {([['none', 'بلا حساب', 'موظف لا يدخل اللوحة'], ['link', 'ربط حساب موجود', 'مستخدم أُنشئ من قبل'], ['new', 'فتح حساب جديد', 'ببريد وكلمة مرور تحددهما الآن']] as const).map(([mode, title, hint]) => (
                                 <button key={mode} type="button" onClick={() => form.setData('account_mode', mode)} className={cn('rounded-[10px] border p-3 text-start transition-colors', form.data.account_mode === mode ? 'border-[#111] bg-[#f9fafb]' : 'border-[#e5e7eb] hover:bg-[#f9fafb]')}>
                                     <span className="text-sm font-medium text-ink">{title}</span>
                                     <span className="mt-1 block text-[12px] text-[#6b7280]">{hint}</span>
@@ -136,7 +147,7 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
                         )}
                         {form.data.account_mode === 'new' && (
                             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-                                <Field label="بريد الدخول" error={form.errors.account_email} required><Input dir="ltr" type="email" value={form.data.account_email} onChange={(e) => form.setData('account_email', e.target.value)} /></Field>
+                                <Field label="بريد الدخول" hint={ownLoginEmail ? 'بريد للدخول غير البريد أعلاه' : 'هو البريد أعلاه — يتغير معه ما لم تغيّره هنا'} error={form.errors.account_email} required><Input dir="ltr" type="email" autoComplete="off" value={form.data.account_email} onChange={(e) => { setOwnLoginEmail(true); form.setData('account_email', e.target.value); }} /></Field>
                                 <Field label="الدور" error={form.errors.account_role_id} required>
                                     <Select value={form.data.account_role_id} onChange={(e) => form.setData('account_role_id', e.target.value)} placeholder="اختر الدور">
                                         {access.roles.map((r) => <option key={r.id} value={r.id} disabled={!r.assignable}>{r.name}{!r.assignable ? ' — يفتح ما لا تملكه' : ''}</option>)}
@@ -147,6 +158,16 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
                                         <option value="">كل الفروع</option>
                                         {access.branches.map((b) => <option key={b.id} value={b.id}>{b.name} فقط</option>)}
                                     </Select>
+                                </Field>
+                                <Field label="كلمة المرور" className="md:col-span-3" hint="ثمانية أحرف على الأقل، أو اتركها فارغة فتُولَّد كلمة مؤقتة وتُعرض لك مرة واحدة بعد الحفظ. تُحفظ مُجزّأة ولا تُعرض بعدها." error={form.errors.account_password}>
+                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                                        <div className="relative">
+                                            <Input dir="ltr" type={showPassword ? 'text' : 'password'} autoComplete="new-password" placeholder="كلمة المرور" aria-label="كلمة المرور" className="pl-10" value={form.data.account_password} onChange={(e) => form.setData('account_password', e.target.value)} />
+                                            <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'} className="absolute inset-y-0 left-0 grid w-10 place-items-center text-[#9ca3af] hover:text-ink">{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>
+                                        </div>
+                                        <Input dir="ltr" type={showPassword ? 'text' : 'password'} autoComplete="new-password" placeholder="تأكيد كلمة المرور" aria-label="تأكيد كلمة المرور" value={form.data.account_password_confirmation} onChange={(e) => form.setData('account_password_confirmation', e.target.value)} />
+                                        <Button type="button" variant="outline" icon={<Sparkles className="size-3.5" />} onClick={generate}>توليد كلمة قوية</Button>
+                                    </div>
                                 </Field>
                             </div>
                         )}
@@ -223,4 +244,16 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
             </form>
         </ClubLayout>
     );
+}
+
+/** Sixteen characters from upper and lower case, digits and symbols, each at least once, from the browser's secure random source. */
+function strongPassword(): string {
+    const sets = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnpqrstuvwxyz', '23456789', '!@#$%*?-_'];
+    const pick = (chars: string) => chars[crypto.getRandomValues(new Uint32Array(1))[0] % chars.length];
+    const chars = [...sets.map(pick), ...Array.from({ length: 12 }, () => pick(sets.join('')))];
+    for (let i = chars.length - 1; i > 0; i--) {
+        const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);
+        [chars[i], chars[j]] = [chars[j], chars[i]];
+    }
+    return chars.join('');
 }

@@ -432,7 +432,9 @@ class EmployeeController extends Controller
             'account_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'account_role_id' => ['required', TenantRule::exists('roles')],
             'account_branch_id' => ['nullable', TenantRule::exists('branches')],
-        ], [], ['account_email' => 'البريد الإلكتروني للدخول', 'account_role_id' => 'الدور']);
+            // Set here, or left empty for a temporary one shown once; saved hashed either way, never shown again.
+            'account_password' => ['nullable', 'string', 'confirmed', Password::defaults()],
+        ], [], ['account_email' => 'البريد الإلكتروني للدخول', 'account_role_id' => 'الدور', 'account_password' => 'كلمة المرور']);
         if (! Grants::mayAssign($request->user(), Role::findOrFail($data['account_role_id']))) {
             throw ValidationException::withMessages(['account_role_id' => 'لا يمكنك إسناد دور يفتح ما لا تملكه.']);
         }
@@ -440,7 +442,7 @@ class EmployeeController extends Controller
             throw ValidationException::withMessages(['account_branch_id' => 'حسابك مرتبط بفرعك: الحسابات التي تديرها تبقى في فرعك.']);
         }
 
-        return ['mode' => 'new', 'email' => strtolower($data['account_email']), 'role_id' => (int) $data['account_role_id'], 'branch_id' => $data['account_branch_id'] ?? null] + $this->ownListRequest($request);
+        return ['mode' => 'new', 'email' => strtolower($data['account_email']), 'role_id' => (int) $data['account_role_id'], 'branch_id' => $data['account_branch_id'] ?? null, 'password' => $data['account_password'] ?? null] + $this->ownListRequest($request);
     }
 
     /**
@@ -467,7 +469,8 @@ class EmployeeController extends Controller
 
     private function createAccount(Request $request, Employee $employee, array $account): void
     {
-        $password = self::temporaryPassword();
+        $chosen = $account['password'] ?? null;
+        $password = $chosen ?? self::temporaryPassword();
         $user = new User(['name' => $employee->name, 'email' => $account['email'], 'phone' => $employee->phone, 'password' => $password]);
         $user->tenant_id = $this->tenants->id();
         $user->role_id = $account['role_id'];
@@ -476,8 +479,10 @@ class EmployeeController extends Controller
         $employee->forceFill(['user_id' => $user->id])->save();
         $this->applyOwnList($request, $user, $account);
         app(AuditLogger::class)->log('user.created', $user, ['role_id' => $user->role_id, 'employee' => $employee->name, 'custom_permissions' => $user->custom_permissions]);
-        // Shown once on the next page, never stored readable.
-        session()->flash('password', $password);
+        // A temporary one is shown once on the next page, never stored readable; one set here is not shown again.
+        if ($chosen === null) {
+            session()->flash('password', $password);
+        }
     }
 
     private function accountOf(Employee $employee): User
