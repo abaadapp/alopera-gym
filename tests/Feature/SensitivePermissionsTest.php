@@ -87,6 +87,41 @@ class SensitivePermissionsTest extends TestCase
         $this->assertSame($exporting->id, $user->fresh()->role_id);
     }
 
+    public function test_an_account_without_a_staff_file_gets_its_own_list_on_the_users_page_under_the_same_rules(): void
+    {
+        $club = $this->club();
+        $actor = $this->holding($club, ['users.manage', 'checkin.perform', 'members.view', 'reports.export']);
+        $user = $this->holding($club, ['members.view']);
+        $exporting = $this->role($club, ['members.view', 'reports.export']);
+        $send = fn (User $as, array $extra) => $this->actingAs($as)->put(route('club.users.update', $user), $extra + ['name' => $user->name, 'email' => $user->email, 'role_id' => $user->fresh()->role_id, 'is_active' => true]);
+
+        // Someone else: the ordinary permission given, the sensitive one not, nor a role carrying it, nor their own list.
+        $send($actor, ['custom' => true, 'permissions' => ['checkin.perform', 'reports.export']])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertTrue($user->fresh()->hasOwnPermissions());
+        $this->assertContains('checkin.perform', $user->fresh()->permissions());
+        $this->assertNotContains('reports.export', $user->fresh()->permissions());
+        $send($actor, ['role_id' => $exporting->id])->assertSessionHasErrors('role_id');
+        $this->actingAs($actor)->put(route('club.users.update', $actor), ['name' => $actor->name, 'email' => $actor->email, 'role_id' => $actor->role_id, 'is_active' => true, 'custom' => true, 'permissions' => ['roles.manage']])->assertForbidden();
+
+        // The owner: the sensitive one given, then the account back on its role's list.
+        $owner = $this->owner($club);
+        $send($owner, ['custom' => true, 'permissions' => ['checkin.perform', 'reports.export']])->assertSessionHasNoErrors();
+        $this->assertContains('reports.export', $user->fresh()->permissions());
+        $send($owner, ['custom' => false])->assertSessionHasNoErrors();
+        $this->assertFalse($user->fresh()->hasOwnPermissions());
+        $this->assertSame(['members.view'], $user->fresh()->permissions());
+
+        // An edit that does not send the list leaves it as it was.
+        $send($owner, ['custom' => true, 'permissions' => ['members.view', 'checkin.perform']])->assertSessionHasNoErrors();
+        $send($owner, ['name' => 'اسم آخر'])->assertSessionHasNoErrors();
+        $this->assertEqualsCanonicalizing(['members.view', 'checkin.perform'], $user->fresh()->permissions());
+    }
+
+    public function test_every_permission_says_what_it_allows(): void
+    {
+        $this->assertSame([], array_diff(PermissionRegistry::all(), array_keys(PermissionRegistry::DESCRIPTIONS)));
+    }
+
     public function test_a_persons_own_list_takes_sensitive_permissions_from_the_owner_only(): void
     {
         $club = $this->club();

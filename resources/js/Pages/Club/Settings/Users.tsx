@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { Plus, UserRound, UserX } from 'lucide-react';
 import { SettingsScreen } from '@/Components/Settings';
+import PermissionPicker, { type PermissionGroup } from '@/Components/Permissions/PermissionPicker';
 import { Badge, Button, Card, DataTable, Field, Input, Modal, RowActions, Select, Toggle, type Column } from '@/Components/ui';
 import { useShared } from '@/hooks/useShared';
 import type { Option } from '@/types';
@@ -21,16 +22,21 @@ interface StaffRow {
     last_login_at: string | null;
     own_permissions: boolean;
     employee_id: number | null;
+    custom: string[] | null;
     may_manage: boolean;
 }
 
 interface Props {
     users: StaffRow[];
-    roles: (Option & { key: string; assignable: boolean })[];
+    roles: (Option & { key: string; assignable: boolean; permissions: string[] })[];
     branches: Option[];
+    groups: PermissionGroup[];
+    decides: string[];
+    sensitive: string[];
+    requires: Record<string, string>;
 }
 
-export default function Users({ users, roles, branches }: Props) {
+export default function Users({ users, roles, branches, groups, decides, sensitive, requires }: Props) {
     const { auth } = useShared();
     const [editing, setEditing] = useState<StaffRow | 'new' | null>(null);
     const [stopping, setStopping] = useState<StaffRow | null>(null);
@@ -86,7 +92,7 @@ export default function Users({ users, roles, branches }: Props) {
                 </div>
                 <DataTable rows={users} columns={columns} rowKey={(u) => u.id} params={{}} empty="لا توجد حسابات" />
             </Card>
-            {editing && <UserModal user={editing === 'new' ? null : editing} roles={roles} branches={branches} onClose={() => setEditing(null)} />}
+            {editing && <UserModal user={editing === 'new' ? null : editing} isMe={editing !== 'new' && me(editing)} roles={roles} branches={branches} picker={{ groups, decides, sensitive, requires }} onClose={() => setEditing(null)} />}
             <Modal open={stopping !== null} onClose={() => setStopping(null)} size="confirm" title="إيقاف الحساب" footer={<><Button variant="outline" onClick={() => setStopping(null)} disabled={stopRequest.busy}>إلغاء</Button><Button variant="danger" loading={stopRequest.busy} onClick={stop}>إيقاف</Button></>}>
                 <p className="text-sm text-[#4b4b4b]">إيقاف حساب {stopping?.name}؟ لن يتمكن من الدخول، ويبقى سجله كما هو.</p>
                 {stopRequest.error && <p className="mt-2 text-sm text-red-600" role="alert">{stopRequest.error}</p>}
@@ -95,7 +101,11 @@ export default function Users({ users, roles, branches }: Props) {
     );
 }
 
-function UserModal({ user, roles, branches, onClose }: { user: StaffRow | null; roles: Props['roles']; branches: Option[]; onClose: () => void }) {
+/** An account's details and reach; for someone else's account, also its permissions: its role's, or a list of its own. */
+function UserModal({ user, isMe, roles, branches, picker, onClose }: { user: StaffRow | null; isMe: boolean; roles: Props['roles']; branches: Option[]; picker: Pick<Props, 'groups' | 'decides' | 'sensitive' | 'requires'>; onClose: () => void }) {
+    const roleList = (id: string) => roles.find((r) => String(r.id) === id)?.permissions ?? [];
+    // Not one's own permissions, nor the owner's (who keeps everything).
+    const permits = user !== null && !isMe && user.role_key !== 'owner';
     const form = useForm({
         name: user?.name ?? '',
         email: user?.email ?? '',
@@ -104,17 +114,22 @@ function UserModal({ user, roles, branches, onClose }: { user: StaffRow | null; 
         branch_id: user?.branch_id ? String(user.branch_id) : '',
         is_active: user?.is_active ?? true,
         password: '',
+        custom: user?.custom !== null && user?.custom !== undefined,
+        permissions: user?.custom ?? roleList(user?.role_id ? String(user.role_id) : ''),
     });
+    const shown = form.data.custom ? form.data.permissions : roleList(form.data.role_id);
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
         const options = { preserveScroll: true, onSuccess: onClose };
+        // The list goes only from where it is shown, so an edit elsewhere never touches it.
+        form.transform((d) => (permits ? d : { ...d, custom: undefined, permissions: undefined }));
         if (user) form.put(route('club.users.update', user.id), options);
         else form.post(route('club.users.store'), options);
     };
 
     return (
-        <Modal open onClose={onClose} title={user ? `تعديل: ${user.name}` : 'مستخدم جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
+        <Modal open onClose={onClose} size={permits ? 'wide' : undefined} title={user ? `تعديل: ${user.name}` : 'مستخدم جديد'} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}>
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
                 <Field label="الاسم" error={form.errors.name} required className="sm:col-span-2">
                     <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} />
@@ -139,6 +154,26 @@ function UserModal({ user, roles, branches, onClose }: { user: StaffRow | null; 
                     <Input type="password" dir="ltr" autoComplete="new-password" value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} />
                 </Field>
                 {user && <Toggle checked={form.data.is_active} onChange={(v) => form.setData('is_active', v)} label="الحساب نشط" />}
+                {permits && (
+                    <div className="space-y-3 sm:col-span-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            {[{ on: false, title: 'اتبع صلاحيات الدور', hint: 'تتبدّل صلاحياته كلما تبدّل دوره' }, { on: true, title: 'خصّص لهذا الحساب', hint: 'قائمة له وحده — لا تتبدّل مع الدور' }].map((opt) => (
+                                <button key={String(opt.on)} type="button" onClick={() => form.setData((d) => ({ ...d, custom: opt.on, permissions: opt.on ? (user?.custom ?? roleList(d.role_id)) : d.permissions }))}
+                                    className={`rounded-[10px] border p-3 text-start transition-colors ${form.data.custom === opt.on ? 'border-[#111] bg-[#f9fafb]' : 'border-[#e5e7eb] hover:bg-[#f9fafb]'}`}>
+                                    <span className="flex items-center gap-2">
+                                        <span className={`flex size-4 shrink-0 items-center justify-center rounded-full border ${form.data.custom === opt.on ? 'border-[#111]' : 'border-[#d1d5db]'}`}>{form.data.custom === opt.on && <span className="size-2 rounded-full bg-[#111]" />}</span>
+                                        <span className="text-sm font-medium text-ink">{opt.title}</span>
+                                    </span>
+                                    <span className="mt-1 block ps-6 text-[12px] text-[#6b7280]">{opt.hint}</span>
+                                </button>
+                            ))}
+                        </div>
+                        {!form.data.custom && <p className="text-[12px] text-muted">ما يفتحه الدور المختار — يُعرض ولا يُعدَّل من هنا. للإضافة إليه أو الحذف منه لهذا الحساب وحده اختر «خصّص لهذا الحساب»؛ الدور نفسه لا يتغير.</p>}
+                        <PermissionPicker groups={picker.groups} value={shown} onChange={(next) => form.setData('permissions', next)} editable={form.data.custom} mine={(p) => picker.decides.includes(p)} sensitive={picker.sensitive} requires={picker.requires} />
+                        {(form.errors as Record<string, string>).custom && <p className="text-xs text-red-600">{(form.errors as Record<string, string>).custom}</p>}
+                        {form.errors.permissions && <p className="text-xs text-red-600">{form.errors.permissions}</p>}
+                    </div>
+                )}
                 <p className="text-[12px] text-[#9ca3af] sm:col-span-2">لربط حساب مدرب بملفه في الجدول، اختر الحساب من صفحة فريق التدريب.</p>
             </form>
         </Modal>
