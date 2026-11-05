@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { ArrowLeftRight, Banknote, CreditCard, Landmark, Scale, TrendingDown, TrendingUp, Users, Wallet } from 'lucide-react';
+import { ArrowLeftRight, Banknote, CreditCard, HandCoins, Landmark, Scale, TrendingDown, TrendingUp, Users, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
 import { Badge, Card, CardHeader, EmptyState, PageHeader, StatCard } from '@/Components/ui';
@@ -11,7 +11,7 @@ type MoneyAccount = { id: number; code: string; name: string; kind: string; bala
 type Entry = { id: number; number: string; date: string; description: string; total: string; source: string; reversed: boolean; is_reversal: boolean };
 
 interface Props {
-    summary: Record<'cash' | 'banks' | 'clearing' | 'receivable' | 'salaries_payable' | 'vat_payable' | 'revenue' | 'expenses' | 'salaries' | 'net', string>;
+    summary: Record<'cash' | 'banks' | 'clearing' | 'receivable' | 'salaries_payable' | 'vat_payable' | 'suppliers_payable' | 'revenue' | 'expenses' | 'salaries' | 'net', string>;
     accounts: MoneyAccount[];
     overdue: { count: number; amount: string };
     unpaidSalaries: string;
@@ -44,11 +44,12 @@ export default function FinanceSummary({ summary, accounts, overdue, unpaidSalar
                 <StatCard label="ذمم الأعضاء" value={m(summary.receivable)} hint={overdue.count ? `${overdue.count} فاتورة متأخرة بـ ${m(overdue.amount)}` : 'لا فواتير متأخرة'} icon={<Users className="size-5" />} tone={overdue.count ? 'amber' : 'gray'} href={route('club.dues')} />
             </div>
 
-            <div className="mb-6 grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mb-6 grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
                 <StatCard label="الإيرادات" value={m(summary.revenue)} icon={<TrendingUp className="size-5" />} tone="green" />
                 <StatCard label="المصروفات" value={m(summary.expenses)} hint={`منها الرواتب ${m(summary.salaries)}`} icon={<TrendingDown className="size-5" />} tone="red" />
                 <StatCard label="صافي النتيجة" value={<span className={cn(negative && 'text-red-700')}>{m(summary.net)}</span>} icon={<Scale className="size-5" />} tone={negative ? 'red' : 'brand'} href={route('club.reports.show', { report: 'statements', ...periodParams(period) })} />
                 <StatCard label="رواتب معتمدة لم تُصرف" value={m(unpaidSalaries)} hint={Number(summary.vat_payable) ? `ضريبة مستحقة ${m(summary.vat_payable)}` : undefined} icon={<Wallet className="size-5" />} tone={Number(unpaidSalaries) ? 'amber' : 'gray'} href={canPayouts ? route('club.payroll.payouts') : undefined} />
+                <StatCard label="مستحقات الموردين" value={m(summary.suppliers_payable)} hint="سندات معتمدة لم تُسدّد بعد" icon={<HandCoins className="size-5" />} tone={Number(summary.suppliers_payable) ? 'amber' : 'gray'} href={can('purchases.view') ? route('club.reports.show', { report: 'supplier-dues' }) : undefined} />
             </div>
 
             <div className="grid gap-4 lg:grid-cols-3">

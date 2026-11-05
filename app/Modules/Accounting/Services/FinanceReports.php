@@ -122,6 +122,8 @@ final class FinanceReports
             'receivable' => $this->signed($this->chart->account('receivable'), $totals),
             'salaries_payable' => $this->signed($this->chart->account('salaries_payable'), $totals),
             'vat_payable' => $this->signed($this->chart->account('vat_payable'), $totals),
+            // What the approved supplier bills still owe: the balance their entries and payments leave on 2103.
+            'suppliers_payable' => $this->signed($this->chart->account('suppliers_payable'), $totals),
             'revenue' => $statement['total_revenue'],
             'expenses' => $statement['total_expenses'],
             'salaries' => $salaries,
