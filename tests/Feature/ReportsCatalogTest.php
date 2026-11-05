@@ -202,6 +202,19 @@ class ReportsCatalogTest extends TestCase
         $this->actingAs($this->staff($club, 'trainer'))->get(route('club.reports.index'))->assertForbidden();
     }
 
+    public function test_the_dues_file_carries_the_by_type_table_its_page_shows(): void
+    {
+        [, $owner] = $this->busyClub();
+
+        $byType = $this->actingAs($owner)->get(route('club.reports.show', ['report' => 'dues']))->viewData('page')['props']['data']['byType'];
+        $this->assertNotEmpty($byType);
+        $file = $this->actingAs($owner)->get(route('club.reports.export', ['report' => 'dues', 'format' => 'csv']))->streamedContent();
+        $this->assertStringContainsString('حسب نوع الفاتورة', $file);
+        foreach ($byType as $row) {
+            $this->assertStringContainsString($row['label'].','.$row['count'].','.number_format($row['amount'], 3, '.', ''), $file);
+        }
+    }
+
     public function test_money_and_salaries_are_for_those_allowed_and_exporting_is_a_permission_of_its_own(): void
     {
         $club = $this->club();
