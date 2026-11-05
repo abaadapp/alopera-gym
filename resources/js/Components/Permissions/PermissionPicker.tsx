@@ -1,0 +1,99 @@
+import { useState } from 'react';
+import { Search, ShieldAlert } from 'lucide-react';
+import { cn } from '@/lib/cn';
+import { togglePermission } from '@/lib/permissions';
+
+export type PermissionGroup = { key: string; label: string; permissions: { key: string; label: string }[] };
+type Filter = 'all' | 'chosen' | 'sensitive';
+
+/**
+ * Every permission of the club in its section, a box before each: search, all / the chosen / the sensitive, a whole
+ * section on or off, how many are chosen. A box the editor may not decide (not held, or sensitive for anyone but the
+ * owner) stays as it is; the server keeps it so whatever is sent.
+ */
+export default function PermissionPicker({ groups, value, onChange, editable, mine, sensitive, requires }: {
+    groups: PermissionGroup[];
+    value: string[];
+    onChange: (next: string[]) => void;
+    editable: boolean;
+    mine: (permission: string) => boolean;
+    sensitive: string[];
+    requires: Record<string, string>;
+}) {
+    const [query, setQuery] = useState('');
+    const [filter, setFilter] = useState<Filter>('all');
+    const all = groups.flatMap((g) => g.permissions.map((p) => p.key));
+    const chosen = all.filter((p) => value.includes(p)).length;
+    const q = query.trim();
+    const visible = groups
+        .map((g) => ({ ...g, permissions: g.permissions.filter((p) =>
+            (filter !== 'chosen' || value.includes(p.key)) && (filter !== 'sensitive' || sensitive.includes(p.key))
+            && (q === '' || p.label.includes(q) || g.label.includes(q) || p.key.includes(q.toLowerCase()))) }))
+        .filter((g) => g.permissions.length > 0);
+    const may = (p: string) => editable && mine(p);
+    const toggle = (p: string) => may(p) && onChange(togglePermission(value, p, requires, mine));
+    const setSection = (g: PermissionGroup, on: boolean) => {
+        const keys = g.permissions.map((p) => p.key).filter(may);
+        if (on) {
+            onChange(Array.from(new Set([...value, ...keys, ...keys.map((k) => requires[k]).filter((n): n is string => !!n && mine(n))])));
+            return;
+        }
+        const left = value.filter((p) => !keys.includes(p));
+        onChange(left.filter((p) => !(requires[p] && !left.includes(requires[p]) && mine(p))));
+    };
+    const filters: [Filter, string, number][] = [['all', 'الكل', all.length], ['chosen', 'المختارة', chosen], ['sensitive', 'الحساسة', sensitive.filter((p) => all.includes(p)).length]];
+
+    return (
+        <div className="space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <label className="relative block flex-1">
+                    <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[#9ca3af]" />
+                    <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ابحث عن صلاحية أو قسم"
+                        className="h-10 w-full rounded-[10px] border border-[#e5e7eb] bg-white ps-9 pe-3 text-sm outline-none focus:border-[#111]" />
+                </label>
+                <div className="flex shrink-0 gap-1 rounded-[10px] bg-[#f2f2f0] p-1" role="group" aria-label="تصفية الصلاحيات">
+                    {filters.map(([key, label, n]) => (
+                        <button key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}
+                            className={cn('rounded-[8px] px-3 py-1.5 text-[12px] font-medium transition-colors', filter === key ? 'bg-white text-ink shadow-sm' : 'text-[#6b7280] hover:text-ink')}>
+                            {label} <span className="num">{n}</span>
+                        </button>
+                    ))}
+                </div>
+            </div>
+            <p className="text-[12px] text-muted" aria-live="polite">المختارة <span className="num font-medium text-ink">{chosen}</span> من <span className="num">{all.length}</span></p>
+            {visible.length === 0 && <p className="rounded-[12px] border border-dashed border-line p-5 text-center text-[13px] text-[#9ca3af]">لا صلاحيات مطابقة.</p>}
+            <div className="grid gap-3 md:grid-cols-2">
+                {visible.map((g) => {
+                    const inSection = g.permissions.filter((p) => value.includes(p.key)).length;
+                    return (
+                        <div key={g.key} className="rounded-2xl border border-line p-4">
+                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                <p className="font-medium">{g.label} <span className="num text-[12px] font-normal text-muted">{inSection}/{g.permissions.length}</span></p>
+                                {editable && (
+                                    <span className="flex gap-3 text-[12px]">
+                                        <button type="button" className="text-[#111] underline-offset-2 hover:underline" onClick={() => setSection(g, true)}>تحديد الكل</button>
+                                        <button type="button" className="text-[#6b7280] underline-offset-2 hover:underline" onClick={() => setSection(g, false)}>إلغاء التحديد</button>
+                                    </span>
+                                )}
+                            </div>
+                            <div className="space-y-1.5">
+                                {g.permissions.map((p) => {
+                                    const isSensitive = sensitive.includes(p.key);
+                                    const locked = editable && !mine(p.key);
+                                    return (
+                                        <label key={p.key} title={locked ? (isSensitive ? 'الصلاحيات الحساسة يمنحها صاحب النشاط وحده.' : 'لا تملك هذه الصلاحية — ولا تُمنح ما لا تملك.') : undefined}
+                                            className={cn('flex items-start gap-2 text-sm text-ink/85', may(p.key) ? 'cursor-pointer' : 'cursor-not-allowed', editable && !may(p.key) && 'opacity-60')}>
+                                            <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-[#111]" checked={value.includes(p.key)} onChange={() => toggle(p.key)} disabled={!may(p.key)} />
+                                            <span className="min-w-0 flex-1">{p.label}</span>
+                                            {isSensitive && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#fffbeb] px-2 py-0.5 text-[11px] font-medium text-[#b45309]"><ShieldAlert className="size-3" />حساسة</span>}
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}

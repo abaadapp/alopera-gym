@@ -7,7 +7,7 @@ import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Inpu
 import { FactList, Initials } from '@/Components/Payroll/parts';
 import { useCurrency, useShared, useCan } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
-import { togglePermission } from '@/lib/permissions';
+import PermissionPicker from '@/Components/Permissions/PermissionPicker';
 import { date, money, number, phone, isoDate } from '@/lib/format';
 import { statusTone, type Can, type EmployeeRow } from './Employees';
 import PrintButton from '@/Components/Printing/PrintButton';
@@ -22,6 +22,8 @@ type Access = {
     branches: { id: number; name: string }[];
     groups: { key: string; label: string; permissions: { key: string; label: string }[] }[];
     grantable: string[];
+    decides?: string[];
+    sensitive?: string[];
     requires: Record<string, string>;
 };
 type HistoryRow = { id: number; event: string; actor: string | null; at: string; old: Record<string, unknown> | null; new: Record<string, unknown> | null; properties: Record<string, unknown> | null };
@@ -303,9 +305,8 @@ function AccessModal({ employeeId, account, access, onClose }: { employeeId: num
         custom: account.own_permissions,
         permissions: account.custom ?? role(String(account.role_id ?? ''))?.permissions ?? [],
     });
-    const mine = (p: string) => access.grantable.includes(p);
+    const mine = (p: string) => (access.decides ?? access.grantable).includes(p);
     const shown = form.data.custom ? form.data.permissions : role(form.data.role_id)?.permissions ?? [];
-    const toggle = (p: string) => form.data.custom && mine(p) && form.setData('permissions', togglePermission(form.data.permissions, p, access.requires, mine));
     const submit = (e: FormEvent) => {
         e.preventDefault();
         form.put(route('club.employees.access', employeeId), { preserveScroll: true, onSuccess: onClose });
@@ -340,22 +341,8 @@ function AccessModal({ employeeId, account, access, onClose }: { employeeId: num
                         </button>
                     ))}
                 </div>
-                {!form.data.custom && <p className="text-[12px] text-muted">ما يفتحه الدور المختار — يُعرض ولا يُعدَّل من هنا.</p>}
-                <div className="grid gap-3 md:grid-cols-2">
-                    {access.groups.map((g) => (
-                        <div key={g.key} className="rounded-2xl border border-line p-4">
-                            <p className="mb-2 font-medium">{g.label}</p>
-                            <div className="space-y-1.5">
-                                {g.permissions.map((p) => (
-                                    <label key={p.key} title={form.data.custom && !mine(p.key) ? 'لا تملك هذه الصلاحية — ولا تُمنح ما لا تملك.' : undefined} className={cn('flex items-center gap-2 text-sm text-ink/85', form.data.custom && mine(p.key) ? 'cursor-pointer' : 'cursor-not-allowed opacity-60')}>
-                                        <input type="checkbox" className="size-4 accent-[#111]" checked={shown.includes(p.key)} onChange={() => toggle(p.key)} disabled={!form.data.custom || !mine(p.key)} />
-                                        {p.label}
-                                    </label>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                {!form.data.custom && <p className="text-[12px] text-muted">ما يفتحه الدور المختار — يُعرض ولا يُعدَّل من هنا. للإضافة إليه أو الحذف منه لهذا الموظف وحده اختر «خصّص لهذا الموظف»؛ الدور نفسه لا يتغير.</p>}
+                <PermissionPicker groups={access.groups} value={shown} onChange={(next) => form.setData('permissions', next)} editable={form.data.custom} mine={mine} sensitive={access.sensitive ?? []} requires={access.requires} />
                 {form.errors.permissions && <p className="text-xs text-red-600">{form.errors.permissions}</p>}
             </form>
         </Modal>

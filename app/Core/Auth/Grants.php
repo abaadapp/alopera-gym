@@ -47,7 +47,8 @@ final class Grants
             return $actor->isOwner();
         }
 
-        return self::covers($actor, $role->expandedPermissions());
+        // Giving a role is giving its permissions: one carrying a sensitive permission is the owner's to give.
+        return self::mayGive($actor, $role->expandedPermissions());
     }
 
     /**

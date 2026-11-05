@@ -65,17 +65,34 @@ class SensitivePermissionsTest extends TestCase
         $this->assertEqualsCanonicalizing(['checkin.perform', 'invoices.void'], $role->fresh()->permissions);
     }
 
+    public function test_a_role_carrying_a_sensitive_permission_is_not_given_by_someone_else_holding_it(): void
+    {
+        $club = $this->club();
+        $actor = $this->holding($club, ['employees.view', 'employees.access', 'checkin.perform', 'members.view', 'reports.export']);
+        $user = $this->holding($club, ['members.view']);
+        $employee = $this->employee($club, ['user_id' => $user->id]);
+        $exporting = $this->role($club, ['members.view', 'reports.export']);
+        $plain = $this->role($club, ['members.view', 'checkin.perform']);
+
+        $this->actingAs($actor)->put(route('club.employees.access', $employee), ['role_id' => $exporting->id, 'is_active' => true, 'custom' => false])->assertRedirect()->assertSessionHasErrors('role_id');
+        $this->assertNotSame($exporting->id, $user->fresh()->role_id);
+        $this->actingAs($actor)->put(route('club.employees.access', $employee), ['role_id' => $plain->id, 'is_active' => true, 'custom' => false])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame($plain->id, $user->fresh()->role_id);
+        $this->actingAs($this->owner($club))->put(route('club.employees.access', $employee), ['role_id' => $exporting->id, 'is_active' => true, 'custom' => false])->assertSessionHasNoErrors();
+        $this->assertSame($exporting->id, $user->fresh()->role_id);
+    }
+
     public function test_a_persons_own_list_takes_sensitive_permissions_from_the_owner_only(): void
     {
         $club = $this->club();
         $actor = $this->holding($club, ['employees.view', 'employees.access', 'checkin.perform', 'members.view', 'reports.export']);
-        $user = $this->staff($club, 'reception');
+        $user = $this->holding($club, ['members.view']);
         $employee = $this->employee($club, ['user_id' => $user->id]);
         $role = $user->role_id;
 
-        $this->actingAs($actor)->put(route('club.employees.access', $employee), ['role_id' => $role, 'is_active' => true, 'custom' => true, 'permissions' => ['checkin.perform', 'reports.export']])->assertSessionHasNoErrors();
+        $this->actingAs($actor)->put(route('club.employees.access', $employee), ['role_id' => $role, 'is_active' => true, 'custom' => true, 'permissions' => ['checkin.perform', 'reports.export']])->assertRedirect()->assertSessionHasNoErrors();
         $this->assertNotContains('reports.export', $user->fresh()->permissions());
-        $this->assertContains('checkin.perform', $user->fresh()->permissions());
+        $this->assertContains('checkin.perform', $user->fresh()->permissions(), 'the ordinary one given, the sensitive one not');
 
         $this->actingAs($this->owner($club))->put(route('club.employees.access', $employee), ['role_id' => $role, 'is_active' => true, 'custom' => true, 'permissions' => ['checkin.perform', 'reports.export']])->assertSessionHasNoErrors();
         $this->assertContains('reports.export', $user->fresh()->permissions());
