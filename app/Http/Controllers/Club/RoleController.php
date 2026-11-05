@@ -76,8 +76,12 @@ class RoleController extends Controller
     /** A new role carries only permissions its author holds. */
     private function guardGrant(Request $request, array $permissions): void
     {
-        if (! Grants::covers($request->user(), PermissionRegistry::sanitize($permissions))) {
+        $permissions = PermissionRegistry::sanitize($permissions);
+        if (! Grants::covers($request->user(), $permissions)) {
             throw ValidationException::withMessages(['permissions' => 'لا يمكنك منح صلاحية لا تملكها.']);
+        }
+        if (! Grants::mayGive($request->user(), $permissions)) {
+            throw ValidationException::withMessages(['permissions' => 'الصلاحيات الحساسة يمنحها صاحب النشاط وحده.']);
         }
     }
 

@@ -157,7 +157,27 @@ final class PermissionRegistry
     ];
 
     /** Permission groups that belong to an optional module (config gym.modules.<module>). */
+    /**
+     * Sensitive: salaries and bank data, preparing, approving and paying salaries (and undoing a payout), the books and
+     * the bank accounts, undoing money, closed months, stock approvals, supplier purchases, exports, accounts and roles,
+     * branches, integrations, backups. Whoever holds one uses it; only the owner gives or takes it (Grants::decides).
+     */
+    public const SENSITIVE = [
+        'payroll.salaries', 'payroll.compensation', 'payroll.prepare', 'payroll.edit', 'payroll.approve', 'payroll.pay', 'payroll.reports',
+        'accounting.manage', 'accounting.close', 'accounting.reopen', 'accounting.all_branches',
+        'invoices.void', 'invoices.credit', 'payments.refund', 'payments.cancel', 'sales.refund',
+        'inventory.adjust', 'inventory.approve', 'purchases.manage', 'purchases.approve', 'purchases.pay',
+        'members.export', 'reports.export',
+        'users.manage', 'roles.manage', 'employees.access', 'branches.manage', 'integrations.manage', 'backups.manage',
+    ];
+
     private const MODULE_GROUPS = ['sales' => 'sales', 'inventory' => 'inventory'];
+
+    /** @return list<string> the sensitive permissions this club can be given now */
+    public static function sensitive(): array
+    {
+        return array_values(array_intersect(self::SENSITIVE, self::all()));
+    }
 
     public static function moduleEnabled(string $module): bool
     {

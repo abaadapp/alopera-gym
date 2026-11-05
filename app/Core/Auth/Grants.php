@@ -9,7 +9,8 @@ use App\Models\User;
  * Who may hand which permissions to whom.
  *
  * Nobody gives what they do not hold: a role, a person's own list, or a role assignment may only carry permissions the
- * acting user holds themselves (the owner holds them all). An account that opens more than the acting user is not
+ * acting user holds themselves (the owner holds them all). The sensitive ones (PermissionRegistry::SENSITIVE) only the
+ * owner adds to or takes from a role or a list; whoever holds one may use it, not pass it on. An account that opens more than the acting user is not
  * theirs to edit, rename, reset or switch off — only someone holding at least as much may. The owner role is given
  * and taken only by an owner.
  */
@@ -19,6 +20,18 @@ final class Grants
     public static function grantable(User $actor): array
     {
         return array_values($actor->isOwner() ? PermissionRegistry::all() : $actor->permissions());
+    }
+
+    /** @return list<string> what the actor may add to or take from a role or a list: what they hold, less the sensitive */
+    public static function decides(User $actor): array
+    {
+        return $actor->isOwner() ? PermissionRegistry::all() : array_values(array_diff(self::grantable($actor), PermissionRegistry::SENSITIVE));
+    }
+
+    /** @param  list<string>  $permissions */
+    public static function mayGive(User $actor, array $permissions): bool
+    {
+        return array_diff($permissions, self::decides($actor)) === [];
     }
 
     /** @param  list<string>  $permissions */
@@ -73,7 +86,7 @@ final class Grants
      */
     public static function merge(User $actor, array $stored, array $requested): array
     {
-        $mine = self::grantable($actor);
+        $mine = self::decides($actor);
         $kept = array_diff($stored, $mine);
         $chosen = array_intersect(PermissionRegistry::sanitize($requested), $mine);
 
