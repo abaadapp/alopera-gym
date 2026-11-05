@@ -134,6 +134,38 @@ class SensitivePermissionsTest extends TestCase
         $this->assertSame(['members.view'], $otherRole->fresh()->permissions(), 'another role is untouched');
     }
 
+    public function test_a_new_staff_file_takes_its_accounts_own_list_under_the_same_rules(): void
+    {
+        $club = $this->club();
+        $actor = $this->holding($club, ['employees.view', 'employees.create', 'employees.access', 'checkin.perform', 'members.view', 'reports.export']);
+        $role = $this->role($club, ['members.view']);
+        $file = fn (string $name, array $account) => ['name' => $name, 'status' => 'active', 'basic_salary' => '300', 'payment_method' => 'cash'] + $account;
+
+        // A new account with a list of its own: the ordinary permission given, the sensitive one only by the owner.
+        $this->actingAs($actor)->post(route('club.employees.store'), $file('سالم', ['account_mode' => 'new', 'account_email' => 'salem@x.test', 'account_role_id' => $role->id, 'account_custom' => true, 'account_permissions' => ['members.view', 'checkin.perform', 'reports.export']]))->assertSessionHasNoErrors();
+        $salem = User::where('email', 'salem@x.test')->sole();
+        $this->assertEqualsCanonicalizing(['members.view', 'checkin.perform'], $salem->permissions());
+        $this->assertSame($salem->id, $this->asTenant($club, fn () => Employee::where('name', 'سالم')->value('user_id')));
+
+        $owner = $this->owner($club);
+        $this->actingAs($owner)->post(route('club.employees.store'), $file('مها', ['account_mode' => 'new', 'account_email' => 'maha@x.test', 'account_role_id' => $role->id, 'account_custom' => true, 'account_permissions' => ['members.view', 'reports.export']]))->assertSessionHasNoErrors();
+        $this->assertEqualsCanonicalizing(['members.view', 'reports.export'], User::where('email', 'maha@x.test')->sole()->permissions());
+
+        // Following the role: no list of its own.
+        $this->actingAs($owner)->post(route('club.employees.store'), $file('نور', ['account_mode' => 'new', 'account_email' => 'noor@x.test', 'account_role_id' => $role->id, 'account_custom' => false]))->assertSessionHasNoErrors();
+        $this->assertFalse(User::where('email', 'noor@x.test')->sole()->hasOwnPermissions());
+
+        // Linking an existing account with a list of its own.
+        $existing = $this->holding($club, ['members.view']);
+        $this->actingAs($owner)->post(route('club.employees.store'), $file('ريم', ['account_mode' => 'link', 'account_user_id' => $existing->id, 'account_custom' => true, 'account_permissions' => ['checkin.perform']]))->assertSessionHasNoErrors();
+        $this->assertSame(['checkin.perform'], $existing->fresh()->permissions());
+        $this->assertSame($existing->id, $this->asTenant($club, fn () => Employee::where('name', 'ريم')->value('user_id')));
+
+        // No account: nothing to give, the file saved alone.
+        $this->actingAs($owner)->post(route('club.employees.store'), $file('هدى', ['account_mode' => 'none', 'account_custom' => true, 'account_permissions' => ['reports.export']]))->assertSessionHasNoErrors();
+        $this->assertNull($this->asTenant($club, fn () => Employee::where('name', 'هدى')->value('user_id')));
+    }
+
     public function test_every_permission_says_what_it_allows(): void
     {
         $this->assertSame([], array_diff(PermissionRegistry::all(), array_keys(PermissionRegistry::DESCRIPTIONS)));

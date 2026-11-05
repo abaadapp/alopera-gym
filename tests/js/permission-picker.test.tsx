@@ -19,21 +19,25 @@ function Picker({ decides }: { decides: string[] }) {
 afterEach(cleanup);
 
 describe('the permission picker', () => {
-    it('chooses a whole section for the owner, with what each step needs, and counts it', () => {
+    it('lists the sensitive apart, ticks what a step needs, chooses them all at once for the owner, and counts it', () => {
         render(<Picker decides={groups.flatMap((g) => g.permissions.map((p) => p.key))} />);
-        fireEvent.click(screen.getAllByText('تحديد الكل')[1]);
-        expect((screen.getByLabelText('صرف الرواتب', { exact: false }) as HTMLInputElement).checked).toBe(true);
+        fireEvent.click(screen.getByLabelText('صرف الرواتب', { exact: false }));
         expect((screen.getByLabelText('عرض الرواتب', { exact: false }) as HTMLInputElement).checked).toBe(true);
         expect(screen.getByText(/المختارة/, { selector: 'p' }).textContent).toContain('2');
+        fireEvent.click(screen.getAllByText('تحديد الكل')[1]);
+        expect((screen.getByLabelText('تصدير بيانات الأعضاء', { exact: false }) as HTMLInputElement).checked).toBe(true);
+        expect(screen.getByText(/المختارة/, { selector: 'p' }).textContent).toContain('3');
         fireEvent.click(screen.getAllByText('إلغاء التحديد')[1]);
         expect((screen.getByLabelText('صرف الرواتب', { exact: false }) as HTMLInputElement).checked).toBe(false);
+        expect((screen.getByLabelText('تصدير بيانات الأعضاء', { exact: false }) as HTMLInputElement).checked).toBe(false);
     });
 
-    it('keeps a sensitive box fixed for someone else, and marks it', () => {
+    it('keeps a sensitive box fixed for someone else, under its own heading with its section', () => {
         render(<Picker decides={['members.view', 'members.export']} />);
         expect((screen.getByLabelText('عرض الأعضاء', { exact: false }) as HTMLInputElement).disabled).toBe(false);
         expect((screen.getByLabelText('صرف الرواتب', { exact: false }) as HTMLInputElement).disabled).toBe(true);
-        expect(screen.getAllByText('حساسة')).toHaveLength(3);
+        expect(screen.getByText('أفعالٌ حساسة')).toBeTruthy();
+        expect(screen.getAllByText('الرواتب')).toHaveLength(2);
     });
 
     it('finds by name and shows the sensitive only', () => {
