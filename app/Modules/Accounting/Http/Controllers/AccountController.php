@@ -4,6 +4,7 @@ namespace App\Modules\Accounting\Http\Controllers;
 
 use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
+use App\Core\Support\Money;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
@@ -77,6 +78,11 @@ class AccountController extends Controller
         // not reach the books.
         if (array_key_exists('is_active', $data) && ! $data['is_active'] && $account->expense_category_id !== null) {
             throw new BusinessRuleException('accounting.category_account', 'هذا حساب تصنيف مصروفات تُقيَّد عليه مصروفاته، فلا يُوقف. يمكنك تغيير اسمه.', 'is_active');
+        }
+        // Stopped with money on it, the account would drop out of the cash and bank totals while the trial balance kept
+        // it (and an open shift on a drawer could not close): the balance is moved first, as on the bank accounts screen.
+        if (array_key_exists('is_active', $data) && ! $data['is_active'] && $account->is_active && ! $account->is_group && ! Money::isZero(app(FinanceReports::class)->balance($account))) {
+            throw new BusinessRuleException('accounting.balance', 'انقل رصيد الحساب إلى حساب آخر قبل إيقافه.', 'is_active');
         }
         $before = ['name' => $account->name, 'is_active' => (bool) $account->is_active];
         $account->update($data);

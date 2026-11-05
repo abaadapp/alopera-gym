@@ -115,14 +115,26 @@ final class PaymentService
                 return $this->completeRefund($payment, $reference);
             }
 
-            $invoice = $this->lockOpen($payment->invoice);
-            $this->assertAmountFits($invoice, $payment->amount);
+            // The money reached the bank whatever the invoice became meanwhile (paid at the desk, for one): what it
+            // still owes is applied, and the rest is the customer's credit, applied to another invoice or paid back.
+            $invoice = Invoice::whereKey($payment->invoice_id)->lockForUpdate()->firstOrFail();
+            $fits = $invoice->isOpen() ? Money::min($payment->amount, $invoice->balance()) : '0';
+            $credit = Money::sub($payment->amount, $fits);
 
             $payment->forceFill([
                 'confirmed_by' => Auth::guard('web')->id(),
                 'confirmed_at' => now(),
+                'credit_amount' => $credit,
             ]);
-            $this->apply($invoice, $payment);
+            if (! Money::isZero($credit)) {
+                $payment->notes = trim(($payment->notes ? $payment->notes.' — ' : '').'تحويل يتجاوز رصيد الفاتورة عند تأكيده: '.$credit.' رصيد دائن للعميل، يُخصَّص لفاتورة أخرى أو يُرد.');
+                $this->audit->log('payment.transfer_overpayment', $payment, ['invoice' => $invoice->number, 'credit' => $credit]);
+            }
+            if (Money::isZero($fits)) {
+                $payment->forceFill(['status' => Payment::COMPLETED, 'receipt_number' => $payment->receipt_number ?? NumberSequence::next('receipt', $invoice->tenant_id)])->save();
+            } else {
+                $this->apply($invoice, $payment, $fits);
+            }
 
             app(StaffNotifier::class)->resolve('payment-pending:'.$payment->id);
 

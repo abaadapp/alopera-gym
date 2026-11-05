@@ -2,6 +2,7 @@
 
 namespace App\Modules\Accounting\Console;
 
+use App\Core\Notifications\StaffAlerts;
 use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
@@ -10,7 +11,8 @@ use Illuminate\Console\Command;
 
 /**
  * Builds each club's books from its finance records, and catches up anything the live posting missed. Safe to
- * run again and again: a record already in the books is not posted twice, and no record is changed.
+ * run again and again: a record already in the books is not posted twice, and no record is changed. A record that
+ * still cannot be posted stays in the bell of whoever keeps the books and fails the run (the rest are posted).
  */
 class SyncLedger extends Command
 {
@@ -18,15 +20,22 @@ class SyncLedger extends Command
 
     protected $description = 'Post invoices, payments, credit notes and expenses that are not in the books yet';
 
-    public function handle(TenantContext $tenants, LedgerProjector $projector): int
+    public function handle(TenantContext $tenants, LedgerProjector $projector, StaffAlerts $alerts): int
     {
+        $failed = 0;
         $clubs = Tenant::query()->when(HomeGym::id(), fn ($q, $home) => $q->whereKey($home))->when($this->option('club'), fn ($q, $slug) => $q->where('slug', $slug))->orderBy('id')->get();
 
         foreach ($clubs as $club) {
-            $counts = $tenants->run($club, fn () => $projector->syncClub());
-            $this->line(sprintf('%s: %d invoices, %d payments, %d credit notes, %d expenses checked — %d entries added, %d skipped (closed period)', $club->slug, $counts['invoices'], $counts['payments'], $counts['credit_notes'], $counts['expenses'], $counts['entries_added'], $counts['skipped_closed']));
+            $counts = $tenants->run($club, function () use ($projector, $alerts) {
+                $counts = $projector->syncClub(fn ($record) => $alerts->unposted($record));
+                $alerts->settleLedger();
+
+                return $counts;
+            });
+            $failed += $counts['failed'];
+            $this->line(sprintf('%s: %d invoices, %d payments, %d credit notes, %d expenses checked — %d entries added, %d skipped (closed period), %d failed (see the log)', $club->slug, $counts['invoices'], $counts['payments'], $counts['credit_notes'], $counts['expenses'], $counts['entries_added'], $counts['skipped_closed'], $counts['failed']));
         }
 
-        return self::SUCCESS;
+        return $failed === 0 ? self::SUCCESS : self::FAILURE;
     }
 }

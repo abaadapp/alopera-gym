@@ -226,6 +226,42 @@ final class BookingService
     }
 
     /**
+     * An upgrade: the old membership's future bookings count on the new one where its plan, dates and sessions allow
+     * it; the others are released, as when a membership is cancelled.
+     */
+    public function carryFuture(Membership $from, Membership $to, string $reason): int
+    {
+        $bookings = Booking::where('membership_id', $from->id)
+            ->where('status', Booking::BOOKED)
+            ->whereHas('session', fn ($q) => $q->where('starts_at', '>', now()))
+            ->orderBy('id')
+            ->get();
+
+        foreach ($bookings as $booking) {
+            $session = ClassSession::whereKey($booking->class_session_id)->lockForUpdate()->firstOrFail();
+            $target = Membership::whereKey($to->id)->lockForUpdate()->firstOrFail();
+            $date = $session->starts_at->startOfDay();
+            if (! ($target->starts_on->lte($date) && $target->ends_on->gte($date) && $this->programAllowed($target, $session) && $target->hasSessionsLeft())) {
+                $this->release($booking, $session, $reason);
+                BookingCancelled::dispatch($booking, $reason);
+
+                continue;
+            }
+
+            if ($booking->consumed_session) {
+                Membership::whereKey($from->id)->where('sessions_used', '>', 0)->decrement('sessions_used');
+            }
+            $consumes = $target->sessions_total !== null;
+            if ($consumes) {
+                Membership::whereKey($target->id)->increment('sessions_used');
+            }
+            $booking->forceFill(['membership_id' => $target->id, 'consumed_session' => $consumes])->save();
+        }
+
+        return $bookings->count();
+    }
+
+    /**
      * After a session ends, bookings nobody marked become no-shows and the
      * session is closed.
      */

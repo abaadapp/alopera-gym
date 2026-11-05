@@ -84,6 +84,10 @@ class ExpenseController extends Controller
         if ($expense->isDirty(['amount', 'account_id', 'payment_method'])) {
             $this->assertShiftOpen($expense);
         }
+        // Moved to another account: it belongs to that drawer's open shift now (counted there), or to none.
+        if ($expense->isDirty('account_id')) {
+            $expense->cash_shift_id = app(CashShifts::class)->current(Account::find($expense->account_id), $expense->branch_id);
+        }
         if ($request->hasFile('attachment')) {
             $expense->attachment_path = $request->file('attachment')->store('tenants/'.$tenants->require()->id.'/expenses', 'local');
         }

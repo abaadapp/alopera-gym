@@ -238,6 +238,27 @@
         @endunless
     </div>
 </div>
+{{-- A window narrower than the sheet (a tablet upright, a narrow desktop window) ignores the phone viewport above: the
+     sheet is shown whole, scaled to it, instead of a corner with a sideways scroll. Printing stays at real size, by
+     the rule below even where a browser prints without telling the page first. --}}
+@unless ($pdf)
+<style>@media print { .paper { zoom: 1 !important; } }</style>
+@endunless
+<script>
+(function () {
+    var paper = document.querySelector('.paper');
+    if (!paper) return;
+    function fit() {
+        paper.style.zoom = '';
+        var k = document.documentElement.clientWidth / paper.offsetWidth;
+        paper.style.zoom = k < 1 ? String(k) : '';
+    }
+    fit();
+    window.addEventListener('resize', fit);
+    window.addEventListener('beforeprint', function () { paper.style.zoom = ''; });
+    window.addEventListener('afterprint', fit);
+})();
+</script>
 @if ($autoprint)
 <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 150); });</script>
 @endif

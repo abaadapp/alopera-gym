@@ -195,7 +195,8 @@ class ProductController extends Controller
 
     public function movements(Product $product): JsonResponse
     {
-        return response()->json(StockMovement::with('user:id,name')->where('product_id', $product->id)->latest('id')->limit(100)->get()
+        // A user tied to a branch reads their branch's shelf only (costs and notes included).
+        return response()->json(BranchContext::scope(StockMovement::with('user:id,name')->where('product_id', $product->id))->latest('id')->limit(100)->get()
             ->map(fn ($m) => $m->only('id', 'type', 'quantity', 'unit_cost', 'balance_after', 'note') + ['user' => $m->user?->name, 'at' => $m->created_at->format('Y-m-d H:i')]));
     }
 

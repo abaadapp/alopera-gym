@@ -11,6 +11,7 @@ use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\StockTransfer;
 use Closure;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -47,8 +48,24 @@ final class TransferService
             throw new BusinessRuleException('transfer.untracked', 'لا يُنقل إلا ما هو مربوط بالمخزون.', 'lines');
         }
 
+        // Direct: created, approved and sent as one step, so a refusal (not enough stock) leaves no approved transfer
+        // behind for a retry of the same dialog to find and report as sent.
+        return DB::transaction(function () use ($from, $to, $lines, $notes, $clientKey, $direct, $supplyRequestId) {
+            $transfer = $this->store($from, $to, $lines, $notes, $clientKey, $supplyRequestId);
+            if ($direct && $transfer->status === StockTransfer::PENDING) {
+                $this->approve($transfer, selfApprove: true);
+                $this->dispatch($transfer);
+            }
+
+            return $transfer->fresh();
+        });
+    }
+
+    /** @param  Collection<int, array{product_id: int, quantity: float}>  $lines */
+    private function store(int $from, int $to, Collection $lines, ?string $notes, ?string $clientKey, ?int $supplyRequestId): StockTransfer
+    {
         try {
-            $transfer = DB::transaction(function () use ($from, $to, $lines, $notes, $clientKey, $supplyRequestId) {
+            return DB::transaction(function () use ($from, $to, $lines, $notes, $clientKey, $supplyRequestId) {
                 $transfer = StockTransfer::create([
                     'number' => NumberSequence::next('stock_transfer'), 'from_branch_id' => $from, 'to_branch_id' => $to, 'status' => StockTransfer::PENDING,
                     'notes' => $notes, 'requested_by' => Auth::guard('web')->id(), 'client_key' => $clientKey, 'supply_request_id' => $supplyRequestId,
@@ -62,13 +79,6 @@ final class TransferService
         } catch (UniqueConstraintViolationException $e) {
             return StockTransfer::where('client_key', $clientKey)->first() ?? throw $e;
         }
-
-        if ($direct) {
-            $this->approve($transfer, selfApprove: true);
-            $this->dispatch($transfer);
-        }
-
-        return $transfer->fresh();
     }
 
     /** @param  array<int, float|string>  $quantities  approved quantity by line id (default: as requested) */

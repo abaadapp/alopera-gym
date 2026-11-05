@@ -8,7 +8,7 @@ import { BILL_STATES, Pill, ReasonDialog } from '@/Components/Inventory/parts';
 import PayBill from '@/Components/Inventory/PayBill';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
-import { money, number } from '@/lib/format';
+import { money, number, isoDate } from '@/lib/format';
 import type { Paginated } from '@/types';
 
 export interface BillRow { id: number; number: string; reference: string; status: string; total: string; paid_total: string; balance: string; state: string | null; supplier: string | null; supplier_id: number; order: { id: number; number: string } | null; issue_date: string; due_date: string | null; has_attachment: boolean; attachment_name: string | null }
@@ -104,7 +104,7 @@ export default function Bills({ bills, summary, filters, suppliers, orders, acco
 
 function NewBill({ suppliers, orders, taxRate, preselect, canApprove, onClose }: { suppliers: Props['suppliers']; orders: OrderOption[]; taxRate: number; preselect: number | null; canApprove: boolean; onClose: () => void }) {
     const currency = useCurrency();
-    const form = useForm({ supplier_id: '', purchase_order_id: '', reference: '', issue_date: new Date().toISOString().slice(0, 10), due_date: '', subtotal: '', discount: '0', tax: '0', notes: '', attachment: null as File | null, approve: false });
+    const form = useForm({ supplier_id: '', purchase_order_id: '', reference: '', issue_date: isoDate(), due_date: '', subtotal: '', discount: '0', tax: '0', notes: '', attachment: null as File | null, approve: false });
     const order = orders.find((o) => String(o.id) === form.data.purchase_order_id);
     const pickOrder = (id: string) => {
         const o = orders.find((x) => String(x.id) === id);

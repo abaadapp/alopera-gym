@@ -60,7 +60,8 @@ class TemplateController extends Controller
     {
         $data = $this->validated($request);
         $allowed = TemplateCatalog::EVENTS[$template->key]['variables'] ?? TemplateCatalog::CAMPAIGN_VARIABLES;
-        $data['variables'] = array_values(array_intersect($data['variables'] ?? [], $allowed)) ?: ($template->variables ?? []);
+        // Sent (even empty: every variable removed) it is kept; not sent, the stored list stays.
+        $data['variables'] = $request->has('variables') ? array_values(array_intersect($data['variables'] ?? [], $allowed)) : ($template->variables ?? []);
         $template->update($data);
 
         return back()->with('success', 'تم حفظ القالب.');

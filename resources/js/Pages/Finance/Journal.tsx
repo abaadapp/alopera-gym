@@ -7,7 +7,7 @@ import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
 import { Badge, Button, Card, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Pagination, SearchInput, Select } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
-import { date, money } from '@/lib/format';
+import { date, money, isoDate } from '@/lib/format';
 import type { Paginated } from '@/types';
 
 type Line = { account: string; debit: string; credit: string; memo: string | null };
@@ -118,7 +118,7 @@ function EntryForm({ accounts, onClose }: { accounts: Props['accounts']; onClose
     const blank = (): FormLine => ({ account_id: '', debit: '', credit: '', memo: '' });
     // One key per entry: a double click or a retry posts it once.
     const key = useRef(clientKey());
-    const form = useForm<{ date: string; description: string; lines: FormLine[] }>({ date: new Date().toISOString().slice(0, 10), description: '', lines: [blank(), blank()] });
+    const form = useForm<{ date: string; description: string; lines: FormLine[] }>({ date: isoDate(), description: '', lines: [blank(), blank()] });
     const sum = (key: 'debit' | 'credit') => form.data.lines.reduce((t, l) => t + Math.round(Number(l[key] || 0) * 1000), 0) / 1000;
     const diff = Math.round((sum('debit') - sum('credit')) * 1000) / 1000;
     const set = (i: number, patch: Partial<FormLine>) => form.setData('lines', form.data.lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));

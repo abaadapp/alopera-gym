@@ -94,6 +94,11 @@ class SupplierBillController extends Controller
             $data['attachment_path'] = $file->storeAs('tenants/'.$request->user()->tenant_id.'/supplier-bills', Str::random(32).'.'.$file->guessExtension(), 'local');
             $data['attachment_name'] = Str::limit($file->getClientOriginalName(), 200, '');
         }
+        // The order comes in the body: held to the user's branch here. A bill without one is the user's branch's.
+        if (! empty($data['purchase_order_id'])) {
+            abort_unless(app(BranchContext::class)->allows($request->user(), PurchaseOrder::findOrFail($data['purchase_order_id'])->branch_id), 404);
+        }
+        $data['branch_id'] = app(BranchContext::class)->id($request->user());
         $bill = $this->bills->create(Supplier::findOrFail($data['supplier_id']), $data);
         if ($request->boolean('approve') && $request->user()->can('purchases.approve')) {
             $this->bills->approve($bill);

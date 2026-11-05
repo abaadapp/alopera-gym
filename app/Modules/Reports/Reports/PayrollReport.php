@@ -95,8 +95,11 @@ final class PayrollReport extends Report
         })->filter(fn ($r) => $r['employees'] > 0 || ! $f->branch)->values();
     }
 
+    /** Approved and paid runs only: a draft is listed, marked «مسودة», but its figures can still change. */
     private function totals(Collection $runs): array
     {
+        $runs = $runs->where('status', '!=', PayrollRun::DRAFT);
+
         return [
             'runs' => $runs->count(),
             'gross' => Money::add('0', ...$runs->pluck('gross')->all()),

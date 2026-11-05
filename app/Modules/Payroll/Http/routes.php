@@ -51,6 +51,7 @@ Route::prefix('payroll')->name('payroll.')->whereNumber(['run', 'item'])->middle
     Route::delete('/{run}', [PayrollRunController::class, 'destroy'])->middleware('can:payroll.edit')->name('destroy');
     Route::post('/{run}/approve', [PayrollRunController::class, 'approve'])->middleware('can:payroll.approve')->name('approve');
     Route::post('/{run}/pay', [PayrollRunController::class, 'pay'])->middleware(['can:payroll.pay', 'throttle:20,1'])->name('pay');
+    Route::post('/payouts/{payout}/void', [PayrollRunController::class, 'voidPayout'])->whereNumber('payout')->middleware(['can:payroll.pay', 'throttle:20,1'])->name('payouts.void');
     // The printed run sheet or one payslip (?item=): the paper engine, with payroll.payslips.
     Route::get('/{run}/print', [PayrollRunController::class, 'print'])->middleware(['can:payroll.payslips', 'can:papers.print'])->name('print');
     Route::get('/{run}/export', [PayrollRunController::class, 'export'])->middleware('can:payroll.reports')->name('export');

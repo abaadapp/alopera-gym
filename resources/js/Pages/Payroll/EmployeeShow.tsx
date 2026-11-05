@@ -8,7 +8,7 @@ import { FactList, Initials } from '@/Components/Payroll/parts';
 import { useCurrency, useShared, useCan } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { togglePermission } from '@/lib/permissions';
-import { date, money, number, phone } from '@/lib/format';
+import { date, money, number, phone, isoDate } from '@/lib/format';
 import { statusTone, type Can, type EmployeeRow } from './Employees';
 import PrintButton from '@/Components/Printing/PrintButton';
 
@@ -363,7 +363,7 @@ function AccessModal({ employeeId, account, access, onClose }: { employeeId: num
 }
 
 function PunchModal({ employeeId, onClose }: { employeeId: number; onClose: () => void }) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = isoDate();
     const form = useForm({ date: today, in: '', out: '', notes: '' });
     const submit = (e: FormEvent) => {
         e.preventDefault();

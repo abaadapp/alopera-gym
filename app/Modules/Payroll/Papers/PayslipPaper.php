@@ -40,7 +40,17 @@ final class PayslipPaper extends PaperBuilder
         $run = $item->run;
         $currency = self::currency($tenant);
         $bank = ($tpl['show_bank'] ?? true) && $item->payment_method === 'bank' && Auth::user()?->hasPermission('payroll.salaries');
-        $account = $bank ? F::masked($item->employee?->iban ?: $item->employee?->account_number) : '';
+        // Paid: the branch and bank as they were then (frozen when paid). Paid before that was kept: no branch, and the
+        // bank said to be unrecorded — today's account is never shown as the one paid into. Not paid yet: today's.
+        $then = $item->paid_snapshot;
+        $legacy = $item->paid_at !== null && $then === null;
+        $branch = $then ? ($then['branch'] ?? null) : ($legacy ? null : $item->employee?->branch?->name);
+        $bankLine = match (true) {
+            ! $bank => null,
+            $legacy => 'لم تُحفظ وقت الصرف',
+            (bool) $then => trim(($then['bank_name'] ?? '').' '.F::masked($then['account'] ?? null)),
+            default => trim(($item->employee?->bank_name ?? '').' '.F::masked($item->employee?->iban ?: $item->employee?->account_number)),
+        };
 
         $rows = [['name' => 'الراتب الأساسي', 'total' => F::amount($item->basic)]];
         foreach ($item->allowance_lines ?? [] as $line) {
@@ -66,12 +76,12 @@ final class PayslipPaper extends PaperBuilder
                 $run->status === PayrollRun::DRAFT => 'مسودة — غير معتمدة',
                 default => '',
             },
-            'parties' => [['caption' => 'الموظف', 'lines' => [$item->employee_name, $item->job_title, $item->employee?->branch?->name]]],
+            'parties' => [['caption' => 'الموظف', 'lines' => [$item->employee_name, $item->job_title, $branch]]],
             'meta' => self::fields([
                 ['label' => 'الشهر', 'value' => $run->label()],
                 ['label' => 'رقم المسيرة', 'value' => $run->number, 'ltr' => true],
                 ['label' => 'طريقة الصرف', 'value' => $item->payment_method === 'cash' ? 'نقدًا' : 'تحويل بنكي'],
-                $bank ? ['label' => 'البنك', 'value' => trim(($item->employee?->bank_name ?? '').' '.$account)] : null,
+                $bankLine !== null ? ['label' => 'البنك', 'value' => $bankLine] : null,
                 ($tpl['show_attendance'] ?? true) && $item->attendance_days !== null ? ['label' => 'أيام الحضور', 'value' => (string) $item->attendance_days] : null,
                 ($tpl['show_attendance'] ?? true) && $item->attendance_hours !== null ? ['label' => 'ساعات العمل', 'value' => F::qty($item->attendance_hours)] : null,
                 $item->payout ? ['label' => 'تاريخ الصرف', 'value' => $item->payout->paid_on->format('Y-m-d').' · '.$item->payout->number, 'ltr' => true] : null,

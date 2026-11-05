@@ -22,6 +22,7 @@ use App\Modules\Website\Http\RendersSite;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -175,6 +176,9 @@ class PortalController extends Controller
     public function updateProfile(Request $request): RedirectResponse
     {
         $member = $this->member($request);
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => Str::lower(trim($request->input('email')))]);
+        }
         $data = $request->validate([
             'email' => ['nullable', 'email', 'max:255', TenantRule::unique('gym_members', 'email')->ignore($member->id)],
             'emergency_contact_name' => ['nullable', 'string', 'max:120'],

@@ -26,6 +26,7 @@ use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Inventory\Services\ProductAddons;
 use App\Modules\Inventory\Services\StockService;
+use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Services\MemberNotifier;
 use App\Modules\Messaging\Services\WhatsAppService;
 use App\Modules\Payments\Models\PaymentIntent;
@@ -498,13 +499,18 @@ class InvoiceController extends Controller
             return back()->with('error', 'الفاتورة غير مرتبطة بعضو.');
         }
 
-        $whatsapp->queueTemplate($member, 'invoice_issued', [
+        $message = $whatsapp->queueTemplate($member, 'invoice_issued', [
             'member_name' => explode(' ', $member->full_name)[0],
             'invoice_number' => $invoice->number,
             'amount' => number_format((float) $invoice->balance(), 3).' '.$invoice->currency,
             'payment_link' => $notifier->paymentLink($invoice),
         ], $invoice, 'invoice:'.$invoice->id.':resend:'.now()->timestamp);
 
-        return back()->with('success', 'تم إرسال الفاتورة عبر واتساب.');
+        // Said as it went: a skipped message (no consent, no phone, a template not approved) was not sent.
+        return match (true) {
+            $message === null => back()->with('error', 'لم تُرسل الفاتورة: أُرسلت قبل لحظات، أو واتساب غير مفعّل.'),
+            $message->status === Message::SKIPPED => back()->with('error', 'لم تُرسل الفاتورة: '.(Message::SKIP_REASONS[$message->error_code] ?? $message->error_code).'.'),
+            default => back()->with('success', 'أُضيفت الفاتورة إلى قائمة الإرسال عبر واتساب.'),
+        };
     }
 }

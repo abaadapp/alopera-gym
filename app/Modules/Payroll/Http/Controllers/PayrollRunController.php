@@ -129,7 +129,9 @@ class PayrollRunController extends Controller
             'runs' => $runs->map(fn (PayrollRun $r) => $this->summary($r) + ['unpaid' => Money::normalize($r->unpaid ?? 0)]),
             'run' => $selected ? $this->detail($selected) : null,
             'payouts' => PayrollPayout::with(['account:id,name', 'author:id,name', 'run:id,period'])->withCount('items')->latest('id')->limit(30)->get()
-                ->map(fn (PayrollPayout $p) => ['id' => $p->id, 'number' => $p->number, 'paid_on' => $p->paid_on->toDateString(), 'account' => $p->account?->name, 'total' => $p->total, 'reference' => $p->reference, 'items' => $p->items_count, 'by' => $p->author?->name, 'period' => $p->run?->label()]),
+                ->map(fn (PayrollPayout $p) => ['id' => $p->id, 'number' => $p->number, 'paid_on' => $p->paid_on->toDateString(), 'account' => $p->account?->name, 'total' => $p->total, 'reference' => $p->reference, 'items' => $p->items_count, 'by' => $p->author?->name, 'period' => $p->run?->label(),
+                    // Voidable once, while its month is open; who may is the page's can.pay.
+                    'voided' => $p->voided_at !== null, 'void_reason' => $p->void_reason, 'voidable' => $p->voided_at === null && ! app(AccountingPeriods::class)->isLocked($p->paid_on)]),
             'waiting' => Money::normalize(PayrollItem::whereNull('paid_at')->whereHas('run', fn ($q) => $q->where('status', PayrollRun::APPROVED))->sum('net')),
             // The accounts to pay from, for who pays; their balances only for who may see the books.
             'accounts' => $request->user()->hasPermission('payroll.pay') ? $reports->moneyAccounts()->filter(fn ($m) => in_array($m['account']->kind, Account::PAYING_KINDS, true))
@@ -153,6 +155,14 @@ class PayrollRunController extends Controller
         $result = $this->payroll->pay($run, $data['items'], $account, $data['paid_on'], $data['reference'] ?? null);
 
         return back()->with('success', "صُرفت الرواتب لعدد {$result['paid']} من الموظفين ({$result['payout']->number}) من «{$account->name}». تسجيل الصرف هنا لا ينفّذ تحويلًا بنكيًا.");
+    }
+
+    public function voidPayout(Request $request, PayrollPayout $payout): RedirectResponse
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'max:255']], [], ['reason' => 'سبب الإلغاء']);
+        $this->payroll->voidPayout($payout, $data['reason']);
+
+        return back()->with('success', "أُلغي الصرف {$payout->number} بقيد عكسي، وعادت رواتبه مستحقة الصرف.");
     }
 
     /** Nobody but the owner changes their own pay, here as in the employee file. */

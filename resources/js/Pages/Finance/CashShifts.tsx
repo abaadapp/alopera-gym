@@ -12,7 +12,7 @@ import type { Paginated } from '@/types';
 
 export type ShiftSummary = {
     methods: Record<string, { received: string; refunded: string; count: number }>;
-    cash_received: string; cash_refunded: string; cash_expenses: string; moved_in: string; moved_out: string; expected: string; pending: number; payments: number;
+    cash_received: string; cash_refunded: string; cash_expenses: string; moved_in: string; moved_out: string; other_in?: string; other_out?: string; expected: string; pending: number; payments: number;
 };
 type Movement = { id: number; direction: 'in' | 'out'; amount: string; account: string | null; reason: string; by: string | null; at: string };
 export type ShiftRow = {
@@ -139,6 +139,9 @@ export function ShiftFigures({ shift, summary }: { shift: ShiftRow; summary: Shi
         ['مصروفات من الدرج', summary.cash_expenses, true],
         ['نقد أُضيف', summary.moved_in],
         ['نقد نُقل من الدرج', summary.moved_out, true],
+        // Salaries, a supplier, a transfer or a journal entry through the drawer (older shifts have no such line).
+        ...(Number(summary.other_in ?? 0) ? [['حركات أخرى إلى الصندوق', summary.other_in ?? '0']] as [string, string][] : []),
+        ...(Number(summary.other_out ?? 0) ? [['حركات أخرى من الصندوق (رواتب، موردون، تحويلات)', summary.other_out ?? '0', true]] as [string, string, boolean][] : []),
     ];
 
     return (

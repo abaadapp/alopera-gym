@@ -7,7 +7,7 @@ import PeriodTabs, { periodParams, type Period } from '@/Components/PeriodTabs';
 import { Button, ConfirmAction, DataTable, Field, Input, Modal, PageHeader, Select, StatCard, FileInput, type Column, type PageMeta, type TableFilter } from '@/Components/ui';
 import ExportMenu from '@/Components/Reports/ExportMenu';
 import { useCurrency } from '@/hooks/useShared';
-import { date, money } from '@/lib/format';
+import { date, money, isoDate } from '@/lib/format';
 import { paymentMethod } from '@/lib/labels';
 import type { Option, Paginated } from '@/types';
 
@@ -45,7 +45,7 @@ interface Props {
     period: Period;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => isoDate();
 
 export default function ExpensesIndex({ expenses, total, categories, suppliers, moneyAccounts, filters, period }: Props) {
     const currency = useCurrency();

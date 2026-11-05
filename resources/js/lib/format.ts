@@ -17,6 +17,14 @@ export function number(value: number | string | null | undefined, digits = 0): s
 export const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 const dayFmt = new Intl.DateTimeFormat('ar-OM-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
 
+/**
+ * A day as the server reads it (YYYY-MM-DD), on the device's own calendar. toISOString() gives the UTC day, which in
+ * Muscat is still yesterday until 04:00 (and last month on the 1st).
+ */
+export function isoDate(d: Date = new Date()): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function date(value: string | null | undefined): string {
     if (!value) return '—';
     const d = new Date(value.length <= 10 ? `${value}T00:00:00` : value.replace(' ', 'T'));

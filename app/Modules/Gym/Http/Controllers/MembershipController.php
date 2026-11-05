@@ -167,6 +167,9 @@ class MembershipController extends Controller
     public function cancel(Request $request, Membership $membership): RedirectResponse
     {
         $data = $request->validate(['reason' => ['required', 'string', 'max:255']]);
+        // Withdrawing a sale voids its invoice: not from a branch that may not reach that invoice.
+        $invoice = $membership->status === Membership::PENDING ? $membership->invoice : null;
+        abort_if($invoice && ! app(BranchContext::class)->allows($request->user(), $invoice->owningBranchId()), 404);
         $this->service->cancel($membership, $data['reason']);
 
         return back()->with('success', 'تم إلغاء العضوية.');

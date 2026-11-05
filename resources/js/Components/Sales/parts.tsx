@@ -129,7 +129,7 @@ export function DeliverDialog({ sale, onClose }: { sale: Pick<SaleRow, 'id' | 'n
 
 /** Cancel a website order: stock back; a paid one is refunded by a credit note (needs sales.refund). */
 export function CancelOrderDialog({ sale, onClose }: { sale: Pick<SaleRow, 'id' | 'number' | 'paid' | 'payment_method'>; onClose: () => void }) {
-    const form = useForm<{ reason: string; refund_method: string }>({ reason: '', refund_method: sale.payment_method === 'cash' ? 'cash' : 'other' });
+    const form = useForm<{ reason: string; refund_method: string }>({ reason: '', refund_method: sale.payment_method === 'cash' ? 'cash' : sale.payment_method === 'paymob' ? 'paymob' : 'other' });
     const submit = (e?: FormEvent) => {
         e?.preventDefault();
         form.post(route('club.sales.orders.cancel', sale.id), { preserveScroll: true, onSuccess: onClose });
@@ -153,7 +153,8 @@ export function CancelOrderDialog({ sale, onClose }: { sale: Pick<SaleRow, 'id' 
                             <option value="cash">نقدًا من الصندوق</option>
                             <option value="card">بطاقة (جهاز الشبكة)</option>
                             <option value="bank_transfer">تحويل بنكي</option>
-                            <option value="other">أخرى (مثل الاسترداد من Paymob)</option>
+                            {sale.payment_method === 'paymob' && <option value="paymob">عبر Paymob (يُؤكَّد بعد تنفيذه في Paymob)</option>}
+                            <option value="other">أخرى</option>
                         </Select>
                     </Field>
                 )}

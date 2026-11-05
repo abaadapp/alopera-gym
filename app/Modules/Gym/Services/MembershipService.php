@@ -6,6 +6,7 @@ use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Modules\Finance\Models\Invoice;
+use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Gym\Events\MembershipActivated;
 use App\Modules\Gym\Events\MembershipCancelled;
@@ -68,10 +69,11 @@ final class MembershipService
         $today = CarbonImmutable::today();
         $start = $latest && $latest->ends_on->gte($today) ? $latest->ends_on->addDay() : $today;
 
-        return $this->create($member, $plan, $latestAny ? Membership::KIND_RENEWAL : Membership::KIND_NEW, $options + [
+        // A renewal starts where the current period ends, whatever start date the request still carries.
+        return $this->create($member, $plan, $latestAny ? Membership::KIND_RENEWAL : Membership::KIND_NEW, [
             'starts_on' => $start->toDateString(),
             'previous_membership_id' => $latestAny?->id,
-        ]);
+        ] + $options);
     }
 
     /**
@@ -228,7 +230,11 @@ final class MembershipService
         }
 
         if ($membership->starts_on->lt($today)) {
-            $plan = $membership->plan;
+            // The length that was sold (plan_snapshot): an edit to the plan since then changes no sale.
+            $sold = $membership->plan_snapshot ?? [];
+            $plan = isset($sold['duration_value'], $sold['duration_unit'])
+                ? (new MembershipPlan)->forceFill(['duration_value' => (int) $sold['duration_value'], 'duration_unit' => $sold['duration_unit']])
+                : $membership->plan;
             $membership->starts_on = $today;
             $membership->ends_on = $plan->endDateFrom($today);
         }
@@ -249,6 +255,9 @@ final class MembershipService
                 ])->save();
                 $previous->openFreeze?->update(['ended_on' => $today, 'days' => 0]);
                 $this->event($previous, 'upgraded', ['to' => $membership->id]);
+                // What hung on the old period moves to the new one: its future bookings, and a renewal already sold.
+                $this->bookings->carryFuture($previous, $membership, 'الترقية');
+                $this->pushBack($membership, $previous->ends_on);
             }
         }
 
@@ -330,11 +339,13 @@ final class MembershipService
 
             $freeze?->update(['ended_on' => $resumeOn, 'days' => $days, 'resumed_by' => Auth::guard('web')->id()]);
 
+            $endedOn = $membership->ends_on;
             $membership->forceFill([
                 'status' => Membership::ACTIVE,
                 'ends_on' => $membership->ends_on->addDays($days),
                 'freeze_days_used' => $membership->freeze_days_used + $days,
             ])->save();
+            $this->pushBack($membership, $endedOn);
 
             $this->event($membership, 'resumed', ['days' => $days, 'new_end' => $membership->ends_on->toDateString()]);
             MembershipResumed::dispatch($membership);
@@ -354,6 +365,13 @@ final class MembershipService
 
             $wasPending = $membership->status === Membership::PENDING;
 
+            // A sale with money on it is not withdrawn behind finance: its invoice would stay open, and paying the rest
+            // would activate nothing. The payment is cancelled (or refunded) in finance first.
+            $invoice = $membership->invoice;
+            if ($wasPending && $invoice && (! Money::isZero($invoice->paid_total) || $invoice->payments()->where('status', Payment::PENDING)->exists())) {
+                throw new BusinessRuleException('membership.partly_paid', 'على فاتورة هذا الاشتراك '.$invoice->number.' دفعة مسجّلة. ألغِ الدفعة أو ردّها من المالية أولًا، ثم ألغِ الاشتراك.');
+            }
+
             $membership->forceFill([
                 'status' => Membership::CANCELLED,
                 'cancelled_at' => now(),
@@ -363,6 +381,10 @@ final class MembershipService
 
             $membership->openFreeze?->update(['ended_on' => today(), 'days' => 0]);
             $this->bookings->cancelFutureForMembership($membership, 'إلغاء العضوية');
+
+            if ($wasPending) {
+                $this->coupons->release($membership);
+            }
 
             // An unpaid sale is simply withdrawn; money already taken is refunded by finance.
             if ($wasPending && $membership->invoice && Money::isZero($membership->invoice->paid_total) && Money::isZero($membership->invoice->credited_total) && $membership->invoice->isOpen()) {
@@ -382,6 +404,7 @@ final class MembershipService
         Membership::where('invoice_id', $invoice->id)->where('status', Membership::PENDING)->get()
             ->each(function (Membership $m) {
                 $m->forceFill(['status' => Membership::CANCELLED, 'cancelled_at' => now(), 'cancel_reason' => 'invoice_voided'])->save();
+                $this->coupons->release($m);
                 $this->event($m, 'cancelled', ['reason' => 'invoice_voided']);
             });
     }
@@ -396,23 +419,24 @@ final class MembershipService
     {
         $today ??= CarbonImmutable::today();
         $counts = ['started' => 0, 'resumed' => 0, 'expired' => 0];
+        // By id, not by offset: each row leaves the filter as it is handled, and paging by offset skipped every other page.
 
         Membership::where('status', Membership::FROZEN)
             ->whereHas('openFreeze', fn ($q) => $q->whereNotNull('planned_end_on')->where('planned_end_on', '<=', $today))
-            ->each(function (Membership $m) use ($today, &$counts) {
+            ->eachById(function (Membership $m) use ($today, &$counts) {
                 $this->resume($m, $today);
                 $counts['resumed']++;
             });
 
         Membership::where('status', Membership::SCHEDULED)->where('starts_on', '<=', $today)
-            ->each(function (Membership $m) use (&$counts) {
+            ->eachById(function (Membership $m) use (&$counts) {
                 $m->forceFill(['status' => Membership::ACTIVE])->save();
                 $this->event($m, 'started');
                 $counts['started']++;
             });
 
         Membership::where('status', Membership::ACTIVE)->where('ends_on', '<', $today)
-            ->each(function (Membership $m) use (&$counts) {
+            ->eachById(function (Membership $m) use (&$counts) {
                 $m->forceFill(['status' => Membership::EXPIRED])->save();
                 $this->bookings->cancelFutureForMembership($m, 'انتهاء العضوية');
                 $this->event($m, 'expired');
@@ -421,6 +445,27 @@ final class MembershipService
             });
 
         return $counts;
+    }
+
+    /**
+     * The member's later periods (sold or paid, not started) move back by as many days as this one now ends after
+     * `$endedOn`, keeping their length: a freeze or an upgrade never leaves two periods running together.
+     */
+    private function pushBack(Membership $membership, CarbonImmutable $endedOn): void
+    {
+        $days = (int) round($endedOn->diffInDays($membership->ends_on));
+        if ($days <= 0) {
+            return;
+        }
+
+        Membership::where('member_id', $membership->member_id)->whereKeyNot($membership->id)
+            ->whereIn('status', [Membership::PENDING, Membership::SCHEDULED])
+            ->where('starts_on', '>', $endedOn)
+            ->lockForUpdate()->get()
+            ->each(function (Membership $later) use ($days) {
+                $later->forceFill(['starts_on' => $later->starts_on->addDays($days), 'ends_on' => $later->ends_on->addDays($days)])->save();
+                $this->event($later, 'moved', ['days' => $days, 'starts_on' => $later->starts_on->toDateString()]);
+            });
     }
 
     /** @param array<string, mixed> $data */

@@ -7,6 +7,7 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Modules\Accounting\Models\Account;
+use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Services\AccountingPeriods;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\Ledger;
@@ -97,11 +98,13 @@ final class PayrollService
             $run = $this->lockDraft($item->payroll_run_id);
             $item = PayrollItem::whereKey($item->id)->where('payroll_run_id', $run->id)->lockForUpdate()->firstOrFail();
 
+            // A field sent empty is emptied (zero); only a field not sent keeps its value.
+            $amount = fn (string $key) => array_key_exists($key, $data) ? ($data[$key] ?? 0) : $item->{$key};
             $item->fill([
-                'overtime_hours' => $data['overtime_hours'] ?? $item->overtime_hours,
-                'overtime' => Money::normalize($data['overtime'] ?? $item->overtime),
-                'allowances' => Money::normalize($data['allowances'] ?? $item->allowances),
-                'deductions' => Money::normalize($data['deductions'] ?? $item->deductions),
+                'overtime_hours' => $amount('overtime_hours'),
+                'overtime' => Money::normalize($amount('overtime')),
+                'allowances' => Money::normalize($amount('allowances')),
+                'deductions' => Money::normalize($amount('deductions')),
                 'deduction_notes' => array_key_exists('deduction_notes', $data) ? $data['deduction_notes'] : $item->deduction_notes,
                 'notes' => array_key_exists('notes', $data) ? $data['notes'] : $item->notes,
             ]);
@@ -188,7 +191,13 @@ final class PayrollService
             $items = PayrollItem::where('payroll_run_id', $run->id)->whereIn('id', $itemIds)->whereNull('paid_at')
                 ->orderBy('employee_name')->lockForUpdate()->get();
             if ($items->isEmpty()) {
-                throw new BusinessRuleException('payroll.nothing_to_pay', 'لا توجد رواتب مستحقة في الاختيار — ربما صُرفت مسبقًا.');
+                // Sent twice (a double click, a second tab): the first request paid them a moment ago — said so, with
+                // the payout, so it does not read as a payment that failed.
+                $paidIn = PayrollItem::with('payout:id,number')->where('payroll_run_id', $run->id)->whereIn('id', $itemIds)->whereNotNull('payroll_payout_id')->get()
+                    ->pluck('payout.number')->filter()->unique();
+                throw new BusinessRuleException('payroll.nothing_to_pay', $paidIn->isNotEmpty()
+                    ? 'صُرفت هذه الرواتب مسبقًا في سند الصرف '.$paidIn->implode('، ').'؛ لم يُصرف شيء مرة ثانية.'
+                    : 'لا توجد رواتب مستحقة في الاختيار.');
             }
 
             $total = Money::add('0', ...$items->pluck('net')->all());
@@ -213,13 +222,53 @@ final class PayrollService
                 ], $lines);
             }
 
-            PayrollItem::whereIn('id', $items->pluck('id'))->update(['paid_at' => now(), 'payroll_payout_id' => $payout->id]);
+            // The branch and bank each line is paid with, frozen: a payslip reprinted later shows them as they were.
+            $items->load('employee.branch:id,name');
+            foreach ($items as $item) {
+                $employee = $item->employee;
+                $item->forceFill(['paid_at' => now(), 'payroll_payout_id' => $payout->id, 'paid_snapshot' => [
+                    'employee_id' => $item->employee_id, 'branch_id' => $employee?->branch_id, 'branch' => $employee?->branch?->name,
+                    'bank_name' => $employee?->bank_name, 'account' => $employee?->iban ?: $employee?->account_number,
+                    'method' => $item->payment_method, 'paid_on' => $date,
+                ]])->save();
+            }
             if (! PayrollItem::where('payroll_run_id', $run->id)->whereNull('paid_at')->exists()) {
                 $run->forceFill(['status' => PayrollRun::PAID])->save();
             }
             $this->audit->log('payroll.paid', $run, ['payout' => $payout->number, 'lines' => $items->count(), 'total' => $total, 'account' => $account->name]);
 
             return ['payout' => $payout, 'paid' => $items->count()];
+        });
+    }
+
+    /**
+     * Void a salary payout made by mistake: its entry is reversed by an entry of its own (the original stays, marked
+     * reversed), its lines are to be paid again and the run with them. Once only, and never in a closed period.
+     */
+    public function voidPayout(PayrollPayout $payout, string $reason): PayrollPayout
+    {
+        return DB::transaction(function () use ($payout, $reason) {
+            $payout = PayrollPayout::whereKey($payout->id)->lockForUpdate()->firstOrFail();
+            if ($payout->voided_at !== null) {
+                throw new BusinessRuleException('payroll.payout_voided', 'هذا الصرف ملغى مسبقًا.');
+            }
+            app(AccountingPeriods::class)->assertEditable($payout->paid_on, 'صرف الرواتب');
+            $run = PayrollRun::whereKey($payout->payroll_run_id)->lockForUpdate()->firstOrFail();
+
+            $entry = JournalEntry::where(['source_type' => 'payroll_payout', 'source_id' => $payout->id, 'source_event' => 'pay'])->whereNull('reversed_at')->first();
+            if ($entry) {
+                $this->ledger->reverse($entry, "إلغاء صرف رواتب {$run->label()} — {$payout->number}: {$reason}",
+                    ['source_type' => 'payroll_payout', 'source_id' => $payout->id, 'event' => 'void'], $payout->paid_on);
+            }
+
+            $lines = PayrollItem::where('payroll_payout_id', $payout->id)->update(['paid_at' => null, 'payroll_payout_id' => null, 'paid_snapshot' => null]);
+            $payout->forceFill(['voided_at' => now(), 'voided_by' => Auth::guard('web')->id(), 'void_reason' => $reason])->save();
+            if ($run->status === PayrollRun::PAID) {
+                $run->forceFill(['status' => PayrollRun::APPROVED])->save();
+            }
+            $this->audit->log('payroll.payout_voided', $run, ['payout' => $payout->number, 'lines' => $lines, 'total' => $payout->total, 'reason' => $reason]);
+
+            return $payout;
         });
     }
 

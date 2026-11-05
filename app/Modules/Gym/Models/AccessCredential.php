@@ -14,6 +14,9 @@ class AccessCredential extends Model
 
     public const TYPES = ['card', 'fingerprint', 'pin', 'barcode'];
 
+    /** A PIN or card number opens the door (and punches staff in): it never goes to the audit trail. */
+    protected array $auditExclude = ['identifier'];
+
     /**
      * A fingerprint is enrolled and matched on the device; the system keeps only the user number the device gives
      * it, never the print, its image or its template. A short id is all that fits here.

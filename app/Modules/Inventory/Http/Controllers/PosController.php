@@ -200,7 +200,7 @@ class PosController extends Controller
         SalesController::ensureBranch($request->user(), $sale);
         $data = $request->validate([
             'reason' => ['required', 'string', 'max:255'],
-            'refund_method' => ['nullable', 'in:cash,card,bank_transfer,other'],
+            'refund_method' => ['nullable', 'in:cash,card,bank_transfer,other,paymob'],
         ]);
         $this->pos->void($sale, $data['reason'], $data['refund_method'] ?? null);
 

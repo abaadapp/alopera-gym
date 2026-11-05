@@ -19,6 +19,10 @@ final class AuditRedaction
      */
     public static function values(?array $values, ?string $subjectType, User $viewer): ?array
     {
+        // A door credential's number (older entries logged it) is shown to nobody.
+        if ($values !== null && $subjectType === 'AccessCredential' && array_key_exists('identifier', $values)) {
+            $values['identifier'] = self::HIDDEN;
+        }
         if ($values === null || $subjectType !== 'Employee' || $viewer->hasPermission('payroll.salaries')) {
             return $values;
         }

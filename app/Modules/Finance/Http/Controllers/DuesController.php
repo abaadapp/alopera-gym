@@ -23,10 +23,7 @@ use Inertia\Response;
 class DuesController extends Controller
 {
     /** Why a reminder was not sent, in words. */
-    private const SKIPS = [
-        'template_missing' => 'القالب غير موجود', 'template_not_approved' => 'القالب لم يُعتمد من Meta بعد', 'opted_out' => 'العضو لم يوافق على رسائل الخدمة',
-        'no_phone' => 'لا رقم هاتف', 'no_marketing_consent' => 'بلا موافقة تسويقية',
-    ];
+    private const SKIPS = Message::SKIP_REASONS;
 
     public function __invoke(Request $request, TenantContext $tenants): Response
     {
@@ -56,7 +53,8 @@ class DuesController extends Controller
             'reminders' => [
                 'enabled' => (bool) $tenants->require()->setting('dues_reminders_enabled', false),
                 'whatsapp' => app(WhatsAppService::class)->enabled(),
-                'log' => Message::with('member:id,full_name')->whereIn('template_key', SendDuesReminders::TEMPLATES)->where('related_type', 'invoice')->latest('id')->limit(30)->get()
+                'log' => Message::with('member:id,full_name')->whereIn('template_key', SendDuesReminders::TEMPLATES)->where('related_type', 'invoice')
+                    ->whereIn('related_id', BranchContext::scope(Invoice::query())->select('id'))->latest('id')->limit(30)->get()
                     ->map(fn (Message $m) => [
                         'id' => $m->id, 'at' => $m->created_at->format('Y-m-d H:i'), 'member' => $m->member?->full_name, 'invoice_id' => $m->related_id,
                         'invoice' => Invoice::whereKey($m->related_id)->value('number'), 'kind' => $m->template_key === 'invoice_overdue' ? 'متأخرة' : 'قبل الاستحقاق',

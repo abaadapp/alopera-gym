@@ -123,7 +123,7 @@ class InventoryTest extends TestCase
         // Saving a draft changes nothing on the shelf.
         $this->actingAs($owner)->put(route('club.inventory.counts.save', $count), ['counts' => [$lines[$bar->id]->id => ['counted' => 8, 'reason' => 'damaged', 'note' => 'broken'], $lines[$water->id]->id => ['counted' => 6]]])->assertSessionHasNoErrors();
         $this->assertSame('10.000', $this->qty($club, $bar, $main->id));
-        // A sale after the count started: approval reads the book again, so the difference is against today's book.
+        // A sale after the count: approval posts the difference found when counting, so the sale stays counted.
         $this->asTenant($club, fn () => app(StockService::class)->move($bar, -1, 'sale', null, branchId: $main->id));
 
         $this->actingAs($owner)->put(route('club.inventory.counts.save', $count), ['counts' => [], 'approve' => true])->assertSessionHasNoErrors();
@@ -131,8 +131,8 @@ class InventoryTest extends TestCase
         $this->asTenant($club, function () use ($count, $bar, $main) {
             $this->assertSame(Stocktake::APPROVED, $count->fresh()->status);
             $movement = StockMovement::where('reference_type', 'stocktake')->sole();
-            $this->assertSame(['-1.000', 'damaged', $count->number, $main->id], [$movement->quantity, $movement->reason, $movement->document, $movement->branch_id]);
-            $this->assertSame('8.000', $bar->fresh()->stock_quantity);
+            $this->assertSame(['-2.000', 'damaged', $count->number, $main->id], [$movement->quantity, $movement->reason, $movement->document, $movement->branch_id]);
+            $this->assertSame('7.000', $bar->fresh()->stock_quantity);
         });
 
         // Approving needs its own permission: a user who counts but may not approve only saves.

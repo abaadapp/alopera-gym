@@ -21,6 +21,7 @@ use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\MembershipEvent;
 use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Models\PtPackage;
+use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Gym\Models\Trainer;
 use App\Modules\Gym\Services\MemberService;
 use App\Modules\Messaging\Models\Message;
@@ -29,10 +30,12 @@ use App\Modules\Payments\Services\OnlinePaymentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class MemberController extends Controller
 {
@@ -169,12 +172,24 @@ class MemberController extends Controller
     public function update(Request $request, Member $member): RedirectResponse
     {
         $data = $this->validated($request, $member);
+        // The old photo goes only once the edit is saved: a refused edit (a phone already taken) keeps it.
+        $old = $member->photo_path;
         if ($request->hasFile('photo')) {
-            ImageStore::delete($member->photo_path);
             $member->photo_path = ImageStore::store($request->file('photo'), 'members', 600);
         }
         unset($data['photo']);
-        $this->members->update($member, $data);
+        try {
+            $this->members->update($member, $data);
+        } catch (Throwable $e) {
+            if ($member->photo_path !== $old) {
+                ImageStore::delete($member->photo_path);
+                $member->photo_path = $old;
+            }
+            throw $e;
+        }
+        if ($member->photo_path !== $old) {
+            ImageStore::delete($old);
+        }
 
         return redirect()->route('club.members.show', $member)->with('success', 'تم حفظ بيانات العضو.');
     }
@@ -184,6 +199,14 @@ class MemberController extends Controller
         if ($member->memberships()->whereIn('status', [Membership::ACTIVE, Membership::FROZEN, Membership::SCHEDULED])->exists()) {
             return back()->with('error', 'لا يمكن حذف عضو لديه عضوية سارية. ألغِ العضوية أولًا.');
         }
+        // A sale waiting for payment (its invoice and payment link stay live) or training still ahead would outlive
+        // the file: they are settled first.
+        if ($member->memberships()->where('status', Membership::PENDING)->exists()) {
+            return back()->with('error', 'للعضو اشتراك بانتظار الدفع. أكمل دفعه أو ألغِه قبل حذف العضو.');
+        }
+        if (PtSubscription::where('member_id', $member->id)->whereIn('status', [PtSubscription::PENDING, PtSubscription::ACTIVE])->exists()) {
+            return back()->with('error', 'للعضو باقة تدريب شخصي قائمة. أنهِها أو ألغِها قبل حذف العضو.');
+        }
         $member->delete();
 
         return redirect()->route('club.members.index')->with('success', 'تم حذف العضو.');
@@ -192,7 +215,8 @@ class MemberController extends Controller
     public function portalPassword(Request $request, Member $member, AuditLogger $audit): RedirectResponse
     {
         $data = $request->validate(['password' => ['required', Password::min(8)]]);
-        $member->forceFill(['password' => $data['password']])->save();
+        // A new password ends the sessions remembered with the old one.
+        $member->forceFill(['password' => $data['password'], 'remember_token' => Str::random(60)])->save();
         $audit->log('member.portal_password_set', $member);
 
         return back()->with('success', 'تم تعيين كلمة مرور بوابة العضو.');
@@ -224,6 +248,11 @@ class MemberController extends Controller
     /** @return array<string, mixed> */
     private function validated(Request $request, ?Member $member = null): array
     {
+        // Compared as stored: in lower case.
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => Str::lower(trim($request->input('email')))]);
+        }
+
         return $request->validate([
             'full_name' => ['required', 'string', 'max:160'],
             'phone' => ['required', 'string', 'max:32', 'regex:/^[+0-9٠-٩\s-]{8,20}$/u'],

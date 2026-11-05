@@ -13,6 +13,8 @@ use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * Turns the club's finance records into journal entries, without touching the services that issue invoices or
@@ -168,6 +170,16 @@ final class LedgerProjector
 
     public function expense(Expense $expense, bool $deleted = false): void
     {
+        DB::transaction(function () use ($expense, $deleted) {
+            // Edited by two hands at once, each request posts after its own commit with the amount it saved: the books
+            // follow the record as it stands now, read under a lock, whichever posting comes in last.
+            $now = Expense::withTrashed()->whereKey($expense->id)->lockForUpdate()->first();
+            $now ? $this->postExpense($now, $now->trashed()) : $this->postExpense($expense, $deleted);
+        });
+    }
+
+    private function postExpense(Expense $expense, bool $deleted): void
+    {
         $current = JournalEntry::with('lines')->where(['source_type' => 'expense', 'source_id' => $expense->id, 'source_event' => 'record'])
             ->whereNull('reversed_at')->latest('revision')->first();
         $lastRevision = (int) JournalEntry::where(['source_type' => 'expense', 'source_id' => $expense->id, 'source_event' => 'record'])->max('revision');
@@ -207,35 +219,43 @@ final class LedgerProjector
     }
 
     /**
-     * Post everything of the current club that is not in the books yet (records from before the books existed). A
-     * record dated in a closed period is skipped and counted (the period's checks keep that from happening).
+     * Post everything of the current club that is not in the books yet (records from before the books existed, or
+     * whose live posting failed). A record dated in a closed period is skipped and counted (the period's checks keep
+     * that from happening). A record that cannot be posted is reported, handed to `$failed` and counted, and the
+     * rest still go in: one bad record does not keep the others out of the books.
+     *
+     * @param  (callable(Model): void)|null  $failed
      */
-    public function syncClub(): array
+    public function syncClub(?callable $failed = null): array
     {
         $this->chart->ensure();
-        $counts = ['invoices' => 0, 'payments' => 0, 'credit_notes' => 0, 'expenses' => 0, 'skipped_closed' => 0];
+        $counts = ['invoices' => 0, 'payments' => 0, 'credit_notes' => 0, 'expenses' => 0, 'skipped_closed' => 0, 'failed' => 0];
         $before = JournalEntry::count();
-        $each = function (callable $post) use (&$counts) {
+        $each = function (Model $record, callable $post) use (&$counts, $failed) {
             try {
                 $post();
-            } catch (BusinessRuleException $e) {
-                if ($e->rule !== 'period.closed') {
-                    throw $e;
+            } catch (Throwable $e) {
+                if ($e instanceof BusinessRuleException && $e->rule === 'period.closed') {
+                    $counts['skipped_closed']++;
+
+                    return;
                 }
-                $counts['skipped_closed']++;
+                report($e);
+                $counts['failed']++;
+                $failed && $failed($record);
             }
         };
 
         Invoice::query()->orderBy('id')->each(function (Invoice $i) use (&$counts, $each) {
-            $each(fn () => $this->invoice($i));
+            $each($i, fn () => $this->invoice($i));
             $counts['invoices']++;
         });
         CreditNote::query()->orderBy('id')->each(function (CreditNote $n) use (&$counts, $each) {
-            $each(fn () => $this->creditNote($n));
+            $each($n, fn () => $this->creditNote($n));
             $counts['credit_notes']++;
         });
         Payment::query()->orderBy('id')->each(function (Payment $p) use (&$counts, $each) {
-            $each(fn () => $this->payment($p));
+            $each($p, fn () => $this->payment($p));
             $counts['payments']++;
         });
         Expense::withTrashed()->with('category')->orderBy('id')->each(function (Expense $e) use (&$counts, $each) {
@@ -243,7 +263,7 @@ final class LedgerProjector
             if ($e->trashed() && ! $this->entry('expense', $e->id, 'record')) {
                 return;
             }
-            $each(fn () => $this->expense($e, $e->trashed()));
+            $each($e, fn () => $this->expense($e, $e->trashed()));
             $counts['expenses']++;
         });
 

@@ -21,12 +21,12 @@ class StaffAttendanceController extends Controller
     {
         $period = Period::fromRequest($request, 'month');
 
-        $rows = BranchContext::scope(StaffAttendance::with(['user:id,name', 'device:id,name']))
+        $rows = BranchContext::scope(StaffAttendance::with(['user:id,name', 'user.employee:id,user_id,name', 'device:id,name']))
             ->tap(fn ($q) => $period->apply($q, 'clock_in_at'))
             ->when($request->integer('user_id'), fn ($q, $id) => $q->where('user_id', $id))
             ->latest('clock_in_at')->paginate(50)->withQueryString()
             ->through(fn (StaffAttendance $a) => [
-                'id' => $a->id, 'user' => $a->user?->name, 'method' => $a->method, 'device' => $a->device?->name,
+                'id' => $a->id, 'user' => $a->user?->staffName(), 'method' => $a->method, 'device' => $a->device?->name,
                 'date' => $a->clock_in_at->toDateString(), 'in' => $a->clock_in_at->format('H:i'), 'out' => $a->clock_out_at?->format('H:i'),
                 'hours' => $a->clock_out_at ? round($a->clock_in_at->diffInMinutes($a->clock_out_at) / 60, 2) : null,
             ]);
@@ -44,7 +44,8 @@ class StaffAttendanceController extends Controller
                 'hours' => round($punches->sum(fn ($a) => $a->clock_out_at ? $a->clock_in_at->diffInMinutes($a->clock_out_at) : 0) / 60, 2),
                 'open' => $punches->whereNull('clock_out_at')->count(),
             ],
-            'staff' => User::ofTenant($tenants->require()->id)->orderBy('name')->get(['id', 'name']),
+            'staff' => User::ofTenant($tenants->require()->id)->with('employee:id,user_id,name')->get(['id', 'name'])
+                ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->staffName()])->sortBy('name')->values(),
             'period' => $period->toArray(),
             'filters' => ['user_id' => $request->integer('user_id') ?: null],
         ]);

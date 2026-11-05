@@ -3,7 +3,7 @@ import { router, useForm } from '@inertiajs/react';
 import { AlertTriangle, Check, Download, FileClock, FileText, FileX, FolderOpen, Lock, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, Checkbox, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Pagination, SearchInput, Select, StatCard, Textarea, FileInput } from '@/Components/ui';
-import { date, dayCount, number } from '@/lib/format';
+import { date, dayCount, number, isoDate } from '@/lib/format';
 import type { Paginated } from '@/types';
 import { useBranchDefault } from '@/hooks/useShared';
 
@@ -254,7 +254,7 @@ function DocumentModal({ document, props, onClose }: { document: DocumentRow | n
 function addMonths(iso: string, months: number): string {
     const d = new Date(`${iso}T00:00:00`);
     d.setMonth(d.getMonth() + months);
-    return d.toISOString().slice(0, 10);
+    return isoDate(d);
 }
 
 function RenewModal({ document, maxKb, onClose }: { document: DocumentRow; maxKb: number; onClose: () => void }) {

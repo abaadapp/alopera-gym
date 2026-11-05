@@ -15,7 +15,7 @@ const iconButton = 'relative grid size-10 shrink-0 place-items-center rounded-[1
 const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'accounting.manage', 'documents.manage'];
 
 export const NOTIFICATION_ICONS: Record<StaffNotification['kind'], LucideIcon> = {
-    document: FileText, order: ShoppingBag, payment: CreditCard, membership: Ticket, integration: Blocks, contact: Mail, inbox: MessageCircle,
+    document: FileText, order: ShoppingBag, payment: CreditCard, membership: Ticket, integration: Blocks, contact: Mail, inbox: MessageCircle, ledger: Wallet,
 };
 
 function initials(name?: string | null): string {

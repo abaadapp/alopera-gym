@@ -11,6 +11,10 @@ export const PAPERS: Record<string, { width: number; height: number | null }> = 
     '58mm': { width: 58, height: null },
 };
 
+// The sheet's scripts belong to the print page (fit to the window, the print dialog): the frame runs none, and would
+// report each one it blocks in the console.
+const withoutScripts = (html: string) => html.replace(/<script\b[\s\S]*?<\/script>/gi, '');
+
 /**
  * The paper as the server drew it, at its real size and scaled to fit: the same HTML the print page and the PDF use,
  * in an isolated frame (no script, no panel styles). A sheet shows a dashed line where each new page starts.
@@ -66,7 +70,7 @@ export default function PaperFrame({ html, paper = 'A4', height = 'min(78svh, 10
                 <iframe
                     ref={frame}
                     title={title}
-                    srcDoc={html}
+                    srcDoc={withoutScripts(html)}
                     sandbox="allow-same-origin"
                     onLoad={measure}
                     scrolling="no"

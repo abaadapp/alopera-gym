@@ -10,6 +10,7 @@ use App\Modules\Finance\Models\Invoice;
 use Database\Factories\MemberFactory;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -48,6 +49,12 @@ class Member extends Authenticatable implements Billable
 
     /** @var list<string> */
     protected array $auditExclude = ['health_notes', 'last_login_at', 'last_check_in_at'];
+
+    /** An email is kept in lower case: the portal signs in by it, and PostgreSQL compares case. */
+    protected function email(): Attribute
+    {
+        return Attribute::make(set: fn (?string $value) => $value === null ? null : Str::lower(trim($value)));
+    }
 
     protected function casts(): array
     {

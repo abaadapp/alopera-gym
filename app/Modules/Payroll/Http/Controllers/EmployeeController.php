@@ -179,8 +179,8 @@ class EmployeeController extends Controller
     {
         $data = $this->validated($request, null);
         $data['branch_id'] = app(BranchContext::class)->assign($data['branch_id'] ?? null);
-        $this->guardSelf($request, null, $data);
         $account = $this->accountRequest($request, null);
+        $this->guardSelf($request, null, $data, $account);
 
         $employee = DB::transaction(function () use ($data, $account, $request) {
             $employee = Employee::create(Arr::except($data, ['user_id']) + ['user_id' => $account && $account['mode'] === 'link' ? $account['user_id'] : null]);
@@ -200,8 +200,8 @@ class EmployeeController extends Controller
         $user = $request->user();
         abort_unless($user->hasPermission('employees.manage') || $user->hasPermission('payroll.compensation'), 403);
         $data = $this->validated($request, $employee);
-        $this->guardSelf($request, $employee, $data);
         $account = $this->accountRequest($request, $employee);
+        $this->guardSelf($request, $employee, $data, $account);
         $closing = $this->closingAccount($request, $employee, $data);
 
         $before = $employee->getAttributes();
@@ -295,13 +295,28 @@ class EmployeeController extends Controller
         ], [], ['date' => 'التاريخ', 'in' => 'وقت الحضور', 'out' => 'وقت الانصراف', 'notes' => 'سبب التسجيل']);
         $in = CarbonImmutable::parse($data['date'].' '.$data['in']);
         $out = isset($data['out']) ? CarbonImmutable::parse($data['date'].' '.$data['out']) : null;
+        if ($in->isFuture()) {
+            throw ValidationException::withMessages(['in' => 'وقت الحضور لم يأتِ بعد.']);
+        }
         if ($out && $out->isFuture()) {
             throw ValidationException::withMessages(['out' => 'وقت الانصراف لم يأتِ بعد.']);
         }
-        $overlap = StaffAttendance::where('user_id', $account->id)->where('clock_in_at', '<', $out ?? $in->addMinute())
-            ->where(fn ($q) => $q->whereNull('clock_out_at')->where('clock_in_at', '>=', $in->startOfDay())->orWhere('clock_out_at', '>', $in))->exists();
+
+        // A day left open (the checkout never punched) is closed by the correction rather than refused as overlapping:
+        // the punch stays as it was, and the checkout is the one given.
+        $open = $out ? StaffAttendance::where('user_id', $account->id)->whereNull('clock_out_at')
+            ->where('clock_in_at', '>=', $in->startOfDay())->where('clock_in_at', '<', $out)->latest('clock_in_at')->first() : null;
+        $overlap = StaffAttendance::where('user_id', $account->id)->when($open, fn ($q) => $q->whereKeyNot($open->id))
+            ->where('clock_in_at', '<', $out ?? $in->addMinute())
+            ->where(fn ($q) => $q->whereNull('clock_out_at')->where('clock_in_at', '>=', $in->startOfDay())->orWhere('clock_out_at', '>', $open ? min($in, $open->clock_in_at) : $in))->exists();
         if ($overlap) {
             throw ValidationException::withMessages(['in' => 'يتداخل مع حضور مسجّل في الوقت نفسه.']);
+        }
+        if ($open) {
+            $open->forceFill(['clock_out_at' => $out, 'notes' => trim(($open->notes ? $open->notes.' — ' : '').$data['notes'])])->save();
+            $audit->log('staff_attendance.corrected', $open, ['employee' => $employee->name, 'date' => $data['date'], 'closed' => true]);
+
+            return back()->with('success', 'سُجّل الانصراف للحضور المفتوح.');
         }
         $row = StaffAttendance::create([
             'user_id' => $account->id, 'branch_id' => $employee->branch_id, 'clock_in_at' => $in, 'clock_out_at' => $out,
@@ -404,6 +419,9 @@ class EmployeeController extends Controller
 
             return ['mode' => 'link', 'user_id' => $target->id];
         }
+        if (is_string($request->input('account_email'))) {
+            $request->merge(['account_email' => strtolower(trim($request->input('account_email')))]);
+        }
         $data = $request->validate([
             'account_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'account_role_id' => ['required', TenantRule::exists('roles')],
@@ -481,17 +499,20 @@ class EmployeeController extends Controller
     }
 
     /** Nobody but the owner sets their own salary or bank details. */
-    private function guardSelf(Request $request, ?Employee $employee, array $data): void
+    /** @param  array{mode: string, user_id?: int}|null  $account  the account this request links, if any */
+    private function guardSelf(Request $request, ?Employee $employee, array $data, ?array $account = null): void
     {
         $user = $request->user();
-        if ($user->isOwner() || ! $employee || $employee->user_id !== $user->id) {
+        // Their own file: already linked to them, or linked to them by this very request (a new file included).
+        $linkingSelf = ($account['mode'] ?? null) === 'link' && (int) ($account['user_id'] ?? 0) === $user->id;
+        if ($user->isOwner() || ! ($linkingSelf || ($employee && $employee->user_id === $user->id))) {
             return;
         }
         foreach (Employee::CONFIDENTIAL as $field) {
             if (! array_key_exists($field, $data)) {
                 continue;
             }
-            $now = $employee->{$field};
+            $now = $employee?->{$field};
             $changed = $field === 'basic_salary' ? Money::cmp($now ?? 0, $data[$field]) !== 0 : $now != $data[$field];
             if ($changed) {
                 throw new BusinessRuleException('payroll.self', 'لا يمكنك تعديل راتبك أو بياناتك البنكية بنفسك. يتولى ذلك صاحب صلاحية أخرى.', 'basic_salary');
