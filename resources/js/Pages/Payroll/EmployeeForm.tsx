@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
-import { useForm } from '@inertiajs/react';
-import { Check, Eye, EyeOff, KeyRound, Plus, ShieldCheck, Sparkles, Trash2, UserRound, Wallet } from 'lucide-react';
+import { router, useForm } from '@inertiajs/react';
+import { Check, Eye, EyeOff, KeyRound, Plus, Search, ShieldCheck, Sparkles, Trash2, UserRound, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Button, Field, Input, PageHeader, Select, Textarea, BackLink } from '@/Components/ui';
+import { Button, Field, Input, Modal, PageHeader, Select, Textarea, BackLink } from '@/Components/ui';
 import { FormSection, Initials } from '@/Components/Payroll/parts';
 import { cn } from '@/lib/cn';
 import PermissionPicker, { type PermissionGroup } from '@/Components/Permissions/PermissionPicker';
@@ -71,6 +71,7 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
         form.setData((d) => ({ ...d, account_password: password, account_password_confirmation: password }));
         setShowPassword(true);
     };
+    const [addingTitle, setAddingTitle] = useState(false);
     const setAllowance = (i: number, patch: Partial<Allowance>) => form.setData('allowances', form.data.allowances.map((a, j) => (j === i ? { ...a, ...patch } : a)));
 
     const submit = (e: FormEvent) => {
@@ -84,7 +85,7 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
             <PageHeader
                 back={<BackLink href={editing ? route('club.employees.show', employee.id) : route('club.employees.index')}>{editing ? 'ملف الموظف' : 'الموظفون'}</BackLink>}
                 title={editing ? 'تعديل ملف الموظف' : 'إضافة موظف'}
-                subtitle={editing ? 'تعديل بيانات الموظف ووظيفته وراتبه حسب صلاحياتك' : 'أضف موظفًا جديدًا وحدّد وظيفته وفرعه، وافتح له حساب دخول إن احتاج'}
+                subtitle={editing ? 'تعديل بيانات الموظف ووظيفته وراتبه حسب صلاحياتك' : 'أضف موظفًا جديدًا وحدّد وظيفته وفرعه'}
             />
 
             <form onSubmit={submit} className="max-w-3xl space-y-5">
@@ -101,18 +102,21 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
                 <FormSection icon={UserRound} title="البيانات الأساسية" hint="ما يظهر في القوائم والتقارير والكشوف" locked={!can.basic && 'تعديل البيانات الأساسية صلاحية لا تملكها؛ يحفظ هذا النموذج ما تملكه فقط.'}>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <Field label="الاسم الكامل" error={form.errors.name} required><Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} /></Field>
-                        <Field label="المسمى الوظيفي" error={form.errors.job_title_id}>
-                            <Select value={form.data.job_title_id} onChange={(e) => form.setData('job_title_id', e.target.value)} placeholder="بلا مسمى">
-                                {jobTitles.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                            </Select>
+                        <Field label="المسمى الوظيفي" hint="للكشوف والتقارير — الصلاحيات من الدور في «الدخول والأمان»" error={form.errors.job_title_id}>
+                            <div className="flex items-start gap-2">
+                                <Select className="min-w-0 flex-1" value={form.data.job_title_id} onChange={(e) => form.setData('job_title_id', e.target.value)} placeholder="اختر المسمى…">
+                                    {jobTitles.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                </Select>
+                                {can.manage && <Button type="button" variant="outline" className="shrink-0 px-0 size-11" icon={<Plus className="size-4" />} aria-label="إضافة مسمى وظيفي" onClick={() => setAddingTitle(true)} />}
+                            </div>
                         </Field>
-                        <Field label="رقم الهاتف" error={form.errors.phone}><Input dir="ltr" value={form.data.phone} onChange={(e) => form.setData('phone', e.target.value)} /></Field>
-                        <Field label="البريد الإلكتروني" error={form.errors.email}><Input dir="ltr" type="email" value={form.data.email} onChange={(e) => setEmail(e.target.value)} /></Field>
-                        <Field label="الفرع" error={form.errors.branch_id}>
+                        <Field label="الفرع الأساسي" error={form.errors.branch_id}>
                             <Select value={form.data.branch_id} onChange={(e) => form.setData('branch_id', e.target.value)} placeholder="الفرع الرئيسي">
                                 {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                             </Select>
                         </Field>
+                        <Field label="رقم الهاتف" error={form.errors.phone}><Input dir="ltr" placeholder="+968 9xxxxxxx" value={form.data.phone} onChange={(e) => form.setData('phone', e.target.value)} /></Field>
+                        <Field label="البريد الإلكتروني" error={form.errors.email}><Input dir="ltr" type="email" value={form.data.email} onChange={(e) => setEmail(e.target.value)} /></Field>
                         <Field label="تاريخ التعيين" error={form.errors.hired_at}><Input type="date" value={form.data.hired_at} onChange={(e) => form.setData('hired_at', e.target.value)} /></Field>
                         <Field label="الحالة الوظيفية" error={form.errors.status} required>
                             <Select value={form.data.status} onChange={(e) => form.setData('status', e.target.value)}>
@@ -140,9 +144,7 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
                         </div>
                         {form.data.account_mode === 'link' && (
                             <Field label="الحساب" className="mt-4" error={form.errors.account_user_id} required>
-                                <Select value={form.data.account_user_id} onChange={(e) => form.setData('account_user_id', e.target.value)} placeholder="اختر الحساب">
-                                    {access.users.map((u) => <option key={u.id} value={u.id} disabled={!u.linkable}>{u.name} — {u.email}{u.role ? ` (${u.role})` : ''}{!u.linkable ? ' — يفتح ما لا تفتحه' : ''}</option>)}
-                                </Select>
+                                <AccountSearch users={access.users} value={form.data.account_user_id} onChange={(id) => form.setData('account_user_id', id)} />
                             </Field>
                         )}
                         {form.data.account_mode === 'new' && (
@@ -242,7 +244,74 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
                     <Button variant="outline" href={editing ? route('club.employees.show', employee.id) : route('club.employees.index')}>إلغاء</Button>
                 </div>
             </form>
+            {addingTitle && <JobTitleModal onClose={() => setAddingTitle(false)} onAdded={(id) => form.setData('job_title_id', String(id))} />}
         </ClubLayout>
+    );
+}
+
+type Account = NonNullable<Props['access']>['users'][number];
+
+/**
+ * The accounts that may be linked, searched by name or email in the page (they are already sent with it): each row
+ * says its role; one that opens more than the actor stays in the list, disabled, with why.
+ */
+function AccountSearch({ users, value, onChange }: { users: Account[]; value: string; onChange: (id: string) => void }) {
+    const [q, setQ] = useState('');
+    const chosen = users.find((u) => String(u.id) === value);
+    const term = q.trim().toLowerCase();
+    const hits = users.filter((u) => term === '' || u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term));
+
+    return (
+        <div className="space-y-2">
+            {chosen && (
+                <div className="flex items-center justify-between gap-3 rounded-[10px] border border-[#111] bg-[#f9fafb] px-3 py-2.5">
+                    <span className="min-w-0"><span className="block truncate text-sm font-medium text-ink">{chosen.name}</span><span className="block truncate text-[12px] text-[#6b7280]" dir="ltr">{chosen.email}</span></span>
+                    <button type="button" className="shrink-0 text-[12px] text-[#6b7280] underline-offset-2 hover:underline" onClick={() => onChange('')}>تغيير</button>
+                </div>
+            )}
+            {!chosen && (
+                <>
+                    <label className="relative block">
+                        <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[#9ca3af]" />
+                        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث بالاسم أو البريد الإلكتروني…" aria-label="ابحث عن الحساب"
+                            className="h-11 w-full rounded-[10px] border border-[#e5e7eb] bg-white ps-9 pe-3 text-sm outline-none focus:border-[#111]" />
+                    </label>
+                    <div className="max-h-64 overflow-y-auto rounded-[10px] border border-[#e5e7eb] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.06)]" role="listbox" aria-label="الحسابات">
+                        {hits.length === 0 && <p className="px-3 py-4 text-center text-[13px] text-[#9ca3af]">لا حسابات مطابقة.</p>}
+                        {hits.map((u) => (
+                            <button key={u.id} type="button" role="option" aria-selected={false} disabled={!u.linkable} onClick={() => onChange(String(u.id))}
+                                className="flex w-full items-center justify-between gap-3 border-b border-[#f2f2f0] px-3 py-2.5 text-start last:border-b-0 hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-white">
+                                <span className="min-w-0"><span className="block truncate text-sm text-ink">{u.name}</span><span className="block truncate text-[12px] text-[#6b7280]" dir="ltr">{u.email}</span></span>
+                                <span className="shrink-0 text-[11px] text-[#9ca3af]">{u.linkable ? u.role ?? '' : 'يفتح ما لا تفتحه'}</span>
+                            </button>
+                        ))}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+/** A job title added from the form, by the same route as the job titles page (employees.manage), then chosen. */
+function JobTitleModal({ onClose, onAdded }: { onClose: () => void; onAdded: (id: number) => void }) {
+    const [name, setName] = useState('');
+    const [error, setError] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+    const submit = () => router.post(route('club.job-titles.store'), { name }, {
+        preserveState: true, preserveScroll: true,
+        onStart: () => setBusy(true), onFinish: () => setBusy(false),
+        onError: (errors) => setError(errors.name ?? Object.values(errors)[0] ?? null),
+        onSuccess: (page) => {
+            const added = (page.props.jobTitles as Option[] | undefined)?.find((t) => t.name === name.trim());
+            if (added) onAdded(added.id);
+            onClose();
+        },
+    });
+
+    return (
+        <Modal open onClose={onClose} size="confirm" title="مسمى وظيفي جديد" footer={<><Button variant="outline" onClick={onClose} disabled={busy}>إلغاء</Button><Button onClick={submit} loading={busy}>إضافة</Button></>}>
+            <Field label="المسمى" error={error ?? undefined} required><Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }} placeholder="مثال: مشرفة الصالة" /></Field>
+        </Modal>
     );
 }
 
