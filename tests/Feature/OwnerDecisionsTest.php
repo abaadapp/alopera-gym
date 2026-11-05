@@ -143,4 +143,27 @@ class OwnerDecisionsTest extends TestCase
         $reports->role->update(['permissions' => ['payroll.reports', 'payroll.salaries']]);
         $this->actingAs($reports->fresh())->post(route('club.payroll.payouts.void', $payout), ['reason' => 'x'])->assertForbidden();
     }
+
+    public function test_saving_payroll_settings_without_the_hidden_hours_keeps_them_stored_and_they_change_no_pay(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $this->asTenant($club, fn () => $club->forceFill(['settings' => array_merge($club->settings ?? [], ['payroll' => ['work_hours' => 4, 'overtime_rate' => 9, 'payout_account_id' => null, 'punch_window_seconds' => 60]])])->save());
+
+        // The settings page no longer sends work hours or the overtime rate.
+        $this->actingAs($owner)->put(route('club.settings.payroll.update'), ['payout_account_id' => '', 'punch_window_seconds' => 30])->assertSessionHasNoErrors();
+        $stored = $club->fresh()->settings['payroll'];
+        $this->assertSame([4, 9, 30], [$stored['work_hours'], $stored['overtime_rate'], $stored['punch_window_seconds']], 'kept as they were, not erased');
+
+        // A run with those settings pays what one without them pays: basic, no overtime of its own; manual lines still count.
+        $this->asTenant($club, function () {
+            Employee::create(['name' => 'موظف', 'basic_salary' => 100, 'status' => 'active']);
+            $run = app(PayrollService::class)->open(now()->format('Y-m'));
+            $item = PayrollItem::sole();
+            $this->assertSame(['100.000', '0.000', '100.000'], [$item->basic, $item->overtime, $item->net]);
+            app(PayrollService::class)->updateItem($item, ['overtime_hours' => '2', 'overtime' => '6', 'deductions' => '1']);
+            $this->assertSame('105.000', $item->fresh()->net, 'manual overtime and deductions work as before');
+            $this->assertSame('105.000', $run->fresh()->net);
+        });
+    }
 }

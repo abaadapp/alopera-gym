@@ -26,11 +26,9 @@ class PayrollSettingsController extends Controller
     public function update(Request $request, TenantContext $tenants): RedirectResponse
     {
         $data = $request->validate([
-            'work_hours' => ['required', 'numeric', 'min:1', 'max:16'],
-            'overtime_rate' => ['nullable', 'numeric', 'min:0', 'max:1000'],
             'payout_account_id' => ['nullable', 'integer'],
             'punch_window_seconds' => ['required', 'integer', 'min:0', 'max:900'],
-        ], [], ['work_hours' => 'ساعات العمل اليومية', 'overtime_rate' => 'أجر الساعة الإضافية', 'punch_window_seconds' => 'مهلة البصمة المكررة']);
+        ], [], ['punch_window_seconds' => 'مهلة البصمة المكررة']);
 
         if ($data['payout_account_id'] && ! Account::money()->postable()->whereIn('kind', Account::PAYING_KINDS)->whereKey($data['payout_account_id'])->exists()) {
             $data['payout_account_id'] = null;
@@ -38,7 +36,9 @@ class PayrollSettingsController extends Controller
 
         $tenant = $tenants->require();
         $settings = $tenant->settings ?? [];
-        $settings['payroll'] = $data;
+        // Daily work hours and the overtime rate are read by no calculation, so the page no longer asks for them;
+        // what a club saved before is kept as it was. Overtime and deductions are entered on each payroll line.
+        $settings['payroll'] = array_merge($settings['payroll'] ?? [], $data);
         $tenant->forceFill(['settings' => $settings])->save();
 
         return back()->with('success', 'حُفظت إعدادات الرواتب والحضور.');
