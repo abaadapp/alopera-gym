@@ -1,10 +1,11 @@
 import type { FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
-import { Check, KeyRound, Plus, Trash2, UserRound, Wallet } from 'lucide-react';
+import { Check, KeyRound, Plus, ShieldCheck, Trash2, UserRound, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Field, Input, PageHeader, Select, Textarea, BackLink } from '@/Components/ui';
 import { FormSection, Initials } from '@/Components/Payroll/parts';
 import { cn } from '@/lib/cn';
+import PermissionPicker, { type PermissionGroup } from '@/Components/Permissions/PermissionPicker';
 import type { Allowance, Can, EmployeeRow } from './Employees';
 
 type Option = { id: number; name: string };
@@ -15,9 +16,13 @@ interface Props {
     trainers: (Option & { linked: boolean })[];
     statuses: Record<string, string>;
     access: {
-        roles: { id: number; name: string; key: string; assignable: boolean }[];
+        roles: { id: number; name: string; key: string; assignable: boolean; permissions: string[] }[];
         branches: Option[];
-        users: { id: number; name: string; email: string; role: string | null; linkable: boolean }[];
+        users: { id: number; name: string; email: string; role: string | null; linkable: boolean; permissions: string[]; own_permissions: boolean }[];
+        groups: PermissionGroup[];
+        decides: string[];
+        sensitive: string[];
+        requires: Record<string, string>;
     } | null;
     can: Can & { basic: boolean };
     confidential: boolean;
@@ -47,7 +52,14 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
         account_email: employee?.email ?? '',
         account_role_id: '',
         account_branch_id: '',
+        account_custom: false,
+        account_permissions: [] as string[],
     });
+    // What the account opens when it follows its role: the chosen role's list, or the linked account's as it stands.
+    const roleList = (): string[] => form.data.account_mode === 'new'
+        ? access?.roles.find((r) => String(r.id) === form.data.account_role_id)?.permissions ?? []
+        : access?.users.find((u) => String(u.id) === form.data.account_user_id)?.permissions ?? [];
+    const shownPermissions = form.data.account_custom ? form.data.account_permissions : roleList();
     const setAllowance = (i: number, patch: Partial<Allowance>) => form.setData('allowances', form.data.allowances.map((a, j) => (j === i ? { ...a, ...patch } : a)));
 
     const submit = (e: FormEvent) => {
@@ -105,42 +117,8 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
                     </div>
                 </FormSection>
 
-                <FormSection icon={Wallet} title="الراتب والبدلات والصرف" hint="سري — يُقرأ ويُكتب بصلاحية مستقلة، ولا يعدّل أحد راتبه بنفسه"
-                    locked={!can.compensation && (confidential ? 'تعديل الرواتب والبيانات البنكية صلاحية لا تملكها؛ تبقى القيم المسجلة كما هي.' : 'قراءة الرواتب صلاحية لا تملكها — يكتبها من يملكها، ولا يتغير ما هو مسجّل بحفظك.')}>
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <Field label="الراتب الأساسي" error={form.errors.basic_salary} required><Input dir="ltr" inputMode="decimal" value={form.data.basic_salary} onChange={(e) => form.setData('basic_salary', e.target.value)} /></Field>
-                        <Field label="طريقة الصرف" error={form.errors.payment_method}>
-                            <Select value={form.data.payment_method} onChange={(e) => form.setData('payment_method', e.target.value)}>
-                                <option value="bank">تحويل بنكي</option>
-                                <option value="cash">نقدًا</option>
-                            </Select>
-                        </Field>
-                    </div>
-                    <div className="mt-4">
-                        <p className="mb-2 text-[13px] font-medium text-ink">البدلات</p>
-                        <div className="space-y-2">
-                            {form.data.allowances.map((a, i) => (
-                                <div key={i} className="flex items-start gap-2">
-                                    <Input className="flex-1" placeholder="سكن، مواصلات…" value={a.name} onChange={(e) => setAllowance(i, { name: e.target.value })} />
-                                    <Input className="w-32" dir="ltr" inputMode="decimal" placeholder="0.000" value={a.amount} onChange={(e) => setAllowance(i, { amount: e.target.value })} />
-                                    <Button type="button" variant="ghost" icon={<Trash2 className="size-4" />} aria-label="حذف البدل" onClick={() => form.setData('allowances', form.data.allowances.filter((_, j) => j !== i))} />
-                                </div>
-                            ))}
-                            <Button type="button" size="sm" variant="outline" icon={<Plus className="size-3.5" />} onClick={() => form.setData('allowances', [...form.data.allowances, { name: '', amount: '' }])}>إضافة بدل</Button>
-                            {form.errors.allowances && <p className="text-xs text-red-600">{form.errors.allowances}</p>}
-                        </div>
-                    </div>
-                    {form.data.payment_method === 'bank' && (
-                        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-                            <Field label="البنك" error={form.errors.bank_name}><Input value={form.data.bank_name} onChange={(e) => form.setData('bank_name', e.target.value)} /></Field>
-                            <Field label="الآيبان" error={form.errors.iban}><Input dir="ltr" value={form.data.iban} onChange={(e) => form.setData('iban', e.target.value)} /></Field>
-                            <Field label="رقم الحساب" error={form.errors.account_number}><Input dir="ltr" value={form.data.account_number} onChange={(e) => form.setData('account_number', e.target.value)} /></Field>
-                        </div>
-                    )}
-                </FormSection>
-
                 {access ? (
-                    <FormSection icon={KeyRound} title="حساب الدخول" hint="للموظف الذي يستخدم اللوحة — الدور يحدد ما يفتحه">
+                    <FormSection icon={KeyRound} title="الدخول والأمان" hint="بالبريد وكلمة المرور يدخل الموظف اللوحة — الدور يحدد ما يفتحه">
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                             {([['none', 'بلا حساب', 'موظف لا يدخل اللوحة'], ['link', 'ربط حساب موجود', 'مستخدم أُنشئ من قبل'], ['new', 'فتح حساب جديد', 'تُعرض كلمة مرور مؤقتة مرة واحدة']] as const).map(([mode, title, hint]) => (
                                 <button key={mode} type="button" onClick={() => form.setData('account_mode', mode)} className={cn('rounded-[10px] border p-3 text-start transition-colors', form.data.account_mode === mode ? 'border-[#111] bg-[#f9fafb]' : 'border-[#e5e7eb] hover:bg-[#f9fafb]')}>
@@ -176,6 +154,67 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
                 ) : editing && employee.user_id ? (
                     <p className="text-[12px] text-muted">للموظف حساب دخول؛ دوره وصلاحياته وكلمة مروره من ملف الموظف.</p>
                 ) : null}
+
+                <FormSection icon={Wallet} title="الراتب" hint="منه يُملأ مسيّر رواتب الشهر — سري، يُقرأ ويُكتب بصلاحية مستقلة، ولا يعدّل أحد راتبه بنفسه"
+                    locked={!can.compensation && (confidential ? 'تعديل الرواتب والبيانات البنكية صلاحية لا تملكها؛ تبقى القيم المسجلة كما هي.' : 'قراءة الرواتب صلاحية لا تملكها — يكتبها من يملكها، ولا يتغير ما هو مسجّل بحفظك.')}>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <Field label="الراتب الأساسي" error={form.errors.basic_salary} required><Input dir="ltr" inputMode="decimal" value={form.data.basic_salary} onChange={(e) => form.setData('basic_salary', e.target.value)} /></Field>
+                        <Field label="طريقة الصرف" error={form.errors.payment_method}>
+                            <Select value={form.data.payment_method} onChange={(e) => form.setData('payment_method', e.target.value)}>
+                                <option value="bank">تحويل بنكي</option>
+                                <option value="cash">نقدًا</option>
+                            </Select>
+                        </Field>
+                    </div>
+                    <div className="mt-4">
+                        <p className="mb-2 text-[13px] font-medium text-ink">البدلات</p>
+                        <div className="space-y-2">
+                            {form.data.allowances.map((a, i) => (
+                                <div key={i} className="flex items-start gap-2">
+                                    <Input className="flex-1" placeholder="سكن، مواصلات…" value={a.name} onChange={(e) => setAllowance(i, { name: e.target.value })} />
+                                    <Input className="w-32" dir="ltr" inputMode="decimal" placeholder="0.000" value={a.amount} onChange={(e) => setAllowance(i, { amount: e.target.value })} />
+                                    <Button type="button" variant="ghost" icon={<Trash2 className="size-4" />} aria-label="حذف البدل" onClick={() => form.setData('allowances', form.data.allowances.filter((_, j) => j !== i))} />
+                                </div>
+                            ))}
+                            <Button type="button" size="sm" variant="outline" icon={<Plus className="size-3.5" />} onClick={() => form.setData('allowances', [...form.data.allowances, { name: '', amount: '' }])}>إضافة بدل</Button>
+                            {form.errors.allowances && <p className="text-xs text-red-600">{form.errors.allowances}</p>}
+                        </div>
+                    </div>
+                    {form.data.payment_method === 'bank' && (
+                        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+                            <Field label="البنك" error={form.errors.bank_name}><Input value={form.data.bank_name} onChange={(e) => form.setData('bank_name', e.target.value)} /></Field>
+                            <Field label="الآيبان" error={form.errors.iban}><Input dir="ltr" value={form.data.iban} onChange={(e) => form.setData('iban', e.target.value)} /></Field>
+                            <Field label="رقم الحساب" error={form.errors.account_number}><Input dir="ltr" value={form.data.account_number} onChange={(e) => form.setData('account_number', e.target.value)} /></Field>
+                        </div>
+                    )}
+                </FormSection>
+
+
+                {access && (
+                    <FormSection icon={ShieldCheck} title="الصلاحيات" hint="حدّد ما يفتحه هذا الموظف — لا شيء يُفتح ما لم تُعلّمه">
+                        {form.data.account_mode === 'none' ? (
+                            <p className="rounded-[10px] border border-[#fde68a] bg-[#fffbeb] px-3 py-2 text-[12px] leading-relaxed text-[#b45309]">لا حساب دخول لهذا الموظف بعد، فلا صلاحيات تعمل له. اختر «ربط حساب موجود» أو «فتح حساب جديد» في «الدخول والأمان» لتحدّد ما يفتحه.</p>
+                        ) : (
+                            <div className="space-y-3">
+                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                    {[{ on: false, title: 'اتبع صلاحيات الدور', hint: 'تتبدّل صلاحياته كلما تبدّل دوره' }, { on: true, title: 'خصّص لهذا الموظف', hint: 'قائمة له وحده — لا تتبدّل مع الدور' }].map((opt) => (
+                                        <button key={String(opt.on)} type="button" onClick={() => form.setData((d) => ({ ...d, account_custom: opt.on, account_permissions: opt.on ? roleList() : d.account_permissions }))}
+                                            className={cn('rounded-[10px] border p-3 text-start transition-colors', form.data.account_custom === opt.on ? 'border-[#111] bg-[#f9fafb]' : 'border-[#e5e7eb] hover:bg-[#f9fafb]')}>
+                                            <span className="flex items-center gap-2">
+                                                <span className={cn('flex size-4 shrink-0 items-center justify-center rounded-full border', form.data.account_custom === opt.on ? 'border-[#111]' : 'border-[#d1d5db]')}>{form.data.account_custom === opt.on && <span className="size-2 rounded-full bg-[#111]" />}</span>
+                                                <span className="text-sm font-medium text-ink">{opt.title}</span>
+                                            </span>
+                                            <span className="mt-1 block ps-6 text-[12px] text-[#6b7280]">{opt.hint}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                                {!form.data.account_custom && <p className="text-[12px] text-muted">{form.data.account_mode === 'new' && !form.data.account_role_id ? 'اختر الدور في «الدخول والأمان» لتظهر صلاحياته.' : 'ما يفتحه الدور — يُعرض ولا يُعدَّل من هنا. للإضافة إليه أو الحذف منه لهذا الموظف وحده اختر «خصّص لهذا الموظف»؛ الدور نفسه لا يتغير.'}</p>}
+                                <PermissionPicker groups={access.groups} value={shownPermissions} onChange={(next) => form.setData('account_permissions', next)} editable={form.data.account_custom} mine={(p) => access.decides.includes(p)} sensitive={access.sensitive} requires={access.requires} />
+                                {(form.errors as Record<string, string>).account_permissions && <p className="text-xs text-red-600">{(form.errors as Record<string, string>).account_permissions}</p>}
+                            </div>
+                        )}
+                    </FormSection>
+                )}
 
                 <div className="flex items-center gap-3">
                     <Button type="submit" icon={<Check className="size-4" />} loading={form.processing}>{editing ? 'حفظ التغييرات' : 'حفظ الموظف'}</Button>

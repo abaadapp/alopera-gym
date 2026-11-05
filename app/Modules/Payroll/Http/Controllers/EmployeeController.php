@@ -187,6 +187,9 @@ class EmployeeController extends Controller
             if ($account && $account['mode'] === 'new') {
                 $this->createAccount($request, $employee, $account);
             }
+            if ($account && $account['mode'] === 'link') {
+                $this->applyOwnList($request, User::ofTenant($this->tenants->id())->findOrFail($account['user_id']), $account);
+            }
 
             return $employee;
         });
@@ -209,6 +212,9 @@ class EmployeeController extends Controller
             $employee->update(Arr::except($data, ['user_id']) + ($account && $account['mode'] === 'link' ? ['user_id' => $account['user_id']] : []));
             if ($account && $account['mode'] === 'new') {
                 $this->createAccount($request, $employee, $account);
+            }
+            if ($account && $account['mode'] === 'link') {
+                $this->applyOwnList($request, User::ofTenant($this->tenants->id())->findOrFail($account['user_id']), $account);
             }
             if ($closing) {
                 $closing->forceFill(['is_active' => false, 'remember_token' => Str::random(60)])->save();
@@ -417,7 +423,7 @@ class EmployeeController extends Controller
                 throw ValidationException::withMessages(['account_user_id' => 'هذا الحساب يفتح ما لا تفتحه، فلا تربطه.']);
             }
 
-            return ['mode' => 'link', 'user_id' => $target->id];
+            return ['mode' => 'link', 'user_id' => $target->id] + $this->ownListRequest($request);
         }
         if (is_string($request->input('account_email'))) {
             $request->merge(['account_email' => strtolower(trim($request->input('account_email')))]);
@@ -434,7 +440,29 @@ class EmployeeController extends Controller
             throw ValidationException::withMessages(['account_branch_id' => 'حسابك مرتبط بفرعك: الحسابات التي تديرها تبقى في فرعك.']);
         }
 
-        return ['mode' => 'new', 'email' => strtolower($data['account_email']), 'role_id' => (int) $data['account_role_id'], 'branch_id' => $data['account_branch_id'] ?? null];
+        return ['mode' => 'new', 'email' => strtolower($data['account_email']), 'role_id' => (int) $data['account_role_id'], 'branch_id' => $data['account_branch_id'] ?? null] + $this->ownListRequest($request);
+    }
+
+    /**
+     * A list of the account's own, chosen with it (account_custom, account_permissions); without one it follows its role.
+     *
+     * @return array{custom: bool, permissions: list<string>}
+     */
+    private function ownListRequest(Request $request): array
+    {
+        $data = $request->validate(['account_custom' => ['boolean'], 'account_permissions' => ['array'], 'account_permissions.*' => ['string', 'in:'.implode(',', PermissionRegistry::all())]]);
+
+        return ['custom' => (bool) ($data['account_custom'] ?? false), 'permissions' => $data['account_permissions'] ?? []];
+    }
+
+    /** The own list, as the staff file's dialog saves it: the actor decides what they hold, the sensitive only as the owner, never their own. */
+    private function applyOwnList(Request $request, User $user, array $account): void
+    {
+        if (! ($account['custom'] ?? false) || $user->isOwner() || $user->id === $request->user()->id) {
+            return;
+        }
+        $stored = $user->custom_permissions !== null ? PermissionRegistry::sanitize($user->custom_permissions) : ($user->role?->expandedPermissions() ?? []);
+        $user->forceFill(['custom_permissions' => [...Grants::merge($request->user(), $stored, $account['permissions']), ...PermissionRegistry::dormant($user->custom_permissions ?? [])]])->save();
     }
 
     private function createAccount(Request $request, Employee $employee, array $account): void
@@ -446,7 +474,8 @@ class EmployeeController extends Controller
         $user->branch_id = $account['branch_id'];
         $user->save();
         $employee->forceFill(['user_id' => $user->id])->save();
-        app(AuditLogger::class)->log('user.created', $user, ['role_id' => $user->role_id, 'employee' => $employee->name]);
+        $this->applyOwnList($request, $user, $account);
+        app(AuditLogger::class)->log('user.created', $user, ['role_id' => $user->role_id, 'employee' => $employee->name, 'custom_permissions' => $user->custom_permissions]);
         // Shown once on the next page, never stored readable.
         session()->flash('password', $password);
     }
@@ -561,7 +590,7 @@ class EmployeeController extends Controller
             'access' => $user->hasPermission('employees.access') && ! $employee?->user_id ? $this->accessOptions($user) + [
                 'users' => User::ofTenant($this->tenants->id())->with('role')->orderBy('name')->get(['id', 'name', 'email', 'role_id', 'custom_permissions', 'is_active', 'tenant_id'])
                     ->reject(fn (User $u) => $linkedUsers->contains($u->id))
-                    ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email, 'role' => $u->role?->name, 'linkable' => Grants::mayManage($user, $u)])->values(),
+                    ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email, 'role' => $u->role?->name, 'linkable' => Grants::mayManage($user, $u), 'permissions' => $u->assignedPermissions(), 'own_permissions' => $u->hasOwnPermissions()])->values(),
             ] : null,
             'can' => $this->abilities($user) + ['basic' => $employee ? $user->hasPermission('employees.manage') : $user->hasPermission('employees.create')],
             'confidential' => $user->hasPermission('payroll.salaries'),
