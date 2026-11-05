@@ -67,6 +67,7 @@ class ReportsCatalogTest extends TestCase
     {
         $club = $this->club();
         $owner = $this->owner($club);
+        $this->fundAccounts($club);
         $khoud = $this->asTenant($club, fn () => Branch::create(['name' => 'فرع الخوض', 'is_active' => true]));
         $member = $this->member($club, ['full_name' => 'سالم الكندي']);
         $this->activeMembership($club, $member);

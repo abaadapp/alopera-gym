@@ -9,6 +9,7 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Modules\Accounting\Models\Account;
+use App\Modules\Accounting\Services\AccountFunds;
 use App\Modules\Accounting\Services\AccountingPeriods;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\Ledger;
@@ -105,13 +106,17 @@ final class PaymentService
      */
     public function confirm(Payment $payment, ?string $reference = null): Payment
     {
-        return DB::transaction(function () use ($payment, $reference) {
+        $out = $payment->kind === Payment::KIND_REFUND ? Account::find($payment->account_id) : null;
+
+        return app(AccountFunds::class)->exclusive($out, fn () => DB::transaction(function () use ($payment, $reference, $out) {
             $payment = Payment::whereKey($payment->id)->lockForUpdate()->firstOrFail();
 
             if ($payment->status !== Payment::PENDING) {
                 throw new BusinessRuleException('payment.not_pending', 'هذه الدفعة ليست بانتظار التأكيد.');
             }
             if ($payment->kind === Payment::KIND_REFUND) {
+                app(AccountFunds::class)->covers($out, $payment->amount);
+
                 return $this->completeRefund($payment, $reference);
             }
 
@@ -139,7 +144,7 @@ final class PaymentService
             app(StaffNotifier::class)->resolve('payment-pending:'.$payment->id);
 
             return $payment;
-        });
+        }));
     }
 
     public function reject(Payment $payment, string $reason): Payment
@@ -246,7 +251,7 @@ final class PaymentService
         }
         $account = $this->accountFor($method, $accountId);
 
-        return DB::transaction(function () use ($note, $amount, $method, $reference, $account) {
+        return app(AccountFunds::class)->exclusive($account, fn () => DB::transaction(function () use ($note, $amount, $method, $reference, $account) {
             $invoice = Invoice::whereKey($note->invoice_id)->lockForUpdate()->firstOrFail();
             $note = CreditNote::whereKey($note->id)->lockForUpdate()->firstOrFail();
 
@@ -271,6 +276,9 @@ final class PaymentService
                 throw new BusinessRuleException('refund.no_gateway_payment', 'لا توجد دفعة إلكترونية على هذه الفاتورة تُرد عبرها. اختر طريقة رد أخرى.', 'method');
             }
             $waits = in_array($method, Payment::REFUND_METHODS_CONFIRMED, true);
+            if (! $waits) {
+                app(AccountFunds::class)->covers($account, Money::normalize($amount));
+            }
 
             $refund = Payment::create([
                 'branch_id' => $note->branch_id ?? $invoice->branch_id,
@@ -306,7 +314,7 @@ final class PaymentService
             $this->audit->log('payment.refunded', $refund, ['credit_note' => $note->number, 'invoice' => $invoice->number, 'amount' => $refund->amount]);
 
             return $refund;
-        });
+        }));
     }
 
     /**
@@ -320,13 +328,16 @@ final class PaymentService
         }
         $account = $this->accountFor($method, $accountId);
 
-        return DB::transaction(function () use ($credit, $amount, $method, $reference, $account) {
+        return app(AccountFunds::class)->exclusive($account, fn () => DB::transaction(function () use ($credit, $amount, $method, $reference, $account) {
             $credit = Payment::whereKey($credit->id)->lockForUpdate()->firstOrFail();
             $this->assertCredit($credit, $amount);
             if ($method === 'paymob' && $credit->method !== 'paymob') {
                 throw new BusinessRuleException('refund.no_gateway_payment', 'هذا الرصيد لم يُدفع إلكترونيًا؛ اختر طريقة رد أخرى.', 'method');
             }
             $waits = in_array($method, Payment::REFUND_METHODS_CONFIRMED, true);
+            if (! $waits) {
+                app(AccountFunds::class)->covers($account, Money::normalize($amount));
+            }
 
             $refund = Payment::create([
                 'branch_id' => $credit->branch_id,
@@ -354,7 +365,7 @@ final class PaymentService
             $this->audit->log($waits ? 'payment.refund_requested' : 'payment.refunded', $refund, ['credit_of' => $credit->receipt_number, 'amount' => $refund->amount, 'method' => $method]);
 
             return $refund;
-        });
+        }));
     }
 
     /**

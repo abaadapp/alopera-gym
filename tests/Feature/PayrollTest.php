@@ -98,6 +98,7 @@ class PayrollTest extends TestCase
     public function test_paying_some_staff_then_repeating_the_request_pays_nobody_twice(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $this->employee($club);
         $this->employee($club, ['name' => 'منى', 'basic_salary' => '300', 'allowances' => []]);
         $run = $this->openRun($club);
@@ -110,12 +111,12 @@ class PayrollTest extends TestCase
         $pay([$sara->id])->assertSessionHasErrors(); // double click / second tab
         $this->assertSame(PayrollRun::APPROVED, $run->fresh()->status);
         $this->assertSame('300.000', $this->balance($club, 'salaries_payable'));
-        $this->assertSame('-450.000', $this->balance($club, 'bank'));
+        $this->assertSame('9550.000', $this->balance($club, 'bank'));
 
         $pay([$sara->id, $mona->id])->assertSessionHasNoErrors(); // only Mona is still owed
         $this->assertSame(PayrollRun::PAID, $run->fresh()->status);
         $this->assertSame('0.000', $this->balance($club, 'salaries_payable'));
-        $this->assertSame('-750.000', $this->balance($club, 'bank'));
+        $this->assertSame('9250.000', $this->balance($club, 'bank'));
         $this->asTenant($club, function () {
             $this->assertSame(2, JournalEntry::where('source_type', 'payroll_payout')->count());
             $this->assertSame(2, PayrollItem::whereNotNull('paid_at')->count());
@@ -140,6 +141,7 @@ class PayrollTest extends TestCase
     public function test_a_draft_cannot_be_paid_and_each_step_needs_its_own_permission(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $this->employee($club);
         $run = $this->openRun($club);
         $item = $this->asTenant($club, fn () => $run->items()->firstOrFail());

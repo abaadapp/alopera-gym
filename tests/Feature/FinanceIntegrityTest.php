@@ -72,6 +72,8 @@ class FinanceIntegrityTest extends TestCase
     public function test_salaries_paid_from_the_drawer_during_a_shift_lower_the_cash_it_should_hold(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
+        $this->travel(1)->minutes(); // the opening balance is in the books before the shift opens
         $owner = $this->owner($club);
         $cash = $this->asTenant($club, fn () => app(ChartOfAccounts::class)->account('cash'));
         $this->actingAs($owner)->post(route('club.cash-shifts.store'), ['account_id' => $cash->id, 'opening_float' => 500])->assertSessionHasNoErrors();

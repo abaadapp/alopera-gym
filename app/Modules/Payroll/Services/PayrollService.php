@@ -8,6 +8,7 @@ use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
+use App\Modules\Accounting\Services\AccountFunds;
 use App\Modules\Accounting\Services\AccountingPeriods;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\Ledger;
@@ -143,6 +144,7 @@ final class PayrollService
             if (! $run->isDraft()) {
                 throw new BusinessRuleException('payroll.not_draft', 'هذه المسيرة معتمدة مسبقًا.');
             }
+            $this->guardMonthBegun($run);
             $items = $run->items()->orderBy('employee_name')->get();
             if ($items->isEmpty() || Money::cmp($run->net, 0) <= 0) {
                 throw new BusinessRuleException('payroll.empty', 'لا تُعتمد مسيرة بلا رواتب.');
@@ -176,16 +178,29 @@ final class PayrollService
      * @param  list<int>  $itemIds
      * @return array{payout: PayrollPayout, paid: int}
      */
+    /** A month still to come is prepared as a draft only: approved and paid once it has begun. */
+    private function guardMonthBegun(PayrollRun $run): void
+    {
+        $start = $run->period->copy()->startOfMonth();
+        if ($start->gt(today())) {
+            throw new BusinessRuleException('payroll.future_month', "لم يبدأ شهر {$run->label()} بعد؛ تُعتمد مسيرته وتُصرف ابتداءً من {$start->toDateString()}.");
+        }
+    }
+
     public function pay(PayrollRun $run, array $itemIds, Account $account, string $date, ?string $reference = null): array
     {
         if (! $account->isPostable() || ! in_array($account->kind, Account::PAYING_KINDS, true)) {
             throw new BusinessRuleException('payroll.account', 'تُصرف الرواتب من الصندوق أو من حساب بنكي فقط.', 'account_id');
         }
 
-        return DB::transaction(function () use ($run, $itemIds, $account, $date, $reference) {
+        return app(AccountFunds::class)->exclusive($account, fn () => DB::transaction(function () use ($run, $itemIds, $account, $date, $reference) {
             $run = PayrollRun::whereKey($run->id)->lockForUpdate()->firstOrFail();
             if ($run->status === PayrollRun::DRAFT) {
                 throw new BusinessRuleException('payroll.not_approved', 'اعتمد المسيرة قبل صرف رواتبها.');
+            }
+            $this->guardMonthBegun($run);
+            if (CarbonImmutable::parse($date)->lt($run->period->copy()->startOfMonth())) {
+                throw new BusinessRuleException('payroll.paid_before_month', 'تاريخ الصرف قبل بداية شهر المسيرة.', 'paid_on');
             }
 
             $items = PayrollItem::where('payroll_run_id', $run->id)->whereIn('id', $itemIds)->whereNull('paid_at')
@@ -201,6 +216,7 @@ final class PayrollService
             }
 
             $total = Money::add('0', ...$items->pluck('net')->all());
+            app(AccountFunds::class)->covers($account, $total);
             $payout = PayrollPayout::create([
                 'payroll_run_id' => $run->id,
                 'number' => NumberSequence::next('payroll_payout'),
@@ -238,7 +254,7 @@ final class PayrollService
             $this->audit->log('payroll.paid', $run, ['payout' => $payout->number, 'lines' => $items->count(), 'total' => $total, 'account' => $account->name]);
 
             return ['payout' => $payout, 'paid' => $items->count()];
-        });
+        }));
     }
 
     /**

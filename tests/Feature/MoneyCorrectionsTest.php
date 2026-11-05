@@ -148,6 +148,7 @@ class MoneyCorrectionsTest extends TestCase
     public function test_an_edited_expense_moves_in_its_own_month(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         $date = CarbonImmutable::today()->subMonthNoOverflow()->startOfMonth()->addDays(19);
         $this->actingAs($owner)->post(route('club.expenses.store'), ['description' => 'صيانة', 'amount' => '100', 'expense_date' => $date->toDateString(), 'payment_method' => 'cash', 'client_key' => $this->key()])->assertSessionHasNoErrors();
@@ -169,6 +170,7 @@ class MoneyCorrectionsTest extends TestCase
     public function test_an_expense_categorys_account_is_not_stopped(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         $category = $this->asTenant($club, fn () => ExpenseCategory::create(['name' => 'تنظيف']));
         $this->actingAs($owner)->post(route('club.expenses.store'), ['description' => 'منظفات', 'amount' => '12', 'expense_date' => today()->toDateString(), 'payment_method' => 'cash', 'expense_category_id' => $category->id, 'client_key' => $this->key()])->assertSessionHasNoErrors();

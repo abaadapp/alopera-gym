@@ -59,6 +59,8 @@ class FollowUpIntegrityTest extends TestCase
     public function test_an_expense_moved_onto_a_drawer_with_an_open_shift_is_counted_in_that_shift(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
+        $this->travel(1)->minutes(); // the opening balance is in the books before the shift opens
         $owner = $this->owner($club);
         [$cash, $bank] = $this->asTenant($club, fn () => [app(ChartOfAccounts::class)->account('cash'), app(ChartOfAccounts::class)->account('bank')]);
         $this->actingAs($owner)->post(route('club.expenses.store'), ['description' => 'ماء', 'amount' => '30', 'expense_date' => today()->toDateString(), 'payment_method' => 'bank_transfer', 'account_id' => $bank->id, 'client_key' => (string) Str::uuid()])->assertSessionHasNoErrors();

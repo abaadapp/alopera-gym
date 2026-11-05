@@ -5,6 +5,7 @@ namespace App\Modules\Finance\Http\Controllers;
 use App\Core\Auth\PermissionRegistry;
 use App\Core\Export\TableExporter;
 use App\Core\Support\BusinessRuleException;
+use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Core\Support\Period;
 use App\Core\Support\SubmittedOnce;
@@ -14,6 +15,7 @@ use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Rules\OpenPeriod;
+use App\Modules\Accounting\Services\AccountFunds;
 use App\Modules\Accounting\Services\AccountingPeriods;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Finance\Models\CashShift;
@@ -56,7 +58,7 @@ class ExpenseController extends Controller
     {
         $data = $this->validated($request);
         // One form, one expense: sent twice (a double click, a retry), the second gets the first back.
-        $number = SubmittedOnce::run($data['client_key'] ?? null, 'expense', function () use ($request, $tenants, $data) {
+        $number = SubmittedOnce::run($data['client_key'] ?? null, 'expense', fn () => $this->spending(Account::find($this->moneyAccount($data)), $data['amount'], function () use ($request, $tenants, $data) {
             $expense = new Expense(collect($data)->except('attachment', 'client_key')->all());
             $expense->number = NumberSequence::next('expense');
             $expense->branch_id = app(BranchContext::class)->assign();
@@ -70,7 +72,7 @@ class ExpenseController extends Controller
             $expense->save();
 
             return $expense->number;
-        });
+        }));
 
         return back()->with('success', 'تم تسجيل المصروف '.$number);
     }
@@ -91,7 +93,9 @@ class ExpenseController extends Controller
         if ($request->hasFile('attachment')) {
             $expense->attachment_path = $request->file('attachment')->store('tenants/'.$tenants->require()->id.'/expenses', 'local');
         }
-        $expense->save();
+        // Raised on the same account it spends the difference; moved to another, that account pays it whole.
+        $spends = (int) $expense->getOriginal('account_id') === $expense->account_id ? Money::sub($expense->amount, (string) $expense->getOriginal('amount')) : $expense->amount;
+        $this->spending(Account::find($expense->account_id), $spends, fn () => $expense->save());
 
         return back()->with('success', 'تم حفظ المصروف.');
     }
@@ -172,6 +176,18 @@ class ExpenseController extends Controller
      * The cash box or bank account that paid it, kept with the expense: the one chosen (an active cash box or bank account
      * suiting the method), else the finance settings' account for the method.
      */
+    /** Paid out of a cash box or bank account only while it holds the amount, one payment at a time (AccountFunds). */
+    private function spending(?Account $account, string|float $amount, callable $save): mixed
+    {
+        $funds = app(AccountFunds::class);
+
+        return $funds->exclusive($account, function () use ($funds, $account, $amount, $save) {
+            $funds->covers($account, $amount);
+
+            return $save();
+        });
+    }
+
     private function moneyAccount(array $data): int
     {
         $chart = app(ChartOfAccounts::class);

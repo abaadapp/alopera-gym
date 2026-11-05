@@ -18,6 +18,7 @@ class ConcurrentEditsTest extends TestCase
     public function test_an_expense_edited_twice_at_once_is_in_the_books_with_the_amount_it_keeps(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         $form = ['description' => 'ماء', 'expense_date' => today()->toDateString(), 'payment_method' => 'cash'];
         $this->actingAs($owner)->post(route('club.expenses.store'), $form + ['amount' => '3', 'client_key' => (string) Str::uuid()])->assertSessionHasNoErrors();

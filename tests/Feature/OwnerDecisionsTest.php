@@ -70,6 +70,7 @@ class OwnerDecisionsTest extends TestCase
     public function test_a_salary_payout_is_voided_once_by_its_own_reversing_entry(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         [$run, $cash] = $this->asTenant($club, function () {
             Employee::create(['name' => 'موظف', 'basic_salary' => 100, 'status' => 'active']);
@@ -81,7 +82,7 @@ class OwnerDecisionsTest extends TestCase
         $this->actingAs($owner)->post(route('club.payroll.pay', $run), ['items' => [$this->asTenant($club, fn () => PayrollItem::value('id'))], 'account_id' => $cash->id, 'paid_on' => today()->toDateString()])->assertSessionHasNoErrors();
         $payout = $this->asTenant($club, fn () => PayrollPayout::sole());
         $drawer = fn () => $this->asTenant($club, fn () => JournalEntry::join('gym_journal_lines as l', 'l.journal_entry_id', '=', 'gym_journal_entries.id')->where('l.account_id', $cash->id)->selectRaw('coalesce(sum(l.debit - l.credit), 0) as b')->value('b'));
-        $this->assertSame('-100.000', (string) $drawer());
+        $this->assertSame('9900.000', (string) $drawer());
 
         $this->actingAs($owner)->post(route('club.payroll.payouts.void', $payout), ['reason' => 'صُرف للحساب الخطأ'])->assertSessionHasNoErrors();
         $this->actingAs($owner)->post(route('club.payroll.payouts.void', $payout), ['reason' => 'مرة ثانية'])->assertSessionHasErrors();
@@ -91,7 +92,7 @@ class OwnerDecisionsTest extends TestCase
             $void = JournalEntry::where(['source_type' => 'payroll_payout', 'source_id' => $payout->id, 'source_event' => 'void'])->sole();
             $this->assertNotNull($pay->reversed_at, 'the original entry stays, marked reversed');
             $this->assertSame([$pay->id, $pay->total], [$void->reverses_id, $void->total]);
-            $this->assertSame('0.000', number_format((float) $drawer(), 3, '.', ''), 'the drawer is back where it was');
+            $this->assertSame('10000.000', number_format((float) $drawer(), 3, '.', ''), 'the drawer is back where it was');
             $this->assertNotNull($payout->fresh()->voided_at);
             $this->assertSame([null, null], [PayrollItem::value('paid_at'), PayrollItem::value('payroll_payout_id')]);
             $this->assertSame(PayrollRun::APPROVED, $run->fresh()->status, 'the run is to be paid again');
@@ -101,6 +102,7 @@ class OwnerDecisionsTest extends TestCase
     public function test_a_payout_in_a_closed_month_is_not_voided(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         $payout = $this->asTenant($club, function () {
             Employee::create(['name' => 'موظف', 'basic_salary' => 100, 'status' => 'active']);
@@ -121,6 +123,7 @@ class OwnerDecisionsTest extends TestCase
     public function test_a_payout_from_the_bank_voided_puts_the_bank_back_and_the_page_shows_it_void(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         $bank = $this->asTenant($club, function () {
             Employee::create(['name' => 'موظف', 'basic_salary' => 250, 'status' => 'active']);
@@ -133,12 +136,12 @@ class OwnerDecisionsTest extends TestCase
         });
         $payout = $this->asTenant($club, fn () => PayrollPayout::sole());
         $balance = fn () => $this->asTenant($club, fn () => number_format((float) JournalEntry::join('gym_journal_lines as l', 'l.journal_entry_id', '=', 'gym_journal_entries.id')->where('l.account_id', $bank->id)->sum(\DB::raw('l.debit - l.credit')), 3, '.', ''));
-        $this->assertSame('-250.000', $balance());
+        $this->assertSame('9750.000', $balance());
         $this->actingAs($owner)->get(route('club.payroll.payouts'))->assertInertia(fn (Assert $page) => $page->where('payouts.0.voidable', true)->where('payouts.0.voided', false));
 
         $this->actingAs($owner)->post(route('club.payroll.payouts.void', $payout), ['reason' => 'تحويل لم يتم'])->assertSessionHasNoErrors()->assertSessionHas('success');
 
-        $this->assertSame('0.000', $balance(), 'the bank in the books is back where it was');
+        $this->assertSame('10000.000', $balance(), 'the bank in the books is back where it was');
         $this->actingAs($owner)->get(route('club.payroll.payouts'))->assertInertia(fn (Assert $page) => $page
             ->where('payouts.0.voided', true)->where('payouts.0.voidable', false)->where('payouts.0.void_reason', 'تحويل لم يتم'));
         // Who may not pay may not void, whatever they send.
@@ -174,6 +177,7 @@ class OwnerDecisionsTest extends TestCase
     private function paidByBank(): array
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         [$item, $khoud] = $this->asTenant($club, function () {
             $main = Branch::orderByDesc('is_main')->orderBy('id')->firstOrFail();
@@ -232,6 +236,7 @@ class OwnerDecisionsTest extends TestCase
     public function test_a_payout_sent_again_says_it_was_already_paid_and_in_which_payout_without_paying_twice(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         [$run, $item, $cash] = $this->asTenant($club, function () {
             Employee::create(['name' => 'موظف', 'basic_salary' => 100, 'status' => 'active']);

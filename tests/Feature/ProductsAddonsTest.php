@@ -265,6 +265,7 @@ class ProductsAddonsTest extends TestCase
     {
         Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_abc', 'intention_order_id' => 4411], 201)]);
         $club = $this->club();
+        $this->fundAccounts($club);
         $this->asTenant($club, fn () => TenantIntegration::create([
             'provider' => 'paymob', 'is_enabled' => true, 'mode' => 'test',
             'credentials' => ['secret_key' => 'sk_test', 'public_key' => 'pk_test', 'hmac_secret' => 'hmac-test', 'integration_ids' => '111'],

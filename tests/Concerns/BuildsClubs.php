@@ -2,11 +2,14 @@
 
 namespace Tests\Concerns;
 
+use App\Core\Support\Money;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantProvisioner;
 use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Modules\Accounting\Services\ChartOfAccounts;
+use App\Modules\Accounting\Services\Ledger;
 use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\Member;
@@ -55,6 +58,21 @@ trait BuildsClubs
      * @param  callable(Tenant): T  $callback
      * @return T
      */
+    /**
+     * Money in the club's cash box and main bank account, as an opening balance: money is paid out of an account only
+     * while it holds it (AccountFunds), as it would be at a club that has been trading.
+     */
+    protected function fundAccounts(Tenant $tenant, string $amount = '10000.000'): void
+    {
+        $this->asTenant($tenant, function () use ($amount) {
+            $chart = app(ChartOfAccounts::class);
+            app(Ledger::class)->post(['date' => today()->toDateString(), 'description' => 'رصيد افتتاحي'], [
+                ['account' => $chart->account('cash'), 'debit' => $amount], ['account' => $chart->account('bank'), 'debit' => $amount],
+                ['account' => $chart->account('opening_equity'), 'credit' => Money::add($amount, $amount)],
+            ]);
+        });
+    }
+
     protected function asTenant(Tenant $tenant, callable $callback): mixed
     {
         return app(TenantContext::class)->run($tenant, $callback);
