@@ -570,13 +570,15 @@ class EmployeeController extends Controller
 
     private function accessOptions(User $actor): array
     {
-        $labels = collect(PermissionRegistry::editorGroups())->map(fn ($g, $key) => ['key' => $key, 'label' => $g['label'], 'permissions' => collect($g['permissions'])->map(fn ($label, $perm) => ['key' => $perm, 'label' => $label])->values()])->values();
+        $labels = PermissionRegistry::editorPayload();
 
         return [
             'roles' => Role::orderBy('id')->get()->map(fn (Role $r) => ['id' => $r->id, 'name' => $r->name, 'key' => $r->key, 'assignable' => Grants::mayAssign($actor, $r), 'permissions' => $r->expandedPermissions()]),
             'branches' => Branch::where('is_active', true)->orderByDesc('is_main')->orderBy('name')->get(['id', 'name']),
             'groups' => $labels,
             'grantable' => Grants::grantable($actor),
+            'decides' => Grants::decides($actor),
+            'sensitive' => PermissionRegistry::sensitive(),
             'requires' => PermissionRegistry::REQUIRES,
         ];
     }

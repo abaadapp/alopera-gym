@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import { Lock, Pencil, Plus, ShieldCheck, Trash2, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { togglePermission } from '@/lib/permissions';
+import PermissionPicker from '@/Components/Permissions/PermissionPicker';
 import { SettingsScreen } from '@/Components/Settings';
 import { Badge, Button, Card, ConfirmAction, Field, Input, Modal, Textarea } from '@/Components/ui';
 
@@ -48,10 +48,10 @@ interface Role {
 interface Group {
     key: string;
     label: string;
-    permissions: { key: string; label: string }[];
+    permissions: { key: string; label: string; hint?: string | null }[];
 }
 
-export default function Roles({ roles, groups, grantable, requires }: { roles: Role[]; groups: Group[]; grantable: string[]; requires: Record<string, string> }) {
+export default function Roles({ roles, groups, grantable, decides, sensitive = [], requires }: { roles: Role[]; groups: Group[]; grantable: string[]; decides?: string[]; sensitive?: string[]; requires: Record<string, string> }) {
     const [editing, setEditing] = useState<Role | 'new' | null>(null);
     const total = groups.reduce((n, g) => n + g.permissions.length, 0);
 
@@ -100,25 +100,16 @@ export default function Roles({ roles, groups, grantable, requires }: { roles: R
                     </Card>
                 ))}
             </div>
-            {editing && <RoleModal role={editing === 'new' ? null : editing} groups={groups} grantable={grantable} requires={requires} onClose={() => setEditing(null)} />}
+            {editing && <RoleModal role={editing === 'new' ? null : editing} groups={groups} grantable={grantable} decides={decides} sensitive={sensitive} requires={requires} onClose={() => setEditing(null)} />}
         </SettingsScreen>
     );
 }
 
-function RoleModal({ role, groups, grantable, requires, onClose }: { role: Role | null; groups: Group[]; grantable: string[]; requires: Record<string, string>; onClose: () => void }) {
+function RoleModal({ role, groups, grantable, decides, sensitive, requires, onClose }: { role: Role | null; groups: Group[]; grantable: string[]; decides?: string[]; sensitive: string[]; requires: Record<string, string>; onClose: () => void }) {
     const locked = role?.is_locked ?? false;
-    // Nobody gives what they do not hold: those boxes stay as they are, and the server keeps them so.
-    const mine = (p: string) => grantable.includes(p);
+    // Nobody gives what they do not hold, nor a sensitive one unless the owner: those boxes stay as they are, and the server keeps them so.
+    const mine = (p: string) => (decides ?? grantable).includes(p);
     const form = useForm({ name: role?.name ?? '', description: role?.description ?? '', permissions: role?.permissions ?? ([] as string[]) });
-    const has = (p: string) => form.data.permissions.includes(p);
-    const toggle = (p: string) => !locked && mine(p) && form.setData('permissions', togglePermission(form.data.permissions, p, requires, mine));
-    const toggleGroup = (g: Group) => {
-        if (locked) return;
-        const keys = g.permissions.map((p) => p.key).filter(mine);
-        const all = keys.every(has);
-        form.setData('permissions', all ? form.data.permissions.filter((p) => !keys.includes(p)) : Array.from(new Set([...form.data.permissions, ...keys])));
-    };
-
     const submit = (e: FormEvent) => {
         e.preventDefault();
         if (locked) return onClose();
@@ -135,7 +126,7 @@ function RoleModal({ role, groups, grantable, requires, onClose }: { role: Role 
             footer={locked ? <Button variant="outline" onClick={onClose}>إغلاق</Button> : <><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing}>حفظ</Button></>}
         >
             {locked && <p className="mb-4 rounded-[10px] bg-[#eff6ff] px-3 py-2 text-[12px] leading-relaxed text-[#1d4ed8]">دور صاحب النشاط يملك كل الصلاحيات ولا يمكن تعديله، حتى لا يُغلق النظام على نفسه.</p>}
-            {!locked && groups.some((g) => g.permissions.some((p) => !mine(p.key))) && <p className="mb-4 rounded-[10px] bg-[#fffbeb] px-3 py-2 text-[12px] leading-relaxed text-[#b45309]">الصلاحيات الباهتة لا تملكها أنت، فلا تمنحها ولا تسحبها؛ تبقى على حالها في الدور.</p>}
+            {!locked && groups.some((g) => g.permissions.some((p) => !mine(p.key))) && <p className="mb-4 rounded-[10px] bg-[#fffbeb] px-3 py-2 text-[12px] leading-relaxed text-[#b45309]">الصلاحيات الباهتة لا تملكها أنت أو هي حساسة يمنحها صاحب النشاط وحده، فلا تمنحها ولا تسحبها؛ تبقى على حالها في الدور.</p>}
             <div className="mb-4 flex flex-wrap gap-1.5">
                 {ACTIONS.map(([key, label]) => <span key={key} className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', actionTone[key])}>{label}</span>)}
             </div>
@@ -150,35 +141,8 @@ function RoleModal({ role, groups, grantable, requires, onClose }: { role: Role 
                         </Field>
                     </div>
                 )}
-                <div className="grid gap-3 md:grid-cols-2">
-                    {groups.map((g) => {
-                        const keys = g.permissions.map((p) => p.key);
-                        const count = keys.filter(has).length;
-                        return (
-                            <div key={g.key} className="rounded-[12px] border border-[#e8e8e8] p-4">
-                                <label className="mb-3 flex cursor-pointer items-center justify-between gap-2">
-                                    <span className="font-semibold text-[#111]">{g.label}</span>
-                                    <span className="flex items-center gap-2 text-[12px] text-[#9ca3af]">
-                                        <span className="num">{locked ? keys.length : count}/{keys.length}</span>
-                                        <input type="checkbox" className="size-4 rounded border-[#d1d5db] accent-[#111]" checked={locked || count === keys.length} ref={(el) => { if (el) el.indeterminate = count > 0 && count < keys.length; }} onChange={() => toggleGroup(g)} disabled={locked} />
-                                    </span>
-                                </label>
-                                <div className="space-y-2">
-                                    {g.permissions.map((p) => {
-                                        const [action, actionLabel] = actionOf(p.key);
-                                        return (
-                                            <label key={p.key} title={!locked && !mine(p.key) ? 'لا تملك هذه الصلاحية، فلا تمنحها ولا تسحبها.' : undefined} className={cn('flex items-start gap-2.5 text-sm text-[#374151]', !locked && !mine(p.key) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer')}>
-                                                <input type="checkbox" className="mt-0.5 size-4 shrink-0 rounded border-[#d1d5db] accent-[#111]" checked={locked || has(p.key)} onChange={() => toggle(p.key)} disabled={locked || !mine(p.key)} />
-                                                <span className="min-w-0 flex-1">{p.label}</span>
-                                                <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium', actionTone[action])}>{actionLabel}</span>
-                                            </label>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
+                <PermissionPicker groups={groups} value={locked ? groups.flatMap((g) => g.permissions.map((p) => p.key)) : form.data.permissions} onChange={(next) => form.setData('permissions', next)} editable={!locked} mine={mine} sensitive={sensitive} requires={requires}
+                    tag={(key) => { const [action, label] = actionOf(key); return <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium', actionTone[action])}>{label}</span>; }} />
                 {form.errors.permissions && <p className="text-[12px] text-[#b91c1c]">{form.errors.permissions}</p>}
             </form>
         </Modal>

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Club;
 use App\Core\Audit\AuditLogger;
 use App\Core\Auth\DemoAccounts;
 use App\Core\Auth\Grants;
+use App\Core\Auth\PermissionRegistry;
 use App\Core\Auth\SystemRoles;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
@@ -12,6 +13,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Role;
 use App\Models\User;
+use App\Modules\Payroll\Models\Employee;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -30,17 +32,26 @@ class UserController extends Controller
         $tid = $this->tenants->require()->id;
         $actor = $request->user();
 
-        // A user tied to a branch sees that branch's accounts.
+        // A user tied to a branch sees that branch's accounts. Each opens its permissions in its staff file, if it has one.
+        $files = $actor->hasPermission('employees.access') ? Employee::whereNotNull('user_id')->pluck('id', 'user_id') : collect();
+
         return Inertia::render('Club/Settings/Users', [
             'users' => User::ofTenant($tid)->when($actor->branch_id, fn ($q, $branch) => $q->where('branch_id', $branch))->with('role', 'branch:id,name')->orderBy('name')->get()
                 ->map(fn (User $u) => $u->only('id', 'name', 'email', 'phone', 'is_active', 'role_id', 'branch_id') + [
                     'role' => $u->role?->name, 'role_key' => $u->role?->key, 'branch' => $u->branch?->name,
                     'last_login_at' => $u->last_login_at?->format('Y-m-d H:i'),
                     'own_permissions' => $u->hasOwnPermissions(),
+                    'custom' => $u->hasOwnPermissions() ? PermissionRegistry::sanitize($u->custom_permissions ?? []) : null,
+                    'employee_id' => $files[$u->id] ?? null,
                     // An account that opens more than this user is shown, not edited.
                     'may_manage' => Grants::mayManage($actor, $u),
                 ]),
-            'roles' => Role::orderBy('id')->get(['id', 'name', 'key', 'permissions'])->map(fn (Role $r) => $r->only('id', 'name', 'key') + ['assignable' => Grants::mayAssign($actor, $r)]),
+            'roles' => Role::orderBy('id')->get(['id', 'name', 'key', 'permissions'])->map(fn (Role $r) => $r->only('id', 'name', 'key') + ['assignable' => Grants::mayAssign($actor, $r), 'permissions' => $r->expandedPermissions()]),
+            // The same picker as the staff file and the roles page, for an account's own list.
+            'groups' => PermissionRegistry::editorPayload(),
+            'decides' => Grants::decides($actor),
+            'sensitive' => PermissionRegistry::sensitive(),
+            'requires' => PermissionRegistry::REQUIRES,
             'branches' => Branch::where('is_active', true)->when($actor->branch_id, fn ($q, $branch) => $q->whereKey($branch))->get(['id', 'name']),
         ]);
     }
@@ -85,18 +96,35 @@ class UserController extends Controller
             return back()->with('error', 'يجب أن يبقى مالك واحد نشط على الأقل.');
         }
 
-        $old = $user->only('role_id', 'is_active', 'email');
+        // Following the role, or a list of its own (sent only by the editor that shows it): the actor decides only the
+        // permissions they hold, the sensitive ones only if they are the owner; nobody sets their own.
+        $custom = $user->custom_permissions;
+        if ($request->has('custom')) {
+            abort_if($user->id === $request->user()->id, 403, 'لا تعدّل صلاحياتك بنفسك.');
+            $role = Role::findOrFail($data['role_id']);
+            $custom = null;
+            if ($request->boolean('custom') && $role->key !== SystemRoles::OWNER) {
+                $stored = $user->custom_permissions !== null ? PermissionRegistry::sanitize($user->custom_permissions) : $role->expandedPermissions();
+                $custom = [...Grants::merge($request->user(), $stored, (array) $request->input('permissions', [])), ...PermissionRegistry::dormant($user->custom_permissions ?? [])];
+            }
+            if ($custom === null && $user->custom_permissions !== null && ! Grants::mayAssign($request->user(), $role)) {
+                throw ValidationException::withMessages(['custom' => 'يفتح الدور ما لا تملكه؛ لا يمكنك إعادة هذا الحساب إلى صلاحيات دوره كاملة.']);
+            }
+        }
+
+        $old = $user->only('role_id', 'is_active', 'email', 'custom_permissions');
         $user->fill(collect($data)->only('name', 'phone')->all());
         $user->email = strtolower($data['email']);
         $user->role_id = $data['role_id'];
         $user->branch_id = $data['branch_id'] ?? null;
         $user->is_active = $data['is_active'] ?? true;
+        $user->custom_permissions = $custom;
         if (! empty($data['password'])) {
             $user->password = $data['password'];
         }
         $user->save();
 
-        $audit->log('user.updated', $user, old: $old, new: $user->only('role_id', 'is_active', 'email'));
+        $audit->log('user.updated', $user, old: $old, new: $user->only('role_id', 'is_active', 'email', 'custom_permissions'));
 
         return back()->with('success', 'تم حفظ المستخدم.');
     }
@@ -157,6 +185,9 @@ class UserController extends Controller
             'branch_id' => ['nullable', TenantRule::exists('branches')],
             'is_active' => ['boolean'],
             'password' => [$user ? 'nullable' : 'required', Password::defaults()],
+            'custom' => ['sometimes', 'boolean'],
+            'permissions' => ['array'],
+            'permissions.*' => ['string', 'in:'.implode(',', PermissionRegistry::all())],
         ]);
     }
 }

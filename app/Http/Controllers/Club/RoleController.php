@@ -20,12 +20,15 @@ class RoleController extends Controller
         return Inertia::render('Club/Settings/Roles', [
             // What this user may give: the editor disables the rest instead of offering what the server refuses.
             'grantable' => Grants::grantable($request->user()),
+            // What this user may add or take: what they hold, less the sensitive unless they are the owner.
+            'decides' => Grants::decides($request->user()),
+            'sensitive' => PermissionRegistry::sensitive(),
             // A payroll step needs seeing salaries: the editor ticks them together.
             'requires' => PermissionRegistry::REQUIRES,
             'roles' => Role::withCount('users')->orderBy('id')->get()->map(fn (Role $r) => $r->only('id', 'key', 'name', 'description', 'is_system', 'is_locked', 'users_count') + [
                 'permissions' => $r->expandedPermissions(),
             ]),
-            'groups' => collect(PermissionRegistry::editorGroups())->map(fn ($g, $key) => ['key' => $key, 'label' => $g['label'], 'permissions' => collect($g['permissions'])->map(fn ($label, $perm) => ['key' => $perm, 'label' => $label])->values()])->values(),
+            'groups' => PermissionRegistry::editorPayload(),
         ]);
     }
 
@@ -76,8 +79,12 @@ class RoleController extends Controller
     /** A new role carries only permissions its author holds. */
     private function guardGrant(Request $request, array $permissions): void
     {
-        if (! Grants::covers($request->user(), PermissionRegistry::sanitize($permissions))) {
+        $permissions = PermissionRegistry::sanitize($permissions);
+        if (! Grants::covers($request->user(), $permissions)) {
             throw ValidationException::withMessages(['permissions' => 'لا يمكنك منح صلاحية لا تملكها.']);
+        }
+        if (! Grants::mayGive($request->user(), $permissions)) {
+            throw ValidationException::withMessages(['permissions' => 'الصلاحيات الحساسة يمنحها صاحب النشاط وحده.']);
         }
     }
 
