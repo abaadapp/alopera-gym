@@ -39,4 +39,9 @@ describe('an A4 sheet on screen', () => {
         window.dispatchEvent(new Event('afterprint'));
         expect(Number(paper.style.zoom)).toBeCloseTo(768 / 794, 4);
     });
+
+    // A browser may print without firing beforeprint: the print rule outranks the inline zoom on its own.
+    it('prints at real size even without the print event', () => {
+        expect(blade).toMatch(/@media print \{ \.paper \{ zoom: 1 !important; \} \}/);
+    });
 });

@@ -239,7 +239,9 @@
     </div>
 </div>
 {{-- A window narrower than the sheet (a tablet upright, a narrow desktop window) ignores the phone viewport above: the
-     sheet is shown whole, scaled to it, instead of a corner with a sideways scroll. Printing stays at real size. --}}
+     sheet is shown whole, scaled to it, instead of a corner with a sideways scroll. Printing stays at real size, by
+     the rule below even where a browser prints without telling the page first. --}}
+<style>@media print { .paper { zoom: 1 !important; } }</style>
 <script>
 (function () {
     var paper = document.querySelector('.paper');
