@@ -85,6 +85,8 @@ body:has(.admin-ui) {
 html:has(.admin-ui) {
     scrollbar-gutter: stable;
     overscroll-behavior-y: none;
+    /* A field the browser scrolls to (focus, a link, an error) stops below the sticky top bar (h-16), not under it. */
+    scroll-padding-top: 4.5rem;
 }
 .admin-ui ::-webkit-scrollbar,
 html:has(.admin-ui)::-webkit-scrollbar {

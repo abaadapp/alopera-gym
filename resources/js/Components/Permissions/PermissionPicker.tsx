@@ -66,7 +66,7 @@ export default function PermissionPicker({ groups, value, onChange, editable, mi
                 <span className="min-w-0 flex-1">{p.label}{p.hint && <span className="mt-0.5 block text-[12px] leading-relaxed text-[#6b7280]">{p.hint}</span>}</span>
                 {tag?.(p.key)}
                 {isSensitive && (section
-                    ? <span className="shrink-0 rounded-full bg-[#fef3c7] px-2 py-0.5 text-[11px] font-medium text-[#92400e]">{section}</span>
+                    ? <span className="shrink-0 rounded-full bg-[#f2f2f0] px-2 py-0.5 text-[11px] font-medium text-[#6b7280]">{section}</span>
                     : <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#fffbeb] px-2 py-0.5 text-[11px] font-medium text-[#b45309]"><ShieldAlert className="size-3" />حساسة</span>)}
             </label>
         );
@@ -103,10 +103,10 @@ export default function PermissionPicker({ groups, value, onChange, editable, mi
                 </div>
             )}
             {sensitiveRows.length > 0 && (
-                <div className="rounded-2xl border border-[#fde68a] bg-[#fffdf5] p-4">
-                    {head(<span className="inline-flex items-center gap-1.5"><ShieldAlert className="size-4 text-[#b45309]" />الصلاحيات الحساسة</span>, sensitiveRows.map((r) => r.p))}
-                    <p className="-mt-1 mb-3 text-[12px] leading-relaxed text-[#92400e]">تُمنح بالاسم، ويمنحها صاحب النشاط وحده: المال والرواتب والقيود والحسابات والتصدير والإعدادات.</p>
-                    <div className="grid gap-x-4 gap-y-1.5 md:grid-cols-2">{sensitiveRows.map(({ p, section }) => row(p, section))}</div>
+                <div className="border-t border-line pt-4">
+                    {head(<span className="text-[14px] font-semibold text-ink">أفعالٌ حساسة</span>, sensitiveRows.map((r) => r.p))}
+                    <p className="-mt-1 mb-3 text-[12px] leading-relaxed text-muted">تُمنح بالاسم، ويمنحها صاحب النشاط وحده: المال والرواتب والقيود والحسابات والتصدير والإعدادات.</p>
+                    <div className="space-y-3">{sensitiveRows.map(({ p, section }) => row(p, section))}</div>
                 </div>
             )}
         </div>

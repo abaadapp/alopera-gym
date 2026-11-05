@@ -36,7 +36,7 @@ describe('the permission picker', () => {
         render(<Picker decides={['members.view', 'members.export']} />);
         expect((screen.getByLabelText('عرض الأعضاء', { exact: false }) as HTMLInputElement).disabled).toBe(false);
         expect((screen.getByLabelText('صرف الرواتب', { exact: false }) as HTMLInputElement).disabled).toBe(true);
-        expect(screen.getByText('الصلاحيات الحساسة')).toBeTruthy();
+        expect(screen.getByText('أفعالٌ حساسة')).toBeTruthy();
         expect(screen.getAllByText('الرواتب')).toHaveLength(2);
     });
 

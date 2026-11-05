@@ -42,7 +42,7 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
     const bell = useBellFeed();
 
     return (
-        <header className="no-print sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-[#e8e8e8] bg-white/95 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-white/80 lg:px-6">
+        <header className="no-print sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-[#e8e8e8] bg-white px-4 lg:px-6">
             <button className={cn(iconButton, 'lg:hidden')} onClick={onMenu} aria-label="القائمة">
                 <Menu />
             </button>
