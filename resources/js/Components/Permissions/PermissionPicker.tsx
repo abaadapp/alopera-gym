@@ -1,17 +1,18 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Search, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { togglePermission } from '@/lib/permissions';
 
-export type PermissionGroup = { key: string; label: string; permissions: { key: string; label: string }[] };
+export type PermissionGroup = { key: string; label: string; permissions: { key: string; label: string; hint?: string | null }[] };
 type Filter = 'all' | 'chosen' | 'sensitive';
 
 /**
  * Every permission of the club in its section, a box before each: search, all / the chosen / the sensitive, a whole
  * section on or off, how many are chosen. A box the editor may not decide (not held, or sensitive for anyone but the
- * owner) stays as it is; the server keeps it so whatever is sent.
+ * owner) stays as it is; the server keeps it so whatever is sent. `tag` adds a mark of its own after a permission (the
+ * roles page's kind of power).
  */
-export default function PermissionPicker({ groups, value, onChange, editable, mine, sensitive, requires }: {
+export default function PermissionPicker({ groups, value, onChange, editable, mine, sensitive, requires, tag }: {
     groups: PermissionGroup[];
     value: string[];
     onChange: (next: string[]) => void;
@@ -19,6 +20,7 @@ export default function PermissionPicker({ groups, value, onChange, editable, mi
     mine: (permission: string) => boolean;
     sensitive: string[];
     requires: Record<string, string>;
+    tag?: (permission: string) => ReactNode;
 }) {
     const [query, setQuery] = useState('');
     const [filter, setFilter] = useState<Filter>('all');
@@ -28,7 +30,7 @@ export default function PermissionPicker({ groups, value, onChange, editable, mi
     const visible = groups
         .map((g) => ({ ...g, permissions: g.permissions.filter((p) =>
             (filter !== 'chosen' || value.includes(p.key)) && (filter !== 'sensitive' || sensitive.includes(p.key))
-            && (q === '' || p.label.includes(q) || g.label.includes(q) || p.key.includes(q.toLowerCase()))) }))
+            && (q === '' || p.label.includes(q) || (p.hint ?? '').includes(q) || g.label.includes(q) || p.key.includes(q.toLowerCase()))) }))
         .filter((g) => g.permissions.length > 0);
     const may = (p: string) => editable && mine(p);
     const toggle = (p: string) => may(p) && onChange(togglePermission(value, p, requires, mine));
@@ -84,7 +86,8 @@ export default function PermissionPicker({ groups, value, onChange, editable, mi
                                         <label key={p.key} title={locked ? (isSensitive ? 'الصلاحيات الحساسة يمنحها صاحب النشاط وحده.' : 'لا تملك هذه الصلاحية — ولا تُمنح ما لا تملك.') : undefined}
                                             className={cn('flex items-start gap-2 text-sm text-ink/85', may(p.key) ? 'cursor-pointer' : 'cursor-not-allowed', editable && !may(p.key) && 'opacity-60')}>
                                             <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-[#111]" checked={value.includes(p.key)} onChange={() => toggle(p.key)} disabled={!may(p.key)} />
-                                            <span className="min-w-0 flex-1">{p.label}</span>
+                                            <span className="min-w-0 flex-1">{p.label}{p.hint && <span className="mt-0.5 block text-[12px] leading-relaxed text-[#6b7280]">{p.hint}</span>}</span>
+                                            {tag?.(p.key)}
                                             {isSensitive && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#fffbeb] px-2 py-0.5 text-[11px] font-medium text-[#b45309]"><ShieldAlert className="size-3" />حساسة</span>}
                                         </label>
                                     );

@@ -46,6 +46,11 @@ class SensitivePermissionsTest extends TestCase
             $this->assertContains($key, PermissionRegistry::sensitive());
         }
         $this->assertNotContains('members.view', PermissionRegistry::sensitive());
+        // Each sensitive one says in a line what it lets its holder do, and that line reaches the editors.
+        $this->assertSame([], array_diff(PermissionRegistry::SENSITIVE, array_keys(PermissionRegistry::DESCRIPTIONS)));
+        $this->assertSame([], array_diff(array_keys(PermissionRegistry::DESCRIPTIONS), PermissionRegistry::all()));
+        $hints = collect(PermissionRegistry::editorPayload())->flatMap(fn ($g) => $g['permissions'])->pluck('hint', 'key');
+        $this->assertSame(PermissionRegistry::DESCRIPTIONS['payroll.pay'], $hints['payroll.pay']);
     }
 
     public function test_a_role_editor_holding_a_sensitive_permission_neither_gives_nor_takes_it(): void

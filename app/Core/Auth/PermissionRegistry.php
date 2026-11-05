@@ -171,7 +171,47 @@ final class PermissionRegistry
         'users.manage', 'roles.manage', 'employees.access', 'branches.manage', 'integrations.manage', 'backups.manage',
     ];
 
+    /** What a sensitive permission lets its holder do, in a line under its name in the editors. */
+    public const DESCRIPTIONS = [
+        'payroll.salaries' => 'يرى رواتب الموظفين وبدلاتهم وأرقام حساباتهم البنكية.',
+        'payroll.compensation' => 'يغيّر الراتب الأساسي والبدلات والحساب البنكي في ملف الموظف.',
+        'payroll.prepare' => 'يفتح مسيّر رواتب الشهر ويحسب بنوده.',
+        'payroll.edit' => 'يعدّل بنود المسيّر قبل اعتماده: الإضافي والخصومات والملاحظات.',
+        'payroll.approve' => 'يعتمد المسيّر فيُقفل للتعديل ويصبح جاهزًا للصرف.',
+        'payroll.pay' => 'يصرف الرواتب من حساب النقد أو البنك بقيد، ويلغي الصرف بقيد عكسي.',
+        'payroll.reports' => 'يفتح تقارير الرواتب ويصدّرها، وفيها أرقام الرواتب.',
+        'accounting.manage' => 'ينشئ الحسابات البنكية والقيود اليدوية ويغيّر الإعدادات المالية.',
+        'accounting.close' => 'يقفل شهرًا محاسبيًا فلا يُسجَّل فيه شيء بعده.',
+        'accounting.reopen' => 'يعيد فتح شهر مقفل للتسجيل فيه من جديد.',
+        'accounting.all_branches' => 'يرى مالية النادي كله وهو مرتبط بفرع واحد.',
+        'invoices.void' => 'يلغي فاتورة صادرة ويعكس قيدها.',
+        'invoices.credit' => 'يصدر إشعارًا دائنًا يُنقص مبلغ فاتورة.',
+        'payments.refund' => 'يرد مبلغًا للعضو نقدًا أو تحويلًا.',
+        'payments.cancel' => 'يلغي دفعة سُجّلت بالخطأ ويعيد الفاتورة مستحقة.',
+        'sales.refund' => 'يلغي عملية بيع من نقطة البيع ويرد مبلغها.',
+        'inventory.adjust' => 'يسجّل الجرد والتالف والفاقد ويعدّل الكميات.',
+        'inventory.approve' => 'يعتمد الجرد ونقل المخزون وطلبات تزويد الفروع فتتغير الأرصدة.',
+        'purchases.manage' => 'ينشئ أوامر الشراء وسندات الموردين.',
+        'purchases.approve' => 'يعتمد أوامر الشراء وسندات الاستلام وسندات الموردين.',
+        'purchases.pay' => 'يسدّد مستحقات الموردين من النقد أو البنك.',
+        'members.export' => 'ينزّل بيانات الأعضاء وأرقام هواتفهم في ملف.',
+        'reports.export' => 'ينزّل التقارير في ملفات PDF وExcel وCSV.',
+        'users.manage' => 'ينشئ حسابات الدخول ويوقفها ويغيّر كلمات مرورها.',
+        'roles.manage' => 'ينشئ الأدوار ويعدّل صلاحياتها.',
+        'employees.access' => 'يغيّر دور الموظف وفرعه وصلاحياته ويوقف حسابه.',
+        'branches.manage' => 'ينشئ الفروع ويعدّلها ويوقفها.',
+        'integrations.manage' => 'يغيّر مفاتيح Paymob وواتساب التي يستخدمها النادي.',
+        'backups.manage' => 'ينزّل نسخة من بيانات النادي ويستعيد نسخة سابقة.',
+    ];
+
     private const MODULE_GROUPS = ['sales' => 'sales', 'inventory' => 'inventory'];
+
+    /** @return list<array{key: string, label: string, permissions: list<array{key: string, label: string, hint: ?string}>}> the editors' sections */
+    public static function editorPayload(): array
+    {
+        return collect(self::editorGroups())->map(fn ($g, $key) => ['key' => $key, 'label' => $g['label'], 'permissions' => collect($g['permissions'])
+            ->map(fn ($label, $perm) => ['key' => $perm, 'label' => $label, 'hint' => self::DESCRIPTIONS[$perm] ?? null])->values()->all()])->values()->all();
+    }
 
     /** @return list<string> the sensitive permissions this club can be given now */
     public static function sensitive(): array
