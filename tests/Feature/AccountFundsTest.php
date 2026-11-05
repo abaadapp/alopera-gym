@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Core\Support\Money;
 use App\Models\Tenant;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
+use App\Modules\Accounting\Models\JournalLine;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\FinanceReports;
 use App\Modules\Accounting\Services\Ledger;
@@ -13,13 +15,16 @@ use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Inventory\Models\Product;
+use App\Modules\Inventory\Models\Sale;
 use App\Modules\Inventory\Models\Supplier;
 use App\Modules\Inventory\Models\SupplierBill;
 use App\Modules\Inventory\Models\SupplierPayment;
 use App\Modules\Payroll\Models\Employee;
 use App\Modules\Payroll\Models\PayrollPayout;
 use App\Modules\Payroll\Models\PayrollRun;
+use ArrayObject;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
 
@@ -164,5 +169,79 @@ class AccountFundsTest extends TestCase
         $this->fund($club, 'bank', '30.000');
         $this->actingAs($owner)->post(route('club.payments.confirm', $refund), ['reference' => 'TR-1'])->assertSessionHasNoErrors();
         $this->assertSame([Payment::COMPLETED, '0.000'], [$refund->fresh()->status, $this->balance($club, $bank)]);
+    }
+
+    /** A bottle sold for 30 in cash at the till: its invoice, and the cash box that took the money. */
+    private function soldForCash(Tenant $club, $owner): array
+    {
+        $product = $this->asTenant($club, fn () => Product::create(['name' => 'Bottle', 'price' => 30, 'track_stock' => false]));
+        $this->actingAs($owner)->post(route('club.pos.checkout'), ['items' => [['product_id' => $product->id, 'quantity' => 1]], 'payment_method' => 'cash'])->assertSessionHasNoErrors();
+        $invoice = $this->asTenant($club, fn () => Invoice::sole());
+
+        return [$invoice, $this->asTenant($club, fn () => Account::findOrFail(Payment::where('invoice_id', $invoice->id)->value('account_id')))];
+    }
+
+    /** Each time cash leaving the box is written to the books: could another payment take the box at that moment? */
+    private function boxFreeWhileCashLeaves(Account $cash): ArrayObject
+    {
+        $seen = new ArrayObject;
+        JournalLine::created(function (JournalLine $line) use ($cash, $seen) {
+            if ((int) $line->account_id === $cash->id && Money::toMinor($line->credit) > 0) {
+                $lock = Cache::lock("account-funds:{$cash->tenant_id}:{$cash->id}", 30);
+                $seen[] = $free = $lock->get();
+                if ($free) {
+                    $lock->release();
+                }
+            }
+        });
+
+        return $seen;
+    }
+
+    public function test_a_refund_paid_with_the_credit_note_keeps_the_cash_box_until_it_is_in_the_books(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        [$invoice, $cash] = $this->soldForCash($club, $owner);
+        $free = $this->boxFreeWhileCashLeaves($cash);
+
+        $this->actingAs($owner)->post(route('club.credit-notes.store', $invoice), ['amount' => '30', 'reason' => 'مرتجع', 'refund_now' => true, 'method' => 'cash'])->assertSessionHasNoErrors();
+
+        $this->assertSame([false], $free->getArrayCopy(), 'another payment could take the box before the refund was in its books');
+        $this->assertSame('0.000', $this->balance($club, $cash));
+    }
+
+    public function test_a_sale_cancelled_with_its_cash_refunded_keeps_the_cash_box_until_it_is_in_the_books(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        [, $cash] = $this->soldForCash($club, $owner);
+        $sale = $this->asTenant($club, fn () => Sale::sole());
+        $free = $this->boxFreeWhileCashLeaves($cash);
+
+        $this->actingAs($owner)->post(route('club.pos.void', $sale), ['reason' => 'خطأ في البيع'])->assertSessionHasNoErrors();
+
+        $this->assertSame([false], $free->getArrayCopy(), 'another payment could take the box before the refund was in its books');
+        $this->assertSame('0.000', $this->balance($club, $cash));
+    }
+
+    public function test_a_credit_note_whose_refund_the_box_cannot_pay_leaves_nothing_behind_and_frees_the_box(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        [$invoice, $cash] = $this->soldForCash($club, $owner);
+        $this->actingAs($owner)->post(route('club.expenses.store'), $this->expense($cash, '10'))->assertSessionHasNoErrors(); // 20 left
+        $entries = $this->asTenant($club, fn () => JournalEntry::count());
+
+        $this->actingAs($owner)->post(route('club.credit-notes.store', $invoice), ['amount' => '30', 'reason' => 'مرتجع', 'refund_now' => true, 'method' => 'cash'])->assertSessionHasErrors('account_id');
+        $this->assertSame([0, 0, $entries], $this->asTenant($club, fn () => [CreditNote::count(), Payment::where('kind', Payment::KIND_REFUND)->count(), JournalEntry::count()]));
+        $this->assertSame(['0.000', Invoice::PAID], [$invoice->fresh()->credited_total, $invoice->fresh()->status]);
+
+        // Nothing still holds the box: the next payment from it goes straight through.
+        $lock = Cache::lock("account-funds:{$cash->tenant_id}:{$cash->id}", 30);
+        $this->assertTrue($lock->get());
+        $lock->release();
+        $this->actingAs($owner)->post(route('club.expenses.store'), $this->expense($cash, '20'))->assertSessionHasNoErrors();
+        $this->assertSame('0.000', $this->balance($club, $cash));
     }
 }
