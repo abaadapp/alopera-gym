@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useForm } from '@inertiajs/react';
+import { Link, useForm } from '@inertiajs/react';
 import { Plus, UserRound, UserX } from 'lucide-react';
 import { SettingsScreen } from '@/Components/Settings';
 import { Badge, Button, Card, DataTable, Field, Input, Modal, RowActions, Select, Toggle, type Column } from '@/Components/ui';
@@ -20,6 +20,7 @@ interface StaffRow {
     branch: string | null;
     last_login_at: string | null;
     own_permissions: boolean;
+    employee_id: number | null;
     may_manage: boolean;
 }
 
@@ -49,7 +50,7 @@ export default function Users({ users, roles, branches }: Props) {
                 </div>
             ),
         },
-        { key: 'role', header: 'الدور', cell: (u) => <><Badge tone={u.role_key === 'owner' ? 'brand' : 'gray'}>{u.role ?? '—'}</Badge>{u.own_permissions && <span className="ms-1.5 text-[12px] text-[#9ca3af]">صلاحيات مخصصة</span>}</> },
+        { key: 'role', header: 'الدور', cell: (u) => <><Badge tone={u.role_key === 'owner' ? 'brand' : 'gray'}>{u.role ?? '—'}</Badge>{u.own_permissions && <span className="ms-1.5 text-[12px] text-[#9ca3af]">صلاحيات مخصصة</span>}{u.employee_id && u.may_manage && <Link href={`${route('club.employees.show', u.employee_id)}?tab=permissions`} className="ms-2 text-[12px] text-[#111] underline-offset-2 hover:underline">الصلاحيات</Link>}</> },
         { key: 'branch', header: 'الفرع', cell: (u) => <span className="text-[#6b7280]">{u.branch ?? 'كل الفروع'}</span> },
         { key: 'login', header: 'آخر دخول', cell: (u) => <span className="num text-[#6b7280]">{u.last_login_at ?? 'لم يسجّل بعد'}</span> },
         { key: 'status', header: 'الحالة', cell: (u) => (u.is_active ? <Badge tone="green">نشط</Badge> : <Badge tone="red">موقوف</Badge>) },

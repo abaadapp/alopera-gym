@@ -12,6 +12,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Role;
 use App\Models\User;
+use App\Modules\Payroll\Models\Employee;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -30,13 +31,16 @@ class UserController extends Controller
         $tid = $this->tenants->require()->id;
         $actor = $request->user();
 
-        // A user tied to a branch sees that branch's accounts.
+        // A user tied to a branch sees that branch's accounts. Each opens its permissions in its staff file, if it has one.
+        $files = $actor->hasPermission('employees.access') ? Employee::whereNotNull('user_id')->pluck('id', 'user_id') : collect();
+
         return Inertia::render('Club/Settings/Users', [
             'users' => User::ofTenant($tid)->when($actor->branch_id, fn ($q, $branch) => $q->where('branch_id', $branch))->with('role', 'branch:id,name')->orderBy('name')->get()
                 ->map(fn (User $u) => $u->only('id', 'name', 'email', 'phone', 'is_active', 'role_id', 'branch_id') + [
                     'role' => $u->role?->name, 'role_key' => $u->role?->key, 'branch' => $u->branch?->name,
                     'last_login_at' => $u->last_login_at?->format('Y-m-d H:i'),
                     'own_permissions' => $u->hasOwnPermissions(),
+                    'employee_id' => $files[$u->id] ?? null,
                     // An account that opens more than this user is shown, not edited.
                     'may_manage' => Grants::mayManage($actor, $u),
                 ]),

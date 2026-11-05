@@ -57,7 +57,7 @@ export default function EmployeeShow({ employee, account, stats, attendance, pay
     const mayPrint = useCan()('papers.print');
     const currency = useCurrency();
     const { flash } = useShared();
-    const [tab, setTab] = useState<'attendance' | 'payslips' | 'history' | 'permissions'>(can.attendance ? 'attendance' : can.payslips ? 'payslips' : 'history');
+    const [tab, setTab] = useState<'attendance' | 'payslips' | 'history' | 'permissions'>(typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tab') === 'permissions' ? 'permissions' : can.attendance ? 'attendance' : can.payslips ? 'payslips' : 'history');
     const [accessOpen, setAccessOpen] = useState(false);
     const [punchOpen, setPunchOpen] = useState(false);
     const [seen, setSeen] = useState(false);
