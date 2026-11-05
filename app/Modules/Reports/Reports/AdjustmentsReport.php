@@ -34,7 +34,7 @@ class AdjustmentsReport extends TabularReport
             ->each(fn ($p) => $add('رد مبلغ', $p->paid_at?->format('Y-m-d H:i'), $p->receipt_number, (Payment::METHOD_LABELS[$p->method] ?? $p->method).($p->reference ? ' · '.$p->reference : ''), $p->amount, $p->receiver?->name));
         $this->in(Payment::query(), $f)->where('status', Payment::CANCELLED)->whereBetween('cancelled_at', [$start, $end])->get()
             ->each(fn ($p) => $add('إلغاء دفعة', $p->cancelled_at?->format('Y-m-d H:i'), $p->receipt_number, (string) $p->cancel_reason, $p->amount, User::find($p->cancelled_by)?->name));
-        PaymentAllocation::with('payment:id,receipt_number', 'invoice:id,number', 'allocator:id,name')->whereBetween('created_at', [$start, $end])->get()
+        PaymentAllocation::with('payment:id,receipt_number', 'invoice:id,number', 'allocator:id,name')->whereHas('invoice', fn ($q) => $this->in($q, $f))->whereBetween('created_at', [$start, $end])->get()
             ->each(fn ($a) => $add('تخصيص رصيد عميل', $a->created_at->format('Y-m-d H:i'), $a->payment?->receipt_number, 'إلى الفاتورة '.$a->invoice?->number, $a->amount, $a->allocator?->name));
         $this->in(CashShift::query(), $f)->with('closer:id,name')->where('status', CashShift::CLOSED)->where('difference', '!=', 0)->whereBetween('closed_at', [$start, $end])->get()
             ->each(fn ($s) => $add(Money::cmp($s->difference, 0) < 0 ? 'عجز صندوق' : 'زيادة صندوق', $s->closed_at?->format('Y-m-d H:i'), $s->number, (string) $s->close_note, $s->difference, $s->closer?->name));

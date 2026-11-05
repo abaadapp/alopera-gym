@@ -26,7 +26,7 @@ class MemberStatementReport extends TabularReport
             return ['figures' => [], 'tables' => [], 'empty' => true, 'options' => ['member' => null, 'notes' => [['tone' => 'blue', 'text' => 'اختر العضو لعرض كشف حسابه.']]]];
         }
 
-        $moves = $this->moves($member);
+        $moves = $this->moves($member, $f);
         $before = $moves->filter(fn ($m) => $m['date'] < $f->from->toDateString());
         $within = $moves->filter(fn ($m) => $m['date'] >= $f->from->toDateString() && $m['date'] <= $f->to->toDateString())->values();
         $opening = Money::add('0', ...$before->map(fn ($m) => Money::sub($m['debit'], $m['credit']))->all());
@@ -55,9 +55,9 @@ class MemberStatementReport extends TabularReport
     }
 
     /** @return Collection<int, array{date: string, number: string, label: string, debit: string, credit: string, order: int}> */
-    private function moves(Member $member): Collection
+    private function moves(Member $member, ReportFilters $f): Collection
     {
-        $invoices = Invoice::where(['billable_type' => 'member', 'billable_id' => $member->id])->where('status', '!=', Invoice::DRAFT)->get();
+        $invoices = $this->in(Invoice::where(['billable_type' => 'member', 'billable_id' => $member->id]), $f)->where('status', '!=', Invoice::DRAFT)->get();
         $ids = $invoices->pluck('id');
         $moves = collect();
         foreach ($invoices as $i) {

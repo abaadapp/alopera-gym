@@ -19,8 +19,8 @@ class SuppliersReport extends TabularReport
         $suppliers = Supplier::orderBy('name')->get();
         $orders = $this->in(PurchaseOrder::query(), $f)->whereNotIn('status', [PurchaseOrder::DRAFT, PurchaseOrder::CANCELLED])->whereBetween('order_date', [$f->from, $f->to])->get(['supplier_id', 'total']);
         $bills = $this->in(SupplierBill::query(), $f)->where('status', SupplierBill::APPROVED)->whereBetween('issue_date', [$f->from, $f->to])->get(['supplier_id', 'total']);
-        $paid = SupplierPayment::whereNull('reversed_at')->whereBetween('paid_on', [$f->from, $f->to])->get(['supplier_id', 'amount']);
-        $due = SupplierBill::where('status', SupplierBill::APPROVED)->selectRaw('supplier_id, sum(total - paid_total) as d')->groupBy('supplier_id')->pluck('d', 'supplier_id');
+        $paid = SupplierPayment::whereNull('reversed_at')->whereHas('bill', fn ($q) => $this->in($q, $f))->whereBetween('paid_on', [$f->from, $f->to])->get(['supplier_id', 'amount']);
+        $due = $this->in(SupplierBill::where('status', SupplierBill::APPROVED), $f)->selectRaw('supplier_id, sum(total - paid_total) as d')->groupBy('supplier_id')->pluck('d', 'supplier_id');
         $rows = $suppliers->map(fn ($s) => [
             $s->name, $s->phone, $s->tax_number, $orders->where('supplier_id', $s->id)->count(), round((float) $orders->where('supplier_id', $s->id)->sum('total'), 3),
             round((float) $bills->where('supplier_id', $s->id)->sum('total'), 3), round((float) $paid->where('supplier_id', $s->id)->sum('amount'), 3), round((float) ($due[$s->id] ?? 0), 3),

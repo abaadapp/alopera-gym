@@ -39,7 +39,7 @@ class PosDeviceController extends Controller
     public function index(Request $request): Response
     {
         $current = $this->devices->current($request);
-        $devices = PosDevice::with(['branch:id,name', 'activator:id,name', 'settlementAccount:id,name', 'peripherals'])->withCount('sales')->orderBy('name')->get();
+        $devices = BranchContext::scope(PosDevice::with(['branch:id,name', 'activator:id,name', 'settlementAccount:id,name', 'peripherals']))->withCount('sales')->orderBy('name')->get();
         // The print log of each device: its latest results, errors included, with who printed what.
         // What keeps a device's receipts from coming out as its settings say — told, never mended here.
         $health = PrinterHealth::assess($devices);

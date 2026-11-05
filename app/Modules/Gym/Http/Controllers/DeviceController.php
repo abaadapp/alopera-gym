@@ -16,8 +16,11 @@ use App\Modules\Gym\Models\CheckIn;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\StaffAttendance;
 use App\Modules\Integrations\Services\IntegrationHub;
+use Illuminate\Contracts\Database\Query\Builder as BuilderContract;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -28,9 +31,8 @@ use Inertia\Response;
  */
 class DeviceController extends Controller
 {
-    public function index(TenantContext $tenants, IntegrationHub $hub): Response
+    public function index(IntegrationHub $hub): Response
     {
-        $tid = $tenants->require()->id;
         $devices = BranchContext::scope(AccessDevice::with('branch:id,name'))->orderBy('name')->get();
 
         return Inertia::render('Integrations/Devices', [
@@ -38,11 +40,11 @@ class DeviceController extends Controller
                 'id', 'name', 'type', 'driver', 'vendor', 'model', 'serial_number', 'direction', 'purpose', 'token_last4', 'is_active', 'last_ip', 'branch_id'
             ) + ['branch' => $d->branch?->name, 'last_seen_at' => $d->last_seen_at?->format('Y-m-d H:i'), 'online' => $d->isOnline()]),
             'status' => $hub->devices($devices),
-            'events' => $this->events(),
+            'events' => $this->events($devices->pluck('id')->all()),
             'simulation' => session('device_simulation'),
             'drivers' => DeviceDrivers::catalog(),
-            'staffCredentials' => AccessCredential::where('holder_type', 'user')->get()->map(fn ($c) => ['identifier' => $c->shownIdentifier()] + $c->only('id', 'type', 'label', 'holder_id', 'is_active')),
-            'staff' => User::ofTenant($tid)->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'staffCredentials' => AccessCredential::where('holder_type', 'user')->whereIn('holder_id', $this->reachableStaff()->select('id'))->get()->map(fn ($c) => ['identifier' => $c->shownIdentifier()] + $c->only('id', 'type', 'label', 'holder_id', 'is_active')),
+            'staff' => $this->reachableStaff()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'branches' => app(BranchContext::class)->choices(),
             'types' => AccessDevice::TYPES,
             'apiBase' => url('/api/devices/v1'),
@@ -81,19 +83,21 @@ class DeviceController extends Controller
     }
 
     /**
-     * The latest readings from devices: members' entries (allowed, denied, repeated) and staff punches, newest first.
+     * The latest readings from the devices on the page: members' entries (allowed, denied, repeated) and staff punches,
+     * newest first.
      *
+     * @param  list<int>  $devices
      * @return list<array<string, mixed>>
      */
-    private function events(): array
+    private function events(array $devices): array
     {
-        $entries = CheckIn::with(['member:id,full_name', 'device:id,name'])->whereNotNull('access_device_id')->latest('checked_in_at')->limit(30)->get()
+        $entries = CheckIn::with(['member:id,full_name', 'device:id,name'])->whereIn('access_device_id', $devices)->latest('checked_in_at')->limit(30)->get()
             ->map(fn (CheckIn $c) => [
                 'key' => 'c'.$c->id, 'at' => $c->checked_in_at, 'device' => $c->device?->name, 'who' => $c->member?->full_name ?? 'غير معروف',
                 'kind' => 'member', 'result' => $c->result, 'reason' => AccessDecision::REASONS[$c->reason] ?? $c->reason,
                 'method' => $c->method, 'hint' => $c->credential_hint,
             ]);
-        $punches = StaffAttendance::with(['user:id,name', 'device:id,name'])->whereNotNull('access_device_id')->latest('clock_in_at')->limit(20)->get()
+        $punches = StaffAttendance::with(['user:id,name', 'device:id,name'])->whereIn('access_device_id', $devices)->latest('clock_in_at')->limit(20)->get()
             ->map(fn (StaffAttendance $a) => [
                 'key' => 's'.$a->id, 'at' => $a->clock_out_at ?? $a->clock_in_at, 'device' => $a->device?->name, 'who' => $a->user?->name,
                 'kind' => 'staff', 'result' => 'allowed', 'reason' => $a->clock_out_at ? 'انصراف موظف' : 'حضور موظف',
@@ -139,7 +143,7 @@ class DeviceController extends Controller
     public function storeStaffCredential(Request $request, TenantContext $tenants): RedirectResponse
     {
         $data = $request->validate([
-            'holder_id' => ['required', Rule::exists('users', 'id')->where('tenant_id', $tenants->require()->id)],
+            'holder_id' => ['required', Rule::exists('users', 'id')->where('tenant_id', $tenants->require()->id)->where(fn ($q) => $this->narrowToBranch($q))],
             'type' => ['required', 'in:'.implode(',', AccessCredential::TYPES)],
             'label' => ['nullable', 'string', 'max:80'],
         ]) + $request->validate(AccessCredential::identifierRules((string) $request->input('type')), AccessCredential::IDENTIFIER_MESSAGES);
@@ -153,10 +157,29 @@ class DeviceController extends Controller
 
     public function destroyStaffCredential(AccessCredential $credential): RedirectResponse
     {
-        abort_unless($credential->holder_type === 'user', 404);
+        abort_unless($credential->holder_type === 'user' && $this->reachableStaff()->whereKey($credential->holder_id)->exists(), 404);
         $credential->delete();
 
         return back()->with('success', 'تم حذف وسيلة دخول الموظف.');
+    }
+
+    /** The club's staff a user may give a door card to: all of them, or for a user tied to a branch that branch's. */
+    private function reachableStaff(): Builder
+    {
+        return $this->narrowToBranch(User::ofTenant(app(TenantContext::class)->require()->id));
+    }
+
+    /**
+     * @template T of BuilderContract
+     *
+     * @param  T  $query  users
+     * @return T
+     */
+    private function narrowToBranch(BuilderContract $query): BuilderContract
+    {
+        $branch = Auth::user()?->branch_id;
+
+        return $branch ? app(BranchContext::class)->narrow($query, (int) $branch) : $query;
     }
 
     /** @return array<string, mixed> */
