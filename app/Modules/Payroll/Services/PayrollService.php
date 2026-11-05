@@ -7,6 +7,7 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Modules\Accounting\Models\Account;
+use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Services\AccountingPeriods;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\Ledger;
@@ -222,6 +223,37 @@ final class PayrollService
             $this->audit->log('payroll.paid', $run, ['payout' => $payout->number, 'lines' => $items->count(), 'total' => $total, 'account' => $account->name]);
 
             return ['payout' => $payout, 'paid' => $items->count()];
+        });
+    }
+
+    /**
+     * Void a salary payout made by mistake: its entry is reversed by an entry of its own (the original stays, marked
+     * reversed), its lines are to be paid again and the run with them. Once only, and never in a closed period.
+     */
+    public function voidPayout(PayrollPayout $payout, string $reason): PayrollPayout
+    {
+        return DB::transaction(function () use ($payout, $reason) {
+            $payout = PayrollPayout::whereKey($payout->id)->lockForUpdate()->firstOrFail();
+            if ($payout->voided_at !== null) {
+                throw new BusinessRuleException('payroll.payout_voided', 'هذا الصرف ملغى مسبقًا.');
+            }
+            app(AccountingPeriods::class)->assertEditable($payout->paid_on, 'صرف الرواتب');
+            $run = PayrollRun::whereKey($payout->payroll_run_id)->lockForUpdate()->firstOrFail();
+
+            $entry = JournalEntry::where(['source_type' => 'payroll_payout', 'source_id' => $payout->id, 'source_event' => 'pay'])->whereNull('reversed_at')->first();
+            if ($entry) {
+                $this->ledger->reverse($entry, "إلغاء صرف رواتب {$run->label()} — {$payout->number}: {$reason}",
+                    ['source_type' => 'payroll_payout', 'source_id' => $payout->id, 'event' => 'void'], $payout->paid_on);
+            }
+
+            $lines = PayrollItem::where('payroll_payout_id', $payout->id)->update(['paid_at' => null, 'payroll_payout_id' => null]);
+            $payout->forceFill(['voided_at' => now(), 'voided_by' => Auth::guard('web')->id(), 'void_reason' => $reason])->save();
+            if ($run->status === PayrollRun::PAID) {
+                $run->forceFill(['status' => PayrollRun::APPROVED])->save();
+            }
+            $this->audit->log('payroll.payout_voided', $run, ['payout' => $payout->number, 'lines' => $lines, 'total' => $payout->total, 'reason' => $reason]);
+
+            return $payout;
         });
     }
 

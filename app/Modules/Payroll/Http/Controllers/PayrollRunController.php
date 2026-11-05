@@ -155,6 +155,14 @@ class PayrollRunController extends Controller
         return back()->with('success', "صُرفت الرواتب لعدد {$result['paid']} من الموظفين ({$result['payout']->number}) من «{$account->name}». تسجيل الصرف هنا لا ينفّذ تحويلًا بنكيًا.");
     }
 
+    public function voidPayout(Request $request, PayrollPayout $payout): RedirectResponse
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'max:255']], [], ['reason' => 'سبب الإلغاء']);
+        $this->payroll->voidPayout($payout, $data['reason']);
+
+        return back()->with('success', "أُلغي الصرف {$payout->number} بقيد عكسي، وعادت رواتبه مستحقة الصرف.");
+    }
+
     /** Nobody but the owner changes their own pay, here as in the employee file. */
     private function guardOwnLine(Request $request, PayrollItem $item): void
     {

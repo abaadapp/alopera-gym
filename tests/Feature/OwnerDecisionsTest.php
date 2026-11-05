@@ -4,10 +4,16 @@ namespace Tests\Feature;
 
 use App\Core\Support\BusinessRuleException;
 use App\Models\Branch;
+use App\Modules\Accounting\Models\AccountingPeriod;
+use App\Modules\Accounting\Models\JournalEntry;
+use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Services\InventoryService;
 use App\Modules\Inventory\Services\StockService;
 use App\Modules\Payroll\Models\Employee;
+use App\Modules\Payroll\Models\PayrollItem;
+use App\Modules\Payroll\Models\PayrollPayout;
+use App\Modules\Payroll\Models\PayrollRun;
 use App\Modules\Payroll\Services\PayrollService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -56,5 +62,56 @@ class OwnerDecisionsTest extends TestCase
                 ->where('data.runs.0.net', '100.000')
                 ->where('data.comparison.net.current', '0.000')
                 ->where('data.comparison.runs.current', 0));
+    }
+
+    public function test_a_salary_payout_is_voided_once_by_its_own_reversing_entry(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        [$run, $cash] = $this->asTenant($club, function () {
+            Employee::create(['name' => 'موظف', 'basic_salary' => 100, 'status' => 'active']);
+            $run = app(PayrollService::class)->open(now()->format('Y-m'));
+            app(PayrollService::class)->approve($run);
+
+            return [$run->fresh(), app(ChartOfAccounts::class)->account('cash')];
+        });
+        $this->actingAs($owner)->post(route('club.payroll.pay', $run), ['items' => [$this->asTenant($club, fn () => PayrollItem::value('id'))], 'account_id' => $cash->id, 'paid_on' => today()->toDateString()])->assertSessionHasNoErrors();
+        $payout = $this->asTenant($club, fn () => PayrollPayout::sole());
+        $drawer = fn () => $this->asTenant($club, fn () => JournalEntry::join('gym_journal_lines as l', 'l.journal_entry_id', '=', 'gym_journal_entries.id')->where('l.account_id', $cash->id)->selectRaw('coalesce(sum(l.debit - l.credit), 0) as b')->value('b'));
+        $this->assertSame('-100.000', (string) $drawer());
+
+        $this->actingAs($owner)->post(route('club.payroll.payouts.void', $payout), ['reason' => 'صُرف للحساب الخطأ'])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.payroll.payouts.void', $payout), ['reason' => 'مرة ثانية'])->assertSessionHasErrors();
+
+        $this->asTenant($club, function () use ($payout, $run, $drawer) {
+            $pay = JournalEntry::where(['source_type' => 'payroll_payout', 'source_id' => $payout->id, 'source_event' => 'pay'])->sole();
+            $void = JournalEntry::where(['source_type' => 'payroll_payout', 'source_id' => $payout->id, 'source_event' => 'void'])->sole();
+            $this->assertNotNull($pay->reversed_at, 'the original entry stays, marked reversed');
+            $this->assertSame([$pay->id, $pay->total], [$void->reverses_id, $void->total]);
+            $this->assertSame('0.000', number_format((float) $drawer(), 3, '.', ''), 'the drawer is back where it was');
+            $this->assertNotNull($payout->fresh()->voided_at);
+            $this->assertSame([null, null], [PayrollItem::value('paid_at'), PayrollItem::value('payroll_payout_id')]);
+            $this->assertSame(PayrollRun::APPROVED, $run->fresh()->status, 'the run is to be paid again');
+        });
+    }
+
+    public function test_a_payout_in_a_closed_month_is_not_voided(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $payout = $this->asTenant($club, function () {
+            Employee::create(['name' => 'موظف', 'basic_salary' => 100, 'status' => 'active']);
+            $month = today()->subMonthNoOverflow();
+            $run = app(PayrollService::class)->open($month->format('Y-m'));
+            app(PayrollService::class)->approve($run);
+            app(PayrollService::class)->pay($run->fresh(), PayrollItem::pluck('id')->all(), app(ChartOfAccounts::class)->account('cash'), $month->endOfMonth()->toDateString());
+            // That month is then closed.
+            AccountingPeriod::create(['kind' => 'month', 'starts_on' => $month->startOfMonth(), 'ends_on' => $month->endOfMonth(), 'status' => 'closed', 'closed_at' => now()]);
+
+            return PayrollPayout::sole();
+        });
+
+        $this->actingAs($owner)->post(route('club.payroll.payouts.void', $payout), ['reason' => 'متأخر'])->assertSessionHasErrors();
+        $this->asTenant($club, fn () => $this->assertNull($payout->fresh()->voided_at));
     }
 }

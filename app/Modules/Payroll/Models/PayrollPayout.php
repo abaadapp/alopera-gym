@@ -23,7 +23,7 @@ class PayrollPayout extends Model
 
     protected function casts(): array
     {
-        return ['paid_on' => 'immutable_date', 'total' => 'decimal:3'];
+        return ['paid_on' => 'immutable_date', 'total' => 'decimal:3', 'voided_at' => 'datetime'];
     }
 
     public function run(): BelongsTo
