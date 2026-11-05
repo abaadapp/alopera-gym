@@ -107,8 +107,8 @@ final class InventoryService
     }
 
     /**
-     * Approve the count: the book quantities are read again under lock and each counted line's difference is
-     * posted once. Approving it a second time is refused.
+     * Approve the count: each counted line's difference from the book at the time it was counted is posted once onto
+     * today's balance, so what was sold or received since the count stays counted. Approving it a second time is refused.
      */
     public function approveCount(Stocktake $count): Stocktake
     {
@@ -119,9 +119,8 @@ final class InventoryService
                 throw new BusinessRuleException('stocktake.nothing', 'لم تُدخل أي كمية معدودة بعد.', 'counts');
             }
             foreach ($lines as $line) {
-                $system = (float) $this->stock->quantity($line->product, $count->branch_id);
-                $difference = round((float) $line->counted_quantity - $system, 3);
-                $line->update(['system_quantity' => $system, 'difference' => $difference, 'unit_cost' => $line->product->cost]);
+                $difference = round((float) $line->counted_quantity - (float) $line->system_quantity, 3);
+                $line->update(['difference' => $difference, 'unit_cost' => $line->product->cost]);
                 if ($difference != 0.0) {
                     $this->stock->move($line->product, $difference, 'adjustment', $count, $line->note ?: 'جرد '.$count->number, allowNegative: true, branchId: $count->branch_id, reason: $line->reason ?: 'count');
                 }
