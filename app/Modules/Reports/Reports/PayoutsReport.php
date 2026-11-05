@@ -31,9 +31,15 @@ final class PayoutsReport extends Report
             'comparison' => $this->compare($this->totals($payouts), $this->totals($this->payouts($f, $f->prevFrom, $f->prevTo))),
             'payouts' => $payouts->values(),
             'byAccount' => $this->byAccount($payouts),
-            'waiting' => Money::add('0', ...$this->lines($f)->whereNull('paid_at')->whereHas('run', fn ($q) => $q->where('status', PayrollRun::APPROVED))->pluck('net')->all()),
+            'waiting' => $this->waiting($f),
             'empty' => $payouts->isEmpty(),
         ];
+    }
+
+    /** What the approved runs still owe: lines not paid yet, whatever the period. */
+    private function waiting(ReportFilters $f): string
+    {
+        return Money::add('0', ...$this->lines($f)->whereNull('paid_at')->whereHas('run', fn ($q) => $q->where('status', PayrollRun::APPROVED))->pluck('net')->all());
     }
 
     public function export(ReportFilters $f, User $user): array
@@ -51,6 +57,7 @@ final class PayoutsReport extends Report
                     $this->lines($f)->whereIn('payroll_payout_id', $payouts->pluck('id'))->orderBy('payroll_payout_id')->orderBy('employee_name')->get()
                         ->map(fn (PayrollItem $i) => [$numbers[$i->payroll_payout_id] ?? '', $i->employee_name, $i->job_title, $i->net, PayrollReport::METHODS[$i->payment_method] ?? $i->payment_method])->all()),
                 new S('حسب الحساب', [['الحساب', S::TEXT], ['الدفعات', S::INT], ['المبلغ', S::MONEY]], array_map(fn ($a) => [$a['account'], $a['count'], $a['total']], $this->byAccount($payouts))),
+                new S('بانتظار الصرف', [['المؤشر', S::TEXT], ['القيمة', S::MONEY]], [['بانتظار الصرف الآن', $this->waiting($f)]]),
             ],
         ];
     }

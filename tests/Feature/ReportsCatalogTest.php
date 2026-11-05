@@ -215,6 +215,15 @@ class ReportsCatalogTest extends TestCase
         }
     }
 
+    public function test_the_payouts_file_carries_what_its_page_shows_as_waiting(): void
+    {
+        [, $owner] = $this->busyClub();
+
+        $waiting = $this->actingAs($owner)->get(route('club.reports.show', ['report' => 'payouts']))->viewData('page')['props']['data']['waiting'];
+        $file = $this->actingAs($owner)->get(route('club.reports.export', ['report' => 'payouts', 'format' => 'csv']))->streamedContent();
+        $this->assertStringContainsString('"بانتظار الصرف الآن",'.number_format((float) $waiting, 3, '.', ''), $file);
+    }
+
     public function test_money_and_salaries_are_for_those_allowed_and_exporting_is_a_permission_of_its_own(): void
     {
         $club = $this->club();
