@@ -117,6 +117,23 @@ class SensitivePermissionsTest extends TestCase
         $this->assertEqualsCanonicalizing(['members.view', 'checkin.perform'], $user->fresh()->permissions());
     }
 
+    public function test_editing_a_role_changes_only_those_who_follow_it(): void
+    {
+        $club = $this->club();
+        $role = $this->role($club, ['members.view']);
+        $follower = $this->staff($club, 'reception');
+        $follower->forceFill(['role_id' => $role->id])->save();
+        $ownList = $this->staff($club, 'reception');
+        $ownList->forceFill(['role_id' => $role->id, 'custom_permissions' => ['members.view', 'checkin.view']])->save();
+        $otherRole = $this->holding($club, ['members.view']);
+
+        $this->actingAs($this->owner($club))->put(route('club.roles.update', $role), ['name' => $role->name, 'permissions' => ['members.view', 'checkin.perform']])->assertSessionHasNoErrors();
+
+        $this->assertEqualsCanonicalizing(['members.view', 'checkin.perform'], $follower->fresh()->permissions(), 'who follows the role gets the change');
+        $this->assertEqualsCanonicalizing(['members.view', 'checkin.view'], $ownList->fresh()->permissions(), 'a list of their own stays as it was');
+        $this->assertSame(['members.view'], $otherRole->fresh()->permissions(), 'another role is untouched');
+    }
+
     public function test_every_permission_says_what_it_allows(): void
     {
         $this->assertSame([], array_diff(PermissionRegistry::all(), array_keys(PermissionRegistry::DESCRIPTIONS)));
