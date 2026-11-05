@@ -191,7 +191,13 @@ final class PayrollService
             $items = PayrollItem::where('payroll_run_id', $run->id)->whereIn('id', $itemIds)->whereNull('paid_at')
                 ->orderBy('employee_name')->lockForUpdate()->get();
             if ($items->isEmpty()) {
-                throw new BusinessRuleException('payroll.nothing_to_pay', 'لا توجد رواتب مستحقة في الاختيار — ربما صُرفت مسبقًا.');
+                // Sent twice (a double click, a second tab): the first request paid them a moment ago — said so, with
+                // the payout, so it does not read as a payment that failed.
+                $paidIn = PayrollItem::with('payout:id,number')->where('payroll_run_id', $run->id)->whereIn('id', $itemIds)->whereNotNull('payroll_payout_id')->get()
+                    ->pluck('payout.number')->filter()->unique();
+                throw new BusinessRuleException('payroll.nothing_to_pay', $paidIn->isNotEmpty()
+                    ? 'صُرفت هذه الرواتب مسبقًا في سند الصرف '.$paidIn->implode('، ').'؛ لم يُصرف شيء مرة ثانية.'
+                    : 'لا توجد رواتب مستحقة في الاختيار.');
             }
 
             $total = Money::add('0', ...$items->pluck('net')->all());

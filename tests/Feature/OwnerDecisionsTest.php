@@ -228,4 +228,27 @@ class OwnerDecisionsTest extends TestCase
         $clerk->role->update(['permissions' => ['payroll.payslips']]);
         $this->assertStringNotContainsString('بنك مسقط', $this->payslip($club2, $clerk->fresh(), $item2));
     }
+
+    public function test_a_payout_sent_again_says_it_was_already_paid_and_in_which_payout_without_paying_twice(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        [$run, $item, $cash] = $this->asTenant($club, function () {
+            Employee::create(['name' => 'موظف', 'basic_salary' => 100, 'status' => 'active']);
+            $run = app(PayrollService::class)->open(now()->format('Y-m'));
+            app(PayrollService::class)->approve($run);
+
+            return [$run->fresh(), PayrollItem::sole(), app(ChartOfAccounts::class)->account('cash')];
+        });
+        $send = ['items' => [$item->id], 'account_id' => $cash->id, 'paid_on' => today()->toDateString()];
+        $this->actingAs($owner)->post(route('club.payroll.pay', $run), $send)->assertSessionHasNoErrors();
+        $number = $this->asTenant($club, fn () => PayrollPayout::sole()->number);
+
+        // A double click or a second tab: the lines were paid by the first request a moment ago.
+        $again = $this->actingAs($owner)->post(route('club.payroll.pay', $run), $send);
+        $said = json_encode(session()->all(), JSON_UNESCAPED_UNICODE);
+        $this->assertStringContainsString($number, (string) $said, 'it names the payout that paid them');
+        $this->assertStringContainsString('لم يُصرف شيء مرة ثانية', (string) $said);
+        $this->asTenant($club, fn () => $this->assertSame([1, 1], [PayrollPayout::count(), JournalEntry::where(['source_type' => 'payroll_payout', 'source_event' => 'pay'])->count()]));
+    }
 }
