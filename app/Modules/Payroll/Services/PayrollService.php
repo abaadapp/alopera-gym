@@ -216,7 +216,16 @@ final class PayrollService
                 ], $lines);
             }
 
-            PayrollItem::whereIn('id', $items->pluck('id'))->update(['paid_at' => now(), 'payroll_payout_id' => $payout->id]);
+            // The branch and bank each line is paid with, frozen: a payslip reprinted later shows them as they were.
+            $items->load('employee.branch:id,name');
+            foreach ($items as $item) {
+                $employee = $item->employee;
+                $item->forceFill(['paid_at' => now(), 'payroll_payout_id' => $payout->id, 'paid_snapshot' => [
+                    'employee_id' => $item->employee_id, 'branch_id' => $employee?->branch_id, 'branch' => $employee?->branch?->name,
+                    'bank_name' => $employee?->bank_name, 'account' => $employee?->iban ?: $employee?->account_number,
+                    'method' => $item->payment_method, 'paid_on' => $date,
+                ]])->save();
+            }
             if (! PayrollItem::where('payroll_run_id', $run->id)->whereNull('paid_at')->exists()) {
                 $run->forceFill(['status' => PayrollRun::PAID])->save();
             }
@@ -246,7 +255,7 @@ final class PayrollService
                     ['source_type' => 'payroll_payout', 'source_id' => $payout->id, 'event' => 'void'], $payout->paid_on);
             }
 
-            $lines = PayrollItem::where('payroll_payout_id', $payout->id)->update(['paid_at' => null, 'payroll_payout_id' => null]);
+            $lines = PayrollItem::where('payroll_payout_id', $payout->id)->update(['paid_at' => null, 'payroll_payout_id' => null, 'paid_snapshot' => null]);
             $payout->forceFill(['voided_at' => now(), 'voided_by' => Auth::guard('web')->id(), 'void_reason' => $reason])->save();
             if ($run->status === PayrollRun::PAID) {
                 $run->forceFill(['status' => PayrollRun::APPROVED])->save();

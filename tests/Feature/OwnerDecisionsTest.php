@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Core\Support\BusinessRuleException;
 use App\Models\Branch;
+use App\Models\Tenant;
+use App\Models\User;
 use App\Modules\Accounting\Models\AccountingPeriod;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Services\ChartOfAccounts;
@@ -14,6 +16,7 @@ use App\Modules\Payroll\Models\Employee;
 use App\Modules\Payroll\Models\PayrollItem;
 use App\Modules\Payroll\Models\PayrollPayout;
 use App\Modules\Payroll\Models\PayrollRun;
+use App\Modules\Payroll\Papers\PayslipPaper;
 use App\Modules\Payroll\Services\PayrollService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -165,5 +168,64 @@ class OwnerDecisionsTest extends TestCase
             $this->assertSame('105.000', $item->fresh()->net, 'manual overtime and deductions work as before');
             $this->assertSame('105.000', $run->fresh()->net);
         });
+    }
+
+    /** @return array{0: Tenant, 1: User, 2: PayrollItem, 3: Branch} a bank-paid line of an employee of the main branch, and a second branch */
+    private function paidByBank(): array
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        [$item, $khoud] = $this->asTenant($club, function () {
+            $main = Branch::orderByDesc('is_main')->orderBy('id')->firstOrFail();
+            Employee::create(['name' => 'موظف', 'basic_salary' => 100, 'status' => 'active', 'branch_id' => $main->id, 'payment_method' => 'bank', 'bank_name' => 'بنك مسقط', 'iban' => 'OM810180000001299123451234']);
+            $run = app(PayrollService::class)->open(now()->format('Y-m'));
+            app(PayrollService::class)->approve($run);
+            app(PayrollService::class)->pay($run->fresh(), PayrollItem::pluck('id')->all(), app(ChartOfAccounts::class)->account('bank'), today()->toDateString());
+
+            return [PayrollItem::sole(), Branch::create(['name' => 'فرع الخوض', 'is_active' => true])];
+        });
+
+        return [$club, $owner, $item, $khoud];
+    }
+
+    private function payslip($club, $user, PayrollItem $item): string
+    {
+        $this->actingAs($user);
+
+        return $this->asTenant($club, fn () => json_encode(PayslipPaper::document($item->fresh(), [], $club->fresh()), JSON_UNESCAPED_UNICODE));
+    }
+
+    public function test_a_payslip_reprinted_after_the_employee_moved_branch_and_bank_shows_the_branch_and_bank_at_payment(): void
+    {
+        [$club, $owner, $item, $khoud] = $this->paidByBank();
+        $before = $this->payslip($club, $owner, $item);
+        $this->assertStringContainsString('بنك مسقط', $before);
+        $this->assertStringContainsString('1234', $before);
+
+        // Moved to another branch, paid into another bank since.
+        $this->asTenant($club, fn () => $item->employee->update(['branch_id' => $khoud->id, 'bank_name' => 'بنك ظفار', 'iban' => 'OM020270000009999999999999']));
+        $after = $this->payslip($club, $owner, $item);
+
+        $this->assertSame($before, $after, 'the reprint is the payslip as paid');
+        $this->assertStringNotContainsString('ظفار', $after);
+        $this->assertStringNotContainsString('9999', $after);
+        $this->assertStringNotContainsString('فرع الخوض', $after);
+        $this->asTenant($club, fn () => $this->assertSame(1, JournalEntry::where(['source_type' => 'payroll_payout', 'source_event' => 'pay'])->count(), 'paid and posted once'));
+    }
+
+    public function test_a_payslip_paid_before_snapshots_never_shows_todays_bank_as_the_old_one_and_bank_lines_need_permission(): void
+    {
+        [$club, $owner, $item] = $this->paidByBank();
+        // Paid before the snapshot existed.
+        $this->asTenant($club, fn () => \DB::table('gym_payroll_items')->where('id', $item->id)->update(['paid_snapshot' => null]));
+        $legacy = $this->payslip($club, $owner, $item);
+        $this->assertStringNotContainsString('بنك مسقط', $legacy);
+        $this->assertStringContainsString('لم تُحفظ وقت الصرف', $legacy);
+
+        // Someone who may print payslips but not read salaries and bank details sees no bank line at all.
+        [$club2, $owner2, $item2] = $this->paidByBank();
+        $clerk = $this->staff($club2, 'reception');
+        $clerk->role->update(['permissions' => ['payroll.payslips']]);
+        $this->assertStringNotContainsString('بنك مسقط', $this->payslip($club2, $clerk->fresh(), $item2));
     }
 }

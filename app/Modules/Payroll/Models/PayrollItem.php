@@ -24,7 +24,7 @@ class PayrollItem extends Model implements ClubFinanceRecord
     {
         return [
             'basic' => 'decimal:3', 'allowances' => 'decimal:3', 'overtime' => 'decimal:3', 'deductions' => 'decimal:3', 'net' => 'decimal:3',
-            'overtime_hours' => 'decimal:2', 'attendance_hours' => 'decimal:2', 'allowance_lines' => 'array', 'paid_at' => 'datetime',
+            'overtime_hours' => 'decimal:2', 'attendance_hours' => 'decimal:2', 'allowance_lines' => 'array', 'paid_at' => 'datetime', 'paid_snapshot' => 'encrypted:array',
         ];
     }
 
