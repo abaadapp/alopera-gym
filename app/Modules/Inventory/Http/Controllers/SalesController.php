@@ -228,7 +228,8 @@ class SalesController extends Controller
             'member_id' => $s->customer instanceof Member ? $s->customer->id : null,
             'at' => $s->created_at->format('Y-m-d H:i'),
             'cashier' => $s->source === Sale::WEBSITE ? null : $s->cashier?->name,
-            'branch' => $s->relationLoaded('branch') ? $s->branch?->name : null,
+            // A sale from before sales were tied to branches keeps none, and says so.
+            'branch' => $s->relationLoaded('branch') ? ($s->branch?->name ?? 'بلا فرع (قبل ربط المبيعات بالفروع)') : null,
             'paid' => $s->source === Sale::POS ? $s->status !== Sale::CANCELLED : $s->paid_at !== null,
             'items_count' => $s->relationLoaded('items') ? $s->items->count() : null,
             'items_preview' => $s->relationLoaded('items') ? $s->items->take(2)->map(fn (SaleItem $i) => $i->name.' × '.(float) $i->quantity)->implode('، ') : null,

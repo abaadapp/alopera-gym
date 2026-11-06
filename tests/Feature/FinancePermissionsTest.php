@@ -72,6 +72,7 @@ class FinancePermissionsTest extends TestCase
     public function test_the_owner_sees_everything_and_approves_and_pays(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         $this->employee($club, 'سارة', '400');
         $this->actingAs($owner)->post(route('club.payroll.store'), ['month' => now()->format('Y-m')])->assertSessionHasNoErrors();
@@ -100,6 +101,7 @@ class FinancePermissionsTest extends TestCase
     {
         $this->withoutMiddleware(ThrottleRequests::class);
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         $finance = $this->staffWithFile($club, 'finance', 'المحاسب', '600');
         $this->employee($club, 'سارة', '400');
@@ -186,6 +188,7 @@ class FinancePermissionsTest extends TestCase
     public function test_salaries_are_for_whoever_may_see_salaries(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         $this->employee($club, 'سارة', '400');
         $this->employee($club, 'علي', '500');

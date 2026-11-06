@@ -116,6 +116,7 @@ class PurchasingTest extends TestCase
     {
         Storage::fake('local');
         $club = $this->club();
+        $this->fundAccounts($club);
         [$supplier, $water, $khoud] = $this->setup2($club);
         $order = $this->order($club, $supplier, $water, $khoud);
         $this->asTenant($club, fn () => app(PurchaseService::class)->approve($order));
@@ -152,7 +153,7 @@ class PurchasingTest extends TestCase
         $pay(10, 'pay-2')->assertSessionHasErrors('amount');
         $this->actingAs($this->staff($club, 'manager'))->post(route('club.purchases.bills.pay', $record), ['account_id' => $bank->id, 'amount' => 1, 'paid_on' => now()->toDateString()])->assertForbidden();
         $this->asTenant($club, fn () => $this->assertSame(['20.000', 1], [$record->fresh()->paid_total, SupplierPayment::count()]));
-        $this->assertSame(['6.250', '-20.000'], [$this->balance($club, 'suppliers_payable'), $this->balance($club, 'bank')]);
+        $this->assertSame(['6.250', '9980.000'], [$this->balance($club, 'suppliers_payable'), $this->balance($club, 'bank')]);
 
         // A paid bill is not voided; the payment is reversed first, then the bill.
         $this->actingAs($owner)->post(route('club.purchases.bills.decide', [$record, 'void']), ['reason' => 'wrong supplier'])->assertSessionHasErrors();
@@ -160,8 +161,8 @@ class PurchasingTest extends TestCase
         $this->actingAs($finance)->post(route('club.purchases.payments.reverse', $payment), ['reason' => 'entered twice'])->assertSessionHasNoErrors();
         $this->actingAs($finance)->post(route('club.purchases.payments.reverse', $payment), ['reason' => 'again'])->assertSessionHasErrors();
         $this->actingAs($owner)->post(route('club.purchases.bills.decide', [$record, 'void']), ['reason' => 'wrong supplier'])->assertSessionHasNoErrors();
-        $this->assertSame(['0.000', '0.000', '0.000'], [$this->balance($club, 'suppliers_payable'), $this->balance($club, 'purchases'), $this->balance($club, 'bank')]);
-        $this->asTenant($club, fn () => $this->assertSame([SupplierBill::VOID, 4], [$record->fresh()->status, JournalEntry::count()]));
+        $this->assertSame(['0.000', '0.000', '10000.000'], [$this->balance($club, 'suppliers_payable'), $this->balance($club, 'purchases'), $this->balance($club, 'bank')]);
+        $this->asTenant($club, fn () => $this->assertSame([SupplierBill::VOID, 5], [$record->fresh()->status, JournalEntry::count()])); // four, and the opening balance
     }
 
     public function test_a_bill_without_an_order_is_a_direct_purchase_listed_once_in_the_register(): void

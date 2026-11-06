@@ -67,6 +67,7 @@ class ReportsCatalogTest extends TestCase
     {
         $club = $this->club();
         $owner = $this->owner($club);
+        $this->fundAccounts($club);
         $khoud = $this->asTenant($club, fn () => Branch::create(['name' => 'فرع الخوض', 'is_active' => true]));
         $member = $this->member($club, ['full_name' => 'سالم الكندي']);
         $this->activeMembership($club, $member);
@@ -200,6 +201,28 @@ class ReportsCatalogTest extends TestCase
         // No report permission at all: no reports page.
         $this->actingAs($this->roleWith($club, ['members.view', 'classes.view']))->get(route('club.reports.index'))->assertForbidden();
         $this->actingAs($this->staff($club, 'trainer'))->get(route('club.reports.index'))->assertForbidden();
+    }
+
+    public function test_the_dues_file_carries_the_by_type_table_its_page_shows(): void
+    {
+        [, $owner] = $this->busyClub();
+
+        $byType = $this->actingAs($owner)->get(route('club.reports.show', ['report' => 'dues']))->viewData('page')['props']['data']['byType'];
+        $this->assertNotEmpty($byType);
+        $file = $this->actingAs($owner)->get(route('club.reports.export', ['report' => 'dues', 'format' => 'csv']))->streamedContent();
+        $this->assertStringContainsString('حسب نوع الفاتورة', $file);
+        foreach ($byType as $row) {
+            $this->assertStringContainsString($row['label'].','.$row['count'].','.number_format($row['amount'], 3, '.', ''), $file);
+        }
+    }
+
+    public function test_the_payouts_file_carries_what_its_page_shows_as_waiting(): void
+    {
+        [, $owner] = $this->busyClub();
+
+        $waiting = $this->actingAs($owner)->get(route('club.reports.show', ['report' => 'payouts']))->viewData('page')['props']['data']['waiting'];
+        $file = $this->actingAs($owner)->get(route('club.reports.export', ['report' => 'payouts', 'format' => 'csv']))->streamedContent();
+        $this->assertStringContainsString('"بانتظار الصرف الآن",'.number_format((float) $waiting, 3, '.', ''), $file);
     }
 
     public function test_money_and_salaries_are_for_those_allowed_and_exporting_is_a_permission_of_its_own(): void

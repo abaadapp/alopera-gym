@@ -54,6 +54,7 @@ final class DuesReport extends Report
                     $open->map(fn (Invoice $i) => [$i->number, $i->customer_name, $i->customer_phone, FinanceReport::INVOICE_TYPES[$i->type] ?? $i->type, $i->issue_date->toDateString(), $i->due_date?->toDateString(),
                         $this->late($i, $today), $i->total, $i->paid_total, $i->balance(), self::STATUSES[$i->status] ?? $i->status])->all()),
                 new S('أعلى المدينين', [['العميل', S::TEXT], ['عدد الفواتير', S::INT], ['المتبقي', S::MONEY]], $this->debtors($open)->map(fn ($d) => [$d['name'], $d['count'], $d['balance']])->all()),
+                new S('حسب نوع الفاتورة', [['النوع', S::TEXT], ['عدد الفواتير', S::INT], ['المتبقي', S::MONEY]], array_map(fn ($t) => [$t['label'], $t['count'], $t['amount']], $this->byType($open))),
             ],
         ];
     }

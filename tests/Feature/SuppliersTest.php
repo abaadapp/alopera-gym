@@ -53,6 +53,7 @@ class SuppliersTest extends TestCase
         $this->actingAs($owner)->post(route('club.purchases.bills.store'), ['supplier_id' => $supplier->id, 'purchase_order_id' => $order->id, 'reference' => 'A-'.$supplier->id, 'issue_date' => now()->toDateString(), 'subtotal' => 24, 'tax' => 1.2, 'approve' => true])->assertSessionHasNoErrors();
         $bill = $this->asTenant($club, fn () => SupplierBill::where('supplier_id', $supplier->id)->latest('id')->firstOrFail());
         $bank = $this->asTenant($club, fn () => app(ChartOfAccounts::class)->account('bank'));
+        $this->fundAccounts($club, '10.000');
         $this->actingAs($owner)->post(route('club.purchases.bills.pay', $bill), ['account_id' => $bank->id, 'amount' => 10, 'paid_on' => now()->toDateString()])->assertSessionHasNoErrors();
     }
 

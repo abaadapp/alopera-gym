@@ -56,6 +56,9 @@ interface Props {
     lastResult: Result | null;
     device: Device;
     branch: string | null;
+    /** The branch this till sells from; none for a club-wide user with several branches until they choose one. */
+    branchId: number | null;
+    branches: { id: number; name: string }[];
     requireDevice: boolean;
 }
 
@@ -71,7 +74,7 @@ const plusChip = 'flex size-8 shrink-0 items-center justify-center rounded-lg bg
  * a Paymob link; its receipt printed on the till's thermal printer. Totals here guide the cashier; the server prices
  * the basket again, issues every invoice and records who sold what, where and on which device.
  */
-export default function Pos({ products, categories, plans, packages, can: allowed, device, branch, requireDevice }: Props) {
+export default function Pos({ products, categories, plans, packages, can: allowed, device, branch, branchId, branches, requireDevice }: Props) {
     const currency = useCurrency();
     const can = useCan();
     const m = (v: string | number) => money(v, currency);
@@ -91,6 +94,9 @@ export default function Pos({ products, categories, plans, packages, can: allowe
     const [basketKey, setBasketKey] = useState(newKey);
     const scanRef = useRef<HTMLInputElement>(null);
     const blocked = requireDevice && !device;
+    const noBranch = !device && branchId === null;
+    // The panel's branch is the till's: choosing one here reloads the till with that branch's shelf.
+    const chooseBranch = (id: number) => router.post(route('club.branch.switch'), { branch_id: id }, { preserveScroll: true });
     const kinds = ([['products', 'المنتجات', Package], ['memberships', 'العضويات', Ticket], ['pt', 'التدريب الشخصي', Dumbbell]] as const).filter(([k]) => k === 'products' || (k === 'memberships' ? plans.length > 0 : packages.length > 0));
 
     const q = query.trim().toLowerCase();
@@ -177,6 +183,7 @@ export default function Pos({ products, categories, plans, packages, can: allowe
     const openPayment = () => {
         if (cart.length === 0) return toast.warning('السلة فارغة: اختر منتجًا أو عضوية أو باقة.');
         if (blocked) return toast.error('البيع من أجهزة نقاط البيع المفعّلة فقط. فعّل هذا الجهاز أولًا.');
+        if (noBranch) return toast.warning('اختر الفرع الذي تبيع منه أولًا.');
         if (hasServices && !member) return toast.warning('العضوية والتدريب الشخصي يُباعان لعضو: اختر العضو أولًا.');
         if (member?.status === 'blocked') return toast.error('حساب العضو موقوف.');
         setPaying(true);
@@ -186,7 +193,17 @@ export default function Pos({ products, categories, plans, packages, can: allowe
         <PosLayout title="نقطة البيع" device={device} branch={branch} fill>
             <div className="flex flex-col gap-4 p-4 max-md:pb-24 md:h-full md:flex-row md:overflow-hidden">
                 <section className="flex min-w-0 flex-1 flex-col md:min-h-0">
-                    {!device && (
+                    {noBranch && !blocked && (
+                        <Notice tone="amber" className="mb-3 shrink-0">
+                            <span className="block font-medium">اختر الفرع الذي تبيع منه</span>
+                            <span className="mt-2 flex flex-wrap gap-2">
+                                {branches.map((b) => (
+                                    <button key={b.id} type="button" onClick={() => chooseBranch(b.id)} className="rounded-full border border-amber-300 bg-white px-3 py-1 text-[13px] font-medium text-ink hover:bg-amber-50">{b.name}</button>
+                                ))}
+                            </span>
+                        </Notice>
+                    )}
+                    {!device && !noBranch && (
                         <Notice tone={blocked ? 'red' : 'gray'} className="mb-3 shrink-0" href={route('club.pos.device')}>
                             {blocked ? 'البيع من أجهزة نقاط البيع المفعّلة فقط. فعّل هذا الجهاز برمز الربط لتتمكن من البيع.' : `هذا المتصفح ليس جهاز نقطة بيع مفعّلًا؛ تُسجَّل المبيعات على ${branch ?? 'الفرع الحالي'}. تفعيل هذا الجهاز`}
                         </Notice>
@@ -385,6 +402,7 @@ export default function Pos({ products, categories, plans, packages, can: allowe
                     discount={discountValue}
                     basketKey={basketKey}
                     device={device}
+                    branchId={branchId}
                     allowed={allowed}
                     hasProducts={hasProducts}
                     result={result}
@@ -504,7 +522,7 @@ function MemberNotes({ member, currency }: { member: MemberCard; currency: strin
 }
 
 /** Paying the basket: the amount due, the method, cash given and change, then the receipts to print and a new sale. */
-function PaymentDialog({ total, cart, member, guest, discount, basketKey, device, allowed, hasProducts, result, onResult, onClose }: {
+function PaymentDialog({ total, cart, member, guest, discount, basketKey, device, branchId, allowed, hasProducts, result, onResult, onClose }: {
     total: number;
     cart: Line[];
     member: MemberCard | null;
@@ -512,6 +530,7 @@ function PaymentDialog({ total, cart, member, guest, discount, basketKey, device
     discount: number;
     basketKey: string;
     device: Device;
+    branchId: number | null;
     allowed: Props['can'];
     hasProducts: boolean;
     result: Result | null;
@@ -565,6 +584,8 @@ function PaymentDialog({ total, cart, member, guest, discount, basketKey, device
                 member_id: member?.id ?? null,
                 customer_name: member ? null : guest.trim() || null,
                 discount: discount || 0,
+                // The branch shown on the till; a device sells from its own.
+                branch_id: device ? null : branchId,
                 client_key: basketKey,
             },
             {

@@ -8,6 +8,7 @@ use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
+use App\Modules\Accounting\Services\AccountFunds;
 use App\Modules\Accounting\Services\AccountingPeriods;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\Ledger;
@@ -137,12 +138,13 @@ final class SupplierBillService
         }
 
         try {
-            return DB::transaction(function () use ($bill, $account, $amount, $paidOn, $reference, $notes, $clientKey) {
+            return app(AccountFunds::class)->exclusive($account, fn () => DB::transaction(function () use ($bill, $account, $amount, $paidOn, $reference, $notes, $clientKey) {
                 $bill = $this->lock($bill, [SupplierBill::APPROVED], 'لا يُسدَّد إلا سند معتمد.');
                 $amount = Money::normalize($amount);
                 if (Money::toMinor($amount) <= 0 || Money::cmp($amount, $bill->balance()) > 0) {
                     throw new BusinessRuleException('supplier_payment.amount', 'المبلغ أكبر من المتبقي على السند ('.$bill->balance().').', 'amount');
                 }
+                app(AccountFunds::class)->covers($account, $amount);
                 $payment = SupplierPayment::create([
                     'number' => NumberSequence::next('supplier_payment'), 'supplier_bill_id' => $bill->id, 'supplier_id' => $bill->supplier_id,
                     'account_id' => $account->id, 'amount' => $amount, 'paid_on' => $paidOn, 'reference' => $reference, 'notes' => $notes,
@@ -159,7 +161,7 @@ final class SupplierBillService
                 $this->audit->log('supplier_payment.made', $payment, ['bill' => $bill->number, 'amount' => $amount, 'account' => $account->name]);
 
                 return $payment;
-            });
+            }));
         } catch (UniqueConstraintViolationException $e) {
             return SupplierPayment::where('client_key', $clientKey)->first() ?? throw $e;
         }

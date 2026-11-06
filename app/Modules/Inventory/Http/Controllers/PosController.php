@@ -15,6 +15,7 @@ use App\Modules\Gym\Http\GymPresenter;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Models\PtPackage;
+use App\Modules\Inventory\Models\PosDevice;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Inventory\Services\PosCheckout;
@@ -47,8 +48,10 @@ class PosController extends Controller
         if ($device) {
             $this->devices->touch($device, $request);
         }
-        // The shelf the till sells from: the device's branch, else the user's (or the one the top bar shows).
-        $branch = $device?->branch_id ?? $this->branches->assign() ?? $this->branches->mainId();
+        // The branch the till sells from: the device's, else the user's (or the one the top bar shows), else the user's
+        // only branch. None (a club-wide user with several, «all branches» shown): the page asks for one before selling.
+        $chosen = $device?->branch_id ?? $this->branches->assign() ?? $this->onlyBranch();
+        $branch = $chosen ?? $this->branches->mainId();
         $quantities = $stock->quantities($branch);
         $products = Product::with('category:id,name,sort_order')->where('is_active', true)->orderBy('name')->get();
         $offered = $addons->map($products, 'pos', stock: $quantities);
@@ -76,7 +79,9 @@ class PosController extends Controller
             'lastResult' => session('pos_result'),
             // The till and its receipt printer, as the printing layer needs them to pick a way to print.
             'device' => $device ? ['id' => $device->id, 'name' => $device->name, 'branch' => $device->branch?->name, 'printer' => $printer?->forPrinting()] : null,
-            'branch' => Branch::whereKey($branch)->value('name'),
+            'branch' => $chosen ? Branch::whereKey($chosen)->value('name') : null,
+            'branchId' => $chosen,
+            'branches' => $chosen ? [] : $this->branches->choices()->map(fn (Branch $b) => ['id' => $b->id, 'name' => $b->name])->values(),
             'requireDevice' => ShopSettings::of($this->tenants->require())['pos_require_device'],
         ]);
     }
@@ -100,6 +105,7 @@ class PosController extends Controller
             'card_reference' => ['nullable', 'string', 'max:120', 'required_if:payment_method,card'],
             'client_key' => ['nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9-]+$/'],
             'customer_name' => ['nullable', 'string', 'max:120'],
+            'branch_id' => ['nullable', 'integer', TenantRule::exists('branches')],
         ], ['card_reference.required_if' => 'أدخل رقم العملية من جهاز الشبكة.']);
         $user = $request->user();
 
@@ -118,6 +124,7 @@ class PosController extends Controller
         } elseif (ShopSettings::of($this->tenants->require())['pos_require_device']) {
             throw new BusinessRuleException('pos.device_required', 'البيع من أجهزة نقاط البيع المفعّلة فقط. فعّل هذا الجهاز أولًا.');
         }
+        $branch = $this->sellingBranch($device, isset($data['branch_id']) ? (int) $data['branch_id'] : null);
 
         // One basket, one sale: a double click or a retried request returns the first result, never a second sale.
         $key = isset($data['client_key']) ? 'pos-basket:'.$this->tenants->id().':'.$data['client_key'] : null;
@@ -126,7 +133,7 @@ class PosController extends Controller
             $run = fn () => Cache::get($key ?? '') ?? $checkout->checkout([
                 'items' => $data['items'] ?? [], 'memberships' => $data['memberships'] ?? [], 'packages' => $data['packages'] ?? [],
                 'method' => $data['payment_method'], 'member' => isset($data['member_id']) ? Member::find($data['member_id']) : null,
-                'discount' => $data['discount'] ?? 0, 'branch_id' => $this->branches->assign(), 'card_reference' => $data['card_reference'] ?? null,
+                'discount' => $data['discount'] ?? 0, 'branch_id' => $branch, 'card_reference' => $data['card_reference'] ?? null,
                 'customer_name' => $data['customer_name'] ?? null, 'device' => $device, 'client_key' => $data['client_key'] ?? null,
             ]);
             $documents = $key ? Cache::lock($key.':lock', 30)->block(15, $run) : $run();
@@ -143,6 +150,32 @@ class PosController extends Controller
             ->with('success', $open ? 'صدرت الفواتير؛ تُفعّل العضوية أو الباقة بعد الدفع عبر الرابط.' : 'تمت عملية البيع بمبلغ '.$total.'.')
             ->with('sale_id', $sale['id'] ?? null)
             ->with('pos_result', ['documents' => $documents, 'total' => $total, 'method' => $data['payment_method'], 'at' => now()->format('H:i')]);
+    }
+
+    /**
+     * The branch a till sale belongs to: the device's, else the one asked for, else the seller's own or the one the panel
+     * shows, else the seller's only branch. A branch the seller may not sell in (or a closed one) is refused, and with
+     * no branch at all nothing is sold: a club-wide seller with several branches chooses one first.
+     */
+    private function sellingBranch(?PosDevice $device, ?int $asked): int
+    {
+        if ($asked !== null && (! $this->branches->allows(request()->user(), $asked) || ! Branch::whereKey($asked)->where('is_active', true)->exists())) {
+            throw new BusinessRuleException('pos.branch', 'لا يمكنك البيع في هذا الفرع.', 'branch_id');
+        }
+        if ($device && $asked !== null && $asked !== $device->branch_id) {
+            throw new BusinessRuleException('pos.branch', 'هذا الجهاز يبيع من فرعه وحده.', 'branch_id');
+        }
+
+        return $device?->branch_id ?? $this->branches->assign($asked) ?? $this->onlyBranch()
+            ?? throw new BusinessRuleException('pos.branch', 'اختر الفرع الذي تبيع منه قبل إتمام البيع.', 'branch_id');
+    }
+
+    /** The branch, when the user has only one open to them. */
+    private function onlyBranch(): ?int
+    {
+        $choices = $this->branches->choices();
+
+        return $choices->count() === 1 ? $choices->first()->id : null;
     }
 
     /** What the cashier should know about the member chosen: their membership, an unpaid balance, a block or freeze. */

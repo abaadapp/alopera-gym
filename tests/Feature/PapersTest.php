@@ -173,6 +173,7 @@ class PapersTest extends TestCase
     public function test_all_ten_papers_draw_the_preview_the_print_page_and_the_pdf_with_one_engine(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         $invoice = $this->sellMembership($club);
         $this->asTenant($club, function () use ($invoice) {
