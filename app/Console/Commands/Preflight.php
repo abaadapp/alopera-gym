@@ -8,6 +8,7 @@ use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Modules\Accounting\Services\OpeningBalances;
 use App\Modules\Gym\Models\Member;
 use Illuminate\Console\Command;
 use Illuminate\Database\Migrations\Migrator;
@@ -83,6 +84,11 @@ class Preflight extends Command
         $this->check($home !== null, 'One gym is served', $home ? $home->slug : Tenant::count().' club records and none named', warn: true, hint: '— GYM_HOME_CLUB=<the gym slug>');
         $demoClubs = Tenant::whereIn('slug', ['alopera', 'demofit'])->get()->filter(fn (Tenant $t) => DemoAccounts::isReservedEmail($t->email))->pluck('slug');
         $this->check($demoClubs->isEmpty(), 'No demo clubs', $demoClubs->isEmpty() ? 'none' : $demoClubs->implode(', ').' look like seeded demo data', warn: true);
+
+        // Each cash box and bank account starts from the money it really held: set by hand (0 when empty), never made up.
+        $unset = ($home ? collect([$home]) : Tenant::all())->flatMap(fn (Tenant $t) => $tenants->run($t, fn () => app(OpeningBalances::class)->unreviewed()->pluck('name')));
+        $this->check($unset->isEmpty(), 'Cash and bank opening balances are reviewed', $unset->isEmpty() ? 'each set by hand' : $unset->count().' not set: '.$unset->take(6)->implode('، ').($unset->count() > 6 ? ' …' : ''), warn: true,
+            hint: '— before trading for real, set each in Finance › Bank accounts › Opening balance (0 if empty); money is paid out of an account only while it holds it');
 
         $owners = User::whereNotNull('tenant_id')->where('is_active', true)->whereHas('role', fn ($q) => $q->where('key', 'owner'))->get(['email'])->reject(fn (User $u) => DemoAccounts::isReservedEmail($u->email));
         $this->check($owners->isNotEmpty(), 'The gym is set up with a real owner account', $owners->count().' owner(s)', warn: true, hint: '— php artisan gym:install');
