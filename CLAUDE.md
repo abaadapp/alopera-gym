@@ -25,3 +25,4 @@ Read `docs/ARCHITECTURE.md` first.
 - Demo data: `php artisan migrate:fresh --seed` (refuses to run in production)
 - Release gate: `php artisan platform:preflight` (run by `scripts/deploy.sh`; fails locally by design)
 - Push + version tag: `scripts/release.sh` (`--dry-run` to preview); bumps from conventional-commit subjects, refuses env files and keys
+- CI tags every push to main that passes the tests, pull requests merged on GitHub included (`scripts/ci-tag.sh`, same bump rule; a tag deploys nothing)

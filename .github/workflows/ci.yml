@@ -41,3 +41,23 @@ jobs:
       - run: npm run build
       - run: vendor/bin/pint --test
       - run: php artisan test
+
+  # Every push to main that passed the tests gets the next version tag (pull requests merged on GitHub included).
+  # A tag deploys nothing.
+  tag:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: tag-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+      - run: scripts/ci-tag.sh "$GITHUB_SHA"
