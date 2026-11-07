@@ -35,6 +35,7 @@ use App\Modules\Inventory\Models\ProductCategory;
 use App\Modules\Inventory\Models\Supplier;
 use App\Modules\Inventory\Services\PosService;
 use App\Modules\Inventory\Services\PurchaseService;
+use App\Modules\Inventory\Services\StockService;
 use App\Modules\Messaging\Models\AutoReply;
 use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Models\Message;
@@ -306,8 +307,10 @@ class AloperaDemoSeeder extends Seeder
         }
 
         $this->travel(today()->subDays(40)->setTime(11, 0), function () use ($supplier, $products) {
-            $po = app(PurchaseService::class)->create($supplier, array_map(fn ($r) => ['product_id' => $r[0]->id, 'quantity' => $r[0]->name === 'حصيرة يوغا' ? 6 : 40, 'unit_cost' => $r[1]], $products));
-            app(PurchaseService::class)->receive($po);
+            $purchases = app(PurchaseService::class);
+            $po = $purchases->approve($purchases->create($supplier, array_map(fn ($r) => ['product_id' => $r[0]->id, 'quantity' => $r[0]->name === 'حصيرة يوغا' ? 6 : 40, 'unit_cost' => $r[1]], $products)));
+            // Delivered in full and approved: the stock goes on the shelves through a goods receipt.
+            $purchases->receive($po, $po->items()->get()->mapWithKeys(fn ($item) => [$item->id => ['quantity' => $item->quantity]])->all(), approveNow: true);
         });
 
         return array_column($products, 0);
@@ -479,8 +482,13 @@ class AloperaDemoSeeder extends Seeder
         $pos = app(PosService::class);
         for ($d = 20; $d >= 0; $d -= 2) {
             $this->travel(now()->subDays($d)->setTime(random_int(9, 20), 15), function () use ($pos, $products, $members) {
-                $items = collect($products)->shuffle()->take(random_int(1, 3))->map(fn ($p) => ['product_id' => $p->id, 'quantity' => random_int(1, 2)])->values()->all();
-                $pos->checkout($items, random_int(0, 1) ? 'cash' : 'card', random_int(0, 1) ? $members[array_rand($members)] : null);
+                // Only what is on the shelf: a few items are bought in small numbers (6 yoga mats) to show low stock.
+                $shelf = app(StockService::class)->quantities();
+                $items = collect($products)->shuffle()->take(random_int(1, 3))->map(fn ($p) => ['product_id' => $p->id, 'quantity' => min(random_int(1, 2), (int) ($shelf[$p->id] ?? 0))])
+                    ->where('quantity', '>', 0)->values()->all();
+                if ($items !== []) {
+                    $pos->checkout($items, random_int(0, 1) ? 'cash' : 'card', random_int(0, 1) ? $members[array_rand($members)] : null);
+                }
             });
         }
     }
