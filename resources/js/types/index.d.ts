@@ -32,6 +32,7 @@ export interface TenantInfo {
     id: number;
     name: string;
     slug: string;
+    site_url?: string;
     logo_url: string | null;
     primary_color: string;
     secondary_color: string;

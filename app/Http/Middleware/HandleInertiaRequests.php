@@ -25,6 +25,17 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
+     * The address the browser shows: on the club's own domain the visitor's clean path (/plans), not the
+     * /c/{club}/plans it is served by (ResolveCustomDomain keeps it in "site_uri").
+     */
+    public function urlResolver()
+    {
+        $uri = request()->attributes->get('site_uri');
+
+        return is_string($uri) ? fn (): string => $uri : null;
+    }
+
+    /**
      * Everything is lazy: the tenant is resolved by route middleware that runs
      * after this one, so values are read when the page renders.
      *
@@ -126,6 +137,8 @@ class HandleInertiaRequests extends Middleware
             'id' => $tenant->id,
             'name' => $tenant->name,
             'slug' => $tenant->slug,
+            // The website's address: the club's own domain when the panel and the website are apart.
+            'site_url' => route('site.home', ['club' => $tenant->slug]),
             'logo_url' => $tenant->logoUrl(),
             'primary_color' => $tenant->primary_color,
             'secondary_color' => $tenant->secondary_color,

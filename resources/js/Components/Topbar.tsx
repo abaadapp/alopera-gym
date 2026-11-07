@@ -59,7 +59,7 @@ export default function Topbar({ onMenu }: { onMenu: () => void }) {
                     </Link>
                 )}
                 {tenant && can('website.manage') && (
-                    <a href={route('site.home', { club: tenant.slug })} target="_blank" rel="noreferrer" className={cn(iconButton, 'max-sm:hidden')} title="موقع النادي">
+                    <a href={tenant.site_url ?? route('site.home', { club: tenant.slug })} target="_blank" rel="noreferrer" className={cn(iconButton, 'max-sm:hidden')} title="موقع النادي">
                         <Globe />
                         <span className="sr-only">موقع النادي</span>
                     </a>
