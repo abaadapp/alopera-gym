@@ -54,7 +54,10 @@ class ResolveCustomDomain
             return $next($request);
         }
 
-        $slug = Cache::remember('custom-domain:'.$host, 300, fn () => Tenant::where('domain', $host)
+        // The home gym's domain is known however it was typed in (www., https://, capitals): a stored form that
+        // differs from the host must not leave the domain unserved, as / would then send the visitor back to it.
+        $split = $this->domains->isSiteHost($host);
+        $slug = $split ? (string) $this->domains->slug() : Cache::remember('custom-domain:'.$host, 300, fn () => Tenant::where('domain', $host)
             ->orWhere('domain', preg_replace('/^www\./', '', $host))
             ->value('slug') ?? '');
 
@@ -62,10 +65,8 @@ class ResolveCustomDomain
             return $next($request);
         }
 
-        $split = $this->domains->isSiteHost($host);
-
         if ($split && $read && str_starts_with($host, 'www.')) {
-            return $this->moved($this->domains->siteRoot().'/'.$path, $request);
+            return $this->moved($this->domains->siteRoot().($this->domains->cleanPath($path) ?? '/'.$path), $request);
         }
 
         // An old address with the club in the path.

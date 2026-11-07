@@ -63,6 +63,32 @@ class SiteDomainSplitTest extends TestCase
         $this->assertSame(1, $this->asTenant($club, fn () => ContactMessage::count()));
     }
 
+    public function test_a_domain_typed_with_www_or_https_serves_the_website_without_a_redirect_loop(): void
+    {
+        $club = $this->split();
+        $club->update(['domain' => 'https://www.AloperaGym.om/']);
+
+        // Unknown to the host lookup, / would go to the website's home, i.e. back to itself.
+        $this->get(self::SITE.'/')->assertOk()->assertInertia(fn ($p) => $p->component('Site/Home'));
+        $this->get(self::SITE.'/plans')->assertOk();
+        // www with an old address: one move, straight to the clean one.
+        $this->get('https://www.aloperagym.om/c/'.$club->slug.'/plans?x=1')->assertStatus(301)->assertRedirect(self::SITE.'/plans?x=1');
+    }
+
+    public function test_form_errors_survive_the_move_from_the_served_address_to_the_clean_one(): void
+    {
+        $this->split();
+
+        $this->get(self::SITE.'/contact')->assertOk();
+        // Laravel sends a refused form back to the address it served (/c/{club}/contact); that moves on to /contact.
+        $back = $this->post(self::SITE.'/contact', ['name' => '', 'phone' => '', 'message' => ''])->assertRedirect()->headers->get('Location');
+        if ($back !== self::SITE.'/contact') {
+            $this->get($back)->assertStatus(301)->assertRedirect(self::SITE.'/contact');
+        }
+        $this->get(self::SITE.'/contact')->assertOk()
+            ->assertInertia(fn ($p) => $p->component('Site/Contact')->has('errors.name')->where('errors.name', fn ($m) => $m !== ''));
+    }
+
     public function test_the_panel_and_staff_sign_in_are_not_on_the_club_domain(): void
     {
         $this->split();
