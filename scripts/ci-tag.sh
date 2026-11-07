@@ -8,6 +8,9 @@
 # release.sh) is left alone. A tag deploys nothing: a release goes live only with scripts/deploy.sh <tag>.
 set -euo pipefail
 
+# In GitHub Actions the commit's tag is handed on (tag=vX.Y.Z), new or already there, for the build to attach to.
+out() { [ -n "${GITHUB_OUTPUT:-}" ] && echo "tag=$1" >> "$GITHUB_OUTPUT"; return 0; }
+
 DRY=""
 if [ "${1:-}" = "--dry-run" ]; then DRY=1; shift; fi
 SHA=$(git rev-parse "${1:-HEAD}^{commit}")
@@ -18,6 +21,7 @@ if [ -z "$LAST" ]; then
     RANGE=$SHA
 elif [ "$(git rev-list --count "$LAST..$SHA")" -eq 0 ]; then
     echo "nothing to tag: ${SHA:0:7} is $LAST"
+    [ -n "$DRY" ] || out "$LAST"
     exit 0
 else
     IFS=. read -r MAJOR MINOR PATCH <<< "${LAST#v}"
@@ -52,3 +56,4 @@ fi
 git tag -a "$NEXT" -m "$NEXT" -m "$NOTES" "$SHA"
 git push --quiet origin "refs/tags/$NEXT"
 echo "tagged ${SHA:0:7} as $NEXT"
+out "$NEXT"

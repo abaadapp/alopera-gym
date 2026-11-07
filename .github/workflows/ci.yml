@@ -60,4 +60,23 @@ jobs:
       - run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-      - run: scripts/ci-tag.sh "$GITHUB_SHA"
+      - id: tag
+        run: scripts/ci-tag.sh "$GITHUB_SHA"
+      # The built pages (public/build) attached to the version, so the 1 GB droplet downloads them instead of
+      # building (scripts/deploy.sh). Built from the tagged commit; nothing in the build comes from .env.
+      - if: steps.tag.outputs.tag != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.tag.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 && { echo "release $TAG already there"; exit 0; }
+          npm ci --no-audit --no-fund
+          npm run build
+          tar -czf build.tar.gz -C public build
+          sha256sum build.tar.gz > build.tar.gz.sha256
+          gh release create "$TAG" build.tar.gz build.tar.gz.sha256 --verify-tag --notes-from-tag --title "$TAG"
