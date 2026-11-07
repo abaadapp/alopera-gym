@@ -217,8 +217,8 @@ final class MembershipService
     /**
      * Called when the membership's invoice is fully paid.
      *
-     * If the payment arrives after the planned start date, the period is moved
-     * to start today: unpaid days were never usable.
+     * The period is the one that was sold and printed on the invoice: a start chosen before the payment (a member who
+     * began training, then paid) is kept, and so is the period of a sale paid late. The payment keeps its own real date.
      */
     public function activate(Membership $membership, ?CarbonImmutable $today = null): Membership
     {
@@ -229,23 +229,19 @@ final class MembershipService
             return $membership;
         }
 
-        if ($membership->starts_on->lt($today)) {
-            // The length that was sold (plan_snapshot): an edit to the plan since then changes no sale.
-            $sold = $membership->plan_snapshot ?? [];
-            $plan = isset($sold['duration_value'], $sold['duration_unit'])
-                ? (new MembershipPlan)->forceFill(['duration_value' => (int) $sold['duration_value'], 'duration_unit' => $sold['duration_unit']])
-                : $membership->plan;
-            $membership->starts_on = $today;
-            $membership->ends_on = $plan->endDateFrom($today);
-        }
-
-        $membership->status = $membership->starts_on->gt($today) ? Membership::SCHEDULED : Membership::ACTIVE;
+        $membership->status = match (true) {
+            $membership->starts_on->gt($today) => Membership::SCHEDULED,
+            $membership->ends_on->lt($today) => Membership::EXPIRED,
+            default => Membership::ACTIVE,
+        };
         $membership->activated_at = now();
         $membership->save();
 
-        $this->event($membership, 'activated', ['status' => $membership->status]);
+        $this->event($membership, 'activated', ['status' => $membership->status, 'paid_on' => $today->toDateString(),
+            'starts_on' => $membership->starts_on->toDateString(), 'ends_on' => $membership->ends_on->toDateString()]);
 
-        if ($membership->kind === Membership::KIND_UPGRADE && $membership->previous_membership_id) {
+        // An upgrade whose own period went by unpaid replaces nothing: the membership the member still has stays.
+        if ($membership->kind === Membership::KIND_UPGRADE && $membership->previous_membership_id && $membership->status !== Membership::EXPIRED) {
             $previous = Membership::whereKey($membership->previous_membership_id)->lockForUpdate()->first();
             if ($previous && in_array($previous->status, [Membership::ACTIVE, Membership::FROZEN, Membership::SCHEDULED], true)) {
                 $previous->forceFill([

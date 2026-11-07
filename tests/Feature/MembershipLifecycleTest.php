@@ -4,12 +4,15 @@ namespace Tests\Feature;
 
 use App\Core\Support\BusinessRuleException;
 use App\Core\Tenancy\TenantContext;
+use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Gym\Access\AccessControlService;
+use App\Modules\Gym\Http\GymPresenter;
 use App\Modules\Gym\Models\Coupon;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Services\MembershipService;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
@@ -70,20 +73,66 @@ class MembershipLifecycleTest extends TestCase
         });
     }
 
-    public function test_late_payment_moves_the_period_to_start_on_the_payment_day(): void
+    public function test_a_late_payment_keeps_the_period_that_was_sold(): void
     {
         $club = $this->club();
         $member = $this->member($club);
         $plan = $this->plan($club, ['duration_value' => 30, 'duration_unit' => 'day']);
 
         $m = $this->asTenant($club, fn () => $this->svc()->sell($member, $plan));
+        $sold = [$m->starts_on->toDateString(), $m->ends_on->toDateString()];
         $this->travel(5)->days();
 
-        $this->asTenant($club, function () use ($m) {
+        $this->asTenant($club, function () use ($m, $sold) {
             $this->pay($m);
             $m = $m->fresh();
-            $this->assertSame(today()->toDateString(), $m->starts_on->toDateString());
-            $this->assertSame(today()->addDays(29)->toDateString(), $m->ends_on->toDateString());
+            // The period on the invoice is the period the member has: the start is never moved behind anyone's back.
+            $this->assertSame($sold, [$m->starts_on->toDateString(), $m->ends_on->toDateString()]);
+            $this->assertSame(Membership::ACTIVE, $m->status);
+        });
+    }
+
+    public function test_a_backdated_start_is_kept_and_the_money_is_dated_the_day_it_came(): void
+    {
+        $club = $this->club();
+        $member = $this->member($club);
+        $plan = $this->plan($club, ['duration_value' => 30, 'duration_unit' => 'day']);
+
+        $this->asTenant($club, function () use ($member, $plan) {
+            $start = CarbonImmutable::today()->subDays(3);
+            $m = $this->svc()->sell($member, $plan, ['starts_on' => $start->toDateString()]);
+            $payment = $this->pay($m);
+            $m = $m->fresh();
+
+            // The member started on the day chosen; the length runs from it.
+            $this->assertSame([$start->toDateString(), $start->addDays(29)->toDateString()], [$m->starts_on->toDateString(), $m->ends_on->toDateString()]);
+            $this->assertSame(Membership::ACTIVE, $m->status);
+            // The invoice says the same period, and the profile shows it.
+            $this->assertStringContainsString('(من '.$start->toDateString().' إلى '.$start->addDays(29)->toDateString().')', $m->invoice->items()->first()->description);
+            $this->assertSame($start->toDateString(), GymPresenter::membership($m)['starts_on']);
+            // The money is dated the day it was paid, not the day the period began; and the activation says both.
+            $this->assertSame(today()->toDateString(), $payment->fresh()->paid_at->toDateString());
+            $this->assertSame([today()->toDateString()], JournalEntry::where('source_type', 'payment')->where('source_id', $payment->id)->pluck('entry_date')->map->toDateString()->unique()->values()->all());
+            $this->assertSame(['paid_on' => today()->toDateString(), 'starts_on' => $start->toDateString(), 'ends_on' => $start->addDays(29)->toDateString()],
+                collect($m->events()->where('type', 'activated')->first()->data)->only('paid_on', 'starts_on', 'ends_on')->all());
+        });
+    }
+
+    public function test_an_upgrade_paid_after_its_own_period_ended_leaves_the_current_membership_alone(): void
+    {
+        $club = $this->club();
+        $member = $this->member($club);
+        $current = $this->activeMembership($club, $member, $this->plan($club, ['duration_value' => 60, 'duration_unit' => 'day']));
+        $short = $this->plan($club, ['name' => 'Week', 'price' => 50, 'duration_value' => 7, 'duration_unit' => 'day']);
+        $upgrade = $this->asTenant($club, fn () => $this->svc()->upgrade($current, $short));
+        $this->travel(10)->days();
+
+        $this->asTenant($club, function () use ($upgrade, $current, $member) {
+            $this->pay($upgrade);
+            // The upgrade's week went by unpaid: it is over, and it does not end the membership the member still has.
+            $this->assertSame(Membership::EXPIRED, $upgrade->fresh()->status);
+            $this->assertSame(Membership::ACTIVE, $current->fresh()->status);
+            $this->assertTrue(app(AccessControlService::class)->evaluate($member->fresh())->allowed);
         });
     }
 

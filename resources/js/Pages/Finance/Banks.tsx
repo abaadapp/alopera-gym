@@ -9,7 +9,7 @@ import { cn } from '@/lib/cn';
 import { date, money, isoDate } from '@/lib/format';
 import { kindIcon } from './Summary';
 
-type Account = { id: number; code: string; name: string; kind: string; balance: string; bank_name: string | null; masked: string | null; is_active: boolean; system: boolean; opening: { amount: string; date: string } | null };
+type Account = { id: number; code: string; name: string; kind: string; balance: string; bank_name: string | null; masked: string | null; is_active: boolean; system: boolean; opening: { amount: string; date: string } | null; opening_reviewed: boolean };
 
 interface Props {
     accounts: Account[];
@@ -77,6 +77,7 @@ export default function FinanceBanks({ accounts, totals, kinds, canManage }: Pro
                                     {!a.is_active && <Badge tone="amber">موقوف</Badge>}
                                 </div>
                                 {a.opening && <p className="mt-2 text-[12px] text-muted">رصيد افتتاحي {m(a.opening.amount)} في {date(a.opening.date)}</p>}
+                                {!a.opening_reviewed && a.is_active && ['cash', 'bank'].includes(a.kind) && <p className="mt-2 text-[12px] text-[#b45309]">لم يُسجَّل رصيده الافتتاحي بعد. سجّله قبل بدء التشغيل الفعلي، ولو صفرًا.</p>}
                             </SummaryCard>
                         );
                     })}

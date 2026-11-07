@@ -622,7 +622,7 @@ function SellModal({ open, onClose, member, current, plans, hasMemberships }: { 
                         </div>
                     </Field>
                     {form.data.mode === 'new' && (
-                        <Field label="تاريخ البدء" error={form.errors.starts_on} hint="اتركه فارغًا ليبدأ اليوم. إن تأخر الدفع تبدأ الفترة يوم التفعيل.">
+                        <Field label="تاريخ البدء" error={form.errors.starts_on} hint="اتركه فارغًا ليبدأ اليوم. يمكن اختيار يوم سابق حتى 7 أيام. تبقى الفترة كما بيعت ولو تأخر الدفع.">
                             <Input type="date" value={form.data.starts_on} onChange={(e) => form.setData('starts_on', e.target.value)} />
                         </Field>
                     )}

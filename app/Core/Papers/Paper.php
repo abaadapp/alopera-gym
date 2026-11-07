@@ -127,17 +127,36 @@ final class Paper
     private function sheetBytes(): string
     {
         $p = PaperSize::of($this->size);
+        $mpdf = $this->sheet($p, withFoot: true);
+        // On A5 the running line (club, number, page) only repeats the head; the browser leaves it out there. A paper
+        // that this line alone pushes onto a second page is drawn on one, in the room the browser's page gives it (the
+        // same bottom margin it prints with). One that still needs two keeps the line on both.
+        if ($this->size === PaperSize::A5 && $mpdf->page === 2) {
+            $one = $this->sheet(['bottom' => $p['bottom'] - PaperSize::FOOT_LINE] + $p, withFoot: false);
+            if ($one->page === 1) {
+                $mpdf = $one;
+            }
+        }
+
+        return $mpdf->Output('', 'S');
+    }
+
+    /** @param  array{width: float, height: float|null, top: float, side: float, bottom: float}  $p */
+    private function sheet(array $p, bool $withFoot): Mpdf
+    {
         $ltr = PaperLabels::ltr((string) ($this->tpl['lang'] ?? 'ar_en'));
         $mpdf = $this->engine([$p['width'], $p['height']], $p['top'], $p['side'], $p['bottom']);
         $mpdf->SetTitle($this->doc['title'].' '.$this->doc['number']);
         $mpdf->SetCreator($this->issuer['name'] ?? '');
-        $second = PaperTheme::SECOND;
-        $mpdf->SetHTMLFooter('<table width="100%" style="font-family:ibmplexsansarabic;font-size:8pt;color:'.$second.';border-collapse:collapse"><tr>'
-            .'<td style="text-align:'.($ltr ? 'left' : 'right').'">'.e($this->issuer['name'] ?? '').' · <span dir="ltr">'.e($this->doc['number']).'</span></td>'
-            .'<td style="text-align:'.($ltr ? 'right' : 'left').'" dir="ltr">{PAGENO} / {nbpg}</td></tr></table>');
+        if ($withFoot) {
+            $second = PaperTheme::SECOND;
+            $mpdf->SetHTMLFooter('<table width="100%" style="font-family:ibmplexsansarabic;font-size:8pt;color:'.$second.';border-collapse:collapse"><tr>'
+                .'<td style="text-align:'.($ltr ? 'left' : 'right').'">'.e($this->issuer['name'] ?? '').' · <span dir="ltr">'.e($this->doc['number']).'</span></td>'
+                .'<td style="text-align:'.($ltr ? 'right' : 'left').'" dir="ltr">{PAGENO} / {nbpg}</td></tr></table>');
+        }
         $this->writeAnchored($mpdf, $this->html(pdf: true), $p);
 
-        return $mpdf->Output('', 'S');
+        return $mpdf;
     }
 
     /**

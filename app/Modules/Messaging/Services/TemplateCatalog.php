@@ -49,6 +49,12 @@ final class TemplateCatalog
             'variables' => ['member_name', 'plan_name', 'starts_on', 'ends_on'],
             'body' => 'تم تفعيل اشتراكك يا {{1}} في باقة {{2}} من {{3}} حتى {{4}}. نراك قريبًا 💪',
         ],
+        'membership_paid_after_end' => [
+            'label' => 'دفعة عن اشتراك انتهت مدته',
+            'category' => 'utility',
+            'variables' => ['member_name', 'plan_name', 'starts_on', 'ends_on'],
+            'body' => 'شكرًا {{1}}، استلمنا دفعتك عن اشتراكك السابق في باقة {{2}} للفترة من {{3}} حتى {{4}}. هذه الفترة انتهت، ولا يجعل الدفع الاشتراك نشطًا. لاشتراك جديد تواصل مع النادي.',
+        ],
         'membership_renewed' => [
             'label' => 'تأكيد التجديد',
             'category' => 'utility',

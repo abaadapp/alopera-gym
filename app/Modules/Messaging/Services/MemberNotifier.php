@@ -112,7 +112,12 @@ final class MemberNotifier
     {
         $membership->loadMissing('member');
         $member = $membership->member;
-        $key = $membership->kind === Membership::KIND_RENEWAL ? 'membership_renewed' : 'membership_activated';
+        // Paid only after its period had ended: the payment is for a past period, never announced as an active one.
+        $key = match (true) {
+            $membership->status === Membership::EXPIRED => 'membership_paid_after_end',
+            $membership->kind === Membership::KIND_RENEWAL => 'membership_renewed',
+            default => 'membership_activated',
+        };
 
         $this->whatsapp->queueTemplate($member, $key, $this->base($member) + $this->membershipValues($membership), $membership, 'activated:'.$membership->id);
     }
