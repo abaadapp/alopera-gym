@@ -225,6 +225,26 @@ class ReportsCatalogTest extends TestCase
         $this->assertStringContainsString('"بانتظار الصرف الآن",'.number_format((float) $waiting, 3, '.', ''), $file);
     }
 
+    public function test_the_movement_file_carries_the_totals_and_the_account_balance_its_page_shows(): void
+    {
+        [$club, $owner] = $this->busyClub();
+        $money = fn (mixed $v) => preg_quote(number_format((float) $v, 3, '.', ''), '/');
+
+        $data = $this->actingAs($owner)->get(route('club.reports.show', ['report' => 'movement']))->viewData('page')['props']['data'];
+        $this->assertNotEquals(0.0, (float) $data['comparison']['in']['current']);
+        $file = $this->actingAs($owner)->get(route('club.reports.export', ['report' => 'movement', 'format' => 'csv']))->streamedContent();
+        foreach (['in' => 'داخل', 'out' => 'خارج', 'net' => 'الصافي'] as $key => $label) {
+            $this->assertMatchesRegularExpression('/^"?'.$label.'"?,'.$money($data['comparison'][$key]['current']).',/mu', $file, $label);
+        }
+
+        // One account chosen: its balance at the start and the end of the period, as the page shows it.
+        $cash = $this->asTenant($club, fn () => app(ChartOfAccounts::class)->account('cash')->id);
+        $data = $this->actingAs($owner)->get(route('club.reports.show', ['report' => 'movement', 'account_id' => $cash]))->viewData('page')['props']['data'];
+        $file = $this->actingAs($owner)->get(route('club.reports.export', ['report' => 'movement', 'format' => 'csv', 'account_id' => $cash]))->streamedContent();
+        $this->assertMatchesRegularExpression('/^"رصيد الحساب أول الفترة",'.$money($data['opening']).'$/mu', $file);
+        $this->assertMatchesRegularExpression('/^"رصيد الحساب آخر الفترة",'.$money($data['closing']).'$/mu', $file);
+    }
+
     public function test_money_and_salaries_are_for_those_allowed_and_exporting_is_a_permission_of_its_own(): void
     {
         $club = $this->club();

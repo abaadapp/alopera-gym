@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class MovementReport extends Report
 {
+    private const FIGURES = ['in' => ['داخل', S::MONEY], 'out' => ['خارج', S::MONEY], 'net' => ['الصافي', S::MONEY]];
+
     public function __construct(private readonly FinanceReports $books) {}
 
     public function page(ReportFilters $f, User $user): array
@@ -46,6 +48,8 @@ final class MovementReport extends Report
         [$accounts, $account, $direction] = $this->choices($f);
         $ids = $account ? [$account->id] : $accounts->pluck('account.id')->all();
         $lines = $this->lines($f, $ids, $direction, $f->from, $f->to);
+        $current = $this->totals($this->lines($f, $ids, $direction, $f->from, $f->to));
+        $previous = $this->totals($this->lines($f, $ids, $direction, $f->prevFrom, $f->prevTo));
 
         return [
             'empty' => ! (clone $lines)->exists(),
@@ -54,6 +58,12 @@ final class MovementReport extends Report
                 ['الاتجاه', ['in' => 'داخل', 'out' => 'خارج'][$direction] ?? 'الكل'],
             ],
             'sheets' => [
+                // The page's cards: in, out and net against the earlier period; for one account, its balance at each end.
+                S::summary($this->compare($current, $previous), self::FIGURES),
+                ...($account ? [new S('رصيد الحساب', [['البند', S::TEXT], ['المبلغ', S::MONEY]], [
+                    ['رصيد الحساب أول الفترة', $this->books->signed($account, $this->books->totals(null, $f->from->subDay()->toDateString(), $f->branch))],
+                    ['رصيد الحساب آخر الفترة', $this->books->signed($account, $this->books->totals(null, $f->to->toDateString(), $f->branch))],
+                ])] : []),
                 new S('الحركة', [['التاريخ', S::TEXT], ['رقم القيد', S::TEXT], ['البيان', S::TEXT], ['الحساب', S::TEXT], ['المصدر', S::TEXT], ['داخل', S::MONEY], ['خارج', S::MONEY], ['ملاحظة', S::TEXT], ['الحالة', S::TEXT]],
                     (function () use ($lines) {
                         foreach ($lines->with(['entry:id,number,entry_date,description,source_type,source_event,reverses_id,reversed_at', 'account:id,name,kind'])->lazy(500) as $l) {
