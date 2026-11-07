@@ -6,6 +6,7 @@ use App\Core\Audit\AuditLogger;
 use App\Core\Auth\PermissionRegistry;
 use App\Core\Notifications\StaffNotifier;
 use App\Core\Tenancy\BranchContext;
+use App\Core\Tenancy\SiteDomains;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Models\User;
@@ -42,6 +43,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -49,6 +51,7 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        $this->app->singleton(SiteDomains::class);
         // Reset for every request and every queued job.
         $this->app->scoped(TenantContext::class);
         $this->app->scoped(BranchContext::class);
@@ -63,6 +66,8 @@ class AppServiceProvider extends ServiceProvider
 
         // migrate:fresh / migrate:refresh / migrate:reset / db:wipe refuse to run in production.
         DB::prohibitDestructiveCommands($this->app->isProduction());
+
+        $this->registerSiteAddresses();
 
         // `composer dev`: the worker listens on both queues (WhatsApp goes through "notifications")
         // and the scheduler runs memberships, reminders and class generation, as in production.
@@ -109,6 +114,34 @@ class AppServiceProvider extends ServiceProvider
                 $event->user->forceFill(['last_login_at' => now()])->saveQuietly();
                 app(AuditLogger::class)->log('auth.login', $event->user, tenantId: $event->user->tenant_id);
             }
+        });
+    }
+
+    /**
+     * Links name their own address wherever they are made (a page on either address, an e-mail, a WhatsApp message
+     * sent by a queued job): the website and portal on the club's domain with clean paths (/plans), everything else
+     * on APP_URL. Without the split (a development copy, the tests) links stay as they were.
+     */
+    private function registerSiteAddresses(): void
+    {
+        Tenant::saved(fn () => $this->app->make(SiteDomains::class)->flush());
+
+        URL::formatHostUsing(function (string $root, $route) {
+            $domains = $this->app->make(SiteDomains::class);
+            if ($route === null || ! $domains->enabled()) {
+                return $root;
+            }
+
+            return SiteDomains::isSiteRoute($route) ? $domains->siteRoot() : $domains->adminRoot();
+        });
+
+        URL::formatPathUsing(function (string $path, $route) {
+            $domains = $this->app->make(SiteDomains::class);
+            if (! SiteDomains::isSiteRoute($route) || ! $domains->enabled()) {
+                return $path;
+            }
+
+            return $domains->cleanPath($path) ?? $path;
         });
     }
 
