@@ -4,6 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\Tenant;
 use App\Models\TenantIntegration;
+use App\Modules\Finance\Services\PaymentService;
+use App\Modules\Gym\Access\AccessControlService;
+use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Services\MembershipService;
 use App\Modules\Messaging\Models\AutoReply;
 use App\Modules\Messaging\Models\Campaign;
 use App\Modules\Messaging\Models\Conversation;
@@ -170,6 +174,38 @@ class WhatsAppTest extends TestCase
             }
             $this->assertSame(0, Message::where('member_id', $optedOut->id)->whereIn('status', ['sent', 'queued'])->count());
             $this->assertSame('opted_out', Message::where('member_id', $optedOut->id)->value('error_code'));
+        });
+    }
+
+    public function test_a_membership_paid_after_its_period_ended_is_not_announced_as_active(): void
+    {
+        $club = $this->club();
+        $this->enableWhatsApp($club);
+        $member = $this->member($club);
+        $plan = $this->plan($club, ['duration_value' => 5, 'duration_unit' => 'day']);
+        $sold = $this->asTenant($club, fn () => app(MembershipService::class)->sell($member, $plan));
+        $period = [$sold->starts_on->toDateString(), $sold->ends_on->toDateString()];
+        $this->travel(10)->days();
+
+        $this->asTenant($club, function () use ($sold, $member, $period) {
+            $payment = app(PaymentService::class)->record($sold->invoice()->first(), $sold->total, 'cash');
+            $m = $sold->fresh();
+
+            // The period sold, unchanged and over; the money dated the day it came; no access given.
+            $this->assertSame(Membership::EXPIRED, $m->status);
+            $this->assertSame($period, [$m->starts_on->toDateString(), $m->ends_on->toDateString()]);
+            $this->assertSame(today()->toDateString(), $payment->fresh()->paid_at->toDateString());
+            $this->assertFalse(app(AccessControlService::class)->evaluate($member->fresh())->allowed);
+
+            // The payment is acknowledged, and said to be for a period that has ended; nothing says it is active.
+            $keys = Message::where('member_id', $member->id)->pluck('template_key')->all();
+            $this->assertContains('payment_received', $keys);
+            $this->assertContains('membership_paid_after_end', $keys);
+            $this->assertNotContains('membership_activated', $keys);
+            $this->assertNotContains('membership_renewed', $keys);
+            $body = Message::where('member_id', $member->id)->where('template_key', 'membership_paid_after_end')->value('body');
+            $this->assertStringContainsString(str_replace('-', '/', $period[0]).' حتى '.str_replace('-', '/', $period[1]), $body);
+            $this->assertStringContainsString('انتهت', $body);
         });
     }
 
