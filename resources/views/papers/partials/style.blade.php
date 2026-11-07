@@ -6,6 +6,10 @@
     $k = (float) $tokens['scale'];
     $pt = fn (float $v) => round($v * $k, 2).'pt';
     $fx = fn (float $v) => round($v, 2).'pt';
+    // The room between sections (never the type, its line height or a row's padding) is closer on a cut sheet, closest
+    // on A5: a short paper then keeps its last lines and its signatures on the first page. Thermal strips keep theirs.
+    $vk = [\App\Core\Papers\PaperSize::A4 => 0.75, \App\Core\Papers\PaperSize::A5 => 0.5][$size] ?? 1.0;
+    $gap = fn (float $v) => round($v * $vk, 2).'pt';
     $S = \App\Core\Papers\PaperTheme::SIZES;
     $hair = $fx(\App\Core\Papers\PaperTheme::HAIRLINE).' solid '.$tokens['rule'];
     $font = "'IBM Plex Sans Arabic', ibmplexarabic, Tahoma, sans-serif";
@@ -30,7 +34,7 @@
     .amt { text-align: {{ $end }}; white-space: nowrap; }
     .num { text-align: center; direction: ltr; }
     .c { text-align: center; }
-    .brandrule { width: 100%; height: {{ $fx(1) }}; background: {{ $tokens['primary'] }}; margin-bottom: {{ $fx($S['section_gap']) }}; font-size: 0; line-height: 0; }
+    .brandrule { width: 100%; height: {{ $fx(1) }}; background: {{ $tokens['primary'] }}; margin-bottom: {{ $gap($S['section_gap']) }}; font-size: 0; line-height: 0; }
     table { border-collapse: collapse; }
     table.head { width: 100%; table-layout: fixed; }
     table.head td { vertical-align: top; border: none; padding: 0; }
@@ -39,18 +43,18 @@
     .club { font-size: {{ $pt($S['currency']) }}; font-weight: bold; line-height: 1.3; }
     table.fields { width: 100%; }
     table.fields td { border: none; padding: 0; text-align: {{ $start }}; line-height: {{ round($S['field_line'] / $S['base'], 3) }}; }
-    table.fields td.gap-after { padding-bottom: {{ $fx($S['field_gap'] - $S['field_line']) }}; }
+    table.fields td.gap-after { padding-bottom: {{ $gap($S['field_gap'] - $S['field_line']) }}; }
     /* The English title line stands apart from the party under it. */
-    table.fields td.f-title { padding-bottom: {{ $fx(18) }}; }
+    table.fields td.f-title { padding-bottom: {{ $gap(18) }}; }
     table.fieldsend td { text-align: {{ $end }}; }
     table.split { width: 100%; table-layout: fixed; }
     table.split td { vertical-align: top; padding: 0; border: none; }
     table.split td.gap { width: {{ $fx(14) }}; }
-    table.figure { margin-top: {{ $fx(13) }}; margin-bottom: {{ $fx(11) }}; page-break-inside: avoid; }
+    table.figure { margin-top: {{ $gap(13) }}; margin-bottom: {{ $gap(11) }}; page-break-inside: avoid; }
     .fig { font-size: {{ $pt($S['display']) }}; font-weight: bold; line-height: 1.25; }
     .fig-cur { font-size: {{ $pt($S['currency']) }}; font-weight: normal; color: {{ $tokens['second'] }}; }
     .stamp { font-size: {{ $pt($S['sm']) }}; font-weight: bold; letter-spacing: 0.06em; color: {{ $tokens['primary_ink'] }}; }
-    table.items { width: 100%; margin-bottom: {{ $fx(8) }}; }
+    table.items { width: 100%; margin-bottom: {{ $gap(8) }}; }
     /* Written out on the cells: the PDF engine does not hand the body's line height down into a table, and the print
        page and the PDF would part by a line's worth on every row. */
     table.items th { text-align: {{ $start }}; vertical-align: bottom; padding: 0 {{ $fx(6) }} {{ $fx(5) }}; font-size: {{ $pt($S['base']) }}; font-weight: normal; border-bottom: {{ $hair }}; line-height: {{ round($S['field_line'] / $S['base'], 3) }}; }
@@ -71,17 +75,17 @@
     table.totals td.lblcell { line-height: {{ round($S['field_line'] / $S['base'], 3) }}; }
     table.totals tr.grand td { font-weight: bold; }
     table.totals tr.grand td .lbl2 { font-weight: normal; }
-    table.stack { width: 100%; margin-top: {{ $fx(12) }}; }
-    table.stack td { border: none; padding: 0 0 {{ $fx(7) }} 0; vertical-align: top; text-align: {{ $start }}; line-height: {{ round($S['field_line'] / $S['base'], 3) }}; }
+    table.stack { width: 100%; margin-top: {{ $gap(12) }}; }
+    table.stack td { border: none; padding: 0 0 {{ $gap(7) }} 0; vertical-align: top; text-align: {{ $start }}; line-height: {{ round($S['field_line'] / $S['base'], 3) }}; }
     table.stack td.cap { padding-bottom: {{ $fx(2) }}; }
     table.rows { width: 100%; }
     table.rows td { border: none; padding: {{ $fx(1.5) }} 0; }
-    table.sign { width: 100%; margin-top: {{ $fx(22) }}; page-break-inside: avoid; table-layout: fixed; }
+    table.sign { width: 100%; margin-top: {{ $gap(22) }}; page-break-inside: avoid; table-layout: fixed; }
     table.sign td { border: none; padding: 0; vertical-align: top; }
-    table.sign td.space { height: {{ $fx(26) }}; }
+    table.sign td.space { height: {{ $fx($size === \App\Core\Papers\PaperSize::A5 ? 21 : 26) }}; }
     table.sign td.box { border-top: {{ $hair }}; padding-top: {{ $fx(5) }}; }
     table.sign td.gap { width: {{ $fx(24) }}; }
-    .spacer { flex: 1 1 auto; min-height: {{ $fx(6) }}; }
+    .spacer { flex: 1 1 auto; min-height: {{ $gap(6) }}; }
     .closezone { page-break-inside: avoid; }
     .foot { margin-top: {{ $fx(8) }}; padding-top: {{ $fx(4) }}; border-top: {{ $hair }}; color: {{ $tokens['second'] }}; font-size: {{ $pt($S['sm']) }}; white-space: pre-line; }
     .docfoot { margin-top: {{ $fx(4) }}; text-align: center; color: {{ $tokens['second'] }}; font-size: {{ $pt($S['xs']) }}; }

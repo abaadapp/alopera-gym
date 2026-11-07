@@ -150,8 +150,8 @@ class MembershipIntegrityTest extends TestCase
         $this->asTenant($club, function () use ($m) {
             $this->pay($m);
             $m = $m->fresh();
-            $this->assertTrue($m->starts_on->eq(CarbonImmutable::today()));
-            $this->assertTrue($m->ends_on->eq(CarbonImmutable::today()->addDays(29)), 'thirty days, as sold');
+            $this->assertTrue($m->starts_on->eq(CarbonImmutable::today()->subDays(2)), 'the period sold is kept');
+            $this->assertTrue($m->ends_on->eq($m->starts_on->addDays(29)), 'thirty days, as sold');
         });
     }
 

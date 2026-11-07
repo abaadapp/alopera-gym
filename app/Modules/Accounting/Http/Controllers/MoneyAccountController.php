@@ -14,6 +14,7 @@ use App\Modules\Accounting\Rules\OpenPeriod;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\FinanceReports;
 use App\Modules\Accounting\Services\Ledger;
+use App\Modules\Accounting\Services\OpeningBalances;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -33,6 +34,7 @@ class MoneyAccountController extends Controller
     {
         $accounts = $this->reports->moneyAccounts(withInactive: true);
         $openings = JournalEntry::where('source_type', 'account')->where('source_event', 'opening')->whereNull('reversed_at')->get()->keyBy('source_id');
+        $reviewed = app(OpeningBalances::class)->reviewed();
 
         return Inertia::render('Finance/Banks', [
             'accounts' => $accounts->map(fn ($m) => [
@@ -40,6 +42,7 @@ class MoneyAccountController extends Controller
                 'balance' => $m['balance'], 'bank_name' => $m['account']->bank_name, 'masked' => $m['account']->maskedNumber(),
                 'is_active' => $m['account']->is_active, 'system' => $m['account']->system_key !== null,
                 'opening' => isset($openings[$m['account']->id]) ? ['amount' => $openings[$m['account']->id]->total, 'date' => $openings[$m['account']->id]->entry_date->toDateString()] : null,
+                'opening_reviewed' => in_array($m['account']->id, $reviewed, true),
             ])->values(),
             'totals' => [
                 'cash' => Money::add('0', ...$accounts->filter(fn ($m) => $m['account']->kind === 'cash')->pluck('balance')->all()),
