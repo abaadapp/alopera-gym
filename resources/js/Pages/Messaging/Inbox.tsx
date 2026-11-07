@@ -315,7 +315,7 @@ export default function Inbox(props: Props) {
             )}
 
             <div className="overflow-hidden rounded-[14px] border border-line bg-white">
-                <div className={cn('grid h-[calc(100dvh-13.5rem)] min-h-[520px]', 'lg:grid-cols-[minmax(300px,360px)_1fr]', thread && showDetails && 'xl:grid-cols-[minmax(300px,360px)_1fr_300px]')}>
+                <div className={cn('grid h-[calc(100dvh-13.5rem)] min-h-[520px]', 'lg:grid-cols-[minmax(300px,360px)_1fr]', thread && showDetails && 'min-[87.5rem]:grid-cols-[minmax(300px,360px)_1fr_300px]')}>
                     {/* The chats */}
                     <aside className={cn('flex min-h-0 flex-col border-line lg:border-e', thread && 'hidden lg:flex')}>
                         <div className="space-y-2 border-b border-line bg-[#fafaf9] p-3">
@@ -387,8 +387,9 @@ export default function Inbox(props: Props) {
                         )}
                     </section>
 
+                    {/* A third column only where the chat keeps room for its buttons (1400px+); narrower, a drawer over it. */}
                     {thread && showDetails && (
-                        <aside className="fixed inset-0 z-40 flex min-h-0 flex-col overflow-y-auto bg-white xl:static xl:z-auto xl:border-s xl:border-line">
+                        <aside className="fixed inset-0 z-40 flex min-h-0 flex-col overflow-y-auto bg-white lg:start-auto lg:w-[340px] lg:border-s lg:border-line lg:shadow-xl min-[87.5rem]:static min-[87.5rem]:z-auto min-[87.5rem]:w-auto min-[87.5rem]:shadow-none">
                             <Details thread={thread} assignees={props.assignees} onClose={() => setShowDetails(false)} onChanged={refreshThread} />
                         </aside>
                     )}
