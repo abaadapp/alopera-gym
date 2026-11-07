@@ -17,8 +17,8 @@ final class PaperSize
     public const T58 = '58mm';
 
     public const PRESETS = [
-        self::A4 => ['strip' => false, 'width' => 210.0, 'height' => 297.0, 'top' => 14.0, 'side' => 13.0, 'bottom' => 18.0],
-        self::A5 => ['strip' => false, 'width' => 148.0, 'height' => 210.0, 'top' => 10.0, 'side' => 10.0, 'bottom' => 13.0],
+        self::A4 => ['strip' => false, 'width' => 210.0, 'height' => 297.0, 'top' => 12.0, 'side' => 13.0, 'bottom' => 18.0],
+        self::A5 => ['strip' => false, 'width' => 148.0, 'height' => 210.0, 'top' => 8.0, 'side' => 10.0, 'bottom' => 13.0],
         self::T80 => ['strip' => true, 'width' => 80.0, 'height' => null, 'top' => 3.0, 'side' => 3.0, 'bottom' => 3.0],
         self::T58 => ['strip' => true, 'width' => 58.0, 'height' => null, 'top' => 3.0, 'side' => 2.0, 'bottom' => 3.0],
     ];

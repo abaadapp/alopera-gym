@@ -239,8 +239,8 @@ class OfficialLogoTest extends TestCase
         $html = $this->paper($this->club(), PaperSize::A4)->html();
 
         $this->assertStringContainsString('print-color-adjust: exact', $html);
-        $this->assertStringContainsString('@page { size: 210mm 297mm; margin: 14mm 13mm 11mm; }', $html);
-        $this->assertStringContainsString('min-height: 270mm', $html);
+        $this->assertStringContainsString('@page { size: 210mm 297mm; margin: 12mm 13mm 11mm; }', $html);
+        $this->assertStringContainsString('min-height: 272mm', $html);
     }
 
     public function test_a_short_paper_is_one_page_with_its_close_at_the_foot(): void
