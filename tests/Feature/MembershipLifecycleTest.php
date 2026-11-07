@@ -118,6 +118,24 @@ class MembershipLifecycleTest extends TestCase
         });
     }
 
+    public function test_an_upgrade_paid_after_its_own_period_ended_leaves_the_current_membership_alone(): void
+    {
+        $club = $this->club();
+        $member = $this->member($club);
+        $current = $this->activeMembership($club, $member, $this->plan($club, ['duration_value' => 60, 'duration_unit' => 'day']));
+        $short = $this->plan($club, ['name' => 'Week', 'price' => 50, 'duration_value' => 7, 'duration_unit' => 'day']);
+        $upgrade = $this->asTenant($club, fn () => $this->svc()->upgrade($current, $short));
+        $this->travel(10)->days();
+
+        $this->asTenant($club, function () use ($upgrade, $current, $member) {
+            $this->pay($upgrade);
+            // The upgrade's week went by unpaid: it is over, and it does not end the membership the member still has.
+            $this->assertSame(Membership::EXPIRED, $upgrade->fresh()->status);
+            $this->assertSame(Membership::ACTIVE, $current->fresh()->status);
+            $this->assertTrue(app(AccessControlService::class)->evaluate($member->fresh())->allowed);
+        });
+    }
+
     public function test_renewal_starts_after_the_current_period_and_expired_members_regain_access_after_renewal(): void
     {
         $club = $this->club();

@@ -240,7 +240,8 @@ final class MembershipService
         $this->event($membership, 'activated', ['status' => $membership->status, 'paid_on' => $today->toDateString(),
             'starts_on' => $membership->starts_on->toDateString(), 'ends_on' => $membership->ends_on->toDateString()]);
 
-        if ($membership->kind === Membership::KIND_UPGRADE && $membership->previous_membership_id) {
+        // An upgrade whose own period went by unpaid replaces nothing: the membership the member still has stays.
+        if ($membership->kind === Membership::KIND_UPGRADE && $membership->previous_membership_id && $membership->status !== Membership::EXPIRED) {
             $previous = Membership::whereKey($membership->previous_membership_id)->lockForUpdate()->first();
             if ($previous && in_array($previous->status, [Membership::ACTIVE, Membership::FROZEN, Membership::SCHEDULED], true)) {
                 $previous->forceFill([
