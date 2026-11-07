@@ -51,6 +51,23 @@ class PaperFitTest extends TestCase
         $this->assertSame(3, $this->pages($this->invoice($club, PaperSize::A5, 12)));
     }
 
+    public function test_a_short_a5_sale_is_one_pdf_page_as_in_the_browser_and_a_long_paper_keeps_its_running_line(): void
+    {
+        $club = $this->club();
+        $paper = fn (string $type, int $lines) => $this->asTenant($club, function () use ($club, $type, $lines) {
+            $tpl = PaperTypes::settings($club, $type);
+            $doc = Papers::builder($type)::sample($club, $tpl);
+            $doc['table']['rows'] = array_slice(array_merge(...array_fill(0, $lines, $doc['table']['rows'])), 0, $lines);
+
+            return new Paper($club, $type, $doc, $tpl, PaperIssuer::resolve($club), PaperSize::A5, 'sample');
+        });
+
+        // Two lines: the running line at the foot (club, number, page) alone pushed the thanks onto a second page.
+        $this->assertSame(1, $this->pages($paper('sale', 2)));
+        // Three lines do not fit either way: two pages, as before, with the running line kept.
+        $this->assertSame(2, $this->pages($paper('sale', 3)));
+    }
+
     public function test_the_closer_room_is_for_cut_sheets_only(): void
     {
         $club = $this->club();

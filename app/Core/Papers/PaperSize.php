@@ -24,7 +24,7 @@ final class PaperSize
     ];
 
     /** Millimetres the line under a printed sheet takes, the same in the PDF's margin and the browser's page. */
-    private const FOOT_LINE = 7.0;
+    public const FOOT_LINE = 7.0;
 
     /** @return array{strip: bool, width: float, height: float|null, top: float, side: float, bottom: float} */
     public static function of(?string $key): array
