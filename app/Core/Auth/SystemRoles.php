@@ -36,6 +36,8 @@ final class SystemRoles
                 'description' => 'إدارة النادي اليومية دون النسخ الاحتياطي والأدوار والرواتب السرية والموقع الإلكتروني.',
                 'permissions' => array_values(array_diff(PermissionRegistry::all(), [
                     'roles.manage', 'backups.manage', 'integrations.manage', 'members.delete',
+                    // The WhatsApp connection's keys go with the integrations: the owner's unless granted by name.
+                    'whatsapp.manage_settings',
                     // The website is the owner's, or whoever the owner grants it to by name.
                     'website.manage',
                     // Salaries stay confidential: every payroll step shows them, so none is the manager's until the owner
@@ -60,7 +62,9 @@ final class SystemRoles
                     'classes.view', 'bookings.manage', 'attendance.mark',
                     'checkin.perform', 'checkin.view',
                     'invoices.view', 'invoices.manage', 'payments.record',
-                    'pos.sell', 'orders.manage', 'whatsapp.inbox', 'whatsapp.send', 'papers.print',
+                    'pos.sell', 'orders.manage', 'papers.print',
+                    // The chats assigned to reception, answered; templates to a member from the profile.
+                    'whatsapp.view_assigned', 'whatsapp.reply', 'whatsapp.send',
                 ],
                 'home' => 'club.reception',
             ],

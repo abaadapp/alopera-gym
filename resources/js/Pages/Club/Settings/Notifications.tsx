@@ -63,7 +63,7 @@ export default function NotificationSettings({ rules }: { rules: Rules }) {
                     </SettingsSection>
                 </form>
 
-                {can('templates.manage') && (
+                {can('whatsapp.manage_automation') && (
                     <SettingsSection icon={Workflow} title="القوالب والردود" description="ما تقوله الرسائل نفسها">
                         <div className="space-y-2">
                             <Button variant="outline" className="w-full justify-start" href={route('club.templates.index')} icon={<FileText className="size-4" />}>قوالب واتساب</Button>

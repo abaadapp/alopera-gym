@@ -15,49 +15,95 @@ interface AutoReply {
     hits: number;
 }
 
-interface Props {
-    autoReplies: AutoReply[];
-    rules: { expiry_reminder_days: number[]; expired_followup_days: number[]; notify_class_changes: boolean };
+interface AutoEvent {
+    key: string;
+    label: string;
+    detail: string;
+    on: boolean;
+    timing: 'expiry_reminder_days' | 'expired_followup_days' | null;
+    templates: { key: string; label: string; category: string; approved: boolean }[];
 }
 
-export default function Automation({ autoReplies, rules }: Props) {
+interface Props {
+    autoReplies: AutoReply[];
+    events: AutoEvent[];
+    rules: { expiry_reminder_days: number[]; expired_followup_days: number[]; hour: number; notify_class_changes: boolean };
+}
+
+const days = (text: string) => Array.from(new Set(text.split(/[^0-9]+/).filter(Boolean).map(Number))).filter((n) => n > 0).slice(0, 5);
+
+export default function Automation({ autoReplies, events, rules }: Props) {
     const can = useCan();
     const [reply, setReply] = useState<AutoReply | 'new' | null>(null);
+    const form = useForm({
+        on: Object.fromEntries(events.map((e) => [e.key, e.on])) as Record<string, boolean>,
+        expiry_reminder_days: rules.expiry_reminder_days ?? [],
+        expired_followup_days: rules.expired_followup_days ?? [],
+        hour: rules.hour,
+    });
+    const [expiryText, setExpiryText] = useState((rules.expiry_reminder_days ?? []).join('، '));
+    const [followText, setFollowText] = useState((rules.expired_followup_days ?? []).join('، '));
+    const save = (e: FormEvent) => {
+        e.preventDefault();
+        form.put(route('club.automation.update'), { preserveScroll: true });
+    };
 
     return (
-        <ClubLayout title="الأتمتة">
-            <PageHeader title="أتمتة واتساب" subtitle="ما يُرسل تلقائيًا ومتى، والردود الآلية على الرسائل الواردة" />
+        <ClubLayout title="الرسائل التلقائية">
+            <PageHeader title="الرسائل التلقائية" subtitle="ما يُرسل تلقائيًا من بيانات الجيم ومتى، والردود الآلية على الرسائل الواردة" />
 
-            <div className="mb-6 grid gap-4 lg:grid-cols-3">
-                <Card>
+            <Card className="mb-6">
+                <form onSubmit={save}>
                     <CardHeader
-                        title="قواعد التشغيل"
-                        actions={can('settings.manage') ? <Button variant="outline" size="sm" href={route('club.settings.notifications')} icon={<Settings2 className="size-3.5" />}>تعديل</Button> : undefined}
+                        title="الرسائل التلقائية"
+                        subtitle="كل رسالة تُرسل مرة واحدة فقط لكل حدث، بقالب معتمد في واتساب، ولمن وافق على رسائل الخدمة. المتابعة التسويقية تحتاج موافقة تسويقية أيضًا."
+                        actions={<Button type="submit" size="sm" loading={form.processing}>حفظ</Button>}
                     />
-                    <dl className="space-y-2.5 text-sm">
-                        <div className="flex justify-between gap-3">
-                            <dt className="text-muted">تذكير قبل الانتهاء</dt>
-                            <dd className="num">{rules.expiry_reminder_days?.length ? rules.expiry_reminder_days.join('، ') + ' يوم' : 'متوقف'}</dd>
-                        </div>
-                        <div className="flex justify-between gap-3">
-                            <dt className="text-muted">متابعة بعد الانتهاء</dt>
-                            <dd className="num">{rules.expired_followup_days?.length ? rules.expired_followup_days.join('، ') + ' يوم' : 'متوقفة'}</dd>
-                        </div>
-                        <div className="flex justify-between gap-3">
-                            <dt className="text-muted">إبلاغ عند تعديل الحصة</dt>
-                            <dd>{rules.notify_class_changes ? <Badge tone="green">مفعّل</Badge> : <Badge>متوقف</Badge>}</dd>
-                        </div>
-                    </dl>
-                </Card>
-                <Card className="lg:col-span-2">
-                    <CardHeader title="رسائل الخدمة التلقائية" />
-                    <p className="text-sm leading-7 text-ink/80">
-                        يرسل النظام رسائل الترحيب والفواتير والتذكيرات والحجوزات تلقائيًا عند حدوثها، بشرط أن يكون قالبها <b>معتمدًا</b> و<b>مفعّلًا</b> في
-                        «القوالب»، وأن يكون العضو قد وافق على استقبال الرسائل.
-                    </p>
-                    {can('templates.manage') && <Button className="mt-4" variant="outline" size="sm" href={route('club.templates.index')}>إدارة القوالب</Button>}
-                </Card>
-            </div>
+                    <ul className="divide-y divide-line">
+                        {events.map((ev) => (
+                            <li key={ev.key} className="py-3">
+                                <Toggle
+                                    checked={form.data.on[ev.key]}
+                                    onChange={(v) => form.setData('on', { ...form.data.on, [ev.key]: v })}
+                                    label={ev.label}
+                                    hint={ev.detail}
+                                />
+                                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                    {ev.templates.map((t) => (
+                                        <Badge key={t.key} tone={t.approved ? 'green' : 'amber'}>{t.label}: {t.approved ? 'القالب معتمد' : 'القالب غير معتمد — لن تُرسل'}</Badge>
+                                    ))}
+                                    {ev.timing === 'expiry_reminder_days' && (
+                                        <label className="inline-flex items-center gap-1.5 text-[12.5px] text-muted">
+                                            قبل الانتهاء بـ
+                                            <Input value={expiryText} onChange={(e) => { setExpiryText(e.target.value); form.setData('expiry_reminder_days', days(e.target.value)); }} className="h-8 w-28 num" dir="ltr" aria-label="أيام التذكير قبل الانتهاء" />
+                                            يوم (مثل 7، 3)
+                                        </label>
+                                    )}
+                                    {ev.timing === 'expired_followup_days' && (
+                                        <label className="inline-flex items-center gap-1.5 text-[12.5px] text-muted">
+                                            بعد الانتهاء بـ
+                                            <Input value={followText} onChange={(e) => { setFollowText(e.target.value); form.setData('expired_followup_days', days(e.target.value)); }} className="h-8 w-28 num" dir="ltr" aria-label="أيام المتابعة بعد الانتهاء" />
+                                            يوم
+                                        </label>
+                                    )}
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3 text-sm">
+                        <span className="text-muted">ساعة إرسال التذكيرات اليومية</span>
+                        <Select value={String(form.data.hour)} onChange={(e) => form.setData('hour', Number(e.target.value))} className="h-9 w-28" aria-label="ساعة الإرسال">
+                            {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+                        </Select>
+                        <span className="text-[12px] text-muted">بتوقيت النادي. التأكيدات (الترحيب والاشتراك والتجديد والدفع) تُرسل فور حدوثها.</span>
+                    </div>
+                    {Object.values(form.errors).length > 0 && <p className="mt-2 text-[12.5px] text-red-700">{Object.values(form.errors)[0]}</p>}
+                </form>
+                <div className="mt-3 flex flex-wrap gap-2">
+                    {can('whatsapp.manage_templates') && <Button variant="outline" size="sm" href={route('club.templates.index')}>إدارة القوالب</Button>}
+                    {can('settings.manage') && <Button variant="ghost" size="sm" href={route('club.settings.notifications')} icon={<Settings2 className="size-3.5" />}>إشعارات الحصص والمستحقات</Button>}
+                </div>
+            </Card>
 
             <Card padded={false}>
                 <div className="p-5 pb-0">

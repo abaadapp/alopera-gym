@@ -187,14 +187,17 @@ export const NAV: NavGroup[] = [
     {
         sections: [
             {
-                label: 'محادثات واتساب',
+                // Hidden altogether from whoever holds none of these (the server refuses the pages as well).
+                label: 'واتساب',
                 icon: MessageCircle,
                 tabs: [
-                    { label: 'المحادثات', route: 'club.inbox.index', permission: 'whatsapp.inbox', match: 'club.inbox.*' },
+                    { label: 'المحادثات', route: 'club.whatsapp.index', permission: ['whatsapp.view_all', 'whatsapp.view_assigned'], match: ['club.whatsapp.index', 'club.inbox.*'] },
+                    { label: 'القوالب', route: 'club.templates.index', permission: 'whatsapp.manage_templates', match: 'club.templates.*' },
+                    { label: 'الرسائل التلقائية', route: 'club.automation.index', permission: 'whatsapp.manage_automation' },
                     { label: 'الحملات', route: 'club.campaigns.index', permission: 'campaigns.manage', match: 'club.campaigns.*' },
-                    { label: 'القوالب', route: 'club.templates.index', permission: 'templates.manage', match: 'club.templates.*' },
-                    { label: 'الأتمتة', route: 'club.automation.index', permission: 'templates.manage' },
-                    { label: 'سجل الرسائل', route: 'club.messages.index', permission: 'whatsapp.inbox' },
+                    { label: 'التقارير', route: 'club.whatsapp.reports', permission: 'whatsapp.view_reports' },
+                    { label: 'سجل الإرسال', route: 'club.messages.index', permission: 'whatsapp.view_reports' },
+                    { label: 'الإعدادات', route: 'club.integrations.whatsapp', permission: ['whatsapp.manage_settings', 'integrations.manage'] },
                 ],
             },
         ],

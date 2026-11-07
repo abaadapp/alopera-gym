@@ -55,6 +55,8 @@ class HandleInertiaRequests extends Middleware
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
                 'token' => $request->session()->get('device_token'),
+                // The 360dialog webhook token just made: shown once, stored encrypted.
+                'webhook_token' => $request->session()->get('webhook_token'),
                 // A temporary password just issued for a staff account: shown once, never stored readable.
                 'password' => $request->session()->get('password'),
                 // Unique per response that carries a message, so the same text twice still shows twice.

@@ -11,8 +11,11 @@ use App\Modules\Gym\Models\Member;
 use App\Modules\Integrations\Services\IntegrationHub;
 use App\Modules\Inventory\Services\ShopSettings;
 use App\Modules\Messaging\Gateways\MetaCloudGateway;
+use App\Modules\Messaging\Http\Controllers\WhatsAppWebhookController;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Models\MessageTemplate;
+use App\Modules\Messaging\Models\WebhookEvent;
+use App\Modules\Messaging\Models\WhatsAppContact;
 use App\Modules\Messaging\Services\TemplateCatalog;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
@@ -30,7 +33,8 @@ use Inertia\Response;
 class IntegrationController extends Controller
 {
     private const SECRETS = [
-        'whatsapp' => ['access_token', 'phone_number_id', 'business_account_id'],
+        // Meta: the system user's token and the ids; 360dialog: its API key (and the number's id, to route webhooks).
+        'whatsapp' => ['access_token', 'phone_number_id', 'business_account_id', 'api_key'],
         'paymob' => ['secret_key', 'public_key', 'hmac_secret', 'integration_ids'],
     ];
 
@@ -125,9 +129,36 @@ class IntegrationController extends Controller
                 'verify_token' => (bool) config('services.whatsapp.verify_token'),
                 'last_webhook_at' => $row?->last_webhook_at?->format('Y-m-d H:i'),
             ],
-            'endpoints' => ['webhook' => route('webhooks.whatsapp')],
+            'endpoints' => ['webhook' => route('webhooks.whatsapp'), 'webhook_360' => route('webhooks.whatsapp.d360'), 'token_header' => WhatsAppWebhookController::TOKEN_HEADER],
+            'vendors' => MetaCloudGateway::VENDORS,
+            'coexistence' => [
+                'state' => $row?->option('coexistence'),
+                'platform_type' => $row?->option('platform_type'),
+                'connection' => $row?->option('connection_state'),
+                'disconnected_reason' => $row?->option('disconnected_reason'),
+                // What the webhook must be subscribed to on the app (Meta) or the number (360dialog).
+                'fields' => ['messages', 'smb_message_echoes', 'history', 'smb_app_state_sync', 'account_update'],
+                'webhook_token' => (bool) $row?->credential('webhook_token'),
+            ],
+            'imports' => [
+                'history' => (bool) $row?->option('import_history'),
+                'contacts' => (bool) $row?->option('import_contacts'),
+                'history_state' => $row?->option('history_state'),
+                'history_note' => $row?->option('history_note'),
+                'history_progress' => $row?->option('history_progress'),
+                'history_requested_at' => $row?->option('history_requested_at'),
+                'contacts_requested_at' => $row?->option('contacts_requested_at'),
+                'contacts_count' => WhatsAppContact::whereNull('removed_at')->count(),
+            ],
+            'webhooks' => [
+                'last_7_days' => WebhookEvent::where('tenant_id', $tenant->id)->where('created_at', '>=', now()->subDays(7))
+                    ->selectRaw('status, count(*) as n')->groupBy('status')->pluck('n', 'status'),
+                'failures' => WebhookEvent::where('tenant_id', $tenant->id)->where('status', WebhookEvent::FAILED)->latest('id')->limit(10)
+                    ->get(['id', 'fields', 'error', 'attempts', 'created_at'])->map(fn ($e) => ['id' => $e->id, 'fields' => $e->fields, 'error' => $e->error, 'attempts' => $e->attempts, 'at' => $e->created_at->format('Y-m-d H:i')]),
+            ],
+            'canManage' => request()->user()->can('whatsapp.settings'),
             'features' => [
-                ['key' => 'inbox', 'label' => 'محادثات الأعضاء', 'detail' => 'رسائل الأعضاء تصل صندوق المحادثات، والرد الحر مسموح خلال 24 ساعة من آخر رسالة للعضو فقط.', 'route' => 'club.inbox.index', 'templates' => []],
+                ['key' => 'inbox', 'label' => 'محادثات الأعضاء', 'detail' => 'رسائل الأعضاء تصل صندوق المحادثات، والرد الحر مسموح خلال 24 ساعة من آخر رسالة للعضو فقط.', 'route' => 'club.whatsapp.index', 'templates' => []],
                 ['key' => 'renewals', 'label' => 'تجديد العضويات', 'detail' => 'تذكير قبل انتهاء العضوية بـ '.implode(' و', (array) $tenant->setting('expiry_reminder_days', [])).' أيام، ومتابعة بعد الانتهاء، وتأكيد التجديد.', 'route' => 'club.settings.notifications', 'templates' => $tpl(['membership_expiring', 'membership_expired', 'membership_followup', 'membership_renewed'])],
                 ['key' => 'classes', 'label' => 'تذكير الحصص', 'detail' => ((int) $tenant->setting('class_reminder_hours', 0)) > 0 ? 'تذكير قبل الحصة المحجوزة بـ '.(int) $tenant->setting('class_reminder_hours').' ساعات، وتأكيد الحجز، وإشعار تعديل الحصة.' : 'تذكير الحصص متوقف. فعّله من إعدادات الإشعارات.', 'route' => 'club.settings.notifications', 'templates' => $tpl(['class_reminder', 'booking_confirmed', 'class_changed'])],
                 ['key' => 'documents', 'label' => 'تنبيهات المستندات', 'detail' => DocumentService::settings($tenant)['whatsapp'] ? 'تصل الموظف المسؤول عن المستند إن كان مخوّلًا بالاطلاع على المستندات.' : 'إرسال تنبيهات المستندات بواتساب متوقف. فعّله من إعدادات المستندات.', 'route' => 'club.settings.documents', 'templates' => $tpl(['document_expiry'])],
@@ -164,6 +195,7 @@ class IntegrationController extends Controller
             'credentials.*' => ['nullable', 'string', 'max:2000'],
             'credentials.integration_ids' => ['nullable', 'string', 'max:200', 'regex:/^[\d\s,]*$/'],
             'display_phone' => ['nullable', 'string', 'max:32'],
+            'vendor' => ['nullable', 'in:'.implode(',', array_keys(MetaCloudGateway::VENDORS))],
         ], ['credentials.integration_ids.regex' => 'أرقام الربط أرقام فقط، مفصولة بفاصلة.']);
 
         $integration = TenantIntegration::firstOrNew(['provider' => $provider]);
@@ -178,9 +210,15 @@ class IntegrationController extends Controller
         }
 
         $settings = array_merge($integration->settings ?? [], ['display_phone' => $data['display_phone'] ?? null]);
+        if ($provider === 'whatsapp') {
+            $vendor = $data['vendor'] ?? ($integration->settings['vendor'] ?? MetaCloudGateway::VENDOR_META);
+            $changed = $changed || ($integration->settings['vendor'] ?? MetaCloudGateway::VENDOR_META) !== $vendor;
+            // The account id is not a secret: kept readable too, to route account updates (disconnection) to the club.
+            $settings = array_merge($settings, ['vendor' => $vendor, 'waba_id' => $credentials['business_account_id'] ?? null]);
+        }
         if ($changed) {
             // New keys are unproven: the club tests them before the card says «connected».
-            unset($settings['verified_name'], $settings['quality_rating']);
+            unset($settings['verified_name'], $settings['quality_rating'], $settings['coexistence'], $settings['platform_type']);
             $integration->forceFill(['verified_at' => null, 'last_error' => null, 'last_error_at' => null]);
         }
 
@@ -215,8 +253,10 @@ class IntegrationController extends Controller
                     'verified_name' => $number['verified_name'] ?? null,
                     'quality_rating' => $number['quality_rating'] ?? null,
                     'display_phone' => $row->option('display_phone') ?: ($number['display_phone'] ?? null),
-                ]));
-            } elseif ($row->credential('phone_number_id') && $row->credential('access_token')) {
+                    'platform_type' => $number['platform_type'] ?? null,
+                    'connection_state' => 'connected',
+                ], fn ($v) => $v !== null) + (array_key_exists('coexistence', $number) && $number['coexistence'] !== null ? ['coexistence' => $number['coexistence']] : []));
+            } elseif ($row->credential('phone_number_id') && ($row->credential('access_token') || $row->credential('api_key'))) {
                 $row->markFailed($result['message']);
             }
         }
@@ -234,7 +274,7 @@ class IntegrationController extends Controller
             'mode' => $row?->mode ?? 'test',
             'present' => $row ? $row->credentialPresence($keys) : array_fill_keys($keys, false),
             'public' => $provider === 'whatsapp'
-                ? ['phone_number_id' => $row?->credential('phone_number_id'), 'display_phone' => $row?->option('display_phone')]
+                ? ['phone_number_id' => $row?->credential('phone_number_id'), 'display_phone' => $row?->option('display_phone'), 'vendor' => $row?->option('vendor') ?? MetaCloudGateway::VENDOR_META]
                 : ['public_key' => $row?->credential('public_key') ? substr((string) $row->credential('public_key'), 0, 12).'…' : null],
             'last_error' => $row?->last_error,
             'last_error_at' => $row?->last_error_at?->format('Y-m-d H:i'),

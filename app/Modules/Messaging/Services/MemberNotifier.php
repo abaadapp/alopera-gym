@@ -24,6 +24,9 @@ final class MemberNotifier
 
     public function welcome(Member $member): void
     {
+        if (! $this->auto('member_welcome')) {
+            return;
+        }
         $this->whatsapp->queueTemplate($member, 'member_welcome', $this->base($member) + [
             'member_no' => $member->member_no,
         ], $member, 'welcome:'.$member->id);
@@ -66,6 +69,9 @@ final class MemberNotifier
 
     public function paymentReceived(Member $member, string $amount, string $receipt, int $paymentId, ?Invoice $invoice = null): void
     {
+        if (! $this->auto('payment_received')) {
+            return;
+        }
         $this->whatsapp->queueTemplate($member, 'payment_received', $this->base($member) + [
             'amount' => $this->money($amount),
             'receipt_number' => $receipt,
@@ -102,6 +108,9 @@ final class MemberNotifier
 
     public function membershipFollowup(Membership $membership, int $days): void
     {
+        if (! $this->auto('membership_followup')) {
+            return;
+        }
         $membership->loadMissing('member');
         $this->whatsapp->queueTemplate($membership->member, 'membership_followup', $this->base($membership->member) + [
             'renew_link' => $this->portalLink('portal.renew'),
@@ -118,6 +127,10 @@ final class MemberNotifier
             $membership->kind === Membership::KIND_RENEWAL => 'membership_renewed',
             default => 'membership_activated',
         };
+        $event = ['membership_paid_after_end' => 'payment_received', 'membership_renewed' => 'membership_renewed', 'membership_activated' => 'membership_activated'][$key];
+        if (! $this->auto($event)) {
+            return;
+        }
 
         $this->whatsapp->queueTemplate($member, $key, $this->base($member) + $this->membershipValues($membership), $membership, 'activated:'.$membership->id);
     }
@@ -138,6 +151,9 @@ final class MemberNotifier
 
     public function membershipExpiring(Membership $membership, int $daysLeft): void
     {
+        if (! $this->auto('membership_expiring')) {
+            return;
+        }
         $membership->loadMissing('member');
         $this->whatsapp->queueTemplate($membership->member, 'membership_expiring', $this->base($membership->member) + $this->membershipValues($membership) + [
             'days_left' => (string) $daysLeft,
@@ -145,8 +161,23 @@ final class MemberNotifier
         ], $membership, 'expiring:'.$membership->id.':'.$daysLeft);
     }
 
+    /** On the last day of the membership (it ends tonight). */
+    public function membershipExpiresToday(Membership $membership): void
+    {
+        if (! $this->auto('membership_expires_today')) {
+            return;
+        }
+        $membership->loadMissing('member');
+        $this->whatsapp->queueTemplate($membership->member, 'membership_expires_today', $this->base($membership->member) + $this->membershipValues($membership) + [
+            'renew_link' => $this->portalLink('portal.renew'),
+        ], $membership, 'expires_today:'.$membership->id);
+    }
+
     public function membershipExpired(Membership $membership): void
     {
+        if (! $this->auto('membership_expired')) {
+            return;
+        }
         $membership->loadMissing('member');
         $this->whatsapp->queueTemplate($membership->member, 'membership_expired', $this->base($membership->member) + [
             'renew_link' => $this->portalLink('portal.renew'),
@@ -227,5 +258,13 @@ final class MemberNotifier
     private function portalLink(string $route): string
     {
         return route($route, ['club' => $this->tenants->require()->slug]);
+    }
+
+    /** Is this automatic notice switched on for the club (WhatsAppAutomation)? */
+    private function auto(string $event): bool
+    {
+        $tenant = $this->tenants->get();
+
+        return ! $tenant || WhatsAppAutomation::on($tenant, $event);
     }
 }

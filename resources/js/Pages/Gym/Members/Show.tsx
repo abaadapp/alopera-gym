@@ -175,7 +175,7 @@ export default function MemberShow(props: Props) {
         if (can('pt.manage') || props.pt.length > 0) list.push({ key: 'pt', label: 'التدريب الشخصي', count: props.pt.length });
         if (can('members.documents')) list.push({ key: 'documents', label: 'المستندات', count: props.documents.length });
         list.push({ key: 'crm', label: 'سجل التواصل', count: props.notes.length });
-        if (can('whatsapp.inbox') || can('whatsapp.send')) list.push({ key: 'whatsapp', label: 'واتساب', count: props.messages.length });
+        if (can('whatsapp.view_all') || can('whatsapp.view_reports') || can('whatsapp.send')) list.push({ key: 'whatsapp', label: 'واتساب', count: props.messages.length });
         if (can('members.manage')) list.push({ key: 'access', label: 'وسائل الدخول', count: props.credentials.length });
         return list;
     }, [can, memberships.length, props]);
@@ -1103,7 +1103,7 @@ function WhatsAppTab({ messages, templates, member }: Props) {
     return (
         <div className="grid gap-6 lg:grid-cols-3">
             <Card className="lg:col-span-2">
-                <CardHeader title="رسائل واتساب" subtitle="الرسائل الآلية واليدوية والواردة" actions={can('whatsapp.inbox') ? <Link href={route('club.inbox.index', { q: member.phone })} className="text-sm text-brand">فتح في صندوق المحادثات</Link> : undefined} />
+                <CardHeader title="رسائل واتساب" subtitle="الرسائل الآلية واليدوية والواردة" actions={can('whatsapp.view_all') || can('whatsapp.view_assigned') ? <Link href={route('club.whatsapp.index', { q: member.phone })} className="text-sm text-brand">فتح في محادثات واتساب</Link> : undefined} />
                 {messages.length === 0 ? <EmptyState icon={<MessageCircle className="size-6" />} title="لا رسائل بعد" /> : (
                     <ul className="space-y-3">
                         {messages.map((m) => {
