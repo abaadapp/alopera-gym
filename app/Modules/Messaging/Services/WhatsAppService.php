@@ -10,11 +10,14 @@ use App\Modules\Gym\Models\Member;
 use App\Modules\Messaging\Gateways\GatewayResult;
 use App\Modules\Messaging\Gateways\WhatsAppGateway;
 use App\Modules\Messaging\Jobs\SendWhatsAppMessage;
+use App\Modules\Messaging\Models\Attachment;
 use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Models\MessageTemplate;
+use App\Modules\Messaging\Models\StatusBacklog;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -33,6 +36,8 @@ final class WhatsAppService
     public function __construct(
         private readonly TenantContext $tenants,
         private readonly WhatsAppGateway $gateway,
+        private readonly Conversations $conversations,
+        private readonly MediaStore $media,
     ) {}
 
     public function integration(): ?TenantIntegration
@@ -74,12 +79,17 @@ final class WhatsAppService
             return null; // already sent for this event
         }
 
+        // Shown in the member's WhatsApp chat when there is one; an automatic notice never starts a chat by itself.
+        $conversation = Phone::normalize($member->phone) !== '' ? Conversation::where('phone', Phone::normalize($member->phone))->first() : null;
+
         try {
             // Savepoint: a duplicate must not abort the caller's transaction (PostgreSQL aborts the whole block on error).
             $message = DB::transaction(fn () => Message::create([
+                'conversation_id' => $conversation?->id,
                 'member_id' => $member->id,
                 'campaign_id' => $campaignId,
                 'direction' => 'outbound',
+                'source' => Auth::guard('web')->check() ? Message::SOURCE_PLATFORM : Message::SOURCE_AUTOMATION,
                 'type' => 'template',
                 'to_phone' => Phone::normalize($member->phone),
                 'template_key' => $key,
@@ -96,6 +106,10 @@ final class WhatsAppService
             ]));
         } catch (UniqueConstraintViolationException) {
             return null; // already sent for this dedupe key
+        }
+
+        if ($conversation && ! $skip) {
+            $this->conversations->recorded($conversation, $message);
         }
 
         if (! $skip && ! $at) {
@@ -131,6 +145,7 @@ final class WhatsAppService
         try {
             $message = DB::transaction(fn () => Message::create([
                 'direction' => 'outbound',
+                'source' => Message::SOURCE_AUTOMATION,
                 'type' => 'template',
                 'to_phone' => $phone ?: null,
                 'template_key' => $key,
@@ -154,30 +169,105 @@ final class WhatsAppService
         return $message;
     }
 
-    /** Free-text reply from the inbox; only allowed inside the 24h customer-service window. */
+    /**
+     * Free-text reply in a chat; only inside the 24-hour customer-service window (outside it, an approved template).
+     * A staff reply marks the chat read; an automatic one (an auto-reply, the opt-out answer) leaves it unread.
+     */
     public function reply(Conversation $conversation, string $body): Message
     {
+        $staff = Auth::guard('web')->check();
+        $open = $conversation->serviceWindowOpen();
         $message = Message::create([
             'conversation_id' => $conversation->id,
             'member_id' => $conversation->member_id,
             'direction' => 'outbound',
+            'source' => $staff ? Message::SOURCE_PLATFORM : Message::SOURCE_AUTOMATION,
             'type' => 'text',
             'to_phone' => $conversation->phone,
             'body' => $body,
-            'status' => $conversation->serviceWindowOpen() ? Message::QUEUED : Message::FAILED,
-            'error_code' => $conversation->serviceWindowOpen() ? null : 'window_closed',
-            'error_message' => $conversation->serviceWindowOpen() ? null : 'انتهت نافذة الـ24 ساعة؛ استخدم قالبًا معتمدًا.',
+            'status' => $open ? Message::QUEUED : Message::FAILED,
+            'error_code' => $open ? null : 'window_closed',
+            'error_message' => $open ? null : 'انتهت نافذة الـ24 ساعة؛ استخدم قالبًا معتمدًا.',
             'sent_by' => Auth::guard('web')->id(),
         ]);
 
-        // Only a staff reply means someone read the chat; automatic replies keep it unread.
-        $conversation->forceFill(['last_message_at' => now(), 'unread_count' => Auth::guard('web')->check() ? 0 : $conversation->unread_count])->save();
+        $this->sent($conversation, $message, $staff);
 
+        return $message;
+    }
+
+    /** A file sent from the chat (within the 24-hour window), kept on the private disk and uploaded when sent. */
+    public function sendMedia(Conversation $conversation, UploadedFile $file, ?string $caption): Message
+    {
+        $mime = (string) $file->getMimeType();
+        $open = $conversation->serviceWindowOpen();
+
+        $message = DB::transaction(function () use ($conversation, $file, $caption, $mime, $open) {
+            $message = Message::create([
+                'conversation_id' => $conversation->id,
+                'member_id' => $conversation->member_id,
+                'direction' => 'outbound',
+                'source' => Message::SOURCE_PLATFORM,
+                'type' => 'media',
+                'to_phone' => $conversation->phone,
+                'body' => $caption !== null && $caption !== '' ? $caption : null,
+                'status' => $open ? Message::QUEUED : Message::FAILED,
+                'error_code' => $open ? null : 'window_closed',
+                'error_message' => $open ? null : 'انتهت نافذة الـ24 ساعة؛ استخدم قالبًا معتمدًا.',
+                'sent_by' => Auth::guard('web')->id(),
+            ]);
+            $message->attachments()->create([
+                'kind' => Attachment::kindFor($mime) ?? 'document',
+                'mime' => $mime,
+                'size' => $file->getSize(),
+                'filename' => mb_substr($file->getClientOriginalName(), 0, 250),
+                'caption' => $caption,
+                'path' => $this->media->storeUpload($file, $conversation->tenant_id),
+                'status' => Attachment::STORED,
+            ]);
+
+            return $message;
+        });
+
+        $this->sent($conversation, $message, true);
+
+        return $message;
+    }
+
+    private function sent(Conversation $conversation, Message $message, bool $staff): void
+    {
+        $this->conversations->recorded($conversation, $message);
+        if ($staff) {
+            $conversation->forceFill(['unread_count' => 0])->save();
+        }
         if ($message->status === Message::QUEUED) {
             SendWhatsAppMessage::dispatch($message->id, $message->tenant_id)->afterCommit();
         }
+    }
 
-        return $message;
+    /**
+     * A delivery status from WhatsApp. Statuses arrive out of order: a message never moves back (read → delivered);
+     * a failure is kept with its reason.
+     */
+    public function applyStatus(Message $message, string $state, ?string $code = null, ?string $error = null): void
+    {
+        if ($state === 'failed') {
+            $message->forceFill([
+                'status' => Message::FAILED,
+                'error_code' => $code ?? 'failed',
+                'error_message' => $error !== null ? mb_substr($error, 0, 250) : null,
+            ])->save();
+        } elseif (isset(Message::PROGRESS[$state]) && Message::PROGRESS[$state] > (Message::PROGRESS[$message->status] ?? -1) && $message->status !== Message::FAILED) {
+            $message->forceFill([
+                'status' => $state,
+                'delivered_at' => in_array($state, [Message::DELIVERED, Message::READ], true) ? ($message->delivered_at ?? now()) : $message->delivered_at,
+                'read_at' => $state === Message::READ ? now() : $message->read_at,
+            ])->save();
+        }
+
+        if ($message->campaign_id) {
+            CampaignService::refreshCounts($message->campaign_id);
+        }
     }
 
     /** Called by the queue worker. */
@@ -196,6 +286,8 @@ final class WhatsAppService
                 $template?->language ?? 'ar',
                 $message->template_params ?? []
             );
+        } elseif ($message->type === 'media') {
+            $result = $this->deliverMedia($integration, $message);
         } else {
             $result = $this->gateway->sendText($integration, (string) $message->to_phone, (string) $message->body);
         }
@@ -217,7 +309,38 @@ final class WhatsAppService
             }
         });
 
+        // A status that came before WhatsApp's answer to the send waited for this id.
+        if ($result->ok && $message->provider_message_id) {
+            StatusBacklog::where('provider_message_id', $message->provider_message_id)->orderBy('id')->get()
+                ->each(function (StatusBacklog $early) use ($message) {
+                    $this->applyStatus($message->refresh(), $early->status, $early->error_code, $early->error_message);
+                    $early->delete();
+                });
+        }
+
         return $result;
+    }
+
+    /** Upload the file once (its WhatsApp id is kept for a retry), then send it. */
+    private function deliverMedia(TenantIntegration $integration, Message $message): GatewayResult
+    {
+        $attachment = $message->attachments()->first();
+        if (! $attachment) {
+            return GatewayResult::failed('no_file', 'لا ملف مرفق بالرسالة.');
+        }
+        if (! $attachment->provider_media_id) {
+            $path = $this->media->absolutePath($attachment);
+            if ($path === null) {
+                return GatewayResult::failed('no_file', 'الملف غير موجود على الخادم.');
+            }
+            $upload = $this->gateway->uploadMedia($integration, $path, (string) $attachment->mime, (string) ($attachment->filename ?: basename($path)));
+            if (! $upload->ok) {
+                return $upload;
+            }
+            $attachment->forceFill(['provider_media_id' => $upload->messageId])->save();
+        }
+
+        return $this->gateway->sendMedia($integration, (string) $message->to_phone, $attachment->kind, (string) $attachment->provider_media_id, $message->body, $attachment->filename);
     }
 
     /**

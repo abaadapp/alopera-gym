@@ -19,6 +19,7 @@ use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Messaging\Models\Conversation;
+use App\Modules\Messaging\Services\ConversationAccess;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Website\Models\ContactMessage;
 use Carbon\CarbonImmutable;
@@ -37,7 +38,7 @@ use Illuminate\Database\Eloquent\Model;
  * | memberships ending within 7 days (daily)| memberships.view                      | —                                |
  * | an integration error (once a day)       | integrations.manage                   | the next successful check        |
  * | a contact-form message                  | website.manage                        | marked read                      |
- * | a WhatsApp message (once a day per chat)| whatsapp.inbox                        | the chat is opened               |
+ * | a WhatsApp message (once a day per chat)| whoever may see the chat               | the chat is opened               |
  * | a finance record not in the books       | accounting.view, of its branch        | it reaches the books (the sync)  |
  */
 final class StaffAlerts
@@ -124,8 +125,10 @@ final class StaffAlerts
     public function inbox(Conversation $conversation): void
     {
         $who = $conversation->contact_name ?: ($conversation->member?->full_name ?? '…'.substr((string) $conversation->phone, -4));
-        $this->notifier->notify('whatsapp.inbox', 'inbox:'.$conversation->id.':'.today()->toDateString(), 'inbox',
-            'رسالة واتساب جديدة من '.$who, route('club.inbox.show', $conversation));
+        // Only whoever may see the chat: everyone with every chat, or the one it is assigned to.
+        $this->notifier->notify(['whatsapp.view_all', 'whatsapp.view_assigned'], 'inbox:'.$conversation->id.':'.today()->toDateString(), 'inbox',
+            'رسالة واتساب جديدة من '.$who, route('club.whatsapp.index', ['c' => $conversation->id]),
+            fn ($user) => app(ConversationAccess::class)->canView($user, $conversation));
     }
 
     /**

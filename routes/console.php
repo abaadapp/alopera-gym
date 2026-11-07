@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\Schedule;
 
 Schedule::command('gym:daily-memberships')->dailyAt('00:10')->withoutOverlapping()->onOneServer();
 Schedule::command('gym:sessions')->hourly()->withoutOverlapping()->onOneServer();
-Schedule::command('gym:send-reminders')->dailyAt('10:00')->withoutOverlapping()->onOneServer();
+// Hourly: each club's WhatsApp reminders go out at the hour it set (10:00 unless changed).
+Schedule::command('gym:send-reminders --due')->hourly()->withoutOverlapping()->onOneServer();
 Schedule::command('finance:remind-dues')->dailyAt('10:30')->withoutOverlapping()->onOneServer();
 Schedule::command('gym:class-reminders')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
 Schedule::command('messaging:dispatch-scheduled')->everyMinute()->withoutOverlapping()->onOneServer();
@@ -19,3 +20,4 @@ Schedule::command('documents:alerts')->dailyAt('07:30')->withoutOverlapping()->o
 Schedule::command('notifications:sync')->hourly()->withoutOverlapping()->onOneServer();
 Schedule::command('backup:tenants')->dailyAt('03:00')->withoutOverlapping()->onOneServer();
 Schedule::command('queue:prune-failed --hours=720')->daily();
+Schedule::command('whatsapp:prune-webhooks')->dailyAt('04:10')->withoutOverlapping()->onOneServer();

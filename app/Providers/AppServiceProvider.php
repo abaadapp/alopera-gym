@@ -131,6 +131,12 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('reports.any', fn (User $user) => app(ReportCatalog::class)->any($user));
         // The sales list: for whoever follows sales or handles website orders (the latter sees the orders only).
         Gate::define('sales.records', fn (User $user) => $user->canAny(['sales.view', 'orders.manage']));
+        // The WhatsApp section: whoever sees a chat (theirs or every one); its settings: whoever holds them or the
+        // integrations. Each conversation is checked again on its own (ConversationAccess).
+        Gate::define('whatsapp.access', fn (User $user) => $user->canAny(['whatsapp.view_all', 'whatsapp.view_assigned']));
+        Gate::define('whatsapp.settings', fn (User $user) => $user->canAny(['whatsapp.manage_settings', 'integrations.manage']));
+        // A provider's keys: WhatsApp's with whatsapp.settings, the others with the integrations.
+        Gate::define('integrations.provider', fn (User $user, string $provider) => $provider === 'whatsapp' ? $user->can('whatsapp.settings') : $user->can('integrations.manage'));
     }
 
     private function registerRateLimiters(): void

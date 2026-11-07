@@ -121,11 +121,18 @@ final class PermissionRegistry
         'printing' => ['label' => 'الطباعة', 'permissions' => [
             'papers.print' => 'طباعة المستندات وتنزيلها PDF: الفواتير والإيصالات والسندات والكشوف',
         ]],
-        'messaging' => ['label' => 'واتساب والتسويق', 'permissions' => [
-            'whatsapp.inbox' => 'صندوق المحادثات',
-            'whatsapp.send' => 'إرسال الرسائل',
+        'messaging' => ['label' => 'واتساب', 'permissions' => [
+            'whatsapp.view_assigned' => 'عرض المحادثات المخصصة له',
+            'whatsapp.view_all' => 'عرض جميع المحادثات',
+            'whatsapp.reply' => 'الرد على المحادثات',
+            'whatsapp.send_media' => 'إرسال المرفقات',
+            'whatsapp.assign' => 'تعيين المحادثات وتحويلها وربطها بالمشتركين',
+            'whatsapp.send' => 'إرسال قالب لعضو من ملفه أو من فاتورته',
+            'whatsapp.manage_templates' => 'إدارة قوالب الرسائل',
+            'whatsapp.manage_automation' => 'إدارة الرسائل التلقائية والردود الآلية',
+            'whatsapp.view_reports' => 'تقارير واتساب وسجل الرسائل',
+            'whatsapp.manage_settings' => 'اتصال واتساب وإعداداته',
             'campaigns.manage' => 'الحملات التسويقية',
-            'templates.manage' => 'القوالب والردود الآلية',
         ]],
         'website' => ['label' => 'الموقع الإلكتروني', 'permissions' => [
             'website.manage' => 'إدارة الموقع الإلكتروني: المحتوى والأقسام والهوية والأخبار والرسائل',
@@ -169,6 +176,7 @@ final class PermissionRegistry
         'inventory.adjust', 'inventory.approve', 'purchases.manage', 'purchases.approve', 'purchases.pay',
         'members.export', 'reports.export',
         'users.manage', 'roles.manage', 'employees.access', 'branches.manage', 'integrations.manage', 'backups.manage',
+        'whatsapp.manage_settings',
     ];
 
     /** What each permission lets its holder do, in a line under its name in the editors. */
@@ -231,10 +239,17 @@ final class PermissionRegistry
         'reports.view' => 'يفتح التقارير التشغيلية دون أرقامها المالية.',
         'reports.financial' => 'يرى الإيرادات في لوحة التحكم والتقارير المالية.',
         'papers.print' => 'يطبع الفواتير والإيصالات والسندات والكشوف أو ينزّلها PDF.',
-        'whatsapp.inbox' => 'يقرأ محادثات واتساب ويرد عليها.',
-        'whatsapp.send' => 'يرسل رسائل واتساب للأعضاء.',
+        'whatsapp.view_assigned' => 'يرى المحادثات التي عُيّن لها فقط.',
+        'whatsapp.view_all' => 'يرى كل محادثات واتساب، المخصصة لغيره وغير المخصصة.',
+        'whatsapp.reply' => 'يرد في المحادثات التي يراها، ويغيّر حالتها ويضيف ملاحظات داخلية.',
+        'whatsapp.send_media' => 'يرسل صورًا ومستندات وملفات صوت وفيديو في المحادثات التي يراها.',
+        'whatsapp.assign' => 'يعيّن المحادثات ويحوّلها بين الموظفين، ويربطها بمشترك (مع عرض الأعضاء).',
+        'whatsapp.send' => 'يرسل قالبًا معتمدًا لعضو من ملفه أو فاتورته.',
+        'whatsapp.manage_templates' => 'يضيف قوالب الرسائل ويعدّلها ويسجّل اعتمادها.',
+        'whatsapp.manage_automation' => 'يفعّل الرسائل التلقائية ويوقفها ويضبط توقيتها، ويدير الردود الآلية.',
+        'whatsapp.view_reports' => 'يرى إحصائيات المحادثات والرسائل وسجل الإرسال.',
+        'whatsapp.manage_settings' => 'يغيّر مفاتيح اتصال واتساب ويختبره ويطلب مزامنة رسائل الهاتف.',
         'campaigns.manage' => 'ينشئ الحملات التسويقية ويرسلها لشرائح الأعضاء.',
-        'templates.manage' => 'يعدّل قوالب الرسائل والردود الآلية.',
         'website.manage' => 'يعدّل محتوى الموقع وأقسامه وهويته وأخباره ويرد على رسائله.',
         'settings.manage' => 'يغيّر إعدادات النادي وهويته وشعاره.',
         'papers.manage' => 'يعدّل قوالب الفواتير والسندات والكشوف المطبوعة.',

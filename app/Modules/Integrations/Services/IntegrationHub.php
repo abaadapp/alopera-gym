@@ -102,9 +102,11 @@ final class IntegrationHub
     public function whatsapp(?TenantIntegration $row): array
     {
         if (! $row?->is_enabled) {
-            return $this->state(self::OFF, $row?->credential('access_token') ? 'المفاتيح محفوظة وواتساب متوقف.' : 'لم يُربط حساب WhatsApp Business بعد.');
+            return $this->state(self::OFF, ($row?->credential('access_token') || $row?->credential('api_key')) ? 'المفاتيح محفوظة وواتساب متوقف.' : 'لم يُربط حساب WhatsApp Business بعد.');
         }
-        $missing = $this->missing($row, ['phone_number_id' => 'Phone number ID', 'access_token' => 'Access token']);
+        $missing = $this->missing($row, $row->option('vendor') === '360dialog'
+            ? ['phone_number_id' => 'Phone number ID', 'api_key' => 'D360-API-KEY']
+            : ['phone_number_id' => 'Phone number ID', 'access_token' => 'Access token']);
         if ($missing !== []) {
             return $this->state(self::SETUP, 'ينقص: '.implode('، ', $missing).'.');
         }
@@ -114,7 +116,7 @@ final class IntegrationHub
         if ($row->verified_at) {
             $name = $row->option('verified_name');
 
-            return $this->state(self::CONNECTED, 'تحققت Meta من الرقم'.($name ? ' «'.$name.'»' : '').' '.$this->when($row->verified_at).'.');
+            return $this->state(self::CONNECTED, ($row->option('vendor') === '360dialog' ? 'تحقق 360dialog من المفتاح' : 'تحققت Meta من الرقم'.($name ? ' «'.$name.'»' : '')).' '.$this->when($row->verified_at).'.');
         }
 
         return $this->state(self::SETUP, 'المفاتيح مكتملة ولم يُتحقق منها بعد. اضغط «اختبار الاتصال».');

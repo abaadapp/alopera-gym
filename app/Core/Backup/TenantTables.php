@@ -32,6 +32,7 @@ final class TenantTables
         'pos_devices', 'pos_peripherals', 'pos_print_logs',
         'sales', 'sale_items', 'sale_item_addons', 'stock_movements',
         'message_templates', 'conversations', 'campaigns', 'messages', 'auto_replies',
+        'whatsapp_attachments', 'conversation_events', 'whatsapp_contacts',
         'payment_intents',
         'gym_journal_entries', 'gym_journal_lines', 'gym_accounting_periods',
         'gym_job_titles', 'gym_employees', 'gym_payroll_runs', 'gym_payroll_payouts', 'gym_payroll_items',
@@ -45,6 +46,8 @@ final class TenantTables
         'platform_invoices' => 'owned by the platform, not by the club',
         'payment_webhook_events' => 'platform-level gateway log',
         'staff_notifications' => 'the bell: transient, rebuilt from open items by notifications:sync',
+        'whatsapp_webhook_events' => 'platform-level WhatsApp webhook log, written before the club is known',
+        'whatsapp_status_backlog' => 'transient: delivery statuses waiting a few seconds for their message',
     ];
 
     /** Child tables without their own tenant_id: [table => [fk column, parent table]]. */

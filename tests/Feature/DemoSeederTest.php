@@ -7,6 +7,8 @@ use App\Modules\Inventory\Models\GoodsReceipt;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\PurchaseOrder;
 use App\Modules\Inventory\Models\StockMovement;
+use App\Modules\Messaging\Models\Conversation;
+use App\Modules\Messaging\Models\Message;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\BuildsClubs;
@@ -32,5 +34,12 @@ class DemoSeederTest extends TestCase
         ]);
 
         $this->assertSame([PurchaseOrder::RECEIVED, 1, 6.0], [$order, $receipts, $mats]);
+
+        // The sample WhatsApp chats are marked as such, never mixed with real ones; nothing in them was sent anywhere.
+        $this->asTenant($club, function () {
+            $this->assertSame(5, Conversation::count());
+            $this->assertSame(0, Conversation::where('is_demo', false)->count());
+            $this->assertSame(0, Message::whereNotNull('conversation_id')->where('provider_message_id', 'not like', 'log.%')->count());
+        });
     }
 }

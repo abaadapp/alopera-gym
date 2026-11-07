@@ -19,7 +19,7 @@ class MessagingServiceProvider extends ModuleServiceProvider
     public function register(): void
     {
         $this->app->bind(WhatsAppGateway::class, fn () => match (config('services.whatsapp.driver')) {
-            'meta' => new MetaCloudGateway,
+            'meta', 'cloud' => new MetaCloudGateway,
             default => new LogGateway,
         });
     }

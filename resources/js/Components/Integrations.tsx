@@ -142,18 +142,21 @@ export interface ProviderForm {
     last_checked_at: string | null;
 }
 
-export type KeyField = { key: string; label: string; hint?: string; secret?: boolean };
+/** `vendor`: shown only for that provider of the service (WhatsApp: Meta or 360dialog). */
+export type KeyField = { key: string; label: string; hint?: string; secret?: boolean; vendor?: string };
 
 /**
  * The keys form of Paymob and WhatsApp. Secrets are write-only: a saved field shows «محفوظ» and an empty input;
  * typing replaces it, leaving it empty keeps it. `extra` adds provider fields (WhatsApp's display number).
  */
-export function KeysForm({ provider, integration, fields, modeHint, extra }: {
+export function KeysForm({ provider, integration, fields, modeHint, extra, vendors }: {
     provider: 'paymob' | 'whatsapp';
     integration: ProviderForm;
     fields: KeyField[];
     modeHint?: ReactNode;
     extra?: (value: string, set: (v: string) => void, error?: string) => ReactNode;
+    /** The providers the service can be reached through, by key (WhatsApp); none: a single provider. */
+    vendors?: Record<string, string>;
 }) {
     const blank = () => Object.fromEntries(fields.map((f) => [f.key, ''])) as Record<string, string>;
     const form = useForm({
@@ -161,7 +164,9 @@ export function KeysForm({ provider, integration, fields, modeHint, extra }: {
         mode: integration.mode,
         credentials: blank(),
         display_phone: integration.public?.display_phone ?? '',
+        ...(vendors ? { vendor: integration.public?.vendor ?? Object.keys(vendors)[0] } : {}),
     });
+    const vendor = (form.data as { vendor?: string }).vendor;
     const errors = form.errors as Record<string, string | undefined>;
 
     const submit = (e: FormEvent) => {
@@ -181,7 +186,15 @@ export function KeysForm({ provider, integration, fields, modeHint, extra }: {
                 </Field>
             </div>
 
-            {fields.map((f) => {
+            {vendors && (
+                <Field label="مزود الخدمة" error={errors.vendor} hint="كلاهما رسمي ويدعم Coexistence: يبقى الرقم على تطبيق WhatsApp Business في الهاتف.">
+                    <Select value={vendor} onChange={(e) => form.setData('vendor' as never, e.target.value as never)}>
+                        {Object.entries(vendors).map(([key, name]) => <option key={key} value={key}>{name}</option>)}
+                    </Select>
+                </Field>
+            )}
+
+            {fields.filter((f) => !f.vendor || f.vendor === vendor).map((f) => {
                 const saved = integration.present?.[f.key];
                 return (
                     <Field

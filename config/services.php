@@ -38,11 +38,19 @@ return [
     // WhatsApp Business Platform (Meta Cloud API). Club credentials are stored
     // per tenant; these values are platform-wide.
     'whatsapp' => [
+        // log: nothing leaves the server (development, tests, demos). meta: real sending, through the club's vendor
+        // (Meta's Cloud API or 360dialog, chosen on the WhatsApp settings page).
         'driver' => env('WHATSAPP_DRIVER', 'log'), // log|meta
         'graph_url' => 'https://graph.facebook.com',
         'graph_version' => env('WHATSAPP_GRAPH_VERSION', 'v21.0'),
         'app_secret' => env('WHATSAPP_APP_SECRET'),
         'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
+        'd360_url' => env('WHATSAPP_360DIALOG_URL', 'https://waba-v2.360dialog.io'),
+        // Files sent and received in chats: a private disk, served only through the panel.
+        'media_disk' => env('WHATSAPP_MEDIA_DISK', 'local'),
+        'media_max_mb' => (int) env('WHATSAPP_MEDIA_MAX_MB', 16),
+        // How long webhook bodies are kept after processing (they hold customers' messages).
+        'webhook_retention_days' => (int) env('WHATSAPP_WEBHOOK_RETENTION_DAYS', 14),
     ],
 
     'paymob' => [

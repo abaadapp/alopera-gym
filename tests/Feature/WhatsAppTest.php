@@ -261,7 +261,8 @@ class WhatsAppTest extends TestCase
         $this->enableWhatsApp($club);
         $conversation = $this->asTenant($club, fn () => Conversation::create(['phone' => '96894444444', 'last_inbound_at' => now()->subDays(2)]));
 
-        $this->actingAs($this->owner($club))->post(route('club.inbox.reply', $conversation->id), ['body' => 'hello'])->assertSessionHas('error');
+        $this->actingAs($this->owner($club))->postJson(route('club.whatsapp.reply', $conversation->id), ['body' => 'hello'])
+            ->assertStatus(422)->assertJsonPath('ok', false)->assertJsonPath('error', 'انتهت نافذة الـ24 ساعة؛ استخدم قالبًا معتمدًا.');
         $this->assertSame('window_closed', $this->asTenant($club, fn () => Message::latest('id')->value('error_code')));
     }
 

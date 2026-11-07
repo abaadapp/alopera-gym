@@ -55,4 +55,5 @@ Route::prefix('webhooks')->name('webhooks.')->middleware('throttle:webhooks')->g
     Route::post('/paymob', PaymobWebhookController::class)->name('paymob');
     Route::get('/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('whatsapp.verify');
     Route::post('/whatsapp', [WhatsAppWebhookController::class, 'receive'])->name('whatsapp');
+    Route::post('/whatsapp/360dialog', [WhatsAppWebhookController::class, 'receive360'])->name('whatsapp.d360');
 });

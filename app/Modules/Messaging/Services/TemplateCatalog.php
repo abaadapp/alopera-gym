@@ -67,6 +67,12 @@ final class TemplateCatalog
             'variables' => ['member_name', 'plan_name', 'ends_on', 'days_left', 'renew_link'],
             'body' => 'تذكير يا {{1}}: اشتراكك في {{2}} ينتهي بتاريخ {{3}} (بعد {{4}} يوم). للتجديد: {{5}}',
         ],
+        'membership_expires_today' => [
+            'label' => 'تنبيه يوم انتهاء العضوية',
+            'category' => 'utility',
+            'variables' => ['member_name', 'plan_name', 'ends_on', 'renew_link'],
+            'body' => 'تذكير يا {{1}}: اليوم آخر يوم في اشتراكك في {{2}} ({{3}}). جدد اشتراكك من هنا: {{4}}',
+        ],
         'membership_expired' => [
             'label' => 'انتهاء العضوية',
             'category' => 'utility',

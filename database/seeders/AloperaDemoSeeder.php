@@ -46,6 +46,7 @@ use App\Modules\Website\Models\SiteSetting;
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Str;
 
 /**
  * Demo data for local development and demos. Never run in production.
@@ -508,15 +509,69 @@ class AloperaDemoSeeder extends Seeder
         }
     }
 
-    /** @param list<Member> $members */
+    /**
+     * Sample WhatsApp conversations for the demo, each marked as such (is_demo): shown with a «تجريبية» badge, left
+     * out of the reports, never sent anywhere (the demo runs the log driver). They show the inbox's cases: a new chat,
+     * one being answered by reception with an internal note, one with a message from the WhatsApp Business app and an
+     * automatic reminder, a customer who is not a member, and a closed one past its 24-hour window.
+     *
+     * @param  list<Member>  $members
+     */
     private function conversations(array $members): void
     {
-        foreach (array_slice($members, 0, 3) as $i => $member) {
-            $c = Conversation::create(['phone' => $member->phone, 'member_id' => $member->id, 'contact_name' => $member->full_name, 'unread_count' => $i === 0 ? 1 : 0,
-                'last_message_at' => now()->subHours($i * 5 + 1), 'last_inbound_at' => now()->subHours($i * 5 + 1)]);
-            Message::create(['conversation_id' => $c->id, 'member_id' => $member->id, 'direction' => 'inbound', 'type' => 'text', 'to_phone' => $member->phone,
-                'body' => ['هل يوجد حصة زومبا يوم الخميس؟', 'أبغى أجمّد اشتراكي أسبوع', 'شكرًا على التذكير'][$i], 'status' => Message::RECEIVED, 'created_at' => now()->subHours($i * 5 + 1)]);
-        }
+        $club = app(TenantContext::class)->id();
+        $reception = User::where('tenant_id', $club)->whereHas('role', fn ($q) => $q->where('key', SystemRoles::RECEPTION))->first();
+        $owner = User::where('tenant_id', $club)->whereHas('role', fn ($q) => $q->where('key', SystemRoles::OWNER))->first();
+        $add = function (Conversation $c, string $direction, string $source, string $body, int $minutesAgo, array $extra = []): Message {
+            $at = now()->subMinutes($minutesAgo);
+
+            return Message::create($extra + ['conversation_id' => $c->id, 'member_id' => $c->member_id, 'direction' => $direction, 'source' => $source,
+                'type' => $extra['type'] ?? 'text', 'to_phone' => $c->phone, 'body' => $body,
+                'status' => $direction === 'inbound' ? Message::RECEIVED : ($extra['status'] ?? Message::READ),
+                'provider_message_id' => 'log.demo.'.Str::uuid(), 'wa_timestamp' => $at, 'created_at' => $at, 'updated_at' => $at]);
+        };
+        $chat = fn (array $attributes) => Conversation::create($attributes + ['is_demo' => true]);
+
+        [$a, $b, $c] = array_slice($members, 0, 3);
+
+        // A new chat, two messages unread.
+        $one = $chat(['phone' => $a->phone, 'member_id' => $a->id, 'status' => Conversation::NEW, 'unread_count' => 2]);
+        $add($one, 'inbound', Message::SOURCE_CUSTOMER, 'مساء الخير', 14);
+        $last = $add($one, 'inbound', Message::SOURCE_CUSTOMER, 'هل يوجد حصة زومبا يوم الخميس؟', 12);
+        $one->forceFill(['first_inbound_at' => now()->subMinutes(14), 'last_inbound_at' => $last->wa_timestamp, 'last_message_at' => $last->wa_timestamp,
+            'last_preview' => $last->body, 'last_direction' => 'inbound'])->save();
+
+        // Being answered by reception, with an internal note.
+        $two = $chat(['phone' => $b->phone, 'member_id' => $b->id, 'status' => Conversation::OPEN, 'assigned_to' => $reception?->id, 'assigned_at' => now()->subHours(3)]);
+        $add($two, 'inbound', Message::SOURCE_CUSTOMER, 'أبغى أجمّد اشتراكي أسبوع، مسافرة', 190);
+        $reply = $add($two, 'outbound', Message::SOURCE_PLATFORM, 'أهلًا بك! تم تسجيل طلب التجميد، يبدأ من الغد لمدة 7 أيام. رحلة سعيدة 🌸', 175, ['sent_by' => $reception?->id]);
+        $two->events()->create(['user_id' => $owner?->id, 'type' => 'assigned', 'data' => ['from' => null, 'to' => $reception?->id, 'to_name' => $reception?->name], 'created_at' => now()->subMinutes(185)]);
+        $two->events()->create(['user_id' => $reception?->id, 'type' => 'note', 'body' => 'تأكدنا من رصيد أيام التجميد في باقتها قبل الرد.', 'created_at' => now()->subMinutes(176)]);
+        $two->forceFill(['first_inbound_at' => now()->subMinutes(190), 'first_response_at' => $reply->wa_timestamp, 'last_inbound_at' => now()->subMinutes(190),
+            'last_message_at' => $reply->wa_timestamp, 'last_preview' => $reply->body, 'last_direction' => 'outbound'])->save();
+
+        // The owner wrote from the WhatsApp Business app on the phone; an automatic reminder went out before.
+        $three = $chat(['phone' => $c->phone, 'member_id' => $c->id, 'status' => Conversation::PENDING]);
+        $add($three, 'outbound', Message::SOURCE_AUTOMATION, 'تذكير: اشتراكك ينتهي بعد 3 أيام. للتجديد: alopera.om/renew', 60 * 26,
+            ['type' => 'template', 'template_key' => 'membership_expiring', 'status' => Message::READ]);
+        $add($three, 'inbound', Message::SOURCE_CUSTOMER, 'شكرًا على التذكير، أبغى أجدد بنفس الباقة', 60 * 5);
+        $echo = $add($three, 'outbound', Message::SOURCE_BUSINESS_APP, 'تمام، جهزنا لك فاتورة التجديد وتقدرين تدفعين في الاستقبال 👍', 60 * 4 + 50, ['status' => Message::DELIVERED]);
+        $three->forceFill(['first_inbound_at' => now()->subHours(5), 'first_response_at' => $echo->wa_timestamp, 'last_inbound_at' => now()->subHours(5),
+            'last_message_at' => $echo->wa_timestamp, 'last_preview' => $echo->body, 'last_direction' => 'outbound'])->save();
+
+        // Not a member: a new customer, answered by the keyword auto-reply.
+        $four = $chat(['phone' => '96890000123', 'profile_name' => 'Laila', 'status' => Conversation::NEW, 'unread_count' => 1]);
+        $add($four, 'inbound', Message::SOURCE_CUSTOMER, 'السلام عليكم، كم الأسعار؟', 40);
+        $auto = $add($four, 'outbound', Message::SOURCE_AUTOMATION, 'أهلًا بك! أسعار باقاتنا هنا: الموقع ← الباقات. يسعدنا خدمتك!', 40, ['status' => Message::DELIVERED]);
+        $four->forceFill(['first_inbound_at' => now()->subMinutes(40), 'last_inbound_at' => now()->subMinutes(40), 'last_message_at' => $auto->wa_timestamp,
+            'last_preview' => $auto->body, 'last_direction' => 'outbound'])->save();
+
+        // Closed, its 24-hour window long over: a free reply was refused.
+        $five = $chat(['phone' => '96890000456', 'contact_name' => 'ضيفة من الموقع', 'status' => Conversation::CLOSED, 'closed_at' => now()->subDays(2)]);
+        $add($five, 'inbound', Message::SOURCE_CUSTOMER, 'هل عندكم حصص للمبتدئات؟', 60 * 24 * 3);
+        $done = $add($five, 'outbound', Message::SOURCE_PLATFORM, 'نعم، كل سبت الساعة 6 مساءً.', 60 * 24 * 3 - 20, ['sent_by' => $owner?->id]);
+        $five->forceFill(['first_inbound_at' => now()->subDays(3), 'first_response_at' => $done->wa_timestamp, 'last_inbound_at' => now()->subDays(3),
+            'last_message_at' => $done->wa_timestamp, 'last_preview' => $done->body, 'last_direction' => 'outbound'])->save();
     }
 
     private function travel(\DateTimeInterface $at, callable $callback): mixed

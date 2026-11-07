@@ -2,11 +2,13 @@
 
 namespace App\Modules\Messaging\Http\Controllers;
 
+use App\Core\Audit\AuditLogger;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Messaging\Models\AutoReply;
 use App\Modules\Messaging\Models\MessageTemplate;
 use App\Modules\Messaging\Services\TemplateCatalog;
+use App\Modules\Messaging\Services\WhatsAppAutomation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -31,19 +33,70 @@ class TemplateController extends Controller
         ]);
     }
 
-    /** Automatic sending rules (edited in Settings → Notifications) and keyword auto-replies. */
+    /** The automatic notices (each on or off, and when), their templates' state, and keyword auto-replies. */
     public function automation(TenantContext $tenants): Response
     {
         $tenant = $tenants->require();
+        TemplateCatalog::seedDefaults();
+        $templates = MessageTemplate::get(['key', 'status', 'is_active'])->keyBy('key');
 
         return Inertia::render('Messaging/Automation', [
             'autoReplies' => AutoReply::orderBy('id')->get(['id', 'keyword', 'match_type', 'reply', 'is_active', 'hits']),
+            'events' => collect(WhatsAppAutomation::EVENTS)->map(fn ($e, $key) => [
+                'key' => $key,
+                'label' => $e['label'],
+                'detail' => $e['detail'],
+                'on' => WhatsAppAutomation::on($tenant, $key),
+                'timing' => $e['timing'] ?? null,
+                'templates' => array_map(fn ($t) => [
+                    'key' => $t,
+                    'label' => TemplateCatalog::EVENTS[$t]['label'] ?? $t,
+                    'category' => TemplateCatalog::EVENTS[$t]['category'] ?? 'utility',
+                    'approved' => (bool) $templates->get($t)?->isUsable(),
+                ], $e['templates']),
+            ])->values(),
             'rules' => [
-                'expiry_reminder_days' => $tenant->setting('expiry_reminder_days'),
+                'expiry_reminder_days' => array_values(array_filter((array) $tenant->setting('expiry_reminder_days'), fn ($d) => (int) $d > 0)),
                 'expired_followup_days' => $tenant->setting('expired_followup_days'),
+                'hour' => WhatsAppAutomation::hour($tenant),
                 'notify_class_changes' => $tenant->setting('notify_class_changes'),
             ],
         ]);
+    }
+
+    /** Switch notices on or off and set when the reminders go out. */
+    public function saveAutomation(Request $request, TenantContext $tenants, AuditLogger $audit): RedirectResponse
+    {
+        $tenant = $tenants->require();
+        $data = $request->validate([
+            'on' => ['array'],
+            'on.*' => ['boolean'],
+            'expiry_reminder_days' => ['array', 'max:5'],
+            'expiry_reminder_days.*' => ['integer', 'between:1,60'],
+            'expired_followup_days' => ['array', 'max:5'],
+            'expired_followup_days.*' => ['integer', 'between:1,180'],
+            'hour' => ['required', 'integer', 'between:0,23'],
+        ]);
+
+        $before = ['off' => $tenant->setting('whatsapp_automation.off', []), 'hour' => WhatsAppAutomation::hour($tenant),
+            'expiry_reminder_days' => $tenant->setting('expiry_reminder_days'), 'expired_followup_days' => $tenant->setting('expired_followup_days')];
+        $off = array_values(array_filter(array_keys(WhatsAppAutomation::EVENTS), fn ($key) => array_key_exists($key, $data['on'] ?? []) && ! $data['on'][$key]));
+        $after = [
+            'off' => $off,
+            'hour' => (int) $data['hour'],
+            'expiry_reminder_days' => array_values(array_unique(array_map('intval', $data['expiry_reminder_days'] ?? []))),
+            'expired_followup_days' => array_values(array_unique(array_map('intval', $data['expired_followup_days'] ?? []))),
+        ];
+
+        $tenant->settings = array_replace($tenant->settings ?? [], [
+            'whatsapp_automation' => ['off' => $after['off'], 'hour' => $after['hour']],
+            'expiry_reminder_days' => $after['expiry_reminder_days'],
+            'expired_followup_days' => $after['expired_followup_days'],
+        ]);
+        $tenant->save();
+        $audit->logChanges('whatsapp.automation_changed', $tenant, $before, $after);
+
+        return back()->with('success', 'تم حفظ إعدادات الرسائل التلقائية.');
     }
 
     /** Custom (marketing) template. */
