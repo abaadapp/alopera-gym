@@ -92,6 +92,19 @@ class PosCheckoutOnceTest extends TestCase
         $this->assertSame([1, 0, 0, 1, 1], $this->sold($club), 'nothing sold for the second basket, and no other sale handed back');
     }
 
+    public function test_two_clubs_may_use_the_same_basket_key_each_selling_their_own(): void
+    {
+        [$one, $two] = [$this->club(), $this->club()];
+        [$cashierOne, $linesOne] = $this->shop($one);
+        [$cashierTwo, $linesTwo] = $this->shop($two);
+
+        $this->actingAs($cashierOne)->post(route('club.pos.checkout'), ['items' => $linesOne['items'], 'payment_method' => 'cash', 'client_key' => 'basket-1'])->assertSessionHasNoErrors();
+        $this->actingAs($cashierTwo)->post(route('club.pos.checkout'), ['items' => $linesTwo['items'], 'payment_method' => 'cash', 'client_key' => 'basket-1'])
+            ->assertSessionHasNoErrors()->assertSessionHas('pos_result');
+
+        $this->assertSame([[1, 0, 0, 1, 1], [1, 0, 0, 1, 1]], [$this->sold($one), $this->sold($two)], 'each club its own sale, neither answered with the other\'s');
+    }
+
     public function test_a_basket_refused_can_be_corrected_and_sent_again_with_the_same_key(): void
     {
         $club = $this->club();

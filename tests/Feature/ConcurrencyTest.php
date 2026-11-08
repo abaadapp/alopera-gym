@@ -358,4 +358,131 @@ class ConcurrencyTest extends TestCase
         $this->assertSame([], $results[1]['value']['errors'] ?? ['no answer'], json_encode($results));
         $this->assertSame([1, '40.000'], $this->box($club, $cash));
     }
+
+    // ── 4. More at once, and failures in the middle ─────────────────────────────────────────────────────────
+
+    public function test_ten_requests_with_the_same_basket_at_once_sell_it_once(): void
+    {
+        $club = $this->club();
+        [$cashier, $basket, $bar] = $this->basket($club, 'basket-ten');
+
+        $results = $this->concurrently(array_fill(0, 10, fn () => $this->checkout($cashier, $basket)));
+
+        $this->assertSame(array_fill(0, 10, 302), array_column(array_column($results, 'value'), 'status'), json_encode($results));
+        $this->assertSame(array_fill(0, 10, []), array_column(array_column($results, 'value'), 'errors'));
+        $this->assertSoldOnce($club, $bar);
+        $this->assertCount(1, array_unique(array_map('json_encode', array_column(array_column($results, 'value'), 'documents'))), 'every request gets the one sale');
+    }
+
+    public function test_a_checkout_killed_halfway_sells_nothing_and_its_retry_sells_once(): void
+    {
+        $club = $this->club();
+        [$cashier, $basket, $bar] = $this->basket($club, 'basket-killed');
+
+        $results = $this->concurrently([
+            function (string $dir) use ($cashier, $basket) {
+                self::pauseAfter('insert into "gym_memberships"', $dir, 20); // the sale and its key are written, not committed
+
+                return $this->checkout($cashier, $basket);
+            },
+            function (string $dir) use ($cashier, $basket) {
+                self::waitFor("$dir/inside");
+                posix_kill((int) file_get_contents("$dir/inside"), SIGKILL); // the worker and its connection die mid-sale
+                usleep(300_000);
+
+                return $this->checkout($cashier, $basket); // the till sends the basket again
+            },
+        ]);
+
+        $this->assertSame('killed before it finished', $results[0]['error']);
+        $this->assertSame([302, []], [$results[1]['value']['status'] ?? null, $results[1]['value']['errors'] ?? ['no answer']], json_encode($results));
+        $this->assertSoldOnce($club, $bar);
+    }
+
+    public function test_bookings_that_overlap_by_half_an_hour_at_once_are_not_both_made(): void
+    {
+        $club = $this->club();
+        $trainer = $this->trainer($club);
+        [$a, $b] = $this->packages($club, $trainer, [$this->member($club), $this->member($club)]);
+        $ten = CarbonImmutable::tomorrow()->setTime(10, 0);
+
+        $results = $this->concurrently([
+            fn () => $this->asTenant($club, fn () => app(PtService::class)->schedule(PtSubscription::findOrFail($a), $ten)->id),
+            fn () => $this->asTenant($club, fn () => app(PtService::class)->schedule(PtSubscription::findOrFail($b), $ten->addMinutes(30))->id),
+        ]);
+
+        $this->assertSame(1, $this->asTenant($club, fn () => PtSession::where('trainer_id', $trainer->id)->count()), json_encode($results));
+        $this->assertStringContainsString('المدرب لديه موعد آخر', (string) collect($results)->firstWhere('ok', false)['error']);
+    }
+
+    public function test_a_booking_killed_halfway_leaves_no_session_and_frees_the_trainer(): void
+    {
+        $club = $this->club();
+        $trainer = $this->trainer($club);
+        [$a, $b] = $this->packages($club, $trainer, [$this->member($club), $this->member($club)]);
+        $ten = CarbonImmutable::tomorrow()->setTime(10, 0);
+
+        $results = $this->concurrently([
+            function (string $dir) use ($club, $a, $ten) {
+                self::pauseAfter('insert into "gym_pt_sessions"', $dir, 20);
+
+                return $this->asTenant($club, fn () => app(PtService::class)->schedule(PtSubscription::findOrFail($a), $ten)->id);
+            },
+            function (string $dir) use ($club, $b, $ten) {
+                self::waitFor("$dir/inside");
+                posix_kill((int) file_get_contents("$dir/inside"), SIGKILL);
+                usleep(300_000);
+
+                return $this->asTenant($club, fn () => app(PtService::class)->schedule(PtSubscription::findOrFail($b), $ten)->id);
+            },
+        ]);
+
+        $this->assertSame('killed before it finished', $results[0]['error']);
+        $this->assertTrue($results[1]['ok'], json_encode($results));
+        $this->asTenant($club, function () use ($a, $b) {
+            $this->assertSame([0, 1], [PtSession::where('pt_subscription_id', $a)->count(), PtSession::where('pt_subscription_id', $b)->count()]);
+        });
+    }
+
+    public function test_ten_payments_at_once_spend_no_more_than_the_box_holds(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $cash = $this->cashBox($club, '100');
+
+        $results = $this->concurrently(array_fill(0, 10, fn () => $this->pay($owner, $cash, '15')));
+
+        $this->assertSame(array_fill(0, 10, 302), array_column(array_column($results, 'value'), 'status'), 'refused, never a server error: '.json_encode($results));
+        $this->assertCount(4, array_filter(array_column($results, 'value'), fn ($r) => $r['errors'] !== []), 'six fit in 100, four are refused');
+        $this->assertSame([6, '10.000'], $this->box($club, $cash));
+        $this->asTenant($club, fn () => $this->assertSame(JournalLine::sum('debit'), JournalLine::sum('credit'), 'the books balance'));
+    }
+
+    public function test_two_clubs_paying_at_once_do_not_hold_each_other(): void
+    {
+        [$one, $two] = [$this->club(), $this->club()];
+        [$ownerOne, $ownerTwo] = [$this->owner($one), $this->owner($two)];
+        [$cashOne, $cashTwo] = [$this->cashBox($one, '100'), $this->cashBox($two, '100')];
+
+        $started = microtime(true);
+        $results = $this->concurrently([
+            function (string $dir) use ($ownerOne, $cashOne) {
+                self::pauseAfter('insert into "expenses"', $dir, 2.0);
+
+                return $this->pay($ownerOne, $cashOne, '60');
+            },
+            function (string $dir) use ($ownerTwo, $cashTwo) {
+                self::waitFor("$dir/inside");
+                $t = microtime(true);
+                $answer = $this->pay($ownerTwo, $cashTwo, '60');
+
+                return $answer + ['seconds' => microtime(true) - $t];
+            },
+        ]);
+
+        $this->assertSame([[], []], [$results[0]['value']['errors'] ?? ['?'], $results[1]['value']['errors'] ?? ['?']], json_encode($results));
+        $this->assertLessThan(1.5, $results[1]['value']['seconds'], 'the second club did not wait for the first club\'s box');
+        $this->assertSame([[1, '40.000'], [1, '40.000']], [$this->box($one, $cashOne), $this->box($two, $cashTwo)]);
+        $this->assertLessThan(10, microtime(true) - $started);
+    }
 }
