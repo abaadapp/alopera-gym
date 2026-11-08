@@ -11,8 +11,10 @@ use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Models\PtPackage;
 use App\Modules\Gym\Services\MembershipService;
 use App\Modules\Gym\Services\PtService;
+use App\Modules\Inventory\Models\PosCheckoutKey;
 use App\Modules\Inventory\Models\PosDevice;
 use App\Modules\Inventory\Models\Sale;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -57,6 +59,14 @@ final class PosCheckout
         $reference = $method === 'card' ? ($basket['card_reference'] ?: null) : null;
 
         return DB::transaction(function () use ($basket, $items, $plans, $packages, $method, $member, $device, $branch, $note, $reference) {
+            $key = $basket['client_key'] ?? null;
+            if ($key) {
+                $first = $this->claim($key, $this->fingerprint($basket));
+                if ($first !== null) {
+                    return $first;
+                }
+            }
+
             $documents = [];
 
             if ($items !== []) {
@@ -74,8 +84,59 @@ final class PosCheckout
                 $documents[] = $this->settle(Invoice::findOrFail($subscription->invoice_id), 'pt', $method, $reference, $branch, $note, $device);
             }
 
+            if ($key) {
+                PosCheckoutKey::where('client_key', $key)->firstOrFail()->update(['documents' => $documents]);
+            }
+
             return $documents;
         });
+    }
+
+    /**
+     * One basket, one sale, kept in the database rather than in the cache: the basket's key is claimed in the sale's
+     * own transaction (unique per club). The same basket sent again — at once, after the cache is gone, after an answer
+     * was lost — waits for the first to finish and gets its documents; if the first failed, its claim went with it and
+     * this one sells. The same key on a different basket is refused, never answered with another sale's documents.
+     *
+     * @return list<array<string, mixed>>|null the first sale's documents, or null when this request is the first
+     */
+    private function claim(string $key, string $fingerprint): ?array
+    {
+        try {
+            // Its own savepoint: a key already taken must not end the surrounding transaction (PostgreSQL would).
+            DB::transaction(fn () => PosCheckoutKey::create(['client_key' => $key, 'fingerprint' => $fingerprint]));
+
+            return null;
+        } catch (UniqueConstraintViolationException) {
+            $first = PosCheckoutKey::where('client_key', $key)->firstOrFail();
+            if (! hash_equals($first->fingerprint, $fingerprint)) {
+                throw new BusinessRuleException('pos.basket_reused', 'رقم هذه السلة بيعت به سلة أخرى، وقد يكون البيع الأول تمّ دون أن يصل ردّه. راجع مبيعات اليوم قبل أن تبيع من جديد.', 'items');
+            }
+
+            return $first->documents ?? [];
+        }
+    }
+
+    /** What the basket asks for, so a key can answer only the basket it was made for. */
+    private function fingerprint(array $basket): string
+    {
+        $number = fn ($value) => rtrim(rtrim(number_format((float) $value, 3, '.', ''), '0'), '.');
+
+        return hash('sha256', json_encode([
+            'items' => array_map(fn ($i) => [
+                (int) $i['product_id'], $number($i['quantity']),
+                array_map(fn ($a) => [(int) $a['addon_id'], (int) $a['quantity']], $i['addons'] ?? []),
+            ], $basket['items']),
+            'memberships' => array_map(fn ($l) => (int) $l['plan_id'], $basket['memberships']),
+            'packages' => array_map(fn ($l) => (int) $l['package_id'], $basket['packages']),
+            'method' => $basket['method'],
+            'member' => $basket['member']?->id,
+            'discount' => $number($basket['discount'] ?? 0),
+            'branch' => $basket['device']?->branch_id ?? $basket['branch_id'],
+            'device' => $basket['device']?->id,
+            'card_reference' => $basket['card_reference'] ?? null,
+            'customer_name' => $basket['customer_name'] ?? null,
+        ]));
     }
 
     /** @return array{kind: string, id: int, number: string, label: string, total: string, paid: bool, payment_id: ?int, pay_url: ?string} */

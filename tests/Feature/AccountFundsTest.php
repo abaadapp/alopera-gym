@@ -7,6 +7,7 @@ use App\Models\Tenant;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Models\JournalLine;
+use App\Modules\Accounting\Services\AccountFunds;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\FinanceReports;
 use App\Modules\Accounting\Services\Ledger;
@@ -24,7 +25,7 @@ use App\Modules\Payroll\Models\PayrollPayout;
 use App\Modules\Payroll\Models\PayrollRun;
 use ArrayObject;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
 
@@ -181,16 +182,20 @@ class AccountFundsTest extends TestCase
         return [$invoice, $this->asTenant($club, fn () => Account::findOrFail(Payment::where('invoice_id', $invoice->id)->value('account_id')))];
     }
 
-    /** Each time cash leaving the box is written to the books: could another payment take the box at that moment? */
+    /**
+     * Each time cash leaving the box is written to the books: could another payment take the box at that moment? Asked
+     * from a second database session, as another request would (the box's lock is PostgreSQL's, held per session).
+     */
     private function boxFreeWhileCashLeaves(Account $cash): ArrayObject
     {
+        config(['database.connections.other_request' => config('database.connections.pgsql')]);
         $seen = new ArrayObject;
         JournalLine::created(function (JournalLine $line) use ($cash, $seen) {
             if ((int) $line->account_id === $cash->id && Money::toMinor($line->credit) > 0) {
-                $lock = Cache::lock("account-funds:{$cash->tenant_id}:{$cash->id}", 30);
-                $seen[] = $free = $lock->get();
+                $other = DB::connection('other_request');
+                $seen[] = $free = (bool) $other->selectOne('select pg_try_advisory_lock(?, ?) as held', [AccountFunds::LOCKS, $cash->id])->held;
                 if ($free) {
-                    $lock->release();
+                    $other->select('select pg_advisory_unlock(?, ?)', [AccountFunds::LOCKS, $cash->id]);
                 }
             }
         });
@@ -237,10 +242,11 @@ class AccountFundsTest extends TestCase
         $this->assertSame([0, 0, $entries], $this->asTenant($club, fn () => [CreditNote::count(), Payment::where('kind', Payment::KIND_REFUND)->count(), JournalEntry::count()]));
         $this->assertSame(['0.000', Invoice::PAID], [$invoice->fresh()->credited_total, $invoice->fresh()->status]);
 
-        // Nothing still holds the box: the next payment from it goes straight through.
-        $lock = Cache::lock("account-funds:{$cash->tenant_id}:{$cash->id}", 30);
-        $this->assertTrue($lock->get());
-        $lock->release();
+        // Nothing still holds the box: another request could take it now, and the next payment from it goes straight through.
+        config(['database.connections.other_request' => config('database.connections.pgsql')]);
+        $other = DB::connection('other_request');
+        $this->assertTrue((bool) $other->selectOne('select pg_try_advisory_lock(?, ?) as held', [AccountFunds::LOCKS, $cash->id])->held);
+        $other->select('select pg_advisory_unlock(?, ?)', [AccountFunds::LOCKS, $cash->id]);
         $this->actingAs($owner)->post(route('club.expenses.store'), $this->expense($cash, '20'))->assertSessionHasNoErrors();
         $this->assertSame('0.000', $this->balance($club, $cash));
     }
