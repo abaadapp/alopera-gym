@@ -210,6 +210,25 @@ class SalesTest extends TestCase
         $this->assertSame('0.000', $this->balance($club, 'cash'));
     }
 
+    public function test_cancelling_a_part_paid_order_also_needs_the_refund_permission(): void
+    {
+        $club = $this->club();
+        $bar = $this->product($club);
+        $order = $this->order($club, $bar, 2);
+        // A part of it paid at the desk: the order is not marked paid, but money is on it.
+        $this->asTenant($club, fn () => app(PaymentService::class)->record(Invoice::find($order->invoice_id), '1.000', 'cash'));
+        $this->asTenant($club, fn () => $this->assertNull($order->fresh()->paid_at));
+
+        $this->actingAs($this->staff($club, 'reception'))->post(route('club.sales.orders.cancel', $order), ['reason' => 'x', 'refund_method' => 'cash'])->assertForbidden();
+        $this->asTenant($club, function () use ($order) {
+            $this->assertSame(Sale::PENDING, $order->fresh()->status);
+            $this->assertSame(0, Payment::where('kind', Payment::KIND_REFUND)->count(), 'nothing refunded');
+        });
+
+        $this->actingAs($this->owner($club))->post(route('club.sales.orders.cancel', $order), ['reason' => 'x', 'refund_method' => 'cash'])->assertSessionHasNoErrors();
+        $this->asTenant($club, fn () => $this->assertSame(Sale::CANCELLED, $order->fresh()->status));
+    }
+
     public function test_stock_cannot_be_oversold_by_orders(): void
     {
         $club = $this->club();

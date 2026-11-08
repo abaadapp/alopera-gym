@@ -17,6 +17,7 @@ use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\Sale;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -176,12 +177,17 @@ final class OrderService
      * Cancel an order that was not handed over: the held stock goes back, an unpaid invoice is voided, a paid one
      * is credited in full and the money recorded as refunded (the actual refund is made outside the system).
      */
-    public function cancel(Sale $sale, string $reason, ?string $refundMethod = null): Sale
+    public function cancel(Sale $sale, string $reason, ?string $refundMethod = null, bool $mayRefund = true): Sale
     {
-        return DB::transaction(function () use ($sale, $reason, $refundMethod) {
+        return DB::transaction(function () use ($sale, $reason, $refundMethod, $mayRefund) {
             $sale = $this->lockOrder($sale);
             $invoice = Invoice::whereKey($sale->invoice_id)->lockForUpdate()->first();
             $paid = $invoice && ! Money::isZero($invoice->paid_total);
+
+            // Any money on it, a part payment included, goes back: that needs the refund permission (seen under the lock).
+            if ($paid && ! $mayRefund) {
+                throw new AuthorizationException('إلغاء طلب عليه دفعة يرد المبلغ، ويحتاج صلاحية رد المبالغ.');
+            }
 
             if ($paid && ! in_array($refundMethod, self::REFUND_METHODS, true)) {
                 throw new BusinessRuleException('order.refund_method', 'الطلب مدفوع: اختر طريقة رد المبلغ.', 'refund_method');
