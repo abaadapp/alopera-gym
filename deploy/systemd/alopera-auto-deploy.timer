@@ -1,0 +1,11 @@
+# /etc/systemd/system/alopera-auto-deploy.timer — looks for a new version tag every two minutes.
+[Unit]
+Description=Alopera Gym: look for a new version every two minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+RandomizedDelaySec=15s
+
+[Install]
+WantedBy=timers.target

@@ -29,9 +29,18 @@ rm -rf "$REL/storage" && ln -sfn "$APP/shared/storage" "$REL/storage"
 cd "$REL"
 composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
 
-ASSETS=${REPO%.git}/releases/download/$REF/build.tar.gz
-if [[ "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && curl -fsSL -o /tmp/alopera-build-$TS.tar.gz "$ASSETS" \
-    && curl -fsSL -o /tmp/alopera-build-$TS.tar.gz.sha256 "$ASSETS.sha256" \
+# A file of the tag's GitHub release: by its public link, or, when that link fails (GitHub has answered 504 there
+# while the rest of the site worked), by the API, which serves the same file without signing in. Checked by sha256.
+fetch_asset() {
+    local name=$1 dest=$2 api
+    curl -fsSL --retry 2 -o "$dest" "${REPO%.git}/releases/download/$REF/$name" && return 0
+    api=$(curl -fsSL "https://api.github.com/repos/$(basename "$(dirname "$REPO")")/$(basename "$REPO" .git)/releases/tags/$REF" \
+        | php -r '$d = json_decode(stream_get_contents(STDIN), true); foreach ($d["assets"] ?? [] as $a) { if ($a["name"] === $argv[1]) { echo $a["url"]; } }' "$name") || return 1
+    [ -n "$api" ] && echo "  (public link failed: $name from the GitHub API)" && curl -fsSL --retry 2 -H 'Accept: application/octet-stream' -o "$dest" "$api"
+}
+
+if [[ "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && fetch_asset build.tar.gz /tmp/alopera-build-$TS.tar.gz \
+    && fetch_asset build.tar.gz.sha256 /tmp/alopera-build-$TS.tar.gz.sha256 \
     && (cd /tmp && sed "s#build.tar.gz#alopera-build-$TS.tar.gz#" alopera-build-$TS.tar.gz.sha256 | sha256sum -c --quiet -); then
     echo "→ built pages from the $REF release"
     tar -xzf /tmp/alopera-build-$TS.tar.gz -C public
@@ -62,7 +71,8 @@ php artisan event:cache
 php artisan platform:preflight
 
 ln -sfn "$REL" "$APP/current"
-sudo systemctl reload php8.4-fpm
+# RELOAD_FPM=0: the caller reloads PHP-FPM itself (scripts/auto-deploy.sh runs this as deploy, then reloads as root).
+[ "${RELOAD_FPM:-1}" = "0" ] || sudo systemctl reload php8.4-fpm
 php artisan queue:restart
 
 # keep the last 5 releases
