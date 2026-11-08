@@ -130,7 +130,8 @@ class MoneyAccountController extends Controller
         DB::transaction(function () use ($account, $data) {
             $previous = JournalEntry::where(['source_type' => 'account', 'source_id' => $account->id, 'source_event' => 'opening'])->whereNull('reversed_at')->latest('revision')->first();
             if ($previous) {
-                $this->ledger->reverse($previous, "تصحيح الرصيد الافتتاحي — {$account->name}", ['source_type' => 'account', 'source_id' => $account->id, 'event' => 'opening_fix', 'revision' => $previous->revision]);
+                // On the old opening's own date (today if that month is closed), so no day in between counts both.
+                $this->ledger->reverse($previous, "تصحيح الرصيد الافتتاحي — {$account->name}", ['source_type' => 'account', 'source_id' => $account->id, 'event' => 'opening_fix', 'revision' => $previous->revision], $previous->entry_date);
             }
             if (Money::cmp($data['amount'], 0) > 0) {
                 // After every opening ever posted, reversed ones included (set to zero, then set again).
