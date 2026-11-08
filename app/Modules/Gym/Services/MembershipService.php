@@ -67,7 +67,8 @@ final class MembershipService
         }
 
         $today = CarbonImmutable::today();
-        $start = $latest && $latest->ends_on->gte($today) ? $latest->ends_on->addDay() : $today;
+        // A frozen period has not ended where its date says: the renewal follows it, and moves when it resumes.
+        $start = $latest && ($latest->ends_on->gte($today) || $latest->status === Membership::FROZEN) ? $latest->ends_on->addDay() : $today;
 
         // A renewal starts where the current period ends, whatever start date the request still carries.
         return $this->create($member, $plan, $latestAny ? Membership::KIND_RENEWAL : Membership::KIND_NEW, [
@@ -230,7 +231,7 @@ final class MembershipService
         }
 
         $membership->status = match (true) {
-            $membership->starts_on->gt($today) => Membership::SCHEDULED,
+            $membership->starts_on->gt($today), $this->heldByFreeze($membership) => Membership::SCHEDULED,
             $membership->ends_on->lt($today) => Membership::EXPIRED,
             default => Membership::ACTIVE,
         };
@@ -426,6 +427,9 @@ final class MembershipService
 
         Membership::where('status', Membership::SCHEDULED)->where('starts_on', '<=', $today)
             ->eachById(function (Membership $m) use (&$counts) {
+                if ($this->heldByFreeze($m)) {
+                    return; // starts once the frozen period resumes, which moves it back by the days frozen
+                }
                 $m->forceFill(['status' => Membership::ACTIVE])->save();
                 $this->event($m, 'started');
                 $counts['started']++;
@@ -441,6 +445,13 @@ final class MembershipService
             });
 
         return $counts;
+    }
+
+    /** An earlier period of the same member is frozen: this one cannot start before it resumes (and moves it back). */
+    private function heldByFreeze(Membership $membership): bool
+    {
+        return Membership::where('member_id', $membership->member_id)->whereKeyNot($membership->id)
+            ->where('status', Membership::FROZEN)->where('starts_on', '<', $membership->starts_on)->exists();
     }
 
     /**
