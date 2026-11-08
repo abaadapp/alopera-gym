@@ -17,6 +17,10 @@ Read `docs/ARCHITECTURE.md` first.
 - Gym tables are prefixed `gym_`; each module keeps its own migrations and routes under `app/Modules/<Module>`.
 - The logo is `App\Core\Branding\OfficialLogo`: the owner's file in `public/brand`, unchanged, until the owner uploads another in the club settings (`settings.logo_file`). The old `logo_path` column is never read. Never redraw or stretch a logo.
 
+## Tasks and merging
+- One task = one GitHub issue (`.github/ISSUE_TEMPLATE/task.yml`) = one branch = one pull request; the label `claude:ready` runs Claude Code on it (`.github/workflows/claude-code-agent.yml`). Rules: `docs/PARALLEL_WORKFLOW.md`, `AI_COMMAND_CENTER/EXECUTION_PROTOCOL.md`.
+- Never commit to main and never merge on your own: merging is the owner's explicit decision for that pull request, because it deploys.
+
 ## Commands
 - Tests: `php artisan test` (PostgreSQL database `alopera_gym_testing`)
 - Types/build: `npx tsc --noEmit -p tsconfig.json` · `npm run build` · JS tests: `npm test` (vitest, `tests/js`)
