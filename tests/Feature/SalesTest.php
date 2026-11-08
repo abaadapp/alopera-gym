@@ -303,6 +303,51 @@ class SalesTest extends TestCase
         });
     }
 
+    public function test_a_payment_confirmed_after_the_order_was_released_sells_nothing_twice_and_is_not_lost(): void
+    {
+        Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_late', 'intention_order_id' => 4413], 201)]);
+        $club = $this->club();
+        $this->asTenant($club, fn () => TenantIntegration::create([
+            'provider' => 'paymob', 'is_enabled' => true, 'mode' => 'test',
+            'credentials' => ['secret_key' => 'sk_test', 'public_key' => 'pk_test', 'hmac_secret' => 'hmac-test', 'integration_ids' => '111'],
+        ]));
+        $bar = $this->product($club, [], 1); // the last one on the shelf
+
+        $this->post(route('site.shop.order.store', ['club' => $club->slug]), [
+            'items' => [['product_id' => $bar->id, 'quantity' => 1]], 'name' => 'Online', 'phone' => '91234567', 'payment_method' => 'paymob',
+        ])->assertRedirectContains('clientSecret=cs_late');
+        [$sale, $intent] = $this->asTenant($club, fn () => [Sale::firstOrFail(), PaymentIntent::firstOrFail()]);
+
+        // Unpaid past its hold and the grace: released, and the bar sold to someone at the desk.
+        $this->asTenant($club, fn () => $sale->forceFill(['reserved_until' => now()->subMinutes(OrderService::PAYMENT_GRACE_MINUTES + 1)])->save());
+        Artisan::call('sales:expire-orders');
+        $other = $this->order($club, $bar->fresh(), 1);
+        $this->asTenant($club, function () use ($sale, $bar) {
+            $this->assertSame(Sale::CANCELLED, $sale->fresh()->status);
+            $this->assertSame('0.000', $bar->fresh()->stock_quantity);
+        });
+
+        // Paymob's confirmation arrives after all that.
+        $obj = ['id' => 777009, 'pending' => false, 'amount_cents' => (int) round((float) $intent->amount * 1000), 'success' => true, 'is_voided' => false,
+            'is_refunded' => false, 'error_occured' => false, 'currency' => 'OMR', 'order' => ['id' => 4413, 'merchant_order_id' => $intent->reference],
+            'created_at' => '2026-10-29T10:00:00', 'is_auth' => false, 'is_capture' => false, 'is_standalone_payment' => true, 'is_3d_secure' => true,
+            'integration_id' => 111, 'has_parent_transaction' => false, 'owner' => 1, 'source_data' => ['pan' => '1234', 'sub_type' => 'Visa', 'type' => 'card']];
+        $this->postJson(route('webhooks.paymob').'?hmac='.PaymobSignature::compute($obj, 'hmac-test'), ['type' => 'TRANSACTION', 'obj' => $obj])->assertOk();
+
+        $this->asTenant($club, function () use ($sale, $other, $bar, $intent) {
+            // Nothing sold twice: the released order stays cancelled, the desk's sale stands, the shelf is not taken below zero.
+            $this->assertSame(Sale::CANCELLED, $sale->fresh()->status);
+            $this->assertNull($sale->fresh()->paid_at);
+            $this->assertSame(Invoice::VOID, Invoice::find($sale->invoice_id)->status);
+            $this->assertNotSame(Sale::CANCELLED, $other->fresh()->status);
+            $this->assertSame('0.000', $bar->fresh()->stock_quantity);
+            // Nothing lost: the money is recorded in full as the customer's credit, to be applied or paid back.
+            $payment = Payment::sole();
+            $this->assertSame($intent->amount, $payment->amount);
+            $this->assertSame($intent->amount, $payment->credit_amount);
+        });
+    }
+
     public function test_sales_and_orders_of_two_clubs_stay_apart(): void
     {
         $a = $this->club('A');
