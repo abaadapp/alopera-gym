@@ -10,7 +10,8 @@ import { date, money, number, time, dayCount } from '@/lib/format';
 interface Props {
     kpis: Record<string, number | string | null>;
     expiring: { id: number; member_id: number; member: string; phone: string; plan: string; ends_on: string; days_left: number }[];
-    today_sessions: { id: number; program: string; color: string; trainer: string | null; time: string; booked: number; capacity: number }[];
+    /** None for whoever may not open the classes. */
+    today_sessions: { id: number; program: string; color: string; trainer: string | null; time: string; booked: number; capacity: number }[] | null;
     revenue_trend: { date: string; amount: number }[];
     /** Business document alerts (null without documents.view). */
     documents: { expiring: number; expired: number; alerts: { id: number; name: string; expiry_date: string; days_left: number | null }[] } | null;
@@ -42,13 +43,15 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
                 }}
             />
 
+            {(financial || today_sessions !== null) && (
             <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
                 {financial && (
-                    <Card className="lg:col-span-2">
+                    <Card className={today_sessions === null ? 'lg:col-span-3' : 'lg:col-span-2'}>
                         <CardHeader title="التحصيل خلال آخر 30 يومًا" subtitle="صافي الدفعات المكتملة بعد المردودات" />
                         <AreaChart data={revenue_trend.map((d) => ({ label: d.date.slice(5), value: d.amount }))} valueLabel={(v) => money(v, currency)} />
                     </Card>
                 )}
+                {today_sessions !== null && (
                 <Card className={financial ? '' : 'lg:col-span-3'}>
                     <CardHeader title="حصص اليوم" actions={<AllLink href={route('club.sessions.index')} />} />
                     {today_sessions.length === 0 ? (
@@ -72,7 +75,9 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
                         </ul>
                     )}
                 </Card>
+                )}
             </div>
+            )}
 
             <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <Card className="lg:col-span-2" padded={false}>
