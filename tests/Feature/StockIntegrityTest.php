@@ -66,4 +66,21 @@ class StockIntegrityTest extends TestCase
 
         $this->asTenant($club, fn () => $this->assertNull($line->fresh()->counted_quantity, 'a refused request saves nothing'));
     }
+
+    public function test_the_average_cost_of_stock_received_below_zero_is_what_it_was_bought_at(): void
+    {
+        $club = $this->club();
+        $this->asTenant($club, function () {
+            $stock = app(StockService::class);
+            // Sold without counting it (not tracked): the book goes below zero, then a delivery comes in.
+            $water = Product::create(['name' => 'Water', 'price' => 0.3, 'track_stock' => false]);
+            $stock->move($water, -90, 'sale');
+            $stock->move($water, 100, 'purchase', unitCost: 1.0);
+            $this->assertSame(['10.000', '1.000'], [$water->fresh()->stock_quantity, $water->fresh()->cost]);
+
+            // Above zero it is the weighted average, as before: 10 at 1.000 and 10 at 2.000.
+            $stock->move($water, 10, 'purchase', unitCost: 2.0);
+            $this->assertSame(['20.000', '1.500'], [$water->fresh()->stock_quantity, $water->fresh()->cost]);
+        });
+    }
 }
