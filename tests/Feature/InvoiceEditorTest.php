@@ -149,6 +149,20 @@ class InvoiceEditorTest extends TestCase
         $this->asTenant($club, fn () => $this->assertSame([$payments, 0], [Payment::count(), Invoice::drafts()->sole()->payments()->count()]));
     }
 
+    public function test_money_taken_on_issue_is_not_dated_before_the_invoice(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $issued = today()->subDays(2)->toDateString();
+
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1, 'issue_date' => $issued, 'payment_method' => 'cash', 'payment_date' => today()->subDays(5)->toDateString()]))
+            ->assertSessionHasErrors('payment_date');
+        $this->asTenant($club, fn () => $this->assertSame(0, Invoice::count(), 'nothing issued'));
+
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1, 'issue_date' => $issued, 'payment_method' => 'cash', 'payment_date' => $issued]))->assertSessionHasNoErrors();
+        $this->asTenant($club, fn () => $this->assertSame(Invoice::PAID, Invoice::sole()->status));
+    }
+
     public function test_catalogue_products_leave_the_shelf_on_issue_and_come_back_when_it_is_voided(): void
     {
         $club = $this->club();
