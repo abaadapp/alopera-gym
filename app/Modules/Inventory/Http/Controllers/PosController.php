@@ -82,6 +82,8 @@ class PosController extends Controller
             'branchId' => $chosen,
             'branches' => $chosen ? [] : $this->branches->choices()->map(fn (Branch $b) => ['id' => $b->id, 'name' => $b->name])->values(),
             'requireDevice' => ShopSettings::of($this->tenants->require())['pos_require_device'],
+            // Added on top of each document by the server: the till shows and takes the total with it.
+            'vatRate' => (float) $this->tenants->require()->setting('vat_rate', 0),
         ]);
     }
 
