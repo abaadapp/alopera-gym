@@ -57,6 +57,9 @@ fi
 
 step "اعتماديات PHP"
 composer install --no-dev --optimize-autoloader --no-interaction --no-scripts --quiet
+# What composer's own post-autoload-dump does first: the cached package lists may name packages no longer installed
+# (removed, or dev only), and artisan could not even start to rebuild them.
+rm -f bootstrap/cache/packages.php bootstrap/cache/services.php bootstrap/cache/config.php
 art package:discover --quiet
 ok "composer (no scripts) · package:discover"
 

@@ -41,7 +41,7 @@ TO="$(git rev-parse --short "$TARGET^{commit}")"
 [[ -z "$(git status --porcelain --untracked-files=no)" ]] || die "uncommitted changes in the tree would be wiped out: see git status"
 
 # Migrations between the two: each module keeps its own (app/Modules/*/Database/migrations) beside database/migrations.
-MIGRATIONS="$(git diff --name-only "$TO" "$FROM" -- database/migrations 'app/Modules/*/Database/migrations')"
+MIGRATIONS="$(git diff --name-only "$TO" "$FROM" -- 'database/migrations/*' 'app/Modules/*/Database/migrations/*')"
 UNLISTED=""
 while IFS= read -r m; do
     [[ -z "$m" ]] && continue
@@ -58,6 +58,9 @@ ok "$TO"
 
 step "اعتماديات PHP"
 composer install --no-dev --optimize-autoloader --no-interaction --no-scripts --quiet
+# What composer's own post-autoload-dump does first: the cached package lists may name packages no longer installed
+# (removed, or dev only), and artisan could not even start to rebuild them.
+rm -f bootstrap/cache/packages.php bootstrap/cache/services.php bootstrap/cache/config.php
 art package:discover --quiet
 ok "composer · package:discover"
 
