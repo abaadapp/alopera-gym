@@ -14,6 +14,7 @@ use App\Modules\Inventory\Models\Stocktake;
 use App\Modules\Inventory\Models\StockTransfer;
 use App\Modules\Inventory\Models\Supplier;
 use App\Modules\Inventory\Models\SupplyRequest;
+use App\Modules\Inventory\Services\InventoryService;
 use App\Modules\Inventory\Services\OrderService;
 use App\Modules\Inventory\Services\StockService;
 use App\Modules\Inventory\Services\TransferService;
@@ -187,6 +188,54 @@ class InventoryTest extends TestCase
         $first = $this->asTenant($club, fn () => Stocktake::where('branch_id', $main->id)->sole());
         $this->actingAs($owner)->post(route('club.inventory.counts.cancel', $first))->assertSessionHasNoErrors();
         $this->actingAs($owner)->post(route('club.inventory.counts.store'), ['branch_id' => $main->id])->assertSessionHasNoErrors();
+    }
+
+    public function test_of_two_old_overlapping_counts_the_second_approval_is_refused_and_names_the_first(): void
+    {
+        $club = $this->club();
+        [$main] = $this->twoBranches($club);
+        $bar = $this->stocked($club, [$main->id => 10]);
+        $owner = $this->owner($club);
+        // Two open counts of the same product in one branch, as could exist before one open count per product and
+        // branch was enforced; both find 7 on a shelf the book says holds 10.
+        [$first, $second] = $this->asTenant($club, function () use ($main) {
+            $first = app(InventoryService::class)->startCount($main->id);
+            $second = $first->replicate();
+            $second->number = $first->number.'-B';
+            $second->save();
+            foreach ($first->lines()->get() as $line) {
+                $copy = $line->replicate();
+                $copy->stocktake_id = $second->id;
+                $copy->save();
+            }
+
+            return [$first->fresh(), $second->fresh()];
+        });
+        foreach ([$first, $second] as $count) {
+            $line = $this->asTenant($club, fn () => $count->lines()->sole());
+            $this->actingAs($owner)->put(route('club.inventory.counts.save', $count), ['counts' => [$line->id => ['counted' => 7]]])->assertSessionHasNoErrors();
+        }
+        // The till sells one while the counts wait for approval: book 9, shelf 6.
+        $this->asTenant($club, fn () => app(StockService::class)->move($bar, -1, 'sale', null, branchId: $main->id));
+        $this->travel(1)->seconds();
+
+        $this->actingAs($owner)->put(route('club.inventory.counts.save', $first), ['counts' => [], 'approve' => true])->assertSessionHasNoErrors();
+        $this->assertSame('6.000', $this->qty($club, $bar, $main->id), 'the 3 missing are taken once; the sale is not given back');
+
+        $this->actingAs($owner)->put(route('club.inventory.counts.save', $second), ['counts' => [], 'approve' => true])
+            ->assertSessionHasErrors(['counts' => 'الجرد '.$first->number.' لنفس المنتجات في هذا الفرع اعتُمد بعد بدء هذا الجرد، فاعتماد هذا يكرر تسوية المخزون. ألغِ الجرد '.$second->number.' وابدأ جردًا جديدًا.']);
+        $this->asTenant($club, function () use ($second) {
+            $this->assertSame(Stocktake::DRAFT, $second->fresh()->status, 'kept as it is, not deleted or corrected');
+            $this->assertSame(1, StockMovement::where('reference_type', 'stocktake')->count());
+        });
+        $this->assertSame('6.000', $this->qty($club, $bar, $main->id));
+
+        // It can be cancelled, and a new count of that moment counted and approved.
+        $this->actingAs($owner)->post(route('club.inventory.counts.cancel', $second))->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.inventory.counts.store'), ['branch_id' => $main->id])->assertSessionHasNoErrors();
+        $third = $this->asTenant($club, fn () => Stocktake::latest('id')->with('lines')->firstOrFail());
+        $this->actingAs($owner)->put(route('club.inventory.counts.save', $third), ['counts' => [$third->lines->sole()->id => ['counted' => 6]], 'approve' => true])->assertSessionHasNoErrors();
+        $this->assertSame('6.000', $this->qty($club, $bar, $main->id));
     }
 
     public function test_damage_and_loss_only_take_away_and_each_adjustment_has_its_own_number(): void
