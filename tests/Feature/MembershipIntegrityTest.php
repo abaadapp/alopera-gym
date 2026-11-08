@@ -97,6 +97,61 @@ class MembershipIntegrityTest extends TestCase
         });
     }
 
+    public function test_a_freeze_running_past_the_paid_renewal_s_start_keeps_the_renewal_waiting_until_it_resumes(): void
+    {
+        $club = $this->club();
+        $member = $this->member($club);
+        $plan = $this->plan($club, ['duration_value' => 10, 'duration_unit' => 'day', 'freeze_allowed' => true, 'max_freeze_days' => 30]);
+
+        $this->asTenant($club, function () use ($member, $plan) {
+            $current = $this->activeMembership(app(TenantContext::class)->require(), $member, $plan);
+            $renewal = $this->svc()->renew($member, $plan);
+            $this->pay($renewal);
+            $renewal = $renewal->fresh();
+            $this->assertSame(Membership::SCHEDULED, $renewal->status);
+
+            // Frozen for 30 days, well past the day the renewal was to start.
+            $this->svc()->freeze($current->fresh(), 30);
+            $this->svc()->runDailyTransitions($renewal->starts_on);
+            $this->assertSame(Membership::SCHEDULED, $renewal->fresh()->status, 'a frozen member\'s renewal does not start');
+            $this->assertSame(Membership::FROZEN, $current->fresh()->status);
+
+            // The freeze ends on its planned day: the period gets its 30 days back and the renewal follows it.
+            $this->travel(30)->days();
+            $this->svc()->runDailyTransitions(CarbonImmutable::today());
+            $current = $current->fresh();
+            $renewal = $renewal->fresh();
+            $this->assertSame(Membership::ACTIVE, $current->status);
+            $this->assertTrue($renewal->starts_on->eq($current->ends_on->addDay()), 'no two periods overlap');
+            $this->assertSame(Membership::SCHEDULED, $renewal->status);
+            $this->assertSame(1, Membership::where('member_id', $member->id)->where('status', Membership::ACTIVE)->count());
+        });
+    }
+
+    public function test_a_renewal_sold_or_paid_while_the_period_is_frozen_past_its_end_waits_for_it(): void
+    {
+        $club = $this->club();
+        $member = $this->member($club);
+        $plan = $this->plan($club, ['duration_value' => 10, 'duration_unit' => 'day', 'freeze_allowed' => true, 'max_freeze_days' => 30]);
+
+        $this->asTenant($club, function () use ($member, $plan) {
+            $current = $this->activeMembership(app(TenantContext::class)->require(), $member, $plan);
+            $this->svc()->freeze($current->fresh(), 30);
+            $this->travel(15)->days(); // frozen past its end date
+
+            $renewal = $this->svc()->renew($member, $plan);
+            $this->assertTrue($renewal->starts_on->eq($current->fresh()->ends_on->addDay()), 'it follows the frozen period, not today');
+            $this->pay($renewal);
+            $this->assertSame(Membership::SCHEDULED, $renewal->fresh()->status, 'paid, it still waits for the freeze to end');
+
+            $this->svc()->resume($current->fresh());
+            $current = $current->fresh();
+            $renewal = $renewal->fresh();
+            $this->assertTrue($current->ends_on->gte(CarbonImmutable::today()));
+            $this->assertTrue($renewal->starts_on->eq($current->ends_on->addDay()));
+        });
+    }
+
     public function test_an_upgrade_pushes_the_renewal_after_it_and_carries_the_future_bookings(): void
     {
         $club = $this->club();
