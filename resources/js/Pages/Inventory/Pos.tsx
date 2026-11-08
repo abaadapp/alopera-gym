@@ -18,6 +18,7 @@ import type { PrinterLike } from '@/lib/printing/types';
 import { describe, lineKey, lineTotal, payload, unitPrice, type AddonOption, type ChosenAddon } from '@/lib/addons';
 import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
+import { withVat } from '@/lib/vat';
 
 interface Product {
     id: number;
@@ -60,6 +61,8 @@ interface Props {
     branchId: number | null;
     branches: { id: number; name: string }[];
     requireDevice: boolean;
+    /** The club's VAT rate (%), added on top of each document as the server issues it. */
+    vatRate: number;
 }
 
 const chip = 'whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors touch:px-5 touch:py-2.5';
@@ -74,7 +77,7 @@ const plusChip = 'flex size-8 shrink-0 items-center justify-center rounded-lg bg
  * a Paymob link; its receipt printed on the till's thermal printer. Totals here guide the cashier; the server prices
  * the basket again, issues every invoice and records who sold what, where and on which device.
  */
-export default function Pos({ products, categories, plans, packages, can: allowed, device, branch, branchId, branches, requireDevice }: Props) {
+export default function Pos({ products, categories, plans, packages, can: allowed, device, branch, branchId, branches, requireDevice, vatRate }: Props) {
     const currency = useCurrency();
     const can = useCan();
     const m = (v: string | number) => money(v, currency);
@@ -166,7 +169,11 @@ export default function Pos({ products, categories, plans, packages, can: allowe
     const productsTotal = Math.round(cart.reduce((s, l) => s + (l.kind === 'product' ? lineAmount(l) : 0) * 1000, 0)) / 1000;
     const servicesTotal = Math.round(cart.reduce((s, l) => s + (l.kind !== 'product' ? lineAmount(l) : 0) * 1000, 0)) / 1000;
     const discountValue = allowed.discount ? Math.min(Number(discount || 0), productsTotal) : 0;
-    const total = Math.round((productsTotal - discountValue + servicesTotal) * 1000) / 1000;
+    // Each document (the products' sale, each membership, each package) is issued with VAT on top: the till charges that.
+    const productsDue = withVat(productsTotal - discountValue, vatRate);
+    const servicesDue = Math.round(cart.reduce((s, l) => s + (l.kind !== 'product' ? withVat(lineAmount(l), vatRate) : 0) * 1000, 0)) / 1000;
+    const total = Math.round((productsDue + servicesDue) * 1000) / 1000;
+    const taxValue = Math.round((total - (productsTotal - discountValue + servicesTotal)) * 1000) / 1000;
     const count = cart.reduce((n, l) => n + (l.kind === 'product' ? l.quantity : 1), 0);
 
     const reset = () => {
@@ -364,6 +371,9 @@ export default function Pos({ products, categories, plans, packages, can: allowe
                                 <Button type="submit" size="sm" disabled={!discountDraft}>تطبيق</Button>
                             </form>
                         ))}
+                        {taxValue > 0 && (
+                            <div className="flex items-center justify-between text-sm text-gray-600"><span>ضريبة القيمة المضافة (<span className="num">{number(vatRate, Number.isInteger(vatRate) ? 0 : 1)}</span>٪)</span><span className="font-medium text-gray-800 num">{m(taxValue)}</span></div>
+                        )}
                         <div className="flex items-center justify-between border-t border-dashed border-gray-200 pt-2">
                             <span className="font-bold text-gray-800">الإجمالي</span>
                             <span className="text-xl font-extrabold text-gray-900 num">{m(total)}</span>

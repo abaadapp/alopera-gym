@@ -47,7 +47,7 @@ class OrderController extends Controller
         if ($sale->paid_at && ! $request->user()->can('sales.refund')) {
             abort(403);
         }
-        $this->orders->cancel($sale, $data['reason'], $data['refund_method'] ?? null);
+        $this->orders->cancel($sale, $data['reason'], $data['refund_method'] ?? null, mayRefund: $request->user()->can('sales.refund'));
 
         return back()->with('success', 'أُلغي الطلب '.$sale->number.' وعادت الكميات إلى المخزون.');
     }

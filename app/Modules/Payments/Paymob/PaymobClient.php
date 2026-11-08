@@ -75,7 +75,8 @@ final class PaymobClient
                         'country' => 'OM',
                     ],
                     'special_reference' => $intent->reference,
-                    'expiration' => (int) config('services.paymob.intent_ttl_seconds', 3600),
+                    // Never longer than the intent (bounded by a website order's stock hold).
+                    'expiration' => max(60, (int) ceil(now()->diffInSeconds($intent->expires_at))),
                     'notification_url' => $notificationUrl,
                     'redirection_url' => $returnUrl,
                 ]);
