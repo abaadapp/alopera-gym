@@ -1,0 +1,94 @@
+name: Alopera Gym Development Task
+description: The task record, for features and fixes alike. Its Prompt is what gets executed.
+title: "[Gym] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One task, one branch, one pull request. Add the label `claude:ready` to have Claude Code execute it
+        (.github/workflows/claude-code-agent.yml). Claude never merges: merging into main deploys to production,
+        and only the owner decides it.
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      options:
+        - Feature
+        - Fix
+    validations:
+      required: true
+  - type: dropdown
+    id: status
+    attributes:
+      label: Status
+      options:
+        - Backlog
+        - Ready
+        - In Progress
+        - Blocked
+        - In Review
+        - Changes Requested
+        - Ready to Merge
+        - Merged
+        - Done
+    validations:
+      required: true
+  - type: dropdown
+    id: owner
+    attributes:
+      label: Owner
+      options:
+        - Udai
+        - Saad
+        - ChatGPT
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P0
+        - P1
+        - P2
+        - P3
+    validations:
+      required: true
+  - type: input
+    id: area
+    attributes:
+      label: Area / Files
+      description: Main module, domain, or files expected to be touched.
+  - type: input
+    id: branch
+    attributes:
+      label: Branch
+      description: Exact branch for this task. Never use main for implementation.
+      placeholder: "udai/fix/short-name"
+  - type: input
+    id: github_pr
+    attributes:
+      label: GitHub PR
+      description: Pull request URL when available.
+      placeholder: "https://github.com/abaadapp/alopera-gym/pull/123"
+  - type: input
+    id: depends_on
+    attributes:
+      label: Depends On
+      description: Issue number, branch, PR, or prerequisite task.
+      placeholder: "#123"
+  - type: textarea
+    id: prompt
+    attributes:
+      label: Prompt
+      description: Exact execution prompt for ChatGPT, Claude, or Codex.
+      placeholder: |
+        Work only on this task and its branch. Inspect the existing implementation first, identify the root cause or
+        the required behaviour, change only what the task needs, add tests, run them, and open a pull request to main.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Acceptance criteria, constraints, edge cases, and additional context.
