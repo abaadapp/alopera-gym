@@ -32,6 +32,9 @@ final class OrderService
     /** Paymob: made in Paymob's dashboard, out of the gateway's balance, and confirmed in finance once done. */
     public const REFUND_METHODS = ['cash', 'card', 'bank_transfer', 'other', 'paymob'];
 
+    /** A payment made at the checkout's last moment is confirmed by a webhook a little later: wait for it before releasing. */
+    public const PAYMENT_GRACE_MINUTES = 5;
+
     public function __construct(
         private readonly SaleLines $lines,
         private readonly InvoiceService $invoices,
@@ -231,7 +234,7 @@ final class OrderService
     {
         $count = 0;
         Sale::where('source', Sale::WEBSITE)->where('status', Sale::PENDING)->whereNull('paid_at')
-            ->whereNotNull('reserved_until')->where('reserved_until', '<', now())->orderBy('id')
+            ->whereNotNull('reserved_until')->where('reserved_until', '<', now()->subMinutes(self::PAYMENT_GRACE_MINUTES))->orderBy('id')
             ->each(function (Sale $sale) use (&$count) {
                 try {
                     $this->audit->as('system', null, 'scheduler', fn () => $this->cancel($sale, 'انتهت مهلة الدفع الإلكتروني'));
