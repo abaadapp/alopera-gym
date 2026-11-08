@@ -11,6 +11,7 @@ use App\Modules\Accounting\Services\AccountFunds;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\FinanceReports;
 use App\Modules\Accounting\Services\Ledger;
+use App\Modules\Finance\Models\CashShift;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\Invoice;
@@ -26,6 +27,7 @@ use App\Modules\Payroll\Models\PayrollRun;
 use ArrayObject;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
 
@@ -103,6 +105,29 @@ class AccountFundsTest extends TestCase
         $this->fund($club, 'bank', '15.000');
         $pay()->assertSessionHasNoErrors();
         $this->assertSame(['5.000', '0.000'], [$bill->fresh()->paid_total, $this->balance($club, $bank)]);
+    }
+
+    public function test_a_transfer_or_a_move_into_the_drawer_takes_only_what_the_account_holds(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $cash = $this->fund($club, 'cash', '200');
+        $bank = $this->asTenant($club, fn () => app(ChartOfAccounts::class)->account('bank'));
+        $transfer = fn (string $amount) => $this->actingAs($owner)->post(route('club.finance.transfers.store'), ['from_id' => $cash->id, 'to_id' => $bank->id, 'amount' => $amount, 'date' => today()->toDateString(), 'client_key' => (string) Str::uuid()]);
+
+        $transfer('1000')->assertSessionHasErrors('amount');
+        $this->assertSame('200.000', $this->balance($club, $cash), 'the box is not driven below zero');
+        $transfer('200')->assertSessionHasNoErrors();
+        $this->assertSame(['0.000', '200.000'], [$this->balance($club, $cash), $this->balance($club, $bank)]);
+
+        // Into a drawer's shift from the bank: only what the bank holds.
+        $drawer = $this->asTenant($club, fn () => Account::create(['parent_id' => app(ChartOfAccounts::class)->account('cash_and_banks')->id, 'code' => '1120', 'name' => 'درج الاستقبال', 'type' => 'asset', 'normal_side' => 'debit', 'kind' => 'cash', 'is_active' => true]));
+        $this->actingAs($owner)->post(route('club.cash-shifts.store'), ['account_id' => $drawer->id, 'opening_float' => '0', 'client_key' => (string) Str::uuid()])->assertSessionHasNoErrors();
+        $shift = $this->asTenant($club, fn () => CashShift::sole());
+        $move = fn (string $amount) => $this->actingAs($owner)->post(route('club.cash-shifts.move', $shift), ['direction' => 'in', 'amount' => $amount, 'counter_account_id' => $bank->id, 'reason' => 'فكّة', 'client_key' => (string) Str::uuid()]);
+        $move('500')->assertSessionHasErrors('amount');
+        $move('50')->assertSessionHasNoErrors();
+        $this->assertSame(['150.000', '50.000'], [$this->balance($club, $bank), $this->balance($club, $drawer)]);
     }
 
     public function test_salaries_are_not_paid_beyond_the_cash_box(): void
