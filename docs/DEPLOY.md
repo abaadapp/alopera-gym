@@ -75,6 +75,9 @@ sudo -u deploy php artisan storage:link
 sudo -u deploy php artisan config:cache && sudo -u deploy php artisan route:cache && sudo -u deploy php artisan view:cache && sudo -u deploy php artisan event:cache
 ln -sfn $A/app $A/current && systemctl reload php8.4-fpm && sudo -u deploy php $A/app/artisan queue:restart
 
+# مجلد حالة النشر (ROLLBACK.txt وDEPLOYED.txt وسجلات الترحيل) يملكه deploy: النظام القديم كان ينشئه بحساب root
+install -d -o deploy -g deploy $A/shared/deploy-state && chown -R deploy:deploy $A/shared/deploy-state
+
 # 4) حساب deploy يعيد تحميل PHP-FPM وحده
 echo 'deploy ALL=(root) NOPASSWD: /usr/bin/systemctl reload php8.4-fpm' > /etc/sudoers.d/alopera-deploy
 chmod 440 /etc/sudoers.d/alopera-deploy && visudo -c
