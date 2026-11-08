@@ -136,7 +136,7 @@ curl -s https://aloperagym.om/plans | grep -o '"domain":"[a-z.]*"' | sort -u    
 
 | المشكلة | الأمر |
 |---|---|
-| الكود | `sudo -u deploy bash /var/www/alopera-gym/current/scripts/rollback.sh` (الإصدار السابق) أو `rollback.sh <ts>` |
+| الكود | `sudo -u deploy bash /var/www/alopera-gym/app/scripts/rollback-code.sh <commit>` (الـcommit في `shared/deploy-state/ROLLBACK.txt`؛ docs/DEPLOY.md) |
 | Nginx | `sudo tar -xzf /root/nginx-before-domains-*.tar.gz -C / && sudo nginx -t && sudo systemctl reload nginx` |
 | قاعدة البيانات (نادرًا: الترحيلات لا تُعكس تلقائيًا) | استعادة آخر نسخة في `shared/backups/db-*.sql.gz` بعد إيقاف الطوابير، وبموافقة صاحب النظام |
 
