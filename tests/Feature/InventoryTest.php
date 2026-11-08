@@ -143,6 +143,52 @@ class InventoryTest extends TestCase
         $this->actingAs($counter->fresh())->put(route('club.inventory.counts.save', $second), ['counts' => [], 'approve' => true])->assertForbidden();
     }
 
+    public function test_approving_from_the_count_page_keeps_the_book_seen_when_counting(): void
+    {
+        $club = $this->club();
+        [$main] = $this->twoBranches($club);
+        $bar = $this->stocked($club, [$main->id => 10]);
+        $owner = $this->owner($club);
+
+        $this->actingAs($owner)->post(route('club.inventory.counts.store'), ['branch_id' => $main->id])->assertSessionHasNoErrors();
+        $count = $this->asTenant($club, fn () => Stocktake::with('lines')->firstOrFail());
+        $line = $count->lines->sole();
+        // Counted 10 on a shelf holding 10: nothing missing.
+        $this->actingAs($owner)->put(route('club.inventory.counts.save', $count), ['counts' => [$line->id => ['counted' => 10]]])->assertSessionHasNoErrors();
+        // The till sells 3 before the manager approves; shelf and book both say 7.
+        $this->asTenant($club, fn () => app(StockService::class)->move($bar, -3, 'sale', null, branchId: $main->id));
+
+        // The page sends every line again with the approval, as it does.
+        $this->actingAs($owner)->put(route('club.inventory.counts.save', $count), ['counts' => [$line->id => ['counted' => 10]], 'approve' => true])->assertSessionHasNoErrors();
+        $this->asTenant($club, function () use ($bar, $count) {
+            $this->assertSame(0, StockMovement::where('reference_type', 'stocktake')->count(), 'nothing was missing when counted');
+            $this->assertSame('7.000', $bar->fresh()->stock_quantity, 'the sold 3 are not added back');
+            $this->assertSame('10.000', $count->lines()->sole()->system_quantity);
+        });
+
+        // A quantity changed is counted again, against the book of that moment.
+        $this->actingAs($owner)->post(route('club.inventory.counts.store'), ['branch_id' => $main->id])->assertSessionHasNoErrors();
+        $second = $this->asTenant($club, fn () => Stocktake::latest('id')->with('lines')->firstOrFail());
+        $this->actingAs($owner)->put(route('club.inventory.counts.save', $second), ['counts' => [$second->lines->sole()->id => ['counted' => 6]], 'approve' => true])->assertSessionHasNoErrors();
+        $this->assertSame('6.000', $this->qty($club, $bar, $main->id));
+    }
+
+    public function test_one_open_count_per_product_and_branch(): void
+    {
+        $club = $this->club();
+        [$main, $khoud] = $this->twoBranches($club);
+        $this->stocked($club, [$main->id => 10, $khoud->id => 4]);
+        $owner = $this->owner($club);
+
+        $this->actingAs($owner)->post(route('club.inventory.counts.store'), ['branch_id' => $main->id])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.inventory.counts.store'), ['branch_id' => $main->id])->assertSessionHasErrors('products');
+        $this->actingAs($owner)->post(route('club.inventory.counts.store'), ['branch_id' => $khoud->id])->assertSessionHasNoErrors();
+
+        $first = $this->asTenant($club, fn () => Stocktake::where('branch_id', $main->id)->sole());
+        $this->actingAs($owner)->post(route('club.inventory.counts.cancel', $first))->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.inventory.counts.store'), ['branch_id' => $main->id])->assertSessionHasNoErrors();
+    }
+
     public function test_damage_and_loss_only_take_away_and_each_adjustment_has_its_own_number(): void
     {
         $club = $this->club();

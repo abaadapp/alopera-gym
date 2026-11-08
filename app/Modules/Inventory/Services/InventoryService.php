@@ -62,6 +62,12 @@ final class InventoryService
             if ($products->isEmpty()) {
                 throw new BusinessRuleException('stocktake.empty', 'لا توجد منتجات مربوطة بالمخزون لجردها.', 'products');
             }
+            // One open count per product and branch: two would each post the same difference.
+            $open = Stocktake::where('branch_id', $branchId)->where('status', Stocktake::DRAFT)
+                ->whereHas('lines', fn ($q) => $q->whereIn('product_id', $products->modelKeys()))->value('number');
+            if ($open) {
+                throw new BusinessRuleException('stocktake.open', 'يوجد جرد مفتوح لهذه المنتجات في هذا الفرع ('.$open.'): اعتمده أو ألغه أولًا.', 'products');
+            }
             $count = new Stocktake(['branch_id' => $branchId, 'number' => NumberSequence::next('stocktake'), 'notes' => $notes, 'created_by' => Auth::guard('web')->id()]);
             $count->forceFill(['status' => Stocktake::DRAFT])->save();
             $books = $this->stock->quantities($branchId);
@@ -92,7 +98,10 @@ final class InventoryService
                 if ($counted !== null && $counted < 0) {
                     throw new BusinessRuleException('stocktake.negative', 'الكمية المعدودة لا تكون سالبة.', 'counts');
                 }
-                $system = (float) ($books[$line->product_id] ?? 0);
+                // The book is the one seen when this quantity was counted: saved again unchanged (as approving does,
+                // with every line), it is kept, or the sales made since the count would be added back to the stock.
+                $unchanged = $counted !== null && $line->counted_quantity !== null && round((float) $line->counted_quantity, 3) === $counted;
+                $system = $unchanged ? (float) $line->system_quantity : (float) ($books[$line->product_id] ?? 0);
                 $line->update([
                     'system_quantity' => $system,
                     'counted_quantity' => $counted,
