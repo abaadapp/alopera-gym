@@ -22,4 +22,13 @@ describe('a document total with VAT, as the server issues it', () => {
     it('leaves an empty or fully discounted part at zero', () => {
         expect(withVat(0, 5)).toBe(0);
     });
+
+    it('matches what the server issues for an odd basket, so the total and the change match the money taken', () => {
+        // tests/Feature/PosBasketTest: three bars at 0.333 less 0.100, a plan of 12.345 and a package of 40, at 5%.
+        const docs = [withVat(0.999 - 0.1, 5), withVat(12.345, 5), withVat(40, 5)];
+        expect(docs).toEqual([0.944, 12.962, 42]);
+        const total = Math.round(docs.reduce((s, d) => s + d * 1000, 0)) / 1000;
+        expect(total).toBe(55.906);
+        expect(Math.round((60 - total) * 1000) / 1000).toBe(4.094); // the change from 60, as the payment dialog works it out
+    });
 });
