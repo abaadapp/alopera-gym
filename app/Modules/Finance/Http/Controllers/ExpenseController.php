@@ -26,6 +26,7 @@ use App\Modules\Finance\Services\CashShifts;
 use App\Modules\Inventory\Models\Supplier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -184,7 +185,9 @@ class ExpenseController extends Controller
         return $funds->exclusive($account, function () use ($funds, $account, $amount, $save) {
             $funds->covers($account, $amount);
 
-            return $save();
+            // The expense and its number are saved whole or not at all: a request that breaks after the insert must not
+            // leave an expense the nightly accounting:sync would post later, below what the account held.
+            return DB::transaction(fn () => $save());
         });
     }
 

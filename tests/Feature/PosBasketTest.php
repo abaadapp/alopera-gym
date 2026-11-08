@@ -44,12 +44,14 @@ class PosBasketTest extends TestCase
         [$water, $plan, $package, $member] = $this->shop($club);
         $cashier = $this->staff($club, 'cashier');
 
-        $this->actingAs($cashier)->post(route('club.pos.checkout'), [
+        $basket = [
             'items' => [['product_id' => $water->id, 'quantity' => 2]],
             'memberships' => [['plan_id' => $plan->id]],
             'packages' => [['package_id' => $package->id]],
             'member_id' => $member->id, 'payment_method' => 'cash', 'client_key' => 'basket-1',
-        ])->assertSessionHasNoErrors()->assertSessionHas('pos_result', fn ($r) => count($r['documents']) === 3 && $r['total'] === '76.000');
+        ];
+        $this->actingAs($cashier)->post(route('club.pos.checkout'), $basket)
+            ->assertSessionHasNoErrors()->assertSessionHas('pos_result', fn ($r) => count($r['documents']) === 3 && $r['total'] === '76.000');
 
         $this->asTenant($club, function () use ($member, $cashier) {
             // The first membership carries the sign-up fee; it is active because its invoice is paid.
@@ -63,10 +65,9 @@ class PosBasketTest extends TestCase
             $this->assertSame($cashier->id, Sale::sole()->cashier_id);
         });
 
-        // The same basket again (a double click, a retried request) is the same sale, not a second one.
-        $this->actingAs($cashier)->post(route('club.pos.checkout'), [
-            'memberships' => [['plan_id' => $plan->id]], 'member_id' => $member->id, 'payment_method' => 'cash', 'client_key' => 'basket-1',
-        ])->assertSessionHasNoErrors();
+        // The same basket again (a double click, a retried request) is the same sale, not a second one. (The same key
+        // with another basket is refused: PosCheckoutOnceTest.)
+        $this->actingAs($cashier)->post(route('club.pos.checkout'), $basket)->assertSessionHasNoErrors();
         $this->asTenant($club, fn () => $this->assertSame(3, Invoice::count()));
 
         // Renewing at the counter: the new period starts the day after the current one ends.

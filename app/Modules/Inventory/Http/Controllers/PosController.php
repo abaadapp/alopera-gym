@@ -28,7 +28,6 @@ use App\Modules\Payments\Services\OnlinePaymentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -126,21 +125,14 @@ class PosController extends Controller
         }
         $branch = $this->sellingBranch($device, isset($data['branch_id']) ? (int) $data['branch_id'] : null);
 
-        // One basket, one sale: a double click or a retried request returns the first result, never a second sale.
-        $key = isset($data['client_key']) ? 'pos-basket:'.$this->tenants->id().':'.$data['client_key'] : null;
-        $documents = $key ? Cache::get($key) : null;
-        if ($documents === null) {
-            $run = fn () => Cache::get($key ?? '') ?? $checkout->checkout([
-                'items' => $data['items'] ?? [], 'memberships' => $data['memberships'] ?? [], 'packages' => $data['packages'] ?? [],
-                'method' => $data['payment_method'], 'member' => isset($data['member_id']) ? Member::find($data['member_id']) : null,
-                'discount' => $data['discount'] ?? 0, 'branch_id' => $branch, 'card_reference' => $data['card_reference'] ?? null,
-                'customer_name' => $data['customer_name'] ?? null, 'device' => $device, 'client_key' => $data['client_key'] ?? null,
-            ]);
-            $documents = $key ? Cache::lock($key.':lock', 30)->block(15, $run) : $run();
-            if ($key) {
-                Cache::put($key, $documents, now()->addDay());
-            }
-        }
+        // One basket, one sale: a double click, a retried request or an answer lost on the way returns the first sale's
+        // documents, never a second sale. PosCheckout keeps the basket's key with its result in the database.
+        $documents = $checkout->checkout([
+            'items' => $data['items'] ?? [], 'memberships' => $data['memberships'] ?? [], 'packages' => $data['packages'] ?? [],
+            'method' => $data['payment_method'], 'member' => isset($data['member_id']) ? Member::find($data['member_id']) : null,
+            'discount' => $data['discount'] ?? 0, 'branch_id' => $branch, 'card_reference' => $data['card_reference'] ?? null,
+            'customer_name' => $data['customer_name'] ?? null, 'device' => $device, 'client_key' => $data['client_key'] ?? null,
+        ]);
 
         $total = array_reduce($documents, fn ($sum, $d) => Money::add($sum, $d['total']), '0');
         $sale = collect($documents)->firstWhere('kind', 'sale');

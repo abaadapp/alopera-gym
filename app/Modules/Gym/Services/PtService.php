@@ -22,6 +22,11 @@ use Illuminate\Support\Facades\DB;
 /** Personal training: packages sold, then sessions booked inside the trainer's availability. */
 final class PtService
 {
+    /** Where the booking locks sit among PostgreSQL's advisory locks: (TRAINER_LOCKS, trainer id), (MEMBER_LOCKS, member id). */
+    public const TRAINER_LOCKS = 74202;
+
+    public const MEMBER_LOCKS = 74203;
+
     public function __construct(
         private readonly InvoiceService $invoices,
         private readonly AuditLogger $audit,
@@ -118,6 +123,13 @@ final class PtService
 
             $minutes = (int) (PtPackage::withTrashed()->whereKey($subscription->pt_package_id)->value('session_minutes') ?: 60);
             $endsAt = $startsAt->addMinutes($minutes);
+
+            // One booking at a time for this trainer and for this member, until this transaction ends: without it two
+            // bookings at once (two members, or one member's two packages) both find the hour free and both are saved.
+            // PostgreSQL transaction locks — let go at commit or rollback, shared by every process and server; always
+            // the trainer first, then the member, so two bookings never wait on each other in a circle.
+            DB::select('select pg_advisory_xact_lock(?, ?)', [self::TRAINER_LOCKS, $trainerId]);
+            DB::select('select pg_advisory_xact_lock(?, ?)', [self::MEMBER_LOCKS, $subscription->member_id]);
 
             $this->assertTrainerFree($trainerId, $startsAt, $endsAt);
             $this->assertMemberFree($subscription->member_id, $startsAt, $endsAt);
