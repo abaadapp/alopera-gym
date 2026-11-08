@@ -88,6 +88,10 @@ class PosCheckoutOnceTest extends TestCase
         $this->actingAs($cashier)->post(route('club.pos.checkout'), [
             'memberships' => $lines['memberships'], 'member_id' => $member, 'payment_method' => 'cash', 'client_key' => 'basket-1',
         ])->assertSessionHasErrors('items');
+        // The first sale may be the one whose answer was lost: the cashier is sent to check it, not to sell again.
+        $message = session('errors')->first('items');
+        $this->assertStringContainsString('مبيعات اليوم', $message);
+        $this->assertStringNotContainsString('أرسل السلة من جديد', $message);
 
         $this->assertSame([1, 0, 0, 1, 1], $this->sold($club), 'nothing sold for the second basket, and no other sale handed back');
     }

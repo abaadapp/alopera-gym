@@ -110,7 +110,7 @@ final class PosCheckout
         } catch (UniqueConstraintViolationException) {
             $first = PosCheckoutKey::where('client_key', $key)->firstOrFail();
             if (! hash_equals($first->fingerprint, $fingerprint)) {
-                throw new BusinessRuleException('pos.basket_reused', 'رقم هذه السلة استُخدم لعملية بيع أخرى. أعد فتح نقطة البيع ثم أرسل السلة من جديد.', 'items');
+                throw new BusinessRuleException('pos.basket_reused', 'رقم هذه السلة بيعت به سلة أخرى، وقد يكون البيع الأول تمّ دون أن يصل ردّه. راجع مبيعات اليوم قبل أن تبيع من جديد.', 'items');
             }
 
             return $first->documents ?? [];
