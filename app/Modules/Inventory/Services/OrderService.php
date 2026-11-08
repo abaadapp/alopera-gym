@@ -244,8 +244,16 @@ final class OrderService
         return $count;
     }
 
+    /**
+     * The invoice is locked before the order, the order every payment takes (the invoice, then the order through
+     * InvoicePaid): a cancellation and a Paymob callback at once then wait for each other instead of deadlocking.
+     */
     private function lockOrder(Sale $sale): Sale
     {
+        $invoiceId = Sale::whereKey($sale->id)->value('invoice_id'); // set once, when the order is placed
+        if ($invoiceId) {
+            Invoice::whereKey($invoiceId)->lockForUpdate()->first();
+        }
         $sale = Sale::whereKey($sale->id)->lockForUpdate()->firstOrFail();
         if ($sale->source !== Sale::WEBSITE || $sale->status !== Sale::PENDING) {
             throw new BusinessRuleException('order.closed', 'الطلب مغلق: سُلّم أو أُلغي.');
