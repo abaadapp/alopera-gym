@@ -1,0 +1,34 @@
+name: Main Gate
+
+# After a merge into main: the tests are not run again. The gate proves that main's tree is the tree a pull request's
+# CI passed on (its pr-proof), and fails for a direct push or for a merge whose result was not tested. Deploy Main
+# starts only when this succeeds (.github/workflows/deploy-main.yml).
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+concurrency:
+  group: main-gate-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: شجرة main هي ما اجتاز CI الطلب
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: إثبات الشجرة المختبَرة
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MAIN_SHA: ${{ github.sha }}
+        run: bash .github/scripts/main-gate-verify.sh

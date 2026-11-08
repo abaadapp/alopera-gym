@@ -1,80 +1,138 @@
 #!/usr/bin/env bash
-# Release deploy on the droplet (run as the deploy user):
-#   /var/www/alopera-gym/current/scripts/deploy.sh [git-ref]      deploy a version tag (vX.Y.Z) or a branch
-#   scripts/rollback.sh                                            back to the previous release
-# Layout: /var/www/alopera-gym/{releases/<ts>, shared/{.env,storage,backups}, current -> releases/<ts>}
-# The database, shared/.env (with APP_KEY) and shared/storage (logos, uploads, chat files) are never replaced: each
-# release links to them. The database is dumped to shared/backups before migrating (SKIP_BACKUP=1 to skip).
-# A version tag's built pages are downloaded from its GitHub release (built by CI, so the 1 GB droplet does not run
-# npm); a branch, or a tag without them, is built here as before (BUILD_ON_SERVER=0 refuses that instead).
+# Production deploy, on the droplet, as deploy (never root), in the one working tree /var/www/alopera-gym/app
+# (/var/www/alopera-gym/current points at it, so Nginx is unchanged).
+#
+# Started by GitHub Actions (Deploy Main) over SSH: the deploy key in ~deploy/.ssh/authorized_keys runs this script
+# and nothing else (command=). By hand, as deploy:   bash /var/www/alopera-gym/app/scripts/deploy.sh
+#
+# In order: pull main · PHP dependencies · build the pages aside, then swap them in · migrate (no database dump
+# before) · caches, reload PHP-FPM and the queue worker · preflight (reported, does not stop the deploy) · the site
+# must answer 200 · tag. The last line says what runs now: "تمّ: <from> → <to> (<version>)".
+# Going back is by hand, code only: scripts/rollback-code.sh <commit> (the commit is in shared/deploy-state/ROLLBACK.txt).
 set -euo pipefail
 
-APP=/var/www/alopera-gym
-REPO=${REPO:-https://github.com/abaadapp/alopera-gym.git}
-REF=${1:-main}
-TS=$(date +%Y%m%d%H%M%S)
-REL=$APP/releases/$TS
+# git pull rewrites this very file while bash is reading it: run a copy of it instead.
+if [[ "${DEPLOY_DETACHED:-}" != "1" ]]; then
+    SELF="$(mktemp "${TMPDIR:-/tmp}/alopera-deploy.XXXXXX")"
+    cat "${BASH_SOURCE[0]}" > "$SELF"
+    DEPLOY_DETACHED=1 exec bash "$SELF" "$@"
+fi
+[[ "$(basename "${BASH_SOURCE[0]}")" == alopera-deploy.* ]] && trap 'rm -f "${BASH_SOURCE[0]}"' EXIT
 
-# The shared files must already be there: this script never makes or replaces the production .env.
-[ -f "$APP/shared/.env" ] || { echo "✗ $APP/shared/.env is missing: nothing deployed"; exit 1; }
-[ -d "$APP/shared/storage" ] || { echo "✗ $APP/shared/storage is missing: nothing deployed"; exit 1; }
+APP_DIR="${APP_DIR:-/var/www/alopera-gym/app}"
+BRANCH="${BRANCH:-main}"
+STATE_DIR="${STATE_DIR:-/var/www/alopera-gym/shared/deploy-state}"
+HEALTH_URL="${HEALTH_URL:-https://app.aloperagym.om/up}"
+PHP_BIN="${PHP_BIN:-php}"
+RELOAD_FPM="${RELOAD_FPM:-sudo -n /usr/bin/systemctl reload php8.4-fpm}"
+export npm_config_cache="${NPM_CACHE:-$HOME/.npm}"
 
-echo "→ cloning $REF into $REL"
-git clone --depth 1 --branch "$REF" "$REPO" "$REL"
-git -C "$REL" rev-parse HEAD > "$REL/REVISION"
+step() { printf '\n\033[1m▸ %s\033[0m\n' "$*"; }
+ok()   { printf '  \033[32m✓\033[0m %s\n' "$*"; }
+warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
+die()  { printf '\n\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
+art()  { "$PHP_BIN" "$APP_DIR/artisan" "$@"; }
 
-ln -sfn "$APP/shared/.env" "$REL/.env"
-rm -rf "$REL/storage" && ln -sfn "$APP/shared/storage" "$REL/storage"
+[[ "$(id -u)" != 0 ]] || die "not as root: the deploy runs as deploy, who owns $APP_DIR (docs/DEPLOY.md)"
+[[ -d "$APP_DIR/.git" ]] || die "no git working tree in $APP_DIR: see the one-time setup in docs/DEPLOY.md"
+[[ -O "$APP_DIR/.git" ]] || die "$(id -un) does not own $APP_DIR/.git: nothing is deployed into a tree owned by someone else"
 
-cd "$REL"
-composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+cd "$APP_DIR"
+FROM="$(git rev-parse --short HEAD)"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$STATE_DIR"
+printf 'commit before the deploy of %s: %s\nback (code only): bash %s/scripts/rollback-code.sh %s\nno database dump was taken before this deploy: going back with the code does not undo its migrations\n' \
+    "$STAMP" "$FROM" "$APP_DIR" "$FROM" > "$STATE_DIR/ROLLBACK.txt"
 
-# A file of the tag's GitHub release: by its public link, or, when that link fails (GitHub has answered 504 there
-# while the rest of the site worked), by the API, which serves the same file without signing in. Checked by sha256.
-fetch_asset() {
-    local name=$1 dest=$2 api
-    curl -fsSL --retry 2 -o "$dest" "${REPO%.git}/releases/download/$REF/$name" && return 0
-    api=$(curl -fsSL "https://api.github.com/repos/$(basename "$(dirname "$REPO")")/$(basename "$REPO" .git)/releases/tags/$REF" \
-        | php -r '$d = json_decode(stream_get_contents(STDIN), true); foreach ($d["assets"] ?? [] as $a) { if ($a["name"] === $argv[1]) { echo $a["url"]; } }' "$name") || return 1
-    [ -n "$api" ] && echo "  (public link failed: $name from the GitHub API)" && curl -fsSL --retry 2 -H 'Accept: application/octet-stream' -o "$dest" "$api"
-}
-
-if [[ "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && fetch_asset build.tar.gz /tmp/alopera-build-$TS.tar.gz \
-    && fetch_asset build.tar.gz.sha256 /tmp/alopera-build-$TS.tar.gz.sha256 \
-    && (cd /tmp && sed "s#build.tar.gz#alopera-build-$TS.tar.gz#" alopera-build-$TS.tar.gz.sha256 | sha256sum -c --quiet -); then
-    echo "→ built pages from the $REF release"
-    tar -xzf /tmp/alopera-build-$TS.tar.gz -C public
-    rm -f /tmp/alopera-build-$TS.tar.gz /tmp/alopera-build-$TS.tar.gz.sha256
-elif [ "${BUILD_ON_SERVER:-1}" = "1" ]; then
-    echo "→ building the pages here (no release build for $REF)"
-    npm ci --no-audit --no-fund
-    npm run build
-    rm -rf node_modules
+step "سحب $BRANCH"
+git fetch --tags --force --quiet origin
+git pull --ff-only --quiet origin "$BRANCH"
+TO="$(git rev-parse --short HEAD)"
+if [[ "$FROM" == "$TO" ]]; then
+    ok "nothing new ($TO): built and cached again all the same"
 else
-    echo "✗ no release build for $REF and BUILD_ON_SERVER=0: nothing deployed"; exit 1
-fi
-[ -f public/build/manifest.json ] || { echo "✗ public/build/manifest.json missing: nothing deployed"; exit 1; }
-
-if [ "${SKIP_BACKUP:-0}" != "1" ]; then
-    echo "→ database backup before migrating"
-    bash "$REL/scripts/backup-database.sh"
+    ok "$FROM → $TO"
+    git --no-pager log --oneline "$FROM..$TO" | sed 's/^/    /'
 fi
 
-php artisan migrate --force
-php artisan storage:link --force
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
-php artisan event:cache
+step "اعتماديات PHP"
+composer install --no-dev --optimize-autoloader --no-interaction --no-scripts --quiet
+# What composer's own post-autoload-dump does first: the cached package lists may name packages no longer installed
+# (removed, or dev only), and artisan could not even start to rebuild them.
+rm -f bootstrap/cache/packages.php bootstrap/cache/services.php bootstrap/cache/config.php
+art package:discover --quiet
+ok "composer (no scripts) · package:discover"
 
-# Release gate: production settings and no usable demo accounts. A FAIL stops here, before the switch.
-php artisan platform:preflight
+step "بناء الواجهة"
+npm ci --no-audit --no-fund --silent
+rm -rf public/build.new public/build.old
+npm run build -- --outDir public/build.new --emptyOutDir 2>&1 | tail -3
+[[ -f public/build.new/manifest.json ]] || { rm -rf public/build.new; die "the build made no manifest: stopped, the live pages are untouched"; }
+if [[ -d public/build ]]; then mv public/build public/build.old; fi
+mv public/build.new public/build || { mv public/build.old public/build; die "swapping the pages failed: the old ones are back"; }
+rm -rf public/build.old
+ok "pages built aside, then swapped in"
 
-ln -sfn "$REL" "$APP/current"
-# RELOAD_FPM=0: the caller reloads PHP-FPM itself (scripts/auto-deploy.sh runs this as deploy, then reloads as root).
-[ "${RELOAD_FPM:-1}" = "0" ] || sudo systemctl reload php8.4-fpm
-php artisan queue:restart
+step "الترحيلات"
+MIGRATE_LOG="$STATE_DIR/migrate-$STAMP.log"
+( umask 077; : > "$MIGRATE_LOG" )
+MIGRATE_RC=0
+art migrate --force > "$MIGRATE_LOG" 2>&1 || MIGRATE_RC=$?
+MIGRATED="$(grep -E '^[[:space:]]*[0-9]{4}_[0-9]{2}_[0-9]{2}_[0-9]{6}_[^ ]+ .*(DONE|FAIL)[[:space:]]*$' "$MIGRATE_LOG" \
+    | sed -E 's/^[[:space:]]*([^ ]+) .*(DONE|FAIL)[[:space:]]*$/\1  \2/' || true)"
+[[ -z "$MIGRATED" ]] || sed 's/^/    /' <<<"$MIGRATED"
+(( MIGRATE_RC == 0 )) || die "the migrations failed: stopped before the caches and the PHP reload.
+What ran before the failure stays in the database, and no dump brings it back. The whole error: $MIGRATE_LOG"
+if [[ -n "$MIGRATED" ]]; then
+    warn "ran with no dump before them: what a migration dropped, renamed or converted is not brought back by going back with the code"
+elif grep -q 'Nothing to migrate' "$MIGRATE_LOG"; then
+    ok "no new migration"
+else
+    warn "could not read from migrate's output what ran: see $MIGRATE_LOG"
+fi
 
-# keep the last 5 releases
-ls -1dt $APP/releases/* | tail -n +6 | xargs -r rm -rf
-echo "✓ deployed $REF ($TS, $(cut -c1-7 "$REL/REVISION"))"
+step "الذاكرة المؤقتة"
+art config:cache --quiet
+art route:cache --quiet
+art view:cache --quiet
+art event:cache --quiet
+$RELOAD_FPM
+art queue:restart --quiet
+ok "config · route · view · event · php-fpm · queue worker"
+
+step "فحص ما بعد النشر"
+set +e
+art platform:preflight
+PREFLIGHT=$?
+set -e
+
+step "الموقع"
+CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$HEALTH_URL" || true)"
+if [[ "$CODE" == "200" ]]; then
+    ok "$HEALTH_URL → 200"
+else
+    die "the site answers ${CODE:-000}. Put the code back by hand; the database is not touched:
+    bash $APP_DIR/scripts/rollback-code.sh $FROM
+then revert the change on main itself (Revert on GitHub), or the next deploy brings the same code back.
+No dump was taken before this deploy: what its migrations changed stays, and is fixed by a new migration."
+fi
+
+step "الوسم"
+if EXISTING="$(git describe --exact-match --tags --match 'v0.*' HEAD 2>/dev/null)" && [[ "$EXISTING" =~ ^v0\.[0-9]+$ ]]; then
+    ok "already tagged: $EXISTING"
+    VERSION="$EXISTING"
+else
+    LAST="$(git tag --list 'v0.*' | sed -E 's/^v0\.([0-9]+).*/\1/' | grep -E '^[0-9]+$' | sort -n | tail -1 || true)"
+    VERSION="v0.$(( ${LAST:-0} + 1 ))"
+    if git -c user.name='alopera-deploy' -c user.email='deploy@aloperagym.om' \
+         tag -a "$VERSION" -m "نُشر على الإنتاج $(date +%Y-%m-%d\ %H:%M)" 2>/dev/null; then
+        ok "$VERSION → $TO (on the droplet; Deploy Main pushes the tag to GitHub)"
+    else
+        warn "could not make the tag $VERSION: the deploy is done all the same"
+    fi
+fi
+
+printf '%s\n%s\n%s\n' "$VERSION" "$TO" "$(date -Is)" > "$STATE_DIR/DEPLOYED.txt"
+printf '\n\033[1mتمّ: %s → %s (%s)\033[0m\n' "$FROM" "$TO" "$VERSION"
+[[ $PREFLIGHT -eq 0 ]] || printf '\033[33m! preflight reports blocking issues above: the deploy is done, the issues are yours to decide\033[0m\n'
+printf 'to go back: %s\n' "$STATE_DIR/ROLLBACK.txt"
