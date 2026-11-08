@@ -1,0 +1,11 @@
+# /etc/systemd/system/alopera-auto-deploy.service — one run of scripts/auto-deploy.sh (see docs/AUTO-DEPLOY.md).
+[Unit]
+Description=Alopera Gym: deploy the newest version tag of main
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/alopera-auto-deploy
+Nice=10
+TimeoutStartSec=20min

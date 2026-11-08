@@ -19,6 +19,6 @@ fi
 
 echo "→ $(basename "$CURRENT") → $(basename "$TARGET") ($(cut -c1-7 "$TARGET/REVISION" 2>/dev/null || echo '?'))"
 ln -sfn "$TARGET" "$APP/current"
-sudo systemctl reload php8.4-fpm
+[ "${RELOAD_FPM:-1}" = "0" ] || sudo systemctl reload php8.4-fpm   # RELOAD_FPM=0 when root reloads it
 php "$APP/current/artisan" queue:restart
 echo "✓ rolled back to $(basename "$TARGET")"

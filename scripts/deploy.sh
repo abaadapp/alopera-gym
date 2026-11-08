@@ -71,7 +71,8 @@ php artisan event:cache
 php artisan platform:preflight
 
 ln -sfn "$REL" "$APP/current"
-sudo systemctl reload php8.4-fpm
+# RELOAD_FPM=0: the caller reloads PHP-FPM itself (scripts/auto-deploy.sh runs this as deploy, then reloads as root).
+[ "${RELOAD_FPM:-1}" = "0" ] || sudo systemctl reload php8.4-fpm
 php artisan queue:restart
 
 # keep the last 5 releases

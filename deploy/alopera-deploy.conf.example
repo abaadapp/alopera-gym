@@ -1,0 +1,4 @@
+# /etc/alopera-deploy.conf — settings of scripts/auto-deploy.sh (root-owned, chmod 600). No secrets here.
+REPO=https://github.com/<owner>/alopera-gym.git
+# Every address must answer after a deploy, or the previous release goes back.
+CHECK_URLS="https://aloperagym.om/ https://aloperagym.om/up https://app.aloperagym.om/login https://app.aloperagym.om/up"
