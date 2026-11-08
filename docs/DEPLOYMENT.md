@@ -37,12 +37,12 @@ cp deploy/supervisor/alopera-gym-worker.conf /etc/supervisor/conf.d/ && supervis
 crontab -u deploy deploy/crontab
 
 # 5) أول إصدار (deploy)
-sudo -u deploy bash scripts/deploy.sh main
+sudo -u deploy bash /var/www/alopera-gym/app/scripts/deploy.sh   # بعد الإعداد في docs/DEPLOY.md
 
 # 6) النادي وحساب صاحب النشاط (مرة واحدة)
 sudo -u deploy php /var/www/alopera-gym/current/artisan gym:install --name="Alopera Gym" --slug=alopera --owner-name="..." --owner-email=owner@alopera.om
 
-# 7) فحص الجاهزية (يشغّله deploy.sh تلقائيًا قبل تبديل الإصدار)
+# 7) فحص الجاهزية (يشغّله deploy.sh بعد كل نشر ويبلّغ عن الموانع)
 sudo -u deploy php /var/www/alopera-gym/current/artisan platform:preflight
 ```
 
@@ -80,8 +80,7 @@ sudo -u deploy php /var/www/alopera-gym/current/artisan platform:preflight
 - استعادة بيانات النادي: «الإعدادات ← النسخ الاحتياطي ← استعادة» (تأكيد بكتابة معرّف النادي، ونسخة أمان تلقائية قبلها).
 
 ## التحديثات
-`scripts/deploy.sh <tag|branch>` — إصدار جديد في `releases/`، تشغيل الترحيلات، تخزين الإعدادات مؤقتًا، تبديل الرابط،
-إعادة تحميل PHP-FPM وإعادة تشغيل العمّال. الرجوع: أعيدي توجيه `current` إلى الإصدار السابق.
+النشر يبدأ بنفسه بعد الدمج في `main`: راجع `docs/DEPLOY.md` (الخطوات، والإعداد على الخادم مرة واحدة، والرجوع اليدوي بـ`scripts/rollback-code.sh`).
 
 ## المراقبة
 - `/up` لفحص الصحة (DigitalOcean Uptime).

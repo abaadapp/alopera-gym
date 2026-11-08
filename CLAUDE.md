@@ -25,5 +25,4 @@ Read `docs/ARCHITECTURE.md` first.
 - Demo data: `php artisan migrate:fresh --seed` (refuses to run in production)
 - Release gate: `php artisan platform:preflight` (run by `scripts/deploy.sh`; fails locally by design)
 - Push + version tag: `scripts/release.sh` (`--dry-run` to preview); bumps from conventional-commit subjects, refuses env files and keys
-- CI tags every push to main that passes the tests, pull requests merged on GitHub included (`scripts/ci-tag.sh`, same bump rule), and publishes the tag's release with the built pages
-- The droplet deploys each new tag by itself within minutes (`scripts/auto-deploy.sh`, systemd timer; docs/AUTO-DEPLOY.md): merging to main IS deploying to production — only with the owner's explicit approval
+- Deploy (docs/DEPLOY.md): CI runs on pull requests and ends with a proof of the tested tree; on main, Main Gate checks main's tree is that tree; Deploy Main then runs `scripts/deploy.sh` on the droplet over SSH and tags what it deployed (v0.N). Merging to main IS deploying to production — only with the owner's explicit approval. Going back is by hand: `scripts/rollback-code.sh <commit>`

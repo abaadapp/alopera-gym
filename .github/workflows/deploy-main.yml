@@ -1,0 +1,149 @@
+name: Deploy Main
+
+# Production deploy, by itself, of what passed the gate.
+#
+# - Starts when Main Gate succeeds on main (workflow_run), not on the push: the push starts with the gate, before
+#   anything is proven. And by hand (workflow_dispatch): deploy what is on main now, on purpose.
+# - The head of main must be the commit the gate proved; if a newer push came meanwhile, it is left to that push's
+#   own gate and deploy.
+# - The deploy key only opens the deploy: in ~deploy/.ssh/authorized_keys it carries command=, so whatever is sent,
+#   the droplet runs scripts/deploy.sh and nothing else, as deploy (not root). Secrets do not reach pull requests from
+#   forks; the repository is public.
+# - The tag is put on what the droplet says it now runs (the deploy script's last line), after the checks pass.
+#
+# Secrets: DEPLOY_SSH_KEY (the private key), DEPLOY_KNOWN_HOSTS (the droplet's host key). Setup: docs/DEPLOY.md.
+
+on:
+  workflow_run:
+    workflows: [Main Gate]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# Two deploys pulling at once: the running one is waited for, never cancelled (half a deploy leaves the site half new).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  HOST: 165.245.218.225
+  SITE: aloperagym.om
+  PANEL: app.aloperagym.om
+
+jobs:
+  deploy:
+    name: نشر على الإنتاج ووسمه
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: رأس main هو ما أثبتته البوابة؟
+        if: github.event_name == 'workflow_run'
+        env:
+          CHECKED: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          HEAD=$(git rev-parse origin/main)
+          if [ "$HEAD" != "$CHECKED" ]; then
+            echo "::notice::main (${HEAD}) is newer than what the gate proved (${CHECKED}): left to its own gate"
+            echo "SKIP=1" >> "$GITHUB_ENV"
+          fi
+
+      - name: تهيئة مفتاح النشر
+        if: env.SKIP != '1'
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          [ -n "$KEY" ]   || { echo "::error::the secret DEPLOY_SSH_KEY is not set (docs/DEPLOY.md)"; exit 1; }
+          [ -n "$KNOWN" ] || { echo "::error::the secret DEPLOY_KNOWN_HOSTS is not set (docs/DEPLOY.md)"; exit 1; }
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY"   > ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+
+      # No command is sent: command= on the droplet runs the deploy. -T: the key allows no terminal. The output is
+      # kept: its last line says what runs now ("تمّ: <from> → <to> (<version>)").
+      - name: النشر
+        if: env.SKIP != '1'
+        run: |
+          set -euo pipefail
+          ssh -T -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=30 \
+              "deploy@${HOST}" 2>&1 | tee deploy.log
+          test "${PIPESTATUS[0]}" -eq 0
+
+      # The droplet checked itself; this is a second look from outside, by the droplet's address (--resolve keeps DNS
+      # out of it and still checks the certificate by name). The website's home page reads the database (its plans).
+      - name: التحقق من الموقع
+        if: env.SKIP != '1'
+        run: |
+          set -uo pipefail
+          check() {
+            local host=$1 path=$2 code i
+            for i in 1 2 3 4 5 6; do
+              code=$(curl -sS -o /dev/null -w '%{http_code}' --resolve "${host}:443:${HOST}" \
+                       --connect-timeout 10 --max-time 30 "https://${host}${path}" 2>curl.err || true)
+              [ "$code" = "200" ] && { echo "https://${host}${path} → 200"; return 0; }
+              echo "attempt ${i}: https://${host}${path} → ${code} $(cat curl.err)"
+              sleep 15
+            done
+            echo "::error::https://${host}${path} does not answer 200 after the deploy"
+            return 1
+          }
+          failed=0
+          check "$SITE" /up || failed=1
+          check "$SITE" / || failed=1
+          check "$PANEL" /up || failed=1
+          check "$PANEL" /login || failed=1
+          exit $failed
+
+      - name: قراءة ما يعمل على الخادم
+        if: env.SKIP != '1'
+        id: deployed
+        env:
+          CHECKED: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          short=$(sed 's/\x1b\[[0-9;]*m//g' deploy.log | grep -oE 'تمّ: [0-9a-f]+ → [0-9a-f]+' | tail -1 | awk '{print $4}' || true)
+          [ -n "$short" ] || { echo "::error::the deploy did not say what it deployed: no tag without a commit"; exit 1; }
+          git fetch --quiet origin main
+          sha=$(git rev-parse --verify "${short}^{commit}")
+          echo "deployed: ${sha}"
+          if [ -n "${CHECKED:-}" ] && [ "$sha" != "$CHECKED" ]; then
+            echo "::error::the droplet runs ${sha}, not ${CHECKED} that passed the gate"
+            exit 1
+          fi
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+
+      # vMAJOR.N, N one more for each deploy (v0.24, v0.25, ...). A second deploy of the same commit makes no new number.
+      - name: الوسم
+        if: env.SKIP != '1'
+        env:
+          SHA: ${{ steps.deployed.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --tags --quiet
+          existing=$(git tag --points-at "$SHA" | grep -E '^v0\.[0-9]+$' | head -1 || true)
+          if [ -n "$existing" ]; then
+            echo "already tagged: ${existing}"
+            echo "### نُشر \`$(git rev-parse --short "$SHA")\` — موسوم أصلًا \`${existing}\`" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          last=$(git tag -l 'v0.*' | sed -E 's/^v0\.([0-9]+).*/\1/' | grep -E '^[0-9]+$' | sort -n | tail -1 || true)
+          next="v0.$(( ${last:-0} + 1 ))"
+          git tag -a "$next" "$SHA" -m "نُشر على الإنتاج $(date -u +%Y-%m-%d\ %H:%M) UTC"
+          git push origin "$next"
+          echo "### نُشر ووُسم \`${next}\` → \`$(git rev-parse --short "$SHA")\`" >> "$GITHUB_STEP_SUMMARY"
