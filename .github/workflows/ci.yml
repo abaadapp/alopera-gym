@@ -41,6 +41,8 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit -p tsconfig.json
       - run: npm test
+        env:
+          LARAVEL_BYPASS_ENV_CHECK: 1   # vitest loads vite.config, whose Laravel plugin refuses a dev server in CI
       - run: npm run build
       - run: vendor/bin/pint --test
       - run: php artisan test
