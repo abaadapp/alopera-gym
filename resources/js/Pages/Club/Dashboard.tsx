@@ -4,13 +4,15 @@ import { ArrowLeft, CalendarClock, CalendarX, CreditCard, FileClock, Landmark, L
 import ClubLayout from '@/Layouts/ClubLayout';
 import { AreaChart, Badge, Button, Card, CardHeader, PageHeader, StatCard } from '@/Components/ui';
 import DashboardTiles, { type TilePreferences } from '@/Components/DashboardTiles';
-import { useCurrency } from '@/hooks/useShared';
+import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, money, number, time, dayCount } from '@/lib/format';
 
 interface Props {
     kpis: Record<string, number | string | null>;
-    expiring: { id: number; member_id: number; member: string; phone: string; plan: string; ends_on: string; days_left: number }[];
-    today_sessions: { id: number; program: string; color: string; trainer: string | null; time: string; booked: number; capacity: number }[];
+    /** None for whoever may not see the members. */
+    expiring: { id: number; member_id: number; member: string; phone: string; plan: string; ends_on: string; days_left: number }[] | null;
+    /** None for whoever may not open the classes. */
+    today_sessions: { id: number; program: string; color: string; trainer: string | null; time: string; booked: number; capacity: number }[] | null;
     revenue_trend: { date: string; amount: number }[];
     /** Business document alerts (null without documents.view). */
     documents: { expiring: number; expired: number; alerts: { id: number; name: string; expiry_date: string; days_left: number | null }[] } | null;
@@ -23,6 +25,10 @@ interface Props {
 export default function Dashboard({ kpis, expiring, today_sessions, revenue_trend, documents, trends, tiles }: Props) {
     const currency = useCurrency();
     const financial = kpis.revenue_month !== null;
+    // Every list and link here opens a page of its own: shown only to whoever may open that page.
+    const can = useCan();
+    const link = (permission: string, href: () => string) => (can(permission) ? href() : undefined);
+    const followUps = can('invoices.view') || can('products.manage');
 
     return (
         <ClubLayout title="لوحة التحكم">
@@ -31,24 +37,26 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
             <DashboardTiles
                 preferences={tiles}
                 tiles={{
-                    active_members: { label: 'عضويات نشطة', node: <StatCard label="عضويات نشطة" value={number(kpis.active_members)} icon={<Users className="size-5" />} href={route('club.memberships.index', { filter: 'active' })} /> },
-                    expiring_7_days: { label: 'تنتهي خلال 7 أيام', node: <StatCard label="تنتهي خلال 7 أيام" value={number(kpis.expiring_7_days)} tone="amber" icon={<CalendarClock className="size-5" />} href={route('club.memberships.index', { filter: 'expiring' })} /> },
-                    expired_members: { label: 'منتهية', node: <StatCard label="منتهية" value={number(kpis.expired_members)} tone="gray" icon={<CalendarX className="size-5" />} href={route('club.members.index', { membership: 'expired' })} /> },
+                    active_members: { label: 'عضويات نشطة', node: <StatCard label="عضويات نشطة" value={number(kpis.active_members)} icon={<Users className="size-5" />} href={link('memberships.view', () => route('club.memberships.index', { filter: 'active' }))} /> },
+                    expiring_7_days: { label: 'تنتهي خلال 7 أيام', node: <StatCard label="تنتهي خلال 7 أيام" value={number(kpis.expiring_7_days)} tone="amber" icon={<CalendarClock className="size-5" />} href={link('memberships.view', () => route('club.memberships.index', { filter: 'expiring' }))} /> },
+                    expired_members: { label: 'منتهية', node: <StatCard label="منتهية" value={number(kpis.expired_members)} tone="gray" icon={<CalendarX className="size-5" />} href={link('members.view', () => route('club.members.index', { membership: 'expired' }))} /> },
                     frozen_members: { label: 'مجمّدة', node: <StatCard label="مجمّدة" value={number(kpis.frozen_members)} tone="violet" icon={<Snowflake className="size-5" />} /> },
                     revenue_month: financial ? { label: 'المحصَّل هذا الشهر', node: <StatCard label="المحصَّل هذا الشهر" value={money(kpis.revenue_month, currency)} tone="green" icon={<Wallet className="size-5" />} trend={trends.revenue_month} hint={`اليوم: ${money(kpis.revenue_today, currency)}`} /> } : null,
-                    outstanding: financial ? { label: 'المستحقات', node: <StatCard label="المستحقات" value={money(kpis.outstanding, currency)} tone="red" icon={<CreditCard className="size-5" />} hint={`${number(kpis.overdue_invoices)} فاتورة متأخرة`} href={route('club.dues')} /> } : null,
+                    outstanding: financial ? { label: 'المستحقات', node: <StatCard label="المستحقات" value={money(kpis.outstanding, currency)} tone="red" icon={<CreditCard className="size-5" />} hint={`${number(kpis.overdue_invoices)} فاتورة متأخرة`} href={link('dues.view', () => route('club.dues'))} /> } : null,
                     checkins_today: { label: 'دخول اليوم', node: <StatCard label="دخول اليوم" value={number(kpis.checkins_today)} tone="blue" icon={<LogIn className="size-5" />} trend={trends.checkins_today} /> },
                     new_members_month: { label: 'أعضاء جدد هذا الشهر', node: <StatCard label="أعضاء جدد هذا الشهر" value={number(kpis.new_members_month)} icon={<UserPlus className="size-5" />} trend={trends.new_members_month} hint={`تجديدات: ${number(kpis.renewals_month)} · إلغاءات: ${number(kpis.cancellations_month)}`} /> },
                 }}
             />
 
+            {(financial || today_sessions !== null) && (
             <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
                 {financial && (
-                    <Card className="lg:col-span-2">
+                    <Card className={today_sessions === null ? 'lg:col-span-3' : 'lg:col-span-2'}>
                         <CardHeader title="التحصيل خلال آخر 30 يومًا" subtitle="صافي الدفعات المكتملة بعد المردودات" />
                         <AreaChart data={revenue_trend.map((d) => ({ label: d.date.slice(5), value: d.amount }))} valueLabel={(v) => money(v, currency)} />
                     </Card>
                 )}
+                {today_sessions !== null && (
                 <Card className={financial ? '' : 'lg:col-span-3'}>
                     <CardHeader title="حصص اليوم" actions={<AllLink href={route('club.sessions.index')} />} />
                     {today_sessions.length === 0 ? (
@@ -72,12 +80,15 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
                         </ul>
                     )}
                 </Card>
+                )}
             </div>
+            )}
 
             <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+                {expiring !== null && (
                 <Card className="lg:col-span-2" padded={false}>
                     <div className="p-5 pb-0">
-                        <CardHeader title="عضويات قريبة من الانتهاء" subtitle="تواصل معهم للتجديد" actions={<AllLink href={route('club.memberships.index', { filter: 'expiring' })} />} />
+                        <CardHeader title="عضويات قريبة من الانتهاء" subtitle="تواصل معهم للتجديد" actions={can('memberships.view') ? <AllLink href={route('club.memberships.index', { filter: 'expiring' })} /> : undefined} />
                     </div>
                     <div className="overflow-x-auto">
                         <table className="table-base">
@@ -99,8 +110,9 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
                         </table>
                     </div>
                 </Card>
+                )}
 
-                <div className="flex flex-col gap-4">
+                <div className={expiring === null ? 'flex flex-col gap-4 lg:col-span-3' : 'flex flex-col gap-4'}>
                     {documents && (
                         <Card>
                             <CardHeader title="تنبيهات المستندات" subtitle={`${number(documents.expiring)} قريب الانتهاء · ${number(documents.expired)} منتهٍ`} actions={<AllLink href={route('club.business-documents.index', { view: documents.expired ? 'expired' : 'expiring' })} />} />
@@ -121,14 +133,16 @@ export default function Dashboard({ kpis, expiring, today_sessions, revenue_tren
                             )}
                         </Card>
                     )}
+                    {followUps && (
                     <Card>
                         <CardHeader title="يحتاج متابعة" />
                         <ul className="flex flex-col gap-3">
-                            <FollowUp icon={<Landmark />} label="تحويلات بنكية بانتظار التأكيد" value={Number(kpis.pending_transfers)} href={route('club.payments.index', { status: 'pending' })} />
-                            <FollowUp icon={<PackageX />} label="منتجات وصلت لحد إعادة الطلب" value={Number(kpis.low_stock)} href={route('club.products.index', { low: 1 })} />
-                            <FollowUp icon={<FileClock />} label="فواتير متأخرة" value={Number(kpis.overdue_invoices)} href={route('club.invoices.index', { state: 'overdue' })} />
+                            {can('invoices.view') && <FollowUp icon={<Landmark />} label="تحويلات بنكية بانتظار التأكيد" value={Number(kpis.pending_transfers)} href={route('club.payments.index', { status: 'pending' })} />}
+                            {can('products.manage') && <FollowUp icon={<PackageX />} label="منتجات وصلت لحد إعادة الطلب" value={Number(kpis.low_stock)} href={route('club.products.index', { low: 1 })} />}
+                            {can('invoices.view') && <FollowUp icon={<FileClock />} label="فواتير متأخرة" value={Number(kpis.overdue_invoices)} href={route('club.invoices.index', { state: 'overdue' })} />}
                         </ul>
                     </Card>
+                    )}
                 </div>
             </div>
         </ClubLayout>

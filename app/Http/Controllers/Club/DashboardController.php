@@ -47,6 +47,14 @@ class DashboardController extends Controller
         }
 
         $data['documents'] = $request->user()->can('documents.view') ? $this->documentAlerts($request) : null;
+        // Today's classes link to the class pages: only for those who may open them.
+        if (! $request->user()->can('classes.view')) {
+            $data['today_sessions'] = null;
+        }
+        // The memberships about to end name the members and carry their phones: only for those who may see members.
+        if (! $request->user()->can('members.view')) {
+            $data['expiring'] = null;
+        }
 
         return Inertia::render('Club/Dashboard', $data);
     }
