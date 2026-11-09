@@ -5,13 +5,15 @@ namespace Tests\Concerns;
 use Closure;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\DatabaseIsolation;
 use Throwable;
 
 /**
  * Requests that really run at the same time, on real PostgreSQL: each task runs in a process of its own (pcntl_fork)
- * with its own database connection, as two requests do on the server. They use a database of their own,
- * alopera_gym_concurrency (made and migrated on first use, emptied before each test), because the test database's
- * per-test transaction would hide one process's rows from the others. The cache is the database store, as on the
+ * with its own database connection, as two requests do on the server. They use a database of their own, named after
+ * the test database (alopera_gym_testing_concurrency; made and migrated on first use, emptied before each test),
+ * because the test database's per-test transaction would hide one process's rows from the others. Named after it, not
+ * fixed: two sessions testing at once on their own test databases do not empty each other's. The cache is the database store, as on the
  * server, so a cache lock taken in one process is seen by the others.
  *
  * Tasks get a folder they share ($dir) to signal each other ("I am inside", a process id) when a test needs an
@@ -27,12 +29,15 @@ trait RunsConcurrently
             $this->markTestSkipped('pcntl and posix are needed to run requests at the same time.');
         }
 
-        $name = 'alopera_gym_concurrency';
+        // Named after the test database, which passed Tests\TestCase's checks.
+        $name = config('database.connections.pgsql.database').'_concurrency';
         if (! DB::selectOne('select 1 as found from pg_database where datname = ?', [$name])) {
             DB::statement('create database '.$name);
         }
         config(['database.connections.pgsql.database' => $name, 'cache.default' => 'database']);
         DB::purge('pgsql');
+        // The same checks as every test's database, on this one, before it is migrated or emptied.
+        DatabaseIsolation::assert(app(), ['testing'], 'The concurrency tests did not start, nothing was touched: ');
 
         if (! self::$concurrencyDatabaseReady) {
             Artisan::call('migrate:fresh', ['--force' => true]);
