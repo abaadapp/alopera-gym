@@ -49,11 +49,16 @@ class PostController extends Controller
         if ($post->is_published && ! $wasPublished) {
             $post->published_at = now();
         }
+        // The new image is stored and saved first; the old file goes only after that worked.
+        $previous = null;
         if ($request->hasFile('image')) {
-            ImageStore::delete($post->image_path);
+            $previous = $post->image_path;
             $post->image_path = ImageStore::store($request->file('image'), 'posts');
         }
         $post->save();
+        if ($previous && $previous !== $post->image_path) {
+            ImageStore::delete($previous);
+        }
 
         return back()->with('success', 'تم الحفظ.');
     }

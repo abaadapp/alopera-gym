@@ -11,7 +11,7 @@ final class TenantTables
 {
     public const ORDER = [
         'roles', 'branches', 'users', 'number_sequences', 'tenant_integrations',
-        'site_settings', 'site_posts', 'site_media', 'contact_messages',
+        'site_settings', 'site_posts', 'site_media', 'site_revisions', 'contact_messages',
         // Accounts first among the money tables: devices, sales and supplier payments point at them.
         'expense_categories', 'gym_accounts', 'product_categories', 'suppliers', 'products', 'product_stocks',
         'product_addons', 'product_addon_product', 'product_addon_category',
