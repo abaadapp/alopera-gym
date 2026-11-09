@@ -21,6 +21,9 @@ final class InventoryService
     /** Reasons that can only take stock away. */
     public const OUT_ONLY = ['damaged', 'lost', 'expired', 'internal'];
 
+    /** pg_advisory_xact_lock key space (with the branch id): starting and approving counts in one branch, one at a time. */
+    public const COUNT_LOCKS = 74204;
+
     public function __construct(private readonly StockService $stock, private readonly AuditLogger $audit) {}
 
     /**
@@ -58,9 +61,17 @@ final class InventoryService
     public function startCount(int $branchId, array $productIds = [], ?string $notes = null): Stocktake
     {
         return DB::transaction(function () use ($branchId, $productIds, $notes) {
+            // Two starts at once in one branch: the second waits here, then sees the first one's open count below.
+            $this->lockCounts($branchId);
             $products = Product::where('track_stock', true)->when($productIds !== [], fn ($q) => $q->whereIn('id', $productIds))->orderBy('name')->get();
             if ($products->isEmpty()) {
                 throw new BusinessRuleException('stocktake.empty', 'لا توجد منتجات مربوطة بالمخزون لجردها.', 'products');
+            }
+            // One open count per product and branch: two would each post the same difference.
+            $open = Stocktake::where('branch_id', $branchId)->where('status', Stocktake::DRAFT)
+                ->whereHas('lines', fn ($q) => $q->whereIn('product_id', $products->modelKeys()))->value('number');
+            if ($open) {
+                throw new BusinessRuleException('stocktake.open', 'يوجد جرد مفتوح لهذه المنتجات في هذا الفرع ('.$open.'): اعتمده أو ألغه أولًا.', 'products');
             }
             $count = new Stocktake(['branch_id' => $branchId, 'number' => NumberSequence::next('stocktake'), 'notes' => $notes, 'created_by' => Auth::guard('web')->id()]);
             $count->forceFill(['status' => Stocktake::DRAFT])->save();
@@ -92,7 +103,10 @@ final class InventoryService
                 if ($counted !== null && $counted < 0) {
                     throw new BusinessRuleException('stocktake.negative', 'الكمية المعدودة لا تكون سالبة.', 'counts');
                 }
-                $system = (float) ($books[$line->product_id] ?? 0);
+                // The book is the one seen when this quantity was counted: saved again unchanged (as approving does,
+                // with every line), it is kept, or the sales made since the count would be added back to the stock.
+                $unchanged = $counted !== null && $line->counted_quantity !== null && round((float) $line->counted_quantity, 3) === $counted;
+                $system = $unchanged ? (float) $line->system_quantity : (float) ($books[$line->product_id] ?? 0);
                 $line->update([
                     'system_quantity' => $system,
                     'counted_quantity' => $counted,
@@ -113,10 +127,21 @@ final class InventoryService
     public function approveCount(Stocktake $count): Stocktake
     {
         return DB::transaction(function () use ($count) {
+            $this->lockCounts($count->branch_id);
             $count = $this->lockDraft($count);
             $lines = $count->lines()->with('product')->whereNotNull('counted_quantity')->get();
             if ($lines->isEmpty()) {
                 throw new BusinessRuleException('stocktake.nothing', 'لم تُدخل أي كمية معدودة بعد.', 'counts');
+            }
+            // Another count of the same products in this branch approved after this one began has already posted the
+            // differences this one measured against the same book: approving this one too would post them twice.
+            // (Two such counts could be open together before one open count per product and branch was enforced.)
+            $clash = Stocktake::where('branch_id', $count->branch_id)->whereKeyNot($count->id)->where('status', Stocktake::APPROVED)
+                ->where('approved_at', '>', $count->created_at)
+                ->whereHas('lines', fn ($q) => $q->whereIn('product_id', $lines->pluck('product_id'))->whereNotNull('counted_quantity'))
+                ->orderBy('approved_at')->value('number');
+            if ($clash) {
+                throw new BusinessRuleException('stocktake.overlap', 'الجرد '.$clash.' لنفس المنتجات في هذا الفرع اعتُمد بعد بدء هذا الجرد، فاعتماد هذا يكرر تسوية المخزون. ألغِ الجرد '.$count->number.' وابدأ جردًا جديدًا.', 'counts');
             }
             foreach ($lines as $line) {
                 $difference = round((float) $line->counted_quantity - (float) $line->system_quantity, 3);
@@ -140,6 +165,11 @@ final class InventoryService
 
             return $count;
         });
+    }
+
+    private function lockCounts(int $branchId): void
+    {
+        DB::select('select pg_advisory_xact_lock(?, ?)', [self::COUNT_LOCKS, $branchId]);
     }
 
     private function lockDraft(Stocktake $count): Stocktake

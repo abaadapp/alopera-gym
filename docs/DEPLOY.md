@@ -102,6 +102,7 @@ chown deploy:deploy /home/deploy/.ssh/authorized_keys && chmod 600 /home/deploy/
 
 | أين | ماذا |
 |---|---|
+| GitHub ← Actions ← Main Gate | سبب نشر الدمج أو عدم نشره (مثل دفع مباشر، أو تحرّك main قبل الدمج) |
 | GitHub ← Actions ← Deploy Main | سجل كل نشر، وفحص الموقع، والوسم |
 | `shared/deploy-state/DEPLOYED.txt` | الإصدار والـCommit والوقت على الخادم |
 | `shared/deploy-state/ROLLBACK.txt` | الـCommit السابق وأمر الرجوع |

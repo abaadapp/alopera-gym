@@ -79,6 +79,13 @@ final class SaleLines
      */
     public function record(Sale $sale, array $lines, string $movement): array
     {
+        // Every product this basket takes stock from (its add-ons' included) is locked first, by id: two baskets with
+        // the same products in another order then wait for each other instead of deadlocking (StockService::move
+        // locks one product at a time, in the basket's order).
+        $ids = collect($lines)->flatMap(fn (array $line) => [$line['product']->id, ...array_map(fn (array $pick) => $pick['addon']->stockProduct?->id, $line['addons'])])
+            ->filter()->unique()->sort()->values();
+        Product::withTrashed()->whereIn('id', $ids)->orderBy('id')->lockForUpdate()->pluck('id');
+
         $invoiceLines = [];
         foreach ($lines as $line) {
             $product = $line['product'];
