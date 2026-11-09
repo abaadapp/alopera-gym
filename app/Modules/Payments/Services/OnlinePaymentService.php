@@ -11,12 +11,14 @@ use App\Models\Tenant;
 use App\Models\TenantIntegration;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Services\PaymentService;
+use App\Modules\Inventory\Models\Sale;
 use App\Modules\Payments\Events\OnlinePaymentFailed;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobClient;
 use App\Modules\Payments\Paymob\PaymobSignature;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -62,8 +64,20 @@ final class OnlinePaymentService
             throw new BusinessRuleException('invoice.not_open', 'لا يوجد مبلغ مستحق على هذه الفاتورة.');
         }
 
+        // A website order holds its stock only until reserved_until: its checkout must not outlive the hold, or the
+        // customer could pay for an order already cancelled whose stock was sold to someone else.
+        $expires = now()->addSeconds((int) config('services.paymob.intent_ttl_seconds', 3600));
+        $hold = Sale::where('invoice_id', $invoice->id)->where('source', Sale::WEBSITE)->where('status', Sale::PENDING)->value('reserved_until');
+        if ($hold !== null) {
+            $hold = Carbon::parse($hold);
+            if ($hold->lte(now()->addMinute())) {
+                throw new BusinessRuleException('order.not_payable', 'انتهت مهلة الدفع لهذا الطلب.');
+            }
+            $expires = $hold->lt($expires) ? $hold : $expires;
+        }
+
         $open = PaymentIntent::where('invoice_id', $invoice->id)->where('status', PaymentIntent::PENDING)->whereNotNull('checkout_url')
-            ->where('expires_at', '>', now()->addMinutes(10))->latest('id')->first();
+            ->where('expires_at', '>', now()->addMinutes(10))->where('expires_at', '<=', $expires)->latest('id')->first();
         if ($open && Money::cmp($open->amount, $invoice->balance()) === 0) {
             return $open;
         }
@@ -76,7 +90,7 @@ final class OnlinePaymentService
             'currency' => $invoice->currency,
             'status' => PaymentIntent::PENDING,
             'channel' => $channel,
-            'expires_at' => now()->addSeconds((int) config('services.paymob.intent_ttl_seconds', 3600)),
+            'expires_at' => $expires,
         ]);
 
         try {

@@ -60,6 +60,9 @@ final class AccountFunds
         }
     }
 
+    /** Added to a refusal when the account's opening balance was never set: why it holds nothing, and where to set it. */
+    public const OPENING_NOT_SET = ' لم يُدخل رصيده الافتتاحي بعد: أدخله من المالية ← الحسابات البنكية ← الرصيد الافتتاحي (0 إن كان فارغًا).';
+
     /** Where these locks sit among PostgreSQL's advisory locks: (LOCKS, account id). */
     public const LOCKS = 74201;
 
@@ -98,8 +101,13 @@ final class AccountFunds
             return;
         }
         $user = Auth::guard('web')->user();
-        throw new BusinessRuleException('funds.insufficient', $user?->hasPermission('accounting.view')
+        // Nothing is assumed for an account whose opening nobody set: it holds what the books show. Saying so tells
+        // why a box with cash in it is refused, and where to put the money it really held.
+        $unset = ! in_array($account->id, app(OpeningBalances::class)->reviewed(), true)
+            ? self::OPENING_NOT_SET
+            : '';
+        throw new BusinessRuleException('funds.insufficient', ($user?->hasPermission('accounting.view')
             ? "رصيد «{$account->name}» لا يكفي: المتاح {$balance} والمطلوب ".Money::normalize($amount).'.'
-            : "رصيد «{$account->name}» لا يكفي لهذا المبلغ.", $field);
+            : "رصيد «{$account->name}» لا يكفي لهذا المبلغ.").$unset, $field);
     }
 }

@@ -17,6 +17,9 @@ use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Finance\Services\PaymentService;
+use App\Modules\Payroll\Models\Employee;
+use App\Modules\Payroll\Models\PayrollPayout;
+use App\Modules\Payroll\Models\PayrollRun;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -142,6 +145,55 @@ class MoneyCorrectionsTest extends TestCase
 
         $this->assertSame('45.000', $this->balance($club, 'cash'));
         $this->asTenant($club, fn () => $this->assertSame([Payment::COMPLETED, 'مياه للصالة'], [$payment->fresh()->status, $expense->fresh()->description]));
+        $this->assertBooksBalance($club);
+    }
+
+    public function test_a_salary_payout_counted_in_a_closed_shift_is_not_voided_afterwards(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $drawer = $this->asTenant($club, fn () => app(ChartOfAccounts::class)->account('cash'));
+        $this->asTenant($club, fn () => Employee::create(['name' => 'سارة', 'basic_salary' => '300.000', 'status' => 'active', 'payment_method' => 'cash']));
+        $invoice = $this->invoice($club, '500');
+        $this->actingAs($owner)->post(route('club.payments.store', $invoice), ['amount' => '500', 'method' => 'cash', 'client_key' => $this->key()])->assertSessionHasNoErrors();
+
+        $this->actingAs($owner)->post(route('club.cash-shifts.store'), ['account_id' => $drawer->id, 'opening_float' => '500', 'client_key' => $this->key()])->assertSessionHasNoErrors();
+        $shift = $this->asTenant($club, fn () => CashShift::sole());
+        $this->actingAs($owner)->post(route('club.payroll.store'), ['month' => now()->format('Y-m')])->assertSessionHasNoErrors();
+        $run = $this->asTenant($club, fn () => PayrollRun::sole());
+        $this->actingAs($owner)->post(route('club.payroll.approve', $run))->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.payroll.pay', $run), ['items' => $run->items()->pluck('id')->all(), 'account_id' => $drawer->id, 'paid_on' => today()->toDateString(), 'client_key' => $this->key()])->assertSessionHasNoErrors();
+        $payout = $this->asTenant($club, fn () => PayrollPayout::sole());
+
+        // The drawer was counted with the salary gone: 200 left, no difference.
+        $this->travel(1)->minutes();
+        $this->actingAs($owner)->post(route('club.cash-shifts.close', $shift), ['counted_cash' => '200', 'client_key' => $this->key()])->assertSessionHasNoErrors();
+        $this->assertSame('200.000', $this->balance($club, 'cash'));
+
+        // Voiding it now would put 300 back in a drawer that was counted without it.
+        $this->travel(1)->minutes();
+        $this->actingAs($owner)->post(route('club.payroll.payouts.void', $payout), ['reason' => 'بالخطأ'])->assertSessionHasErrors();
+        $this->assertSame('200.000', $this->balance($club, 'cash'));
+        $this->asTenant($club, fn () => $this->assertNull($payout->fresh()->voided_at));
+        $this->assertBooksBalance($club);
+    }
+
+    public function test_a_salary_payout_made_with_no_shift_open_can_still_be_voided(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $drawer = $this->asTenant($club, fn () => app(ChartOfAccounts::class)->account('cash'));
+        $this->asTenant($club, fn () => Employee::create(['name' => 'سارة', 'basic_salary' => '300.000', 'status' => 'active', 'payment_method' => 'cash']));
+        $invoice = $this->invoice($club, '500');
+        $this->actingAs($owner)->post(route('club.payments.store', $invoice), ['amount' => '500', 'method' => 'cash', 'client_key' => $this->key()])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.payroll.store'), ['month' => now()->format('Y-m')])->assertSessionHasNoErrors();
+        $run = $this->asTenant($club, fn () => PayrollRun::sole());
+        $this->actingAs($owner)->post(route('club.payroll.approve', $run))->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.payroll.pay', $run), ['items' => $run->items()->pluck('id')->all(), 'account_id' => $drawer->id, 'paid_on' => today()->toDateString(), 'client_key' => $this->key()])->assertSessionHasNoErrors();
+        $payout = $this->asTenant($club, fn () => PayrollPayout::sole());
+
+        $this->actingAs($owner)->post(route('club.payroll.payouts.void', $payout), ['reason' => 'بالخطأ'])->assertSessionHasNoErrors();
+        $this->assertSame('500.000', $this->balance($club, 'cash'));
         $this->assertBooksBalance($club);
     }
 
