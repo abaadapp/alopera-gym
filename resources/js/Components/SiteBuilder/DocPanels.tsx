@@ -2,7 +2,7 @@ import { Link } from '@inertiajs/react';
 import { Card, CardHeader, Field, Input } from '@/Components/ui';
 import { useCan } from '@/hooks/useShared';
 import { checkHref, contrastRatio, isHexColor, THEME_PRESETS, themeWarnings } from '@/lib/site-builder';
-import type { FieldSchema, SiteDoc } from '@/types/site';
+import type { FieldSchema, PageKey, PageText, SiteDoc } from '@/types/site';
 import { useBuilder } from './context';
 import FieldInput from './FieldInput';
 
@@ -206,6 +206,31 @@ export function ThemePanel({ doc, patch }: { doc: SiteDoc; patch: Patch }) {
 }
 
 /** «الإعلان ومحركات البحث»: the strip over every page, and the title and description search engines show. */
+/** The words at the top of each inner page, which are also its title and description in search results. */
+export function PagesPanel({ doc, patch, pages }: { doc: SiteDoc; patch: Patch; pages: { key: PageKey; label: string; fields: FieldSchema[] }[] }) {
+    return (
+        <div className="space-y-4">
+            <p className="text-[13px] leading-6 text-muted">عنوان كل صفحة داخلية والسطر تحته، ويظهران أيضًا في نتائج البحث. العنوان الفارغ يعود إلى العنوان الأصلي، والسطر الفارغ لا يظهر.</p>
+            <div className="grid gap-4 xl:grid-cols-2">
+                {pages.map((page) => (
+                    <Card key={page.key} className="space-y-3">
+                        <CardHeader title={page.label} className="mb-0" />
+                        {page.fields.map((field) => (
+                            <FieldInput
+                                key={field.key}
+                                field={field}
+                                value={doc.pages?.[page.key]?.[field.key as keyof PageText] ?? ''}
+                                onChange={(v) => patch((d) => ({ ...d, pages: { ...d.pages, [page.key]: { ...d.pages?.[page.key], [field.key]: v as string } } }))}
+                                path={`pages.${page.key}`}
+                            />
+                        ))}
+                    </Card>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 export function SeoPanel({ doc, patch }: { doc: SiteDoc; patch: Patch }) {
     return (
         <div className="grid gap-4 xl:grid-cols-2">

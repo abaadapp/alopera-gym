@@ -50,10 +50,10 @@ class SiteController extends Controller
     {
         $plans = MembershipPlan::public()->with('programs:id,name')->orderBy('sort')->get();
 
-        return $this->page('Site/Plans', [
+        return $this->sitePage('plans', 'Site/Plans', [
             'plans' => $plans->map(fn ($p) => GymPresenter::plan($p) + ['programs' => $p->programs->pluck('name')]),
             'ptPackages' => PtPackage::where('is_active', true)->where('is_public', true)->orderBy('price')->get(['id', 'name', 'description', 'sessions_count', 'session_minutes', 'price', 'validity_days']),
-        ], 'الباقات والأسعار', 'اختر الباقة المناسبة لك: اشتراكات شهرية وسنوية وباقات حصص وتدريب شخصي.', null, [
+        ], [
             '@context' => 'https://schema.org',
             '@type' => 'ItemList',
             'itemListElement' => $plans->values()->map(fn ($p, $i) => [
@@ -65,37 +65,37 @@ class SiteController extends Controller
 
     public function programs(): Response
     {
-        return $this->page('Site/Programs', [
+        return $this->sitePage('programs', 'Site/Programs', [
             'programs' => Program::public()->orderBy('sort')->get()->map(fn ($p) => $this->program($p)),
-        ], 'البرامج التدريبية', 'برامجنا وحصصنا الجماعية لكل المستويات.');
+        ]);
     }
 
     public function trainers(): Response
     {
-        return $this->page('Site/Trainers', [
+        return $this->sitePage('trainers', 'Site/Trainers', [
             'trainers' => Trainer::public()->orderBy('sort')->get()->map(fn ($t) => $this->trainer($t)),
-        ], 'فريق التدريب', 'تعرّف على فريق المدربين المعتمدين.');
+        ]);
     }
 
     public function schedule(Request $request): Response
     {
         $start = CarbonImmutable::today();
 
-        return $this->page('Site/Schedule', [
+        return $this->sitePage('schedule', 'Site/Schedule', [
             'sessions' => ClassSession::with(['program:id,name,color', 'trainer:id,name'])
                 ->where('status', ClassSession::SCHEDULED)
                 ->whereHas('program', fn ($q) => $q->where('is_public', true))
                 ->between($start, $start->addDays(7))->orderBy('starts_at')->get()
                 ->map(fn ($s) => GymPresenter::session($s)),
             'from' => $start->toDateString(),
-        ], 'جدول الحصص', 'جدول الحصص الأسبوعي والمقاعد المتاحة — احجز من بوابة الأعضاء.');
+        ]);
     }
 
     public function news(): Response
     {
-        return $this->page('Site/News', [
+        return $this->sitePage('news', 'Site/News', [
             'posts' => SitePost::visible()->latest('published_at')->paginate(9)->through(fn ($p) => $this->post($p)),
-        ], 'العروض والأخبار', 'آخر عروض النادي وأخباره.');
+        ]);
     }
 
     public function showPost(string $slug): Response
@@ -109,7 +109,7 @@ class SiteController extends Controller
 
     public function contact(): Response
     {
-        return $this->page('Site/Contact', [], 'تواصل معنا', 'العنوان وأوقات العمل وطرق التواصل مع النادي.');
+        return $this->sitePage('contact', 'Site/Contact', []);
     }
 
     public function sendContact(Request $request): RedirectResponse
@@ -126,7 +126,7 @@ class SiteController extends Controller
 
         app(StaffAlerts::class)->contact(ContactMessage::create($data + ['ip_address' => $request->ip()]));
 
-        return back()->with('success', 'وصلتنا رسالتك، وسنتواصل معك قريبًا.');
+        return back()->with('success', 'تم استلام رسالتك بنجاح');
     }
 
     public function sitemap(TenantContext $tenants): HttpResponse

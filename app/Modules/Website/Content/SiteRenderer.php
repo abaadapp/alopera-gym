@@ -96,6 +96,7 @@ final class SiteRenderer
                 'footer' => ['line' => ($doc['footer']['line'] ?? '') ?: null, 'links' => $links($doc['footer']['links'] ?? []), 'show_hours' => (bool) ($doc['footer']['show_hours'] ?? true), 'show_social' => (bool) ($doc['footer']['show_social'] ?? true)],
                 'home_url' => $this->homeUrl,
                 'preview' => $preview,
+                'pages' => SitePages::of($doc),
             ],
             'page' => ['sections' => $sections],
             'site' => $this->siteInfo($doc),

@@ -404,8 +404,7 @@ export function Contact({ section, site, chrome, joined }: SectionProps) {
                     <div className="flex min-w-0 flex-col gap-4">
                         {sent ? (
                             <div className="flex flex-col gap-2 py-6">
-                                <h3 className="m-0 text-2xl font-bold">وصلتنا رسالتكِ</h3>
-                                <p className={cn('m-0', bodyText(tone))}>شكرًا لتواصلكِ.</p>
+                                <h3 className="m-0 text-2xl font-bold">تم استلام رسالتك بنجاح</h3>
                                 <button type="button" onClick={() => setSent(false)} className="mt-2 self-start border-b border-current bg-transparent p-0 text-[15px]">رسالة أخرى</button>
                             </div>
                         ) : (

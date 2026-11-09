@@ -10,6 +10,7 @@ use App\Modules\Website\Content\MediaLibrary;
 use App\Modules\Website\Content\SectionTypes;
 use App\Modules\Website\Content\SiteContent;
 use App\Modules\Website\Content\SiteLinks;
+use App\Modules\Website\Content\SitePages;
 use App\Modules\Website\Content\SiteRenderer;
 use App\Modules\Website\Http\RendersSite;
 use App\Modules\Website\Models\ContactMessage;
@@ -48,6 +49,7 @@ class SiteBuilderController extends Controller
             'version' => (int) $site->draft_version,
             'status' => $this->content->status($site),
             'schema' => SectionTypes::forEditor(),
+            'pageFields' => SitePages::forEditor(),
             // Sections of the saved draft that wait for data in the system (no plans yet…) and are not on the site now.
             'waiting' => $renderer->waiting($doc),
             'media' => SiteMedia::latest('id')->get()->map(fn ($m) => MediaLibrary::present($m, $uses))->all(),

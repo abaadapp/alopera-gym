@@ -107,6 +107,45 @@ class WebsiteContentTest extends TestCase
         $this->assertSame($club->name, $props['seo']['title']);
     }
 
+    public function test_the_inner_pages_words_are_the_owners_and_promise_nothing(): void
+    {
+        $club = $this->club();
+        $this->plan($club, ['is_public' => true]);
+        [$doc, $version] = $this->editor($club);
+        $props = $this->actingAs($this->owner($club))->get(route('club.website.edit'))->viewData('page')['props'];
+        $this->assertSame(['plans', 'programs', 'schedule', 'trainers', 'news', 'contact', 'join', 'shop'], array_column($props['pageFields'], 'key'));
+        // The starting words state what each page holds, nothing more.
+        $words = json_encode($doc['pages'], JSON_UNESCAPED_UNICODE);
+        foreach (['معتمد', 'قريب', 'دقائق', 'دقيقة', 'أونلاين', 'سنتواصل', 'أقرب وقت', 'مصمم'] as $claim) {
+            $this->assertStringNotContainsString($claim, $words, "«{$claim}»");
+        }
+
+        $doc['pages']['plans'] = ['title' => 'باقات النادي', 'subtitle' => '', 'pt_title' => 'جلسات خاصة', 'pt_subtitle' => ''];
+        $doc['pages']['contact']['subtitle'] = 'راسلنا من هنا.';
+        $this->save($club, $doc, $version)->assertSessionHasNoErrors();
+        $this->publish($club, $version + 1)->assertSessionHasNoErrors();
+        auth()->logout();
+
+        $this->get(route('site.plans', ['club' => $club->slug]))->assertOk()->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('chrome.pages.plans.title', 'باقات النادي')
+            ->where('chrome.pages.plans.pt_title', 'جلسات خاصة')
+            ->where('seo.title', 'باقات النادي | '.$club->name));
+        $this->get(route('site.contact', ['club' => $club->slug]))->assertInertia(fn (AssertableInertia $p) => $p->where('seo.description', 'راسلنا من هنا.'));
+        // An emptied title falls back to the page's own; a page keeps a title.
+        $doc['pages']['news']['title'] = '';
+        $this->save($club, $doc, $version + 1)->assertSessionHasNoErrors();
+        $this->publish($club, $version + 2);
+        auth()->logout();
+        $this->get(route('site.news', ['club' => $club->slug]))->assertInertia(fn (AssertableInertia $p) => $p->where('chrome.pages.news.title', 'العروض والأخبار'));
+    }
+
+    public function test_the_contact_form_confirms_receipt_without_promising_a_reply(): void
+    {
+        $club = $this->club();
+        $this->post(route('site.contact.send', ['club' => $club->slug]), ['name' => 'سارة', 'phone' => '91234567', 'message' => 'استفسار عن الباقات'])
+            ->assertSessionHasNoErrors()->assertSessionHas('success', 'تم استلام رسالتك بنجاح');
+    }
+
     public function test_every_page_menu_links_only_to_sections_that_show(): void
     {
         $club = $this->club();

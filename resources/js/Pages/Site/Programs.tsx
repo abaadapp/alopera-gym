@@ -48,10 +48,10 @@ export function ProgramCard({ program }: { program: ProgramData }) {
 export default function Programs({ site, seo, programs }: { site: SiteInfo; seo: { title: string }; programs: ProgramData[] }) {
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero title="البرامج التدريبية" subtitle="حصص جماعية وبرامج متنوعة لكل المستويات — قوة، مرونة، لياقة وتوازن." icon={<Dumbbell className="size-6" />} />
+            <PageHero page="programs" title="البرامج التدريبية" icon={<Dumbbell className="size-6" />} />
             <section className="mx-auto max-w-6xl px-4 py-12">
                 {programs.length === 0 ? (
-                    <p className="py-16 text-center text-muted">ستُضاف البرامج قريبًا.</p>
+                    <p className="py-16 text-center text-muted">لا توجد برامج معروضة حاليًا.</p>
                 ) : (
                     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                         {programs.map((p) => <ProgramCard key={p.id} program={p} />)}

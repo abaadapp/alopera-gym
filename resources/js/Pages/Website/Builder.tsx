@@ -6,7 +6,7 @@ import { Badge, Button, Card, Modal, PageHeader, Tabs } from '@/Components/ui';
 import { Dropdown, DropdownItem } from '@/Components/ui/Dropdown';
 import AddSectionModal from '@/Components/SiteBuilder/AddSectionModal';
 import { BuilderContext, sectionLabel, type BuilderContextValue } from '@/Components/SiteBuilder/context';
-import { ContactPanel, MenuPanel, SeoPanel, ThemePanel } from '@/Components/SiteBuilder/DocPanels';
+import { ContactPanel, MenuPanel, PagesPanel, SeoPanel, ThemePanel } from '@/Components/SiteBuilder/DocPanels';
 import HistoryModal from '@/Components/SiteBuilder/HistoryModal';
 import MediaLibrary from '@/Components/SiteBuilder/MediaLibrary';
 import PreviewPanel from '@/Components/SiteBuilder/PreviewPanel';
@@ -17,11 +17,12 @@ import { date, time } from '@/lib/format';
 import { docKey, duplicateSection, errorIndex, hasErrorUnder, imageUses, mapErrors, move, newSection, normalizeDoc, type BuilderError } from '@/lib/site-builder';
 import type { BuilderProps, SectionDoc, SectionTypeSchema, SiteDoc } from '@/types/site';
 
-type Tab = 'sections' | 'menu' | 'contact' | 'colors' | 'media' | 'seo';
+type Tab = 'sections' | 'pages' | 'menu' | 'contact' | 'colors' | 'media' | 'seo';
 type Busy = 'save' | 'publish' | 'discard' | null;
 
 const TAB_OF_PATH: [string, Tab][] = [
     ['sections.', 'sections'],
+    ['pages.', 'pages'],
     ['header.', 'menu'],
     ['footer.', 'menu'],
     ['contact.', 'contact'],
@@ -263,7 +264,7 @@ export default function WebsiteBuilder(props: BuilderProps) {
             return [s ? sectionLabel(s, schemas) : 'قسم محذوف', field?.label].filter(Boolean).join(' — ');
         }
         const t = tabOf(e.path);
-        return { menu: 'القائمة والتذييل', contact: 'التواصل', colors: 'الألوان', seo: 'الإعلان ومحركات البحث', sections: 'الأقسام', media: 'الصور' }[t ?? 'sections'] ?? '';
+        return { menu: 'القائمة والتذييل', pages: 'الصفحات الداخلية', contact: 'التواصل', colors: 'الألوان', seo: 'الإعلان ومحركات البحث', sections: 'الأقسام', media: 'الصور' }[t ?? 'sections'] ?? '';
     };
 
     const goTo = (e: BuilderError) => {
@@ -275,6 +276,7 @@ export default function WebsiteBuilder(props: BuilderProps) {
     const tabErr = (t: Tab) => errors.some((e) => tabOf(e.path) === t);
     const tabs: { key: Tab; label: string; dot?: string }[] = [
         { key: 'sections', label: 'الأقسام', dot: tabErr('sections') ? '#dc2626' : undefined },
+        { key: 'pages', label: 'الصفحات الداخلية', dot: tabErr('pages') ? '#dc2626' : undefined },
         { key: 'menu', label: 'القائمة العلوية والتذييل', dot: tabErr('menu') ? '#dc2626' : undefined },
         { key: 'contact', label: 'التواصل وأوقات العمل', dot: tabErr('contact') ? '#dc2626' : undefined },
         { key: 'colors', label: 'الألوان', dot: tabErr('colors') ? '#dc2626' : undefined },
@@ -371,6 +373,7 @@ export default function WebsiteBuilder(props: BuilderProps) {
                         </div>
                     </div>
                 )}
+                {tab === 'pages' && <PagesPanel doc={doc} patch={patch} pages={props.pageFields} />}
                 {tab === 'menu' && <MenuPanel doc={doc} patch={patch} />}
                 {tab === 'contact' && <ContactPanel doc={doc} patch={patch} />}
                 {tab === 'colors' && <ThemePanel doc={doc} patch={patch} />}

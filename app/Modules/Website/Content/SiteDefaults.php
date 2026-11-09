@@ -108,6 +108,7 @@ final class SiteDefaults
                 'social' => collect(['instagram', 'x', 'tiktok', 'snapchat', 'facebook', 'youtube'])->mapWithKeys(fn ($k) => [$k => (string) (($site->social_links ?? [])[$k] ?? '')])->all(),
             ],
             'seo' => ['title' => (string) ($seoTitle ?? $tenant->name), 'description' => (string) ($seoDescription ?? '')],
+            'pages' => SitePages::defaults(),
             'sections' => $sections,
         ];
     }

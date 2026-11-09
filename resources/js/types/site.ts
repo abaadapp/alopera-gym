@@ -44,8 +44,19 @@ export interface SectionDoc {
     data: Record<string, unknown>;
 }
 
+/** The inner pages whose title and line under it the owner writes (app/Modules/Website/Content/SitePages). */
+export type PageKey = 'plans' | 'programs' | 'schedule' | 'trainers' | 'news' | 'contact' | 'join' | 'shop';
+export interface PageText {
+    title: string;
+    subtitle: string;
+    /** Only on the plans page: the personal training part. */
+    pt_title?: string;
+    pt_subtitle?: string;
+}
+
 export interface SiteDoc {
     v: 1;
+    pages: Record<PageKey, PageText>;
     theme: { accent: string; ink: string; surface: string };
     announcement: string;
     header: { links: { id: string; label: string; href: Href }[]; cta: ButtonDoc; show_login: boolean };
@@ -209,6 +220,8 @@ export interface SiteChrome {
     home_url: string;
     /** True on «معاينة»: the page shows the saved draft to the club's staff only. */
     preview: boolean;
+    /** Each inner page's title and line under it, as the owner wrote them. */
+    pages: Record<PageKey, PageText>;
 }
 
 export interface SitePage {
@@ -257,6 +270,8 @@ export interface BuilderProps {
     version: number;
     status: BuilderStatus;
     schema: SectionTypeSchema[];
+    /** The inner pages and their editable lines, for «الصفحات الداخلية». */
+    pageFields: { key: PageKey; label: string; fields: FieldSchema[] }[];
     /** Sections of the saved draft fed by the gym system that show nothing now (no plans yet…): id => why. */
     waiting: Record<string, string>;
     media: MediaItem[];

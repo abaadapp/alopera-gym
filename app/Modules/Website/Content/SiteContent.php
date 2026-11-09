@@ -34,7 +34,11 @@ final class SiteContent
     /** What the editor opens: the saved draft, else what is live, else the starting design. @return array<string, mixed> */
     public function editable(SiteSetting $site): array
     {
-        return $site->draft ?? $site->published ?? SiteDefaults::document($site, $this->tenants->require(), true);
+        $doc = $site->draft ?? $site->published ?? SiteDefaults::document($site, $this->tenants->require(), true);
+        // A document saved before the inner pages' words could be edited gets their defaults.
+        $doc['pages'] = SitePages::of($doc);
+
+        return $doc;
     }
 
     /** What visitors see. @return array<string, mixed> */

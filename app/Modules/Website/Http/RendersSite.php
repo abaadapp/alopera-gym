@@ -57,6 +57,21 @@ trait RendersSite
         ]);
     }
 
+    /**
+     * An inner page of the site headed by the owner's words for it (SitePages, edited in «إدارة الموقع»), which are
+     * also its title and description in search results.
+     *
+     * @param  array<string, mixed>  $props
+     * @param  array<string, mixed>|null  $jsonld
+     */
+    protected function sitePage(string $key, string $component, array $props, ?array $jsonld = null): Response
+    {
+        $rendered = app(SiteRenderer::class)->render(app(SiteContent::class)->live($this->site()));
+        $text = $rendered['chrome']['pages'][$key];
+
+        return $this->page($component, $props, $text['title'], $text['subtitle'] ?: null, null, $jsonld, $rendered);
+    }
+
     private function canonical(): string
     {
         $tenant = app(TenantContext::class)->require();

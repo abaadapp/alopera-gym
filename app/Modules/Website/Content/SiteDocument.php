@@ -53,6 +53,7 @@ final class SiteDocument
                 ['key' => 'social', 'type' => 'group', 'fields' => collect(['instagram', 'x', 'tiktok', 'snapchat', 'facebook', 'youtube'])->map(fn ($k) => ['key' => $k, 'type' => 'url'])->all()],
             ],
             'seo' => [['key' => 'title', 'type' => 'text', 'max' => 70], ['key' => 'description', 'type' => 'textarea', 'max' => 300]],
+            'pages' => SitePages::fields(),
         ];
     }
 

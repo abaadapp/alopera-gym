@@ -18,7 +18,7 @@ export default function Contact({ site, seo }: { site: SiteInfo; seo: { title: s
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero title="تواصل معنا" subtitle="يسعدنا الرد على استفساراتك حول الاشتراكات والحصص والعروض." icon={<MessageCircle className="size-6" />} />
+            <PageHero page="contact" title="تواصل معنا" icon={<MessageCircle className="size-6" />} />
 
             <section className="mx-auto grid max-w-6xl gap-8 px-4 py-12 lg:grid-cols-5">
                 <div className="space-y-4 lg:col-span-2">
@@ -78,7 +78,6 @@ export default function Contact({ site, seo }: { site: SiteInfo; seo: { title: s
 
                 <form onSubmit={submit} className="rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-8 lg:col-span-3">
                     <h2 className="font-display text-xl font-semibold">أرسل رسالة</h2>
-                    <p className="mt-1 text-sm text-muted">سنعاود التواصل معك في أقرب وقت.</p>
                     <div className="mt-6 grid gap-4 sm:grid-cols-2">
                         <Field label="الاسم" error={form.errors.name} required className="sm:col-span-2">
                             <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} autoComplete="name" required />
@@ -103,7 +102,7 @@ export default function Contact({ site, seo }: { site: SiteInfo; seo: { title: s
                     <Button type="submit" className="mt-6 w-full rounded-full sm:w-auto" size="lg" loading={form.processing} icon={<Send className="size-4" />}>
                         إرسال
                     </Button>
-                    {form.recentlySuccessful && <p className="mt-3 text-sm text-emerald-600">وصلتنا رسالتك، شكرًا لك.</p>}
+                    {form.recentlySuccessful && <p className="mt-3 text-sm text-emerald-600">تم استلام رسالتك بنجاح</p>}
                 </form>
             </section>
         </SiteLayout>
