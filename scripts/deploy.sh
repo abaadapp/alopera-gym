@@ -5,9 +5,10 @@
 # Started by GitHub Actions (Deploy Main) over SSH: the deploy key in ~deploy/.ssh/authorized_keys runs this script
 # and nothing else (command=). By hand, as deploy:   bash /var/www/alopera-gym/app/scripts/deploy.sh
 #
-# In order: pull main · PHP dependencies · build the pages aside, then swap them in · migrate (no database dump
-# before) · caches, reload PHP-FPM and the queue worker · preflight (reported, does not stop the deploy) · the site
-# must answer 200 · tag. The last line says what runs now: "تمّ: <from> → <to> (<version>)".
+# In order: the new migrations checked before anything changes (one that drops, renames or deletes, not marked as
+# reviewed, stops the deploy here) · pull main · PHP dependencies · build the pages aside, then swap them in · migrate
+# (no database dump before) · caches, reload PHP-FPM and the queue worker · preflight (reported, does not stop the
+# deploy; flagged in the Deploy Main run) · the site must answer 200 · tag. The last line says what runs now: "تمّ: <from> → <to> (<version>)".
 # Going back is by hand, code only: scripts/rollback-code.sh <commit> (the commit is in shared/deploy-state/ROLLBACK.txt).
 set -euo pipefail
 
@@ -46,6 +47,31 @@ printf 'commit before the deploy of %s: %s\nback (code only): bash %s/scripts/ro
 
 step "سحب $BRANCH"
 git fetch --tags --force --quiet origin
+
+# Before anything changes on the server: what main's new migrations will do (scripts/migration-risk.php, from main's
+# own tree). Dropping or renaming a table or column, changing a type or deleting rows stops here unless the migration
+# carries @deploy-destructive-reviewed, seen by the owner in its pull request.
+NEW_MIGRATIONS=()
+while IFS= read -r f; do [[ -n "$f" ]] && NEW_MIGRATIONS+=("$f"); done < <(git diff --name-only --diff-filter=AR HEAD "origin/$BRANCH" -- \
+    'database/migrations/*.php' 'app/Modules/*/Database/migrations/*.php')
+if (( ${#NEW_MIGRATIONS[@]} > 0 )); then
+    RISK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alopera-migrations.XXXXXX")"
+    if git cat-file -e "origin/$BRANCH:scripts/migration-risk.php" 2>/dev/null; then
+        git show "origin/$BRANCH:scripts/migration-risk.php" > "$RISK_DIR/migration-risk.php"
+        for f in "${NEW_MIGRATIONS[@]}"; do mkdir -p "$RISK_DIR/$(dirname "$f")"; git show "origin/$BRANCH:$f" > "$RISK_DIR/$f"; done
+        RISK_RC=0
+        RISK_OUT="$(cd "$RISK_DIR" && "$PHP_BIN" migration-risk.php "${NEW_MIGRATIONS[@]}" 2>&1)" || RISK_RC=$?
+        rm -rf "$RISK_DIR"
+        sed 's/^/    /' <<<"$RISK_OUT"
+        (( RISK_RC == 0 )) || die "a new migration drops, renames or deletes, and is not marked as reviewed: nothing was changed on the server
+(not pulled, not migrated). Look at it; if it is meant, mark it with @deploy-destructive-reviewed in a pull request, then deploy again."
+        ok "${#NEW_MIGRATIONS[@]} new migration(s) checked before pulling"
+    else
+        rm -rf "$RISK_DIR"
+        warn "main has no scripts/migration-risk.php: the new migrations were not checked"
+    fi
+fi
+
 git pull --ff-only --quiet origin "$BRANCH"
 TO="$(git rev-parse --short HEAD)"
 if [[ "$FROM" == "$TO" ]]; then
@@ -105,6 +131,8 @@ set +e
 art platform:preflight
 PREFLIGHT=$?
 set -e
+# Read by GitHub Actions from the deploy's output: the Deploy Main run shows it as a warning, not only in the log.
+(( PREFLIGHT == 0 )) || echo "::warning title=platform:preflight::the release gate reports blocking issues (FAIL in the table above): the deploy goes on; they are the owner's to decide"
 
 step "الموقع"
 CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$HEALTH_URL" || true)"
