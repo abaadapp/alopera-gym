@@ -149,6 +149,9 @@ class WebsiteContentTest extends TestCase
         $this->assertTrue($props['chrome']['header']['show_login']);
         // The pages themselves still open for anyone who has their address.
         $this->get(route('site.plans', ['club' => $club->slug]))->assertOk();
+        // Nor «اشترك الآن» on the members' sign-in page.
+        $this->get(route('portal.login', ['club' => $club->slug]))->assertOk()
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('site.signup_enabled', false));
 
         // Once there is something on the page, its links come back by themselves, without publishing again.
         $this->plan($club, ['is_public' => true]);
@@ -157,6 +160,7 @@ class WebsiteContentTest extends TestCase
         $this->assertSame(route('site.join', ['club' => $club->slug]), $props['chrome']['header']['cta']['href']);
         $this->assertSame(route('site.join', ['club' => $club->slug]), $props['page']['sections'][0]['data']['primary']['href']);
         $this->assertContains('join', $this->sectionsOf($props));
+        $this->get(route('portal.login', ['club' => $club->slug]))->assertInertia(fn (AssertableInertia $p) => $p->where('site.signup_enabled', true));
 
         // With online sign-up switched off, the sign-up buttons go again (the page answers 404).
         $club->update(['settings' => ['member_signup_enabled' => false] + ($club->settings ?? [])]);

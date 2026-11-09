@@ -3,6 +3,7 @@
 namespace App\Modules\Website\Http;
 
 use App\Core\Tenancy\TenantContext;
+use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Inventory\Services\ShopSettings;
 use App\Modules\Website\Content\SiteContent;
 use App\Modules\Website\Content\SiteRenderer;
@@ -38,7 +39,9 @@ trait RendersSite
             'site' => $rendered['site'] + [
                 'is_published' => $site->is_published,
                 'logo_url' => $tenant->logoUrl(),
-                'signup_enabled' => (bool) $tenant->setting('member_signup_enabled', true),
+                // «اشترك الآن» links on every page (portal sign-in, timetable, offers) show only when the sign-up page has
+                // a plan to choose; with none yet it would open a page that says there is nothing to sign up for.
+                'signup_enabled' => (bool) $tenant->setting('member_signup_enabled', true) && MembershipPlan::public()->exists(),
                 'shop_open' => app(ShopSettings::class)->shopOpen($tenant),
             ],
             'chrome' => $rendered['chrome'],
