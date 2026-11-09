@@ -50,11 +50,11 @@ class ShopController extends Controller
         $products = Product::onWebsite()->with('category:id,name')->orderBy('name')->get();
         $addons = $this->addons->map($products, 'website', true);
 
-        return $this->page('Site/Shop', [
+        return $this->sitePage('shop', 'Site/Shop', [
             'products' => $products->map(fn (Product $p) => $this->product($p, $addons[$p->id])),
             'categories' => ProductCategory::whereIn('id', $products->pluck('product_category_id')->filter()->unique())->ordered()->pluck('name'),
             'currency' => $this->tenants->require()->currency,
-        ], 'المتجر', 'منتجات النادي وأسعارها، اطلبها أونلاين واستلمها من النادي.');
+        ]);
     }
 
     public function show(Product $product): Response
@@ -130,7 +130,7 @@ class ShopController extends Controller
         }
 
         return redirect()->route('site.shop.order', ['club' => $tenant->slug, 'token' => $sale->public_token])
-            ->with('success', 'تم استلام طلبك رقم '.$sale->number.'. سنتواصل معك عند تجهيزه.');
+            ->with('success', 'تم استلام طلبك رقم '.$sale->number.'. تتابع حالته من هذه الصفحة.');
     }
 
     public function order(string $token): Response

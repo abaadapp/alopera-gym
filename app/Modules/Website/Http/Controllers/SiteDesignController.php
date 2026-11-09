@@ -8,7 +8,6 @@ use App\Http\Controllers\Controller;
 use App\Modules\Website\Models\SiteSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -19,28 +18,6 @@ use Inertia\Response;
  */
 class SiteDesignController extends Controller
 {
-    public function sections(TenantContext $tenants): Response
-    {
-        return Inertia::render('Website/Sections', [
-            'sections' => $this->site()->sectionLayout(),
-            'siteUrl' => route('site.home', ['club' => $tenants->require()->slug]),
-        ]);
-    }
-
-    public function updateSections(Request $request, AuditLogger $audit): RedirectResponse
-    {
-        $data = $request->validate([
-            'sections' => ['required', 'array'],
-            'sections.*.key' => ['required', Rule::in(array_keys(SiteSetting::SECTIONS))],
-            'sections.*.visible' => ['required', 'boolean'],
-        ]);
-        $site = $this->site();
-        $site->update(['sections' => collect($data['sections'])->unique('key')->map(fn ($s) => ['key' => $s['key'], 'visible' => (bool) $s['visible']])->values()->all()]);
-        $audit->log('website.sections_updated', $site, ['visible' => $site->visibleSections()]);
-
-        return back()->with('success', 'حُفظ ترتيب أقسام الموقع.');
-    }
-
     public function branding(TenantContext $tenants): Response
     {
         $tenant = $tenants->require();

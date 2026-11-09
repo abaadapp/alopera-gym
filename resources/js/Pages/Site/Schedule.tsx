@@ -103,7 +103,7 @@ export default function Schedule({ site, seo, sessions }: { site: SiteInfo; seo:
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero title="جدول الحصص" subtitle="الأسبوع القادم بحسب المقاعد المتاحة الآن. الحجز متاح للأعضاء من بوابة الأعضاء." icon={<CalendarDays className="size-6" />} />
+            <PageHero page="schedule" title="جدول الحصص" icon={<CalendarDays className="size-6" />} />
             <section className="mx-auto max-w-4xl px-4 py-10">
                 {days.length === 0 ? (
                     <p className="py-16 text-center text-muted">لا توجد حصص مجدولة خلال الأيام القادمة.</p>

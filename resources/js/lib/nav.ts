@@ -209,8 +209,7 @@ export const NAV: NavGroup[] = [
                 icon: Globe,
                 // The owner's, or whoever the owner grants website.manage to by name (no role holds it by default).
                 tabs: [
-                    { label: 'المحتوى', route: 'club.website.edit', permission: 'website.manage' },
-                    { label: 'أقسام الموقع', route: 'club.website.sections', permission: 'website.manage' },
+                    { label: 'إدارة الموقع', route: 'club.website.edit', permission: 'website.manage' },
                     { label: 'الهوية والألوان', route: 'club.website.branding', permission: 'website.manage' },
                     { label: 'الأخبار والعروض', route: 'club.website.posts.index', permission: 'website.manage', match: 'club.website.posts.*' },
                     { label: 'رسائل التواصل', route: 'club.website.messages', permission: 'website.manage' },

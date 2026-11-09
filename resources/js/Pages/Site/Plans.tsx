@@ -1,9 +1,10 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import { Check, Clock, Crown, Dumbbell, Snowflake, Sparkles, UserRound } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { currencyLabel, money, number } from '@/lib/format';
+import type { PageKey, PageText, SiteChrome } from '@/types/site';
 
 export interface PlanData {
     id: number;
@@ -138,7 +139,16 @@ export function SectionTitle({ eyebrow, title, subtitle, center = true }: { eyeb
     );
 }
 
-export function PageHero({ title, subtitle, icon }: { title: string; subtitle?: string; icon?: React.ReactNode }) {
+/** The owner's words for an inner page (edited in «إدارة الموقع» → «الصفحات الداخلية»). */
+export function usePageText(page: PageKey): PageText | undefined {
+    return usePage<{ chrome?: SiteChrome }>().props.chrome?.pages?.[page];
+}
+
+/** The head of an inner page: with `page`, its title and line come from the site's content; otherwise from props. */
+export function PageHero({ page, title: fixedTitle, subtitle: fixedSubtitle, icon }: { page?: PageKey; title?: string; subtitle?: string; icon?: React.ReactNode }) {
+    const text = usePageText(page ?? 'plans');
+    const title = (page ? text?.title : undefined) || fixedTitle || '';
+    const subtitle = page ? text?.subtitle : fixedSubtitle;
     return (
         <section className="relative overflow-hidden bg-gradient-to-b from-brand-50 to-[#fffafb]">
             <div className="pointer-events-none absolute -top-24 end-[-6rem] size-72 rounded-full bg-brand-soft/30 blur-3xl" />
@@ -154,14 +164,15 @@ export function PageHero({ title, subtitle, icon }: { title: string; subtitle?: 
 
 export default function Plans({ site, seo, plans, ptPackages }: { site: SiteInfo; seo: { title: string }; plans: PlanData[]; ptPackages: PtPackage[] }) {
     const currency = useCurrency();
+    const text = usePageText('plans');
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero title="الباقات والأسعار" subtitle="اختر الباقة التي تناسب أهدافك وجدولك. الأسعار محدّثة مباشرة من النادي." icon={<Sparkles className="size-6" />} />
+            <PageHero page="plans" title="الباقات والأسعار" icon={<Sparkles className="size-6" />} />
 
             <section className="mx-auto max-w-6xl px-4 py-12">
                 {plans.length === 0 ? (
-                    <p className="py-16 text-center text-muted">ستُعلن الباقات قريبًا. تواصل معنا لمعرفة التفاصيل.</p>
+                    <p className="py-16 text-center text-muted">لا توجد باقات معروضة حاليًا.</p>
                 ) : (
                     <div className="grid gap-6 pt-3 sm:grid-cols-2 lg:grid-cols-3">
                         {plans.map((plan) => (
@@ -173,7 +184,7 @@ export default function Plans({ site, seo, plans, ptPackages }: { site: SiteInfo
 
             {ptPackages.length > 0 && (
                 <section className="mx-auto max-w-6xl px-4 py-12">
-                    <SectionTitle eyebrow="تدريب شخصي" title="جلسات فردية مع مدربك" subtitle="برنامج مصمم لك وحدك، بمتابعة مباشرة وخطة واضحة." />
+                    <SectionTitle eyebrow="تدريب شخصي" title={text?.pt_title || 'التدريب الشخصي'} subtitle={text?.pt_subtitle || undefined} />
                     <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                         {ptPackages.map((p) => (
                             <div key={p.id} className="rounded-3xl border border-line bg-white p-6 shadow-sm">

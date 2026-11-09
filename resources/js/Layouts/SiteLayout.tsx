@@ -1,11 +1,12 @@
-import { useState, type ReactNode } from 'react';
-import { Head, Link } from '@inertiajs/react';
-import { AtSign, Mail, MapPin, Menu, MessageCircle, Phone, ShoppingBag, X } from 'lucide-react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Menu, ShoppingBag, X } from 'lucide-react';
 import { Flash } from '@/Components/ui';
 import { useShared } from '@/hooks/useShared';
 import { useCart } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { phone as fmtPhone, whatsappUrl } from '@/lib/format';
+import type { LinkData, SiteChrome } from '@/types/site';
 
 export interface SiteInfo {
     is_published: boolean;
@@ -23,105 +24,163 @@ export interface SiteInfo {
     shop_open: boolean;
 }
 
-const links = [
-    { label: 'الرئيسية', route: 'site.home' },
-    { label: 'الباقات', route: 'site.plans' },
-    { label: 'البرامج', route: 'site.programs' },
-    { label: 'جدول الحصص', route: 'site.schedule' },
-    { label: 'فريق التدريب', route: 'site.trainers' },
-    { label: 'العروض والأخبار', route: 'site.news' },
-    { label: 'تواصل معنا', route: 'site.contact' },
-];
+/** The menu before the owner has one (or on a page the server sends without the site's chrome). */
+function fallbackLinks(shopOpen: boolean): LinkData[] {
+    const pages: [string, string][] = [
+        ['الباقات', 'site.plans'],
+        ['البرامج', 'site.programs'],
+        ['جدول الحصص', 'site.schedule'],
+        ['المدربات', 'site.trainers'],
+        ...(shopOpen ? [['المتجر', 'site.shop'] as [string, string]] : []),
+        ['العروض والأخبار', 'site.news'],
+        ['تواصل معنا', 'site.contact'],
+    ];
+    return pages.map(([label, name]) => ({ label, href: route(name), external: false }));
+}
+
+const SOCIAL: Record<string, string> = { instagram: 'إنستغرام', x: 'إكس', tiktok: 'تيك توك', snapchat: 'سناب شات', facebook: 'فيسبوك', youtube: 'يوتيوب' };
+
+/** A link of the menu or footer: a plain <a>, so a section anchor (#…) or another address both work. */
+function NavLink({ link, className, onClick }: { link: LinkData; className?: string; onClick?: () => void }) {
+    const blank = link.external && /^https?:/i.test(link.href);
+    return (
+        <a href={link.href} onClick={onClick} className={className} {...(blank ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
+            {link.label}
+        </a>
+    );
+}
 
 /**
- * Public website shell. <title>/description are rendered on the server from
- * the `seo` prop; Head here only keeps the title in sync on client navigation.
+ * The official website's frame, in the v2 design: a white sticky header (logo, menu, join button), the page, and a
+ * dark footer. The menu, join button, footer and colours come from «إدارة الموقع» (the `chrome` prop the server
+ * sends with every site page); <title>/description are rendered on the server from the `seo` prop, and Head here
+ * only keeps the title in sync on client navigation.
  */
 export default function SiteLayout({ site, children, seoTitle }: { site: SiteInfo; children: ReactNode; seoTitle?: string }) {
     const { tenant, member } = useShared();
+    const chrome = (usePage().props.chrome as SiteChrome | undefined) ?? null;
     const [open, setOpen] = useState(false);
     const cart = useCart();
-    const nav = site.shop_open ? [...links.slice(0, 5), { label: 'المتجر', route: 'site.shop' }, ...links.slice(5)] : links;
+
+    useEffect(() => router.on('navigate', () => setOpen(false)), []);
+
+    const theme = chrome?.theme ?? { accent: '#8A6700', ink: '#16130F', surface: '#F6F3EE' };
+    const vars = { '--brand': theme.accent, '--site-accent': theme.accent, '--site-ink': theme.ink, '--site-surface': theme.surface } as CSSProperties;
+    const links = chrome ? chrome.header.links : fallbackLinks(site.shop_open);
+    const cta: LinkData | null = chrome ? chrome.header.cta : site.signup_enabled ? { label: 'انضمي الآن', href: route('site.join'), external: false } : null;
+    const showLogin = chrome ? chrome.header.show_login : true;
+    const homeUrl = chrome?.home_url ?? route('site.home');
+    const announcement = chrome ? chrome.announcement : site.announcement;
+    const footerLinks = chrome ? chrome.footer.links : links;
+    const showHours = chrome ? chrome.footer.show_hours : true;
+    const showSocial = chrome ? chrome.footer.show_social : true;
+    const social = Object.entries(site.social_links ?? {}).filter(([, v]) => !!v) as [string, string][];
+    const hours = site.working_hours ?? [];
+    const login = { label: member ? 'حسابي' : 'دخول العضوات', href: route(member ? 'portal.dashboard' : 'portal.login') };
 
     return (
         <>
             {seoTitle && <Head title={seoTitle} />}
-            {/* The site's own faces come and go with it: loaded for the whole app they would reach the panel, which loads none. */}
+            {/* The site's own face comes and goes with it: loaded for the whole app it would reach the panel, which loads none. */}
             <Head>
                 <link rel="preconnect" href="https://fonts.googleapis.com" />
                 <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-                <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap" />
+                <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" />
             </Head>
-            <div className="min-h-screen bg-[#fffafb]">
-                {site.announcement && <div className="bg-brand px-4 py-2 text-center text-sm text-white">{site.announcement}</div>}
-                <header className="sticky top-0 z-30 border-b border-line/70 bg-white/90 backdrop-blur">
-                    <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:gap-4">
-                        <Link href={route('site.home')} className="flex min-w-0 items-center gap-2.5">
-                            <img src={site.logo_url} alt={tenant?.name} className="h-14 w-auto object-contain" width={75} height={56} />
-                        </Link>
-                        <nav className="hidden items-center gap-1 lg:flex" aria-label="القائمة الرئيسية">
-                            {nav.map((l) => (
-                                <Link key={l.route} href={route(l.route)} className={cn('rounded-full px-3 py-1.5 text-sm transition', route().current(l.route) || (l.route === 'site.shop' && route().current('site.shop.*')) ? 'bg-brand-50 text-brand-700' : 'text-ink/80 hover:text-brand')}>
-                                    {l.label}
-                                </Link>
+            <div className="site-theme flex min-h-screen flex-col overflow-x-clip bg-white font-sans leading-[1.65] text-[var(--site-ink)]" style={vars}>
+                {announcement && <div className="bg-[var(--site-ink)] px-5 py-2 text-center text-sm text-white">{announcement}</div>}
+
+                <header className="sticky top-0 z-50 border-b border-[rgba(22,19,15,0.1)] bg-white/95 backdrop-blur-[10px]">
+                    <div className="mx-auto flex min-h-16 max-w-[1360px] items-center gap-4 px-5 py-2.5 sm:px-10 xl:gap-8">
+                        <a href={homeUrl} className="flex shrink-0" aria-label={tenant?.name ?? 'الرئيسية'}>
+                            <img src={site.logo_url} alt={tenant?.name ?? ''} className="block h-11 w-auto object-contain" />
+                        </a>
+                        <nav className="hidden min-w-0 flex-1 flex-wrap gap-x-[22px] xl:flex" aria-label="القائمة الرئيسية">
+                            {links.map((l, i) => (
+                                <NavLink key={i} link={l} className="py-1.5 text-[15px] whitespace-nowrap text-[#3A342B] transition-colors hover:text-[var(--site-accent)]" />
                             ))}
                         </nav>
-                        <div className="flex shrink-0 items-center gap-2">
+                        <div className="ms-auto flex shrink-0 items-center gap-2 sm:gap-4">
                             {site.shop_open && (
-                                <Link href={route('site.shop.cart')} className="relative grid size-10 place-items-center rounded-full border border-line hover:border-brand-300" aria-label={`السلة (${cart.count})`}>
+                                <Link href={route('site.shop.cart')} className="relative grid size-10 place-items-center rounded-xl text-[var(--site-ink)] hover:bg-[var(--site-surface)]" aria-label={`السلة (${cart.count})`}>
                                     <ShoppingBag className="size-5" />
-                                    {cart.count > 0 && <span className="absolute -top-1 -end-1 grid min-w-5 place-items-center rounded-full bg-brand px-1 text-[11px] font-semibold text-white num">{cart.count}</span>}
+                                    {cart.count > 0 && <span className="absolute -top-0.5 -end-0.5 grid min-w-5 place-items-center rounded-full bg-[var(--site-accent)] px-1 text-[11px] font-semibold text-white">{cart.count}</span>}
                                 </Link>
                             )}
-                            <Link href={route(member ? 'portal.dashboard' : 'portal.login')} className="hidden rounded-full border border-line px-4 py-2 text-sm hover:border-brand-300 sm:inline-block">
-                                {member ? 'حسابي' : 'دخول الأعضاء'}
-                            </Link>
-                            {site.signup_enabled && (
-                                <Link href={route('site.join')} className="whitespace-nowrap rounded-full bg-brand px-3 py-2 text-sm font-medium text-white shadow-sm shadow-brand/30 hover:bg-brand-600 sm:px-4">
-                                    اشترك الآن
-                                </Link>
+                            {showLogin && (
+                                <a href={login.href} className="hidden py-1.5 text-[15px] whitespace-nowrap text-[var(--site-ink)] underline underline-offset-[5px] hover:text-[var(--site-accent)] sm:inline">
+                                    {login.label}
+                                </a>
                             )}
-                            <button className="grid size-10 place-items-center rounded-full hover:bg-brand-50 lg:hidden" onClick={() => setOpen(!open)} aria-label="القائمة">
+                            {cta && cta.label && (
+                                <NavLink link={cta} className="inline-flex h-11 items-center rounded-xl bg-[var(--site-ink)] px-4 text-[15px] font-semibold whitespace-nowrap text-white transition-colors hover:bg-[var(--site-accent)] hover:text-white sm:px-[22px]" />
+                            )}
+                            <button
+                                type="button"
+                                className="grid size-10 place-items-center rounded-xl text-[var(--site-ink)] hover:bg-[var(--site-surface)] xl:hidden"
+                                onClick={() => setOpen(!open)}
+                                aria-label={open ? 'إغلاق القائمة' : 'القائمة'}
+                                aria-expanded={open}
+                            >
                                 {open ? <X className="size-5" /> : <Menu className="size-5" />}
                             </button>
                         </div>
                     </div>
                     {open && (
-                        <nav className="border-t border-line bg-white px-4 py-3 lg:hidden">
-                            {nav.map((l) => (
-                                <Link key={l.route} href={route(l.route)} className="block rounded-xl px-3 py-2.5 text-sm hover:bg-brand-50">{l.label}</Link>
+                        <nav className="max-h-[calc(100svh-65px)] overflow-y-auto border-t border-[rgba(22,19,15,0.1)] bg-white px-5 py-3 sm:px-10 xl:hidden" aria-label="القائمة">
+                            {links.map((l, i) => (
+                                <NavLink key={i} link={l} onClick={() => setOpen(false)} className="block border-b border-[rgba(22,19,15,0.08)] py-3.5 text-base text-[#3A342B] last:border-b-0 hover:text-[var(--site-accent)]" />
                             ))}
-                            <Link href={route(member ? 'portal.dashboard' : 'portal.login')} className="block rounded-xl px-3 py-2.5 text-sm font-medium text-brand">{member ? 'حسابي' : 'دخول الأعضاء'}</Link>
+                            {showLogin && (
+                                <a href={login.href} className="mt-2 block py-3 text-base font-semibold text-[var(--site-ink)]">{login.label}</a>
+                            )}
                         </nav>
                     )}
                 </header>
 
-                <main>{children}</main>
+                <main className="flex-1">{children}</main>
 
-                <footer className="mt-20 border-t border-line bg-white">
-                    <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 md:grid-cols-3">
-                        <div>
-                            <p className="font-display text-lg font-semibold">{tenant?.name}</p>
-                            <p className="mt-2 text-sm leading-7 text-muted">نادٍ للياقة والصحة. احجز حصصك وجدد اشتراكك أونلاين.</p>
+                <footer className="bg-[var(--site-ink)] text-[#CFC7B8]">
+                    <div className="mx-auto grid max-w-[1360px] gap-10 px-5 py-14 sm:px-10 md:grid-cols-2 lg:grid-cols-12 lg:gap-12">
+                        <div className="flex min-w-0 flex-col gap-4 lg:col-span-4">
+                            <img src={site.logo_url} alt={tenant?.name ?? ''} className="block h-[60px] w-auto self-start object-contain" />
+                            {chrome?.footer.line && <p className="m-0 max-w-[360px] text-sm leading-7 whitespace-pre-line">{chrome.footer.line}</p>}
                         </div>
-                        <div className="space-y-2 text-sm">
-                            {site.contact_phone && <a href={`tel:+${site.contact_phone}`} className="flex items-center gap-2 text-ink/80"><Phone className="size-4 text-brand" /><span className="num">{fmtPhone(site.contact_phone)}</span></a>}
-                            {site.whatsapp_number && <a href={whatsappUrl(site.whatsapp_number)} className="flex items-center gap-2 text-ink/80" target="_blank" rel="noreferrer"><MessageCircle className="size-4 text-brand" />واتساب</a>}
-                            {site.contact_email && <a href={`mailto:${site.contact_email}`} className="flex items-center gap-2 text-ink/80"><Mail className="size-4 text-brand" />{site.contact_email}</a>}
-                            {site.address && <p className="flex items-center gap-2 text-ink/80"><MapPin className="size-4 text-brand" />{site.address}</p>}
-                            {site.social_links?.instagram && <a href={site.social_links.instagram} className="flex items-center gap-2 text-ink/80" target="_blank" rel="noreferrer"><AtSign className="size-4 text-brand" />إنستغرام</a>}
+                        {footerLinks.length > 0 && (
+                            <nav className="flex min-w-0 flex-col gap-2.5 text-sm lg:col-span-2" aria-label="روابط الموقع">
+                                {footerLinks.map((l, i) => <NavLink key={i} link={l} className="self-start text-[#CFC7B8] transition-colors hover:text-white" />)}
+                            </nav>
+                        )}
+                        <div className="flex min-w-0 flex-col gap-2.5 text-sm lg:col-span-3">
+                            {site.contact_phone && <a href={`tel:+${site.contact_phone}`} dir="ltr" className="self-start [unicode-bidi:isolate] hover:text-white">{fmtPhone(site.contact_phone)}</a>}
+                            {site.whatsapp_number && <a href={whatsappUrl(site.whatsapp_number)} target="_blank" rel="noopener noreferrer" className="self-start hover:text-white">واتساب</a>}
+                            {site.contact_email && <a href={`mailto:${site.contact_email}`} className="self-start break-all hover:text-white">{site.contact_email}</a>}
+                            {site.address && <p className="m-0 leading-7">{site.address}</p>}
+                            {showSocial && social.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                                    {social.map(([key, href]) => <a key={key} href={href} target="_blank" rel="noopener noreferrer" className="border-b border-white/30 hover:border-white hover:text-white">{SOCIAL[key] ?? key}</a>)}
+                                </div>
+                            )}
                         </div>
-                        {(site.working_hours ?? []).length > 0 && (
-                            <div className="text-sm">
-                                <p className="mb-2 font-medium">أوقات العمل</p>
-                                {(site.working_hours ?? []).map((w, i) => (
-                                    <p key={i} className="flex justify-between gap-4 py-0.5 text-ink/80"><span>{w.days}</span><span>{w.hours}</span></p>
+                        {showHours && hours.length > 0 && (
+                            <div className="flex min-w-0 flex-col gap-1.5 text-sm lg:col-span-3">
+                                <p className="m-0 mb-1 font-semibold text-white">أوقات العمل</p>
+                                {hours.map((w, i) => (
+                                    <p key={i} className="m-0 flex flex-wrap justify-between gap-x-4"><span>{w.days}</span><span>{w.hours}</span></p>
                                 ))}
                             </div>
                         )}
                     </div>
-                    <p className="border-t border-line py-4 text-center text-xs text-muted">© {new Date().getFullYear()} {tenant?.name}</p>
+                    <div className="border-t border-white/10">
+                        <p className="mx-auto m-0 max-w-[1360px] px-5 py-5 text-[13px] text-[#9A9284] sm:px-10">© {new Date().getFullYear()} {tenant?.name}</p>
+                    </div>
                 </footer>
+
+                {chrome?.preview && (
+                    <div className="pointer-events-none fixed inset-x-0 bottom-3 z-[60] flex justify-center px-4">
+                        <span className="rounded-full bg-[#A33A22] px-4 py-1.5 text-sm font-semibold text-white shadow-lg">معاينة المسودة — لا يراها الزوار</span>
+                    </div>
+                )}
             </div>
             <Flash />
         </>

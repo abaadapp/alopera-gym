@@ -38,12 +38,12 @@ class PortalAuthController extends Controller
     {
         abort_unless($tenants->require()->setting('member_signup_enabled', true), 404);
 
-        return $this->page('Site/Join', [
+        return $this->sitePage('join', 'Site/Join', [
             'plans' => MembershipPlan::public()->orderBy('sort')->get()->map(fn ($p) => GymPresenter::plan($p)),
             'selected' => $request->integer('plan') ?: null,
             'onlinePayments' => $online->available(),
             'payAtReception' => (bool) $tenants->require()->setting('allow_pay_at_reception', true),
-        ], 'اشترك الآن', 'سجّل واختر باقتك وادفع أونلاين خلال دقيقة.');
+        ]);
     }
 
     public function storeRegistration(Request $request, MemberService $members, MembershipService $memberships, OnlinePaymentService $online, TenantContext $tenants): HttpResponse
@@ -100,7 +100,7 @@ class PortalAuthController extends Controller
         }
 
         return redirect()->route('portal.dashboard')->with('success', $invoice->isOpen()
-            ? 'تم التسجيل! أكمل الدفع لتفعيل اشتراكك (أونلاين من صفحة الفواتير أو في الاستقبال).'
+            ? ($online->available() ? 'تم التسجيل! أكمل الدفع لتفعيل اشتراكك (أونلاين من صفحة الفواتير أو في الاستقبال).' : 'تم التسجيل! أكمل الدفع في الاستقبال لتفعيل اشتراكك.')
             : 'تم التسجيل وتفعيل اشتراكك. أهلًا بك!');
     }
 
