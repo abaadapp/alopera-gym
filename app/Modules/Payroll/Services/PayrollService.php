@@ -12,6 +12,7 @@ use App\Modules\Accounting\Services\AccountFunds;
 use App\Modules\Accounting\Services\AccountingPeriods;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\Ledger;
+use App\Modules\Finance\Models\CashShift;
 use App\Modules\Gym\Models\StaffAttendance;
 use App\Modules\Payroll\Models\Employee;
 use App\Modules\Payroll\Models\PayrollItem;
@@ -272,6 +273,14 @@ final class PayrollService
             $run = PayrollRun::whereKey($payout->payroll_run_id)->lockForUpdate()->firstOrFail();
 
             $entry = JournalEntry::where(['source_type' => 'payroll_payout', 'source_id' => $payout->id, 'source_event' => 'pay'])->whereNull('reversed_at')->first();
+            // Paid out of a cash box while one of its shifts was open, and that shift is closed: its count already put
+            // the drawer right, so reversing would put the cash back a second time (and into the shift open now).
+            $at = $entry?->created_at ?? $payout->created_at;
+            $shift = CashShift::where('account_id', $payout->account_id)->whereNotNull('closed_at')
+                ->where('opened_at', '<=', $at)->where('closed_at', '>=', $at)->first();
+            if ($shift) {
+                throw new BusinessRuleException('payroll.shift_closed', "صُرف هذا من الصندوق في الوردية {$shift->number} وقد أُقفلت وحُسب فرقها؛ لا يُلغى الصرف. صحّح بقيد يومية.");
+            }
             if ($entry) {
                 $this->ledger->reverse($entry, "إلغاء صرف رواتب {$run->label()} — {$payout->number}: {$reason}",
                     ['source_type' => 'payroll_payout', 'source_id' => $payout->id, 'event' => 'void'], $payout->paid_on);
