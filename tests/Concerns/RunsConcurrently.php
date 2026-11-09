@@ -5,6 +5,7 @@ namespace Tests\Concerns;
 use Closure;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Tests\Support\DatabaseIsolation;
 use Throwable;
 
 /**
@@ -28,13 +29,15 @@ trait RunsConcurrently
             $this->markTestSkipped('pcntl and posix are needed to run requests at the same time.');
         }
 
-        // The test database passed Tests\TestCase's check (its name says test), so this one does too.
+        // Named after the test database, which passed Tests\TestCase's checks.
         $name = config('database.connections.pgsql.database').'_concurrency';
         if (! DB::selectOne('select 1 as found from pg_database where datname = ?', [$name])) {
             DB::statement('create database '.$name);
         }
         config(['database.connections.pgsql.database' => $name, 'cache.default' => 'database']);
         DB::purge('pgsql');
+        // The same checks as every test's database, on this one, before it is migrated or emptied.
+        DatabaseIsolation::assert(app(), ['testing'], 'The concurrency tests did not start, nothing was touched: ');
 
         if (! self::$concurrencyDatabaseReady) {
             Artisan::call('migrate:fresh', ['--force' => true]);
