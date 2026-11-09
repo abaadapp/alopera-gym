@@ -28,6 +28,8 @@
       - ما يحذف أو يعيد تسمية جدول أو عمود، أو يغيّر نوع عمود، أو يحذف صفوفًا، يوقف النشر هنا **قبل أن يتغير شيء على الخادم**.
       - إلا إذا حمل الترحيل العلامة `@deploy-destructive-reviewed`، فيراها صاحب النظام في طلب الدمج قبل الموافقة.
       - الإضافة فقط (جداول وأعمدة وفهارس جديدة) تمر دون توقف.
+      - إعادة كتابة صفوف موجودة (`update()` أو `UPDATE … SET`) لا توقف النشر، لكنها تظهر تحذيرًا في تشغيل Deploy Main: هكذا تُملأ الأعمدة الجديدة وتُمنح الصلاحيات (ثلث الترحيلات حتى الآن).
+      - تُفحص الترحيلات الجديدة منذ آخر Commit نُفذت ترحيلاته كلها (`MIGRATED.txt`)، لا منذ الكود الحالي على الخادم: نشرٌ سحب ثم فشل قبل الترحيل لا يجعل النشر التالي يتجاوز الفحص.
    2. سحب `main` (`git pull --ff-only`).
    3. اعتماديات Composer للإنتاج.
    4. بناء الواجهة على الخادم في مجلد جانبي، ثم تبديلها بالقديمة.
@@ -79,7 +81,7 @@ sudo -u deploy php artisan storage:link
 sudo -u deploy php artisan config:cache && sudo -u deploy php artisan route:cache && sudo -u deploy php artisan view:cache && sudo -u deploy php artisan event:cache
 ln -sfn $A/app $A/current && systemctl reload php8.4-fpm && sudo -u deploy php $A/app/artisan queue:restart
 
-# مجلد حالة النشر (ROLLBACK.txt وDEPLOYED.txt وسجلات الترحيل) يملكه deploy: النظام القديم كان ينشئه بحساب root
+# مجلد حالة النشر (ROLLBACK.txt وDEPLOYED.txt وMIGRATED.txt وسجلات الترحيل) يملكه deploy: النظام القديم كان ينشئه بحساب root
 install -d -o deploy -g deploy $A/shared/deploy-state && chown -R deploy:deploy $A/shared/deploy-state
 
 # 4) حساب deploy يعيد تحميل PHP-FPM وحده
@@ -105,5 +107,6 @@ chown deploy:deploy /home/deploy/.ssh/authorized_keys && chmod 600 /home/deploy/
 | GitHub ← Actions ← Main Gate | سبب نشر الدمج أو عدم نشره (مثل دفع مباشر، أو تحرّك main قبل الدمج) |
 | GitHub ← Actions ← Deploy Main | سجل كل نشر، وفحص الموقع، والوسم |
 | `shared/deploy-state/DEPLOYED.txt` | الإصدار والـCommit والوقت على الخادم |
+| `shared/deploy-state/MIGRATED.txt` | آخر Commit نُفذت ترحيلاته كلها: منه يبدأ فحص الترحيلات في النشر التالي |
 | `shared/deploy-state/ROLLBACK.txt` | الـCommit السابق وأمر الرجوع |
 | `shared/deploy-state/migrate-*.log` | ناتج كل ترحيل |

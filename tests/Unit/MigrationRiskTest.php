@@ -64,6 +64,37 @@ class MigrationRiskTest extends TestCase
         yield 'delete rows' => ["        DB::table('t')->where('x', 1)->delete();"];
         yield 'raw drop' => ["        DB::statement('ALTER TABLE t DROP COLUMN a');"];
         yield 'raw type change' => ['        DB::statement("ALTER TABLE t ALTER COLUMN a TYPE bigint");'];
+        yield 'drop columns through Schema' => ["        Schema::dropColumns('t', ['a', 'b']);"];
+        yield 'rename a table from its blueprint' => ["        Schema::table('t', fn (Blueprint \$table) => \$table->rename('u'));"];
+        yield 'raw drop in a heredoc' => ["        DB::statement(<<<'SQL'\n            ALTER TABLE t DROP COLUMN a\n            SQL);"];
+        yield 'raw drop put together' => ["        DB::statement('ALTER TABLE t '.'DROP '.'COLUMN a');"];
+        yield 'raw drop kept in a variable' => ["        \$sql = \"ALTER TABLE t DROP COLUMN {\$this->column}\";\n        DB::statement(\$sql);"];
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function rewrites(): iterable
+    {
+        yield 'update()' => ["        DB::table('t')->whereNotNull('a')->update(['b' => DB::raw('a')]);"];
+        yield 'UPDATE in a heredoc' => ["        DB::statement(<<<'SQL'\n            UPDATE t SET b = a\n            SQL);"];
+    }
+
+    #[DataProvider('rewrites')]
+    public function test_rewriting_rows_is_reported_without_stopping(string $up): void
+    {
+        [$code, $out] = $this->scan(self::migration($up));
+        $this->assertSame(0, $code, $out);
+        $this->assertStringContainsString('rewrites rows', $out);
+        $this->assertStringNotContainsString('adds only', $out);
+    }
+
+    public function test_words_in_data_are_not_read_as_sql(): void
+    {
+        [$code, $out] = $this->scan(self::migration(
+            "        DB::table('programs')->insert(['name' => 'Drop-in', 'note' => 'drop', 'permission' => 'members.delete']);",
+        ));
+
+        $this->assertSame(0, $code, $out);
+        $this->assertStringContainsString('adds only', $out);
     }
 
     #[DataProvider('destructive')]
@@ -77,9 +108,17 @@ class MigrationRiskTest extends TestCase
         $this->assertSame(0, $code, $out);
     }
 
-    public function test_the_deploy_stops_before_pulling_a_destructive_migration(): void
+    /** @var \Closure(string, string...): string */
+    private \Closure $git;
+
+    /**
+     * A remote main with one commit deployed, then a commit adding a migration that drops a column.
+     *
+     * @return array{0: string, 1: string, 2: string} the server's tree, the deployed commit, main's new commit
+     */
+    private function serverAndMain(): array
     {
-        $git = function (string $cwd, string ...$args): string {
+        $this->git = $git = function (string $cwd, string ...$args): string {
             $p = new Process(['git', '-c', 'user.name=t', '-c', 'user.email=t@t.test', '-c', 'init.defaultBranch=main', ...$args], $cwd);
             $p->mustRun();
 
@@ -105,15 +144,59 @@ class MigrationRiskTest extends TestCase
         $git($work, 'commit', '-q', '-m', 'drop a column');
         $git($work, 'push', '-q', 'origin', 'HEAD:main');
 
+        return [$app, $deployed, $git($work, 'rev-parse', 'HEAD')];
+    }
+
+    private function deploy(string $app): Process
+    {
         $deploy = new Process(['bash', dirname(__DIR__, 2).'/scripts/deploy.sh'], $app, [
             'DEPLOY_DETACHED' => '1', 'APP_DIR' => $app, 'STATE_DIR' => $this->dir.'/state', 'PHP_BIN' => PHP_BINARY,
         ]);
         $deploy->run();
 
+        return $deploy;
+    }
+
+    public function test_the_deploy_stops_before_pulling_a_destructive_migration(): void
+    {
+        [$app, $deployed] = $this->serverAndMain();
+
+        $deploy = $this->deploy($app);
+
         $this->assertSame(1, $deploy->getExitCode(), $deploy->getOutput().$deploy->getErrorOutput());
         $this->assertStringContainsString('NOT REVIEWED', $deploy->getOutput());
         $this->assertStringContainsString('nothing was changed on the server', $deploy->getErrorOutput());
-        $this->assertSame($deployed, $git($app, 'rev-parse', 'HEAD'), 'not pulled');
+        $this->assertSame($deployed, ($this->git)($app, 'rev-parse', 'HEAD'), 'not pulled');
         $this->assertFileDoesNotExist($app.'/database/migrations/2030_01_01_000000_drop_old.php');
+    }
+
+    public function test_a_deploy_that_pulled_then_failed_before_migrating_does_not_let_the_next_one_skip_the_check(): void
+    {
+        [$app, $deployed] = $this->serverAndMain();
+        // The last deploy that finished, then one that pulled main (by hand, or an old deploy script) and failed
+        // before migrating: the server's tree is main already, its migration has not run.
+        mkdir($this->dir.'/state');
+        file_put_contents($this->dir.'/state/DEPLOYED.txt', "v0.1\n{$deployed}\n2030-01-01T00:00:00+00:00\n");
+        ($this->git)($app, 'pull', '-q', '--ff-only', 'origin', 'main');
+
+        $deploy = $this->deploy($app);
+
+        $this->assertSame(1, $deploy->getExitCode(), $deploy->getOutput().$deploy->getErrorOutput());
+        $this->assertStringContainsString('NOT REVIEWED', $deploy->getOutput());
+        $this->assertStringNotContainsString('nothing new', $deploy->getOutput(), 'stopped at the check, before going on');
+    }
+
+    public function test_migrations_that_have_run_are_not_checked_again(): void
+    {
+        [$app, , $main] = $this->serverAndMain();
+        // A deploy that migrated main, then failed later (a cache, the site check): MIGRATED.txt says so.
+        mkdir($this->dir.'/state');
+        file_put_contents($this->dir.'/state/MIGRATED.txt', $main."\n");
+        ($this->git)($app, 'pull', '-q', '--ff-only', 'origin', 'main');
+
+        $deploy = $this->deploy($app);
+
+        $this->assertStringNotContainsString('NOT REVIEWED', $deploy->getOutput(), $deploy->getErrorOutput());
+        $this->assertStringContainsString('nothing new', $deploy->getOutput());
     }
 }

@@ -7,27 +7,37 @@
  *   php scripts/migration-risk.php <migration.php>...
  *
  * Looks inside up() only (down() drops what up() made, as it should), comments left out: dropping or renaming a table
- * or a column, changing a column's type, deleting or truncating rows, raw SQL that drops, truncates, deletes, renames
- * or changes a column's type. A migration meant to do one of these says so with the marker below, which the owner sees
- * in its pull request before merging (merging is deploying).
+ * or a column, changing a column's type, deleting or truncating rows, and SQL that does one of these, in any string of
+ * up() (quoted, heredoc or nowdoc, or put together from pieces). A migration meant to do one of these says so with the
+ * marker below, which the owner sees in its pull request before merging (merging is deploying).
  *
- * Exit 0: nothing found, or each finding marked as reviewed · 1: something not reviewed · 2: no file, or unreadable.
+ * Rewriting rows (update(), UPDATE … SET) is reported, not stopped: it is how a new column is filled and how a role is
+ * given a permission, a third of the migrations so far; the deploy shows it as a warning to look at.
+ *
+ * Exit 0: nothing found, rows rewritten only, or each finding marked as reviewed · 1: something not reviewed · 2: no
+ * file, or unreadable.
  * Plain PHP, no Laravel: the deploy runs it from main's tree before main is pulled.
  */
 
 const MARKER = '@deploy-destructive-reviewed';
 
+const SCHEMA = 'Schema::(?:connection\([^)]*\)->)?';
+
 const PATTERNS = [
-    'drops a table' => '/Schema::(?:connection\([^)]*\)->)?drop(?:IfExists)?\s*\(/',
-    'renames a table' => '/Schema::(?:connection\([^)]*\)->)?rename\s*\(/',
-    'drops a column' => '/->drop(?:Column|Columns|Timestamps|TimestampsTz|SoftDeletes|SoftDeletesTz|Morphs|NullableMorphs|RememberToken|ConstrainedForeignId)\s*\(/',
+    'drops a table' => '/'.SCHEMA.'drop(?:IfExists|AllTables|AllViews|AllTypes)?\s*\(/',
+    'renames a table' => '/'.SCHEMA.'rename\s*\(|->rename\s*\(/',
+    'drops a column' => '/->drop(?:Column|Columns|Timestamps|TimestampsTz|SoftDeletes|SoftDeletesTz|Morphs|NullableMorphs|RememberToken|ConstrainedForeignId)\s*\(|'.SCHEMA.'dropColumns\s*\(/',
     'renames a column' => '/->renameColumn\s*\(/',
     'changes a column' => '/->change\s*\(\s*\)/',
     'deletes rows' => '/(?:->(?:delete|forceDelete|truncate)|DB::delete)\s*\(/',
 ];
 
-const RAW_SQL = '/(?:statement|unprepared)\s*\(\s*([\'"])(.*?)(?<!\\\\)\1/s';
-const RAW_DESTRUCTIVE = '/\b(?:DROP|TRUNCATE|DELETE|RENAME)\b|\bALTER\s+COLUMN\s+\S+\s+(?:SET\s+DATA\s+)?TYPE\b/i';
+/** SQL that does the same, in the strings of up(): each keyword followed by what SQL puts after it. */
+const SQL_DESTRUCTIVE = '/\b(?:DROP|RENAME)\s+\w|\bTRUNCATE\b|\bDELETE\s+FROM\b|\bALTER\s+COLUMN\s+\S+\s+(?:SET\s+DATA\s+)?TYPE\b/i';
+
+/** Reported, does not stop the deploy. */
+const REWRITES = '/(?:->update|DB::update)\s*\(/';
+const SQL_REWRITES = '/\bUPDATE\s+\S+\s+SET\b/i';
 
 /** The body of up(), comments left out; the whole file (comments left out) if there is no up(). */
 function upBody(string $source): string
@@ -79,6 +89,35 @@ function upBody(string $source): string
     return $code;
 }
 
+/**
+ * The strings of the code, quoted or heredoc/nowdoc, each piece of SQL read as a whole: pieces joined by "." or with a
+ * value put inside ("… DROP " . "COLUMN", "DROP COLUMN {$name}") stay together, and SQL kept in a variable before
+ * DB::statement($sql) is read too. Anything else between two strings (a comma, "=>", a parenthesis) keeps them apart
+ * with a character SQL's spaces never match, so ['note' => 'drop', 'permission' => …] is not "drop permission".
+ */
+function strings(string $code): string
+{
+    $sameSql = ['.', '"', '}', '[', ']'];
+    $sameSqlTokens = [T_START_HEREDOC, T_END_HEREDOC, T_VARIABLE, T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES, T_OBJECT_OPERATOR,
+        T_NULLSAFE_OBJECT_OPERATOR, T_STRING, T_NUM_STRING, T_STRING_VARNAME];
+    $text = '';
+    foreach (token_get_all("<?php\n".$code) as $token) {
+        [$id, $value] = is_array($token) ? $token : [null, $token];
+        if ($id === T_OPEN_TAG || $id === T_WHITESPACE) {
+            continue;
+        }
+        if ($id === T_CONSTANT_ENCAPSED_STRING) {
+            $text .= substr($value, 1, -1);
+        } elseif ($id === T_ENCAPSED_AND_WHITESPACE) {
+            $text .= $value;
+        } else {
+            $text .= in_array($value, $sameSql, true) || in_array($id, $sameSqlTokens, true) ? ' ' : "\0";
+        }
+    }
+
+    return $text;
+}
+
 /** @return list<string> what the migration's up() does that cannot be undone */
 function findings(string $source): array
 {
@@ -89,16 +128,18 @@ function findings(string $source): array
             $found[] = $what;
         }
     }
-    if (preg_match_all(RAW_SQL, $body, $matches)) {
-        foreach ($matches[2] as $sql) {
-            if (preg_match(RAW_DESTRUCTIVE, $sql)) {
-                $found[] = 'runs SQL that drops, truncates, deletes, renames or changes a type';
-                break;
-            }
-        }
+    if (preg_match(SQL_DESTRUCTIVE, strings($body))) {
+        $found[] = 'runs SQL that drops, renames, truncates, deletes or changes a type';
     }
 
     return $found;
+}
+
+function rewritesRows(string $source): bool
+{
+    $body = upBody($source);
+
+    return preg_match(REWRITES, $body) === 1 || preg_match(SQL_REWRITES, strings($body)) === 1;
 }
 
 $files = array_slice($argv, 1);
@@ -115,13 +156,14 @@ foreach ($files as $file) {
         exit(2);
     }
     $found = findings($source);
+    $note = rewritesRows($source) ? ' · rewrites rows (reported, not stopped: look that it only fills what it adds)' : '';
     if ($found === []) {
-        echo "$file: adds only\n";
+        echo $file.': '.($note === '' ? 'adds only' : 'adds'.$note)."\n";
 
         continue;
     }
     $reviewed = str_contains($source, MARKER);
-    echo $file.': '.implode(', ', $found).($reviewed ? ' — marked '.MARKER : ' — NOT REVIEWED')."\n";
+    echo $file.': '.implode(', ', $found).($reviewed ? ' — marked '.MARKER : ' — NOT REVIEWED').$note."\n";
     $unreviewed += $reviewed ? 0 : 1;
 }
 
