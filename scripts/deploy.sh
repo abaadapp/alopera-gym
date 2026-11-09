@@ -73,10 +73,9 @@ if (( ${#NEW_MIGRATIONS[@]} > 0 )); then
         (( RISK_RC == 0 )) || die "a new migration drops, renames or deletes, and is not marked as reviewed: nothing was changed on the server
 (not pulled, not migrated). Look at it; if it is meant, mark it with @deploy-destructive-reviewed in a pull request, then deploy again."
         ok "${#NEW_MIGRATIONS[@]} new migration(s) checked before pulling"
-        # Read by GitHub Actions: rows rewritten are not stopped, but shown on the Deploy Main run.
-        if grep -q 'rewrites rows' <<<"$RISK_OUT"; then
-            echo "::warning title=migrations::a new migration rewrites existing rows (update / UPDATE … SET): it is not stopped; look that it only fills what it adds"
-        fi
+        # Read by GitHub Actions: what is reported but not stopped (rows rewritten, a unique key on a table with rows)
+        # is shown on the Deploy Main run, one warning per migration.
+        grep 'reported, not stopped' <<<"$RISK_OUT" | while IFS= read -r line; do echo "::warning title=migrations::$line"; done || true
     else
         rm -rf "$RISK_DIR"
         warn "main has no scripts/migration-risk.php: the new migrations were not checked"

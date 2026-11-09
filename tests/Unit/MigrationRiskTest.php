@@ -100,7 +100,7 @@ class MigrationRiskTest extends TestCase
         yield 'a table with keys that cascade' => ["        Schema::create('t', function (Blueprint \$table) {\n            \$table->id();\n            \$table->foreignId('tenant_id')->constrained()->cascadeOnDelete()->cascadeOnUpdate();\n            \$table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();\n            \$table->foreignId('a_id')->constrained('a')->restrictOnDelete();\n            \$table->foreign('b_id')->references('id')->on('b')->onDelete('cascade')->onUpdate('cascade');\n            \$table->timestamp('seen_at')->useCurrentOnUpdate();\n            \$table->softDeletes();\n            \$table->timestamps();\n            \$table->unique(['tenant_id', 'user_id']);\n        });"];
         yield 'a column, an index and a comment on a table' => ["        Schema::table('t', function (Blueprint \$table) {\n            \$table->string('status')->default('active')->index()->comment('Drop-in or member');\n            \$table->index(['a', 'b']);\n        });"];
         yield 'rows added' => ["        DB::table('roles')->insert(['key' => 'coach', 'permissions' => json_encode(['classes.delete', 'classes.update'])]);"];
-        yield 'raw SQL that adds' => ["        DB::statement('CREATE EXTENSION IF NOT EXISTS pg_trgm');\n        DB::statement('CREATE UNIQUE INDEX t_a_unique ON t (a) WHERE deleted_at IS NULL');\n        DB::statement('ALTER TABLE t ADD CONSTRAINT t_a_positive CHECK (a >= 0)');\n        DB::statement('ALTER TABLE t ADD COLUMN type varchar(20)');"];
+        yield 'raw SQL that adds' => ["        DB::statement('CREATE EXTENSION IF NOT EXISTS pg_trgm');\n        DB::statement('ALTER TABLE t ADD CONSTRAINT t_a_positive CHECK (a >= 0)');\n        DB::statement('ALTER TABLE t ADD COLUMN type varchar(20)');"];
         yield 'guards' => ["        if (! Schema::hasColumn('t', 'a')) {\n            Schema::table('t', fn (Blueprint \$table) => \$table->string('a')->nullable());\n        }"];
     }
 
@@ -109,6 +109,32 @@ class MigrationRiskTest extends TestCase
     {
         [$code, $out] = $this->scan(self::migration($up));
 
+        $this->assertSame(0, $code, $out);
+        $this->assertStringContainsString('adds only', $out);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function uniqueOnRows(): iterable
+    {
+        yield 'unique() on a table made before' => ["        Schema::table('t', fn (Blueprint \$table) => \$table->unique(['a', 'b']));"];
+        yield 'a unique column added to a table made before' => ["        Schema::table('t', function (Blueprint \$table) {\n            \$table->string('code')->nullable()->unique();\n        });"];
+        yield 'raw CREATE UNIQUE INDEX' => ["        DB::statement('CREATE UNIQUE INDEX t_a_unique ON t (a) WHERE deleted_at IS NULL');"];
+        yield 'raw ADD CONSTRAINT UNIQUE' => ["        DB::statement('ALTER TABLE t ADD CONSTRAINT t_a_unique UNIQUE (a)');"];
+    }
+
+    #[DataProvider('uniqueOnRows')]
+    public function test_a_unique_key_on_a_table_with_rows_is_reported_without_stopping(string $up): void
+    {
+        [$code, $out] = $this->scan(self::migration($up));
+        $this->assertSame(0, $code, $out);
+        $this->assertStringContainsString('adds a unique key', $out);
+    }
+
+    public function test_a_unique_key_on_a_new_table_is_not_reported(): void
+    {
+        [$code, $out] = $this->scan(self::migration(
+            "        Schema::create('t', function (Blueprint \$table) { \$table->id(); \$table->string('code')->unique(); \$table->unique(['id', 'code']); });\n        Schema::table('u', fn (Blueprint \$table) => \$table->string('x')->nullable());",
+        ));
         $this->assertSame(0, $code, $out);
         $this->assertStringContainsString('adds only', $out);
     }
@@ -142,7 +168,7 @@ class MigrationRiskTest extends TestCase
      *
      * @return array{0: string, 1: string, 2: string} the server's tree, the deployed commit, main's new commit
      */
-    private function serverAndMain(): array
+    private function serverAndMain(?string $up = null): array
     {
         $this->git = $git = function (string $cwd, string ...$args): string {
             $p = new Process(['git', '-c', 'user.name=t', '-c', 'user.email=t@t.test', '-c', 'init.defaultBranch=main', ...$args], $cwd);
@@ -165,7 +191,7 @@ class MigrationRiskTest extends TestCase
         $deployed = $git($app, 'rev-parse', 'HEAD');
 
         copy(dirname(__DIR__, 2).'/scripts/migration-risk.php', $work.'/scripts/migration-risk.php');
-        file_put_contents($work.'/database/migrations/2030_01_01_000000_drop_old.php', self::migration("        Schema::table('members', fn (Blueprint \$table) => \$table->dropColumn('phone'));"));
+        file_put_contents($work.'/database/migrations/2030_01_01_000000_drop_old.php', self::migration($up ?? "        Schema::table('members', fn (Blueprint \$table) => \$table->dropColumn('phone'));"));
         $git($work, 'add', '.');
         $git($work, 'commit', '-q', '-m', 'drop a column');
         $git($work, 'push', '-q', 'origin', 'HEAD:main');
@@ -210,6 +236,18 @@ class MigrationRiskTest extends TestCase
         $this->assertSame(1, $deploy->getExitCode(), $deploy->getOutput().$deploy->getErrorOutput());
         $this->assertStringContainsString('NOT REVIEWED', $deploy->getOutput());
         $this->assertStringNotContainsString('nothing new', $deploy->getOutput(), 'stopped at the check, before going on');
+    }
+
+    public function test_what_is_reported_but_not_stopped_shows_as_a_warning_on_the_deploy_run(): void
+    {
+        [$app] = $this->serverAndMain("        DB::table('members')->whereNull('code')->update(['code' => DB::raw('id')]);");
+
+        $deploy = $this->deploy($app);
+
+        $this->assertStringContainsString('::warning title=migrations::', $deploy->getOutput(), $deploy->getErrorOutput());
+        $this->assertStringContainsString('rewrites rows', $deploy->getOutput());
+        $this->assertStringNotContainsString('NOT REVIEWED', $deploy->getOutput());
+        $this->assertStringContainsString('new migration(s) checked before pulling', $deploy->getOutput());
     }
 
     public function test_an_unreadable_migrated_mark_falls_back_to_the_last_deploy(): void

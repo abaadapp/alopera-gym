@@ -12,10 +12,11 @@
  * (quoted, heredoc or nowdoc, or put together from pieces). A migration meant to do one of these says so with the
  * marker below, which the owner sees in its pull request before merging (merging is deploying).
  *
- * Rewriting rows (update(), UPDATE … SET) is reported, not stopped: it is how a new column is filled and how a role is
- * given a permission, a third of the migrations so far; the deploy shows it as a warning to look at.
+ * Reported, not stopped (the deploy shows each as a warning to look at): rewriting rows (update(), UPDATE … SET), how a
+ * new column is filled and a role given a permission, a third of the migrations so far; and a unique key or primary key
+ * added to a table that has rows (Schema::table, CREATE UNIQUE INDEX, ADD … UNIQUE), which fails if they repeat.
  *
- * Exit 0: nothing found, rows rewritten only, or each finding marked as reviewed · 1: something not reviewed · 2: no
+ * Exit 0: nothing found, only what is reported, or each finding marked as reviewed · 1: something not reviewed · 2: no
  * file, or unreadable.
  * Plain PHP, no Laravel: the deploy runs it from main's tree before main is pulled.
  */
@@ -40,6 +41,8 @@ const SQL_DESTRUCTIVE = '/\b(?:DROP|RENAME)\s+\w|\bTRUNCATE\b|\bDELETE\s+FROM\b|
 /** Reported, does not stop the deploy. */
 const REWRITES = '/(?:->update|DB::update)\s*\(/';
 const SQL_REWRITES = '/\bUPDATE\s+\S+\s+SET\b/i';
+const UNIQUE = '/->(?:unique|primary)\s*\(/';
+const SQL_UNIQUE = '/\bCREATE\s+UNIQUE\s+INDEX\b|\bADD\s+(?:CONSTRAINT\s+\S+\s+)?(?:UNIQUE|PRIMARY\s+KEY)\b/i';
 
 /** The body of up(), comments left out; the whole file (comments left out) if there is no up(). */
 function upBody(string $source): string
@@ -137,11 +140,24 @@ function findings(string $source): array
     return $found;
 }
 
-function rewritesRows(string $source): bool
+/** @return list<string> what is reported without stopping the deploy */
+function notes(string $source): array
 {
     $body = upBody($source);
+    $notes = [];
+    if (preg_match(REWRITES, $body) || preg_match(SQL_REWRITES, strings($body))) {
+        $notes[] = 'rewrites rows (reported, not stopped: look that it only fills what it adds)';
+    }
+    // A unique key inside Schema::table() (a table made before, with rows), not Schema::create().
+    $onExistingTable = false;
+    foreach (preg_split('/(?=Schema::)/', $body) as $call) {
+        $onExistingTable = $onExistingTable || (preg_match('/^'.SCHEMA.'table\s*\(/', $call) && preg_match(UNIQUE, $call));
+    }
+    if ($onExistingTable || preg_match(SQL_UNIQUE, strings($body))) {
+        $notes[] = 'adds a unique key to a table that may have rows (reported, not stopped: the migration fails if they repeat)';
+    }
 
-    return preg_match(REWRITES, $body) === 1 || preg_match(SQL_REWRITES, strings($body)) === 1;
+    return $notes;
 }
 
 $files = array_slice($argv, 1);
@@ -158,7 +174,8 @@ foreach ($files as $file) {
         exit(2);
     }
     $found = findings($source);
-    $note = rewritesRows($source) ? ' · rewrites rows (reported, not stopped: look that it only fills what it adds)' : '';
+    $notes = notes($source);
+    $note = $notes === [] ? '' : ' · '.implode(' · ', $notes);
     if ($found === []) {
         echo $file.': '.($note === '' ? 'adds only' : 'adds'.$note)."\n";
 
