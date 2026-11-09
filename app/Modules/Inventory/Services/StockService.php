@@ -54,7 +54,10 @@ final class StockService
             $newTotal = round($total + $quantity, 3);
             $cost = (float) $product->cost;
             if ($quantity > 0 && $unitCost !== null) {
-                $cost = $newTotal > 0 ? round((max(0, $total) * $cost + $quantity * $unitCost) / max($newTotal, 0.001), 3) : $unitCost;
+                // What is held (none when the book is below zero) and what comes in, over the same pieces: a book at
+                // -90 receiving 100 at 1.000 costs 1.000, not 100 / 10.
+                $held = max(0, $total);
+                $cost = $newTotal > 0 ? round(($held * $cost + $quantity * $unitCost) / ($held + $quantity), 3) : $unitCost;
             }
 
             $stock->forceFill(['quantity' => $balance])->save();
