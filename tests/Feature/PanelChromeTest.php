@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Branch;
+use App\Models\Role;
 use App\Models\StaffNotification;
 use App\Models\Tenant;
 use App\Models\User;
@@ -416,5 +417,18 @@ class PanelChromeTest extends TestCase
         $this->assertTrue($finance->can('dashboard.view') && ! $finance->can('classes.view'));
         $this->actingAs($finance)->get(route('club.dashboard'))->assertOk()
             ->assertInertia(fn ($page) => $page->component('Club/Dashboard')->where('today_sessions', null));
+    }
+
+    public function test_a_role_with_the_dashboard_only_gets_no_member_names_or_class_links(): void
+    {
+        $club = $this->club();
+        $this->classSession($club, attributes: ['starts_at' => now()->addHour()]);
+        $role = $this->asTenant($club, fn () => Role::create(['key' => 'dashboard_only', 'name' => 'Dashboard', 'permissions' => ['dashboard.view']]));
+
+        // The memberships about to end name the members and carry their phones.
+        $this->actingAs($this->staff($club, $role->key))->get(route('club.dashboard'))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Club/Dashboard')->where('expiring', null)->where('today_sessions', null));
+        $this->actingAs($this->staff($club, 'finance'))->get(route('club.dashboard'))->assertOk()
+            ->assertInertia(fn ($page) => $page->has('expiring', 0)->where('today_sessions', null));
     }
 }

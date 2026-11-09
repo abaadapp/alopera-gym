@@ -51,6 +51,10 @@ class DashboardController extends Controller
         if (! $request->user()->can('classes.view')) {
             $data['today_sessions'] = null;
         }
+        // The memberships about to end name the members and carry their phones: only for those who may see members.
+        if (! $request->user()->can('members.view')) {
+            $data['expiring'] = null;
+        }
 
         return Inertia::render('Club/Dashboard', $data);
     }
