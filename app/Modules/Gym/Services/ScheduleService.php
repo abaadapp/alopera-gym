@@ -78,19 +78,27 @@ final class ScheduleService
                 $startsAt = CarbonImmutable::parse($date->toDateString().' '.$schedule->starts_at);
 
                 if ($startsAt->isFuture()) {
-                    $session = ClassSession::firstOrCreate(
-                        ['class_schedule_id' => $schedule->id, 'starts_at' => $startsAt],
-                        [
-                            'branch_id' => $schedule->branch_id,
-                            'program_id' => $schedule->program_id,
-                            'trainer_id' => $schedule->trainer_id,
-                            'ends_at' => $startsAt->addMinutes($schedule->duration_minutes),
-                            'capacity' => $schedule->capacity,
-                            'room' => $schedule->room,
-                            'status' => ClassSession::SCHEDULED,
-                        ]
-                    );
-                    $created += $session->wasRecentlyCreated ? 1 : 0;
+                    // Found by the slot it was made for: a class moved to another time is not made again here.
+                    $taken = ClassSession::where('class_schedule_id', $schedule->id)
+                        ->where(fn ($q) => $q->where('slot_starts_at', $startsAt)->orWhere('starts_at', $startsAt))->exists();
+                    if ($taken) {
+                        $date = $date->addDay();
+
+                        continue;
+                    }
+                    ClassSession::create([
+                        'class_schedule_id' => $schedule->id,
+                        'starts_at' => $startsAt,
+                        'slot_starts_at' => $startsAt,
+                        'branch_id' => $schedule->branch_id,
+                        'program_id' => $schedule->program_id,
+                        'trainer_id' => $schedule->trainer_id,
+                        'ends_at' => $startsAt->addMinutes($schedule->duration_minutes),
+                        'capacity' => $schedule->capacity,
+                        'room' => $schedule->room,
+                        'status' => ClassSession::SCHEDULED,
+                    ]);
+                    $created++;
                 }
             }
             $date = $date->addDay();

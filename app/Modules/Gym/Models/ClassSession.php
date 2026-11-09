@@ -33,6 +33,7 @@ class ClassSession extends Model implements BranchOwned
     {
         return [
             'starts_at' => 'immutable_datetime',
+            'slot_starts_at' => 'immutable_datetime',
             'ends_at' => 'immutable_datetime',
         ];
     }
