@@ -156,8 +156,10 @@ class InvoiceEditorTest extends TestCase
         $issued = today()->subDays(2)->toDateString();
 
         $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1, 'issue_date' => $issued, 'payment_method' => 'cash', 'payment_date' => today()->subDays(5)->toDateString()]))
-            ->assertSessionHasErrors('payment_date');
+            ->assertSessionHasErrors(['payment_date' => 'تاريخ الدفع لا يكون قبل تاريخ الفاتورة.']);
         $this->asTenant($club, fn () => $this->assertSame(0, Invoice::count(), 'nothing issued'));
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1, 'issue_date' => $issued, 'due_date' => today()->subDays(5)->toDateString()]))
+            ->assertSessionHasErrors(['due_date' => 'تاريخ الاستحقاق لا يكون قبل تاريخ الفاتورة.']);
 
         $this->actingAs($owner)->post(route('club.invoices.store'), $this->form(['issue' => 1, 'issue_date' => $issued, 'payment_method' => 'cash', 'payment_date' => $issued]))->assertSessionHasNoErrors();
         $this->asTenant($club, fn () => $this->assertSame(Invoice::PAID, Invoice::sole()->status));

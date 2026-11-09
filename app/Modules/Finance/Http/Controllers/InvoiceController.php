@@ -325,6 +325,8 @@ class InvoiceController extends Controller
         'lines.*.unit_price.decimal' => 'السعر بثلاث منازل عشرية على الأكثر.',
         'lines.*.discount.decimal' => 'الخصم بثلاث منازل عشرية على الأكثر.',
         'paid_amount.decimal' => 'المبلغ المدفوع بثلاث منازل عشرية على الأكثر.',
+        'payment_date.after_or_equal' => 'تاريخ الدفع لا يكون قبل تاريخ الفاتورة.',
+        'due_date.after_or_equal' => 'تاريخ الاستحقاق لا يكون قبل تاريخ الفاتورة.',
     ];
 
     /** @return array<string, mixed> */
