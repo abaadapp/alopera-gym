@@ -69,8 +69,11 @@ class TestDatabaseGuardTest extends TestCase
         $this->assertNull(DatabaseIsolation::liveRefusal('alopera_gym_testing', 'alopera_gym_testing', '::1'));
         // A pooler or an alias that lands somewhere else than the settings say.
         $this->assertStringContainsString('reached the database "alopera_gym"', (string) DatabaseIsolation::liveRefusal('alopera_gym_testing', 'alopera_gym', '127.0.0.1'));
-        // A tunnel or a forwarded port: the settings say 127.0.0.1, the server answering is elsewhere.
-        $this->assertStringContainsString('at 10.114.0.2', (string) DatabaseIsolation::liveRefusal('alopera_gym_testing', 'alopera_gym_testing', '10.114.0.2'));
+        // PostgreSQL in a container (CI): connected to 127.0.0.1, it answers from the container's own address.
+        $this->assertNull(DatabaseIsolation::liveRefusal('alopera_gym_testing', 'alopera_gym_testing', '172.18.0.2'));
+        // A port on 127.0.0.1 forwarded to a database across the internet: the server answering is at a public address.
+        $this->assertStringContainsString('public address 165.245.218.225', (string) DatabaseIsolation::liveRefusal('alopera_gym_testing', 'alopera_gym_testing', '165.245.218.225'));
+        $this->assertStringContainsString('public address 2a03:b0c0:3:d0::1', (string) DatabaseIsolation::liveRefusal('alopera_gym_testing', 'alopera_gym_testing', '2a03:b0c0:3:d0::1'));
     }
 
     /** @return iterable<string, array{array<string, string>, string}> */

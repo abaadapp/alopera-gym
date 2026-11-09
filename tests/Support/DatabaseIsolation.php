@@ -9,7 +9,9 @@ use RuntimeException;
  * Where the tests and the browser checks may write: a test database on this computer, never the dev data in .env, never
  * production. Not the database's name alone. Before connecting: not the production server, the app's environment and
  * the .env file's, the configuration cache, the connection's driver, DB_URL and host, then the name. Once connected,
- * what PostgreSQL itself answers: the database reached and the address of the server answering.
+ * what PostgreSQL itself answers: the database reached, and the address of the server answering, which must not be a
+ * public one (a database across the internet behind a local port). A private address is accepted: PostgreSQL in a
+ * container, as in CI, answers from the container's own address (172.18.0.2) to a connection made to 127.0.0.1.
  *
  * Used by Tests\TestCase (every test, before RefreshDatabase empties anything), Tests\Concerns\RunsConcurrently (before
  * it migrates its own database) and scripts/serve-isolated.sh (before it makes, migrates or seeds a database).
@@ -91,17 +93,26 @@ final class DatabaseIsolation
         return null;
     }
 
-    /** Once connected: the database PostgreSQL reached, and the address of the server answering (null over a socket). */
+    /**
+     * Once connected: the database PostgreSQL reached, and the address of the server answering (null over a socket),
+     * which may be this computer or a private address (a container), never a public one.
+     */
     public static function liveRefusal(string $expectedDatabase, string $currentDatabase, ?string $serverAddress): ?string
     {
         if ($currentDatabase !== $expectedDatabase) {
             return "the connection reached the database \"$currentDatabase\", not \"$expectedDatabase\".";
         }
-        if ($serverAddress !== null && $serverAddress !== '' && ! self::isLocal($serverAddress)) {
-            return "the PostgreSQL server answering is at $serverAddress, not on this computer.";
+        if ($serverAddress !== null && $serverAddress !== '' && ! self::isLocal($serverAddress) && self::isPublic($serverAddress)) {
+            return "the PostgreSQL server answering is at the public address $serverAddress, not on this computer.";
         }
 
         return null;
+    }
+
+    /** An address on the internet: not loopback, private (10/8, 172.16/12, 192.168/16, fc00::/7) or reserved. */
+    private static function isPublic(string $address): bool
+    {
+        return filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
     }
 
     /**
