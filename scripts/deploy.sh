@@ -51,8 +51,15 @@ git fetch --tags --force --quiet origin
 # Before anything changes on the server: what main's new migrations will do (scripts/migration-risk.php, from main's
 # own tree). Dropping or renaming a table or column, changing a type or deleting rows stops here unless the migration
 # carries @deploy-destructive-reviewed, seen by the owner in its pull request.
+# New since the last commit whose migrations all ran (MIGRATED.txt), not since HEAD: a deploy that pulled and then
+# failed before migrating leaves HEAD at main, and its migrations would otherwise run on the next deploy unchecked.
+# Before MIGRATED.txt exists: the last deployed commit (DEPLOYED.txt), then HEAD.
+MIGRATED_BASE="HEAD"
+for candidate in "$(head -1 "$STATE_DIR/MIGRATED.txt" 2>/dev/null || true)" "$(sed -n 2p "$STATE_DIR/DEPLOYED.txt" 2>/dev/null || true)"; do
+    if [[ -n "$candidate" ]] && git cat-file -e "$candidate^{commit}" 2>/dev/null; then MIGRATED_BASE="$candidate"; break; fi
+done
 NEW_MIGRATIONS=()
-while IFS= read -r f; do [[ -n "$f" ]] && NEW_MIGRATIONS+=("$f"); done < <(git diff --name-only --diff-filter=AR HEAD "origin/$BRANCH" -- \
+while IFS= read -r f; do [[ -n "$f" ]] && NEW_MIGRATIONS+=("$f"); done < <(git diff --name-only --diff-filter=AR "$MIGRATED_BASE" "origin/$BRANCH" -- \
     'database/migrations/*.php' 'app/Modules/*/Database/migrations/*.php')
 if (( ${#NEW_MIGRATIONS[@]} > 0 )); then
     RISK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/alopera-migrations.XXXXXX")"
@@ -66,6 +73,9 @@ if (( ${#NEW_MIGRATIONS[@]} > 0 )); then
         (( RISK_RC == 0 )) || die "a new migration drops, renames or deletes, and is not marked as reviewed: nothing was changed on the server
 (not pulled, not migrated). Look at it; if it is meant, mark it with @deploy-destructive-reviewed in a pull request, then deploy again."
         ok "${#NEW_MIGRATIONS[@]} new migration(s) checked before pulling"
+        # Read by GitHub Actions: what is reported but not stopped (rows rewritten, a unique key on a table with rows)
+        # is shown on the Deploy Main run, one warning per migration.
+        grep 'reported, not stopped' <<<"$RISK_OUT" | while IFS= read -r line; do echo "::warning title=migrations::$line"; done || true
     else
         rm -rf "$RISK_DIR"
         warn "main has no scripts/migration-risk.php: the new migrations were not checked"
@@ -109,6 +119,8 @@ MIGRATED="$(grep -E '^[[:space:]]*[0-9]{4}_[0-9]{2}_[0-9]{2}_[0-9]{6}_[^ ]+ .*(D
 [[ -z "$MIGRATED" ]] || sed 's/^/    /' <<<"$MIGRATED"
 (( MIGRATE_RC == 0 )) || die "the migrations failed: stopped before the caches and the PHP reload.
 What ran before the failure stays in the database, and no dump brings it back. The whole error: $MIGRATE_LOG"
+# Every migration of this commit has run: the next deploy checks only what comes after it.
+git rev-parse HEAD > "$STATE_DIR/MIGRATED.txt"
 if [[ -n "$MIGRATED" ]]; then
     warn "ran with no dump before them: what a migration dropped, renamed or converted is not brought back by going back with the code"
 elif grep -q 'Nothing to migrate' "$MIGRATE_LOG"; then
