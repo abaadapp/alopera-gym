@@ -407,6 +407,8 @@ class PanelChromeTest extends TestCase
 
     public function test_today_s_classes_on_the_dashboard_only_for_whoever_may_open_them(): void
     {
+        // A class later today whatever the hour the tests run: after 23:00 "in an hour" is tomorrow.
+        $this->travelTo(today()->setTime(10, 0));
         $club = $this->club();
         $this->classSession($club, attributes: ['starts_at' => now()->addHour()]);
 
@@ -421,6 +423,8 @@ class PanelChromeTest extends TestCase
 
     public function test_a_role_with_the_dashboard_only_gets_no_member_names_or_class_links(): void
     {
+        // A class later today whatever the hour the tests run: after 23:00 "in an hour" is tomorrow.
+        $this->travelTo(today()->setTime(10, 0));
         $club = $this->club();
         $this->classSession($club, attributes: ['starts_at' => now()->addHour()]);
         $role = $this->asTenant($club, fn () => Role::create(['key' => 'dashboard_only', 'name' => 'Dashboard', 'permissions' => ['dashboard.view']]));
