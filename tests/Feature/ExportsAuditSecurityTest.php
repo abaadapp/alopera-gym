@@ -115,6 +115,26 @@ class ExportsAuditSecurityTest extends TestCase
         $this->post(route('login.store'), ['email' => 'x@y.test', 'password' => 'wrong'])->assertStatus(429);
     }
 
+    public function test_guesses_at_one_account_are_limited_whatever_address_they_come_from(): void
+    {
+        $club = $this->club();
+        $guess = fn (string $ip, array $form) => $this->withServerVariables(['REMOTE_ADDR' => $ip])->post(route('portal.login.store', ['club' => $club->slug]), $form + ['password' => 'wrong']);
+
+        // One member's phone, written two ways, from ten addresses: then refused from an eleventh.
+        foreach (range(1, 10) as $i) {
+            $guess('10.0.0.'.$i, ['login' => $i % 2 ? '91234567' : '+968 9123 4567'])->assertStatus(302);
+        }
+        $guess('10.0.0.99', ['login' => '91234567'])->assertStatus(429);
+        // Another member is not held back by it.
+        $guess('10.0.0.99', ['login' => '97654321'])->assertStatus(302);
+
+        // The portal's own field counts per address as well.
+        foreach (range(1, 5) as $i) {
+            $guess('10.0.1.1', ['login' => 'sara@mail.com']);
+        }
+        $guess('10.0.1.1', ['login' => 'Sara@Mail.com'])->assertStatus(429);
+    }
+
     public function test_security_headers_are_sent(): void
     {
         $this->get(route('login'))

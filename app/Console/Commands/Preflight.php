@@ -17,8 +17,9 @@ use Throwable;
 
 /**
  * Release gate: checks the settings a live system needs and that no demo
- * account can sign in. scripts/deploy.sh runs it before switching releases;
- * any FAIL stops the deploy.
+ * account can sign in. Exits non-zero on any FAIL. scripts/deploy.sh runs it
+ * after migrating and reloading and reports it (a warning in the Deploy Main
+ * run): by the owner's decision a FAIL does not stop the deploy (docs/DEPLOY.md).
  */
 class Preflight extends Command
 {

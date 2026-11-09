@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Inventory\Models\Product;
 use App\Modules\Messaging\Models\MessageTemplate;
 use App\Modules\Messaging\Services\TemplateCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -128,5 +129,22 @@ class FormsIntegrityTest extends TestCase
 
         $this->assertSame('members/old.jpg', $member->fresh()->photo_path);
         Storage::disk('public')->assertExists('members/old.jpg');
+    }
+
+    public function test_an_id_that_is_not_a_number_is_refused_as_invalid_not_a_server_error(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $product = $this->asTenant($club, fn () => Product::create(['name' => 'Bar', 'price' => 1, 'track_stock' => false]));
+
+        $this->actingAs($owner)->post(route('club.pos.checkout'), ['items' => [['product_id' => $product->id, 'quantity' => 1]], 'member_id' => 'abc', 'payment_method' => 'cash'])
+            ->assertStatus(302)->assertSessionHasErrors('member_id');
+        $this->actingAs($owner)->post(route('club.pos.checkout'), ['items' => [['product_id' => '1 or 1=1', 'quantity' => 1]], 'payment_method' => 'cash'])
+            ->assertStatus(302)->assertSessionHasErrors('items.0.product_id');
+        $this->actingAs($owner)->post(route('club.pos.checkout'), ['items' => [['product_id' => '99999999999999999999', 'quantity' => 1]], 'payment_method' => 'cash'])
+            ->assertStatus(302)->assertSessionHasErrors('items.0.product_id');
+        // A real id still goes through.
+        $this->actingAs($owner)->post(route('club.pos.checkout'), ['items' => [['product_id' => (string) $product->id, 'quantity' => 1]], 'payment_method' => 'cash', 'client_key' => 'id-ok'])
+            ->assertSessionHasNoErrors();
     }
 }

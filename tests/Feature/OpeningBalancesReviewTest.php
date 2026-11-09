@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Services\ChartOfAccounts;
+use App\Modules\Accounting\Services\FinanceReports;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsClubs;
@@ -42,5 +43,25 @@ class OpeningBalancesReviewTest extends TestCase
         $this->actingAs($owner)->post(route('club.finance.banks.store'), ['name' => 'صندوق الاستقبال', 'kind' => 'cash'])->assertSessionHasNoErrors();
         $this->artisan('platform:preflight')->expectsOutputToContain('1 not set: صندوق الاستقبال');
         $this->asTenant($club, fn () => $this->assertSame(0, Account::where('name', 'صندوق الاستقبال')->firstOrFail()->lines()->count(), 'nothing is posted for it'));
+    }
+
+    public function test_correcting_an_opening_balance_replaces_it_from_its_own_date_on(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $bank = $this->asTenant($club, fn () => app(ChartOfAccounts::class)->account('bank'));
+        $opened = today()->startOfYear()->toDateString();
+        $meanwhile = today()->startOfYear()->addDays(10)->toDateString();
+        $this->travelTo(today()->startOfYear()->addMonths(10));
+
+        $this->actingAs($owner)->post(route('club.finance.banks.opening', $bank), ['amount' => '5000', 'date' => $opened])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.finance.banks.opening', $bank), ['amount' => '6000', 'date' => $opened])->assertSessionHasNoErrors();
+
+        $this->asTenant($club, function () use ($bank, $opened, $meanwhile) {
+            $reports = app(FinanceReports::class);
+            $this->assertSame('6000.000', $reports->balance($bank, $meanwhile), 'the months between see the corrected balance, not both');
+            $this->assertSame('6000.000', $reports->balance($bank));
+            $this->assertSame($opened, JournalEntry::where('source_event', 'opening_fix')->sole()->entry_date->toDateString());
+        });
     }
 }
