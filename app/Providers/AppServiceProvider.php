@@ -7,6 +7,7 @@ use App\Core\Auth\PermissionRegistry;
 use App\Core\Notifications\StaffNotifier;
 use App\Core\Support\Phone;
 use App\Core\Tenancy\BranchContext;
+use App\Core\Tenancy\IdPresenceVerifier;
 use App\Core\Tenancy\SiteDomains;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
@@ -57,6 +58,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(TenantContext::class);
         $this->app->scoped(BranchContext::class);
         $this->app->scoped(StaffNotifier::class);
+        // `exists` on an id: a value that is not a number is invalid, not a database error (IdPresenceVerifier).
+        $this->app->extend('validation.presence', fn ($verifier, $app) => new IdPresenceVerifier($app['db']));
         $this->app->scoped(AuditLogger::class);
     }
 
