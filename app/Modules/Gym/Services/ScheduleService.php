@@ -86,10 +86,10 @@ final class ScheduleService
 
                         continue;
                     }
-                    ClassSession::create([
-                        'class_schedule_id' => $schedule->id,
+                    // Two runs at once (the hourly job and the generate button) both find the slot free: the unique
+                    // slot index lets one of them make it, the other takes the one made instead of failing.
+                    $session = ClassSession::createOrFirst(['class_schedule_id' => $schedule->id, 'slot_starts_at' => $startsAt], [
                         'starts_at' => $startsAt,
-                        'slot_starts_at' => $startsAt,
                         'branch_id' => $schedule->branch_id,
                         'program_id' => $schedule->program_id,
                         'trainer_id' => $schedule->trainer_id,
@@ -98,7 +98,7 @@ final class ScheduleService
                         'room' => $schedule->room,
                         'status' => ClassSession::SCHEDULED,
                     ]);
-                    $created++;
+                    $created += $session->wasRecentlyCreated ? 1 : 0;
                 }
             }
             $date = $date->addDay();
