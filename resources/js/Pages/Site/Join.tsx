@@ -44,7 +44,7 @@ export default function Join({ site, seo, plans, selected, onlinePayments, payAt
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero title="اشترك الآن" subtitle="اختر الباقة، أكمل بياناتك، وابدأ رحلتك خلال دقائق." icon={<Sparkles className="size-6" />} />
+            <PageHero page="join" title="اشترك الآن" icon={<Sparkles className="size-6" />} />
 
             <form onSubmit={submit} className="mx-auto max-w-6xl px-4 py-12">
                 <h2 className="mb-1 font-display text-xl font-semibold"><span className="text-brand num">1.</span> اختر الباقة</h2>

@@ -17,6 +17,6 @@ class SiteMedia extends Model
 
     protected function casts(): array
     {
-        return ['in_gallery' => 'boolean'];
+        return ['in_gallery' => 'boolean', 'width' => 'integer', 'height' => 'integer', 'size' => 'integer'];
     }
 }

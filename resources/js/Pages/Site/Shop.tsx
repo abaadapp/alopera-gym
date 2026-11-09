@@ -66,7 +66,7 @@ export default function Shop({ site, seo, products, categories, currency }: { si
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero title="المتجر" subtitle="منتجات النادي بأسعارها المحدّثة. اطلب أونلاين واستلم طلبك من النادي." icon={<ShoppingBag className="size-6" />} />
+            <PageHero page="shop" title="المتجر" icon={<ShoppingBag className="size-6" />} />
 
             <section className="mx-auto max-w-6xl px-4 py-12">
                 {categories.length > 1 && (

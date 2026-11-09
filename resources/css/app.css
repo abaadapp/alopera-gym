@@ -44,6 +44,29 @@
 }
 
 /*
+ * The official website (SiteLayout): the v2 palette from «إدارة الموقع». SiteLayout sets --brand to the site's
+ * accent on its wrapper; the tints are derived again here because the ones on :root were computed from the
+ * club's panel colour. The inner pages written with brand-*, ink, muted and line classes follow it too.
+ */
+.site-theme {
+    --brand-soft: color-mix(in oklab, var(--brand) 30%, white);
+    --color-brand: var(--brand);
+    --color-brand-soft: var(--brand-soft);
+    --color-brand-50: color-mix(in oklab, var(--brand) 6%, white);
+    --color-brand-100: color-mix(in oklab, var(--brand) 12%, white);
+    --color-brand-200: color-mix(in oklab, var(--brand) 24%, white);
+    --color-brand-300: color-mix(in oklab, var(--brand) 40%, white);
+    --color-brand-600: color-mix(in oklab, var(--brand) 88%, black);
+    --color-brand-700: color-mix(in oklab, var(--brand) 75%, black);
+    --color-brand-900: color-mix(in oklab, var(--brand) 45%, black);
+    --color-ink: var(--site-ink, #16130f);
+    --color-muted: #6b6356;
+    --color-line: #e7e1d8;
+    --color-canvas: var(--site-surface, #f6f3ee);
+    --font-display: 'IBM Plex Sans Arabic', ui-sans-serif, system-ui, sans-serif;
+}
+
+/*
  * The panel and the point of sale (AdminScope): one neutral palette — grey lines and canvas, near-black text,
  * and near-black as the accent too (primary buttons, toggles, checkboxes, active tabs and chips, links). The
  * brand tints resolve to greys here, so a screen written with brand-* classes looks the same as one written
