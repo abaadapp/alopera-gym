@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Core\Audit\AuditLogger;
 use App\Core\Auth\PermissionRegistry;
 use App\Core\Notifications\StaffNotifier;
+use App\Core\Support\Phone;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\IdPresenceVerifier;
 use App\Core\Tenancy\SiteDomains;
@@ -177,10 +178,18 @@ class AppServiceProvider extends ServiceProvider
 
     private function registerRateLimiters(): void
     {
-        RateLimiter::for('login', fn (Request $request) => [
-            Limit::perMinute(5)->by(strtolower((string) $request->input('email')).'|'.$request->ip()),
-            Limit::perMinute(20)->by($request->ip()),
-        ]);
+        // The account is the staff form's email or the portal form's login (an email or a phone). Each limit names
+        // it: one IP at a time, any IP (guesses spread over many addresses), and one IP whatever the account.
+        RateLimiter::for('login', function (Request $request) {
+            $login = strtolower(trim((string) ($request->input('email') ?? $request->input('login'))));
+            $account = $login === '' || str_contains($login, '@') ? $login : Phone::normalize($login);
+
+            return [
+                Limit::perMinute(5)->by($account.'|'.$request->ip()),
+                Limit::perMinute(10)->by('account|'.$account),
+                Limit::perMinute(20)->by($request->ip()),
+            ];
+        });
 
         RateLimiter::for('public-forms', fn (Request $request) => Limit::perMinute(6)->by($request->ip()));
 
