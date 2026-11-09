@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Branch;
+use App\Models\Role;
 use App\Models\StaffNotification;
 use App\Models\Tenant;
 use App\Models\User;
@@ -402,5 +403,36 @@ class PanelChromeTest extends TestCase
         $club = $this->club();
         $this->actingAs($this->owner($club))->get(route('site.home', ['club' => $club->slug]))
             ->assertInertia(fn ($page) => $page->where('notifications', null));
+    }
+
+    public function test_today_s_classes_on_the_dashboard_only_for_whoever_may_open_them(): void
+    {
+        // A class later today whatever the hour the tests run: after 23:00 "in an hour" is tomorrow.
+        $this->travelTo(today()->setTime(10, 0));
+        $club = $this->club();
+        $this->classSession($club, attributes: ['starts_at' => now()->addHour()]);
+
+        $this->actingAs($this->owner($club))->get(route('club.dashboard'))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Club/Dashboard')->has('today_sessions', 1));
+        // Finance sees the dashboard but not the classes: no list of links that open on "forbidden".
+        $finance = $this->staff($club, 'finance');
+        $this->assertTrue($finance->can('dashboard.view') && ! $finance->can('classes.view'));
+        $this->actingAs($finance)->get(route('club.dashboard'))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Club/Dashboard')->where('today_sessions', null));
+    }
+
+    public function test_a_role_with_the_dashboard_only_gets_no_member_names_or_class_links(): void
+    {
+        // A class later today whatever the hour the tests run: after 23:00 "in an hour" is tomorrow.
+        $this->travelTo(today()->setTime(10, 0));
+        $club = $this->club();
+        $this->classSession($club, attributes: ['starts_at' => now()->addHour()]);
+        $role = $this->asTenant($club, fn () => Role::create(['key' => 'dashboard_only', 'name' => 'Dashboard', 'permissions' => ['dashboard.view']]));
+
+        // The memberships about to end name the members and carry their phones.
+        $this->actingAs($this->staff($club, $role->key))->get(route('club.dashboard'))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Club/Dashboard')->where('expiring', null)->where('today_sessions', null));
+        $this->actingAs($this->staff($club, 'finance'))->get(route('club.dashboard'))->assertOk()
+            ->assertInertia(fn ($page) => $page->has('expiring', 0)->where('today_sessions', null));
     }
 }
