@@ -198,6 +198,8 @@ class AccessHardeningTest extends TestCase
         $this->actingAs($owner)->post(route('club.finance.journal.store'), $entry([['account_id' => $stranger->id, 'debit' => 5], ['account_id' => $cash->id, 'credit' => 5]], (string) Str::uuid()))
             ->assertSessionHasErrors('lines.0.account_id');
 
+        // The box holds money before any of it is moved (a transfer takes only what the account holds: AccountFundsTest).
+        $this->actingAs($owner)->post(route('club.finance.banks.opening', $cash), ['amount' => '20', 'date' => today()->toDateString()])->assertSessionHasNoErrors();
         $transfer = ['client_key' => (string) Str::uuid(), 'from_id' => $cash->id, 'to_id' => $bank->id, 'amount' => 2, 'date' => today()->toDateString()];
         $this->actingAs($owner)->post(route('club.finance.transfers.store'), $transfer)->assertSessionHasNoErrors();
         $this->actingAs($owner)->post(route('club.finance.transfers.store'), $transfer)->assertSessionHasNoErrors();

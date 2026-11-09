@@ -11,6 +11,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Accounting\Rules\OpenPeriod;
+use App\Modules\Accounting\Services\AccountFunds;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\FinanceReports;
 use App\Modules\Accounting\Services\Ledger;
@@ -159,7 +160,9 @@ class MoneyAccountController extends Controller
         $to = Account::money()->postable()->findOrFail($data['to_id']);
 
         // Sent twice (a double click, a retry): moved once. Who moved what stays on record.
-        SubmittedOnce::run($data['client_key'] ?? null, 'money-transfer', function () use ($data, $from, $to, $audit) {
+        // Money leaves a cash box or a bank only while it holds it, one payment out of it at a time (AccountFunds).
+        SubmittedOnce::run($data['client_key'] ?? null, 'money-transfer', fn () => app(AccountFunds::class)->exclusive($from, fn () => DB::transaction(function () use ($data, $from, $to, $audit) {
+            app(AccountFunds::class)->covers($from, $data['amount'], 'amount');
             $entry = $this->ledger->post(['date' => $data['date'], 'description' => "تحويل من {$from->name} إلى {$to->name}".(filled($data['note'] ?? null) ? " — {$data['note']}" : '')], [
                 ['account' => $to, 'debit' => $data['amount']],
                 ['account' => $from, 'credit' => $data['amount']],
@@ -167,7 +170,7 @@ class MoneyAccountController extends Controller
             $audit->log('money.transferred', $entry, ['from' => $from->code, 'to' => $to->code, 'amount' => $data['amount'], 'date' => $data['date']]);
 
             return $entry->number;
-        });
+        })));
 
         return back()->with('success', 'سُجّل التحويل بين الحسابين.');
     }
