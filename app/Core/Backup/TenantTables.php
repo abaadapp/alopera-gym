@@ -29,7 +29,7 @@ final class TenantTables
         'expenses', 'purchase_orders', 'purchase_order_items',
         'goods_receipts', 'goods_receipt_lines', 'supplier_bills', 'supplier_payments',
         'stocktakes', 'stocktake_lines', 'stock_transfers', 'stock_transfer_lines', 'supply_requests', 'supply_request_lines',
-        'pos_devices', 'pos_peripherals', 'pos_print_logs', 'pos_checkout_keys',
+        'pos_devices', 'pos_peripherals', 'pos_print_logs', 'pos_checkout_keys', 'submitted_once_keys',
         'sales', 'sale_items', 'sale_item_addons', 'stock_movements',
         'message_templates', 'conversations', 'campaigns', 'messages', 'auto_replies',
         'whatsapp_attachments', 'conversation_events', 'whatsapp_contacts',
