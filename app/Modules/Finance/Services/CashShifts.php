@@ -10,6 +10,7 @@ use App\Core\Tenancy\BranchContext;
 use App\Models\User;
 use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\JournalLine;
+use App\Modules\Accounting\Services\AccountFunds;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\Ledger;
 use App\Modules\Finance\Models\CashShift;
@@ -87,7 +88,8 @@ final class CashShifts
     /** Cash into the drawer (change from the safe) or out of it (taken to the bank): a transfer between the two accounts. */
     public function move(CashShift $shift, string $direction, string|float $amount, Account $counter, string $reason): CashShiftMovement
     {
-        return DB::transaction(function () use ($shift, $direction, $amount, $counter, $reason) {
+        // Into the drawer, the money leaves the other box or bank: only while that one holds it (AccountFunds).
+        return app(AccountFunds::class)->exclusive($direction === 'in' ? $counter : null, fn () => DB::transaction(function () use ($shift, $direction, $amount, $counter, $reason) {
             $shift = CashShift::whereKey($shift->id)->lockForUpdate()->firstOrFail();
             if (! $shift->isOpen()) {
                 throw new BusinessRuleException('shift.closed', 'الوردية مقفلة.');
@@ -100,6 +102,9 @@ final class CashShifts
             }
             if ($direction === 'out' && Money::cmp($amount, $this->summary($shift)['expected']) > 0) {
                 throw new BusinessRuleException('shift.amount', 'المبلغ أكبر من النقد المتوقع في الدرج ('.$this->summary($shift)['expected'].').', 'amount');
+            }
+            if ($direction === 'in') {
+                app(AccountFunds::class)->covers($counter, $amount, 'amount');
             }
 
             $movement = CashShiftMovement::create([
@@ -115,7 +120,7 @@ final class CashShifts
             $this->audit->log('cash_shift.moved', $movement, ['shift' => $shift->number, 'direction' => $direction, 'amount' => $movement->amount, 'account' => $counter->name, 'reason' => $reason]);
 
             return $movement;
-        });
+        }));
     }
 
     /**
