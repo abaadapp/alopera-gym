@@ -131,6 +131,11 @@ class SessionController extends Controller
         }
 
         $start = CarbonImmutable::parse($data['starts_at']);
+        // Two classes of one timetable line at one time are one class twice.
+        if ($session->class_schedule_id && ! $start->equalTo($session->starts_at) && ClassSession::where('class_schedule_id', $session->class_schedule_id)
+            ->whereKeyNot($session->id)->where(fn ($q) => $q->where('starts_at', $start)->orWhere('slot_starts_at', $start))->exists()) {
+            throw new BusinessRuleException('session.slot_taken', 'في هذا الموعد حصة أخرى من الجدول نفسه.', 'starts_at');
+        }
         $duration = (int) $session->starts_at->diffInMinutes($session->ends_at);
         $changes = [];
         if (! $start->equalTo($session->starts_at)) {
