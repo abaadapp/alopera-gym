@@ -76,7 +76,7 @@ class AccountFundsTest extends TestCase
         $entries = $this->asTenant($club, fn () => JournalEntry::count());
 
         $this->actingAs($owner)->post(route('club.expenses.store'), $this->expense($cash, '0.001'))
-            ->assertSessionHasErrors(['account_id' => 'رصيد «'.$cash->name.'» لا يكفي: المتاح 0.000 والمطلوب 0.001.']);
+            ->assertSessionHasErrors(['account_id' => 'رصيد «'.$cash->name.'» لا يكفي: المتاح 0.000 والمطلوب 0.001.'.AccountFunds::OPENING_NOT_SET]);
         $this->assertSame([2, $entries], $this->asTenant($club, fn () => [Expense::count(), JournalEntry::count()]));
 
         // Raising an expense spends only the difference; the difference must be there.
@@ -130,6 +130,24 @@ class AccountFundsTest extends TestCase
         $this->assertSame(['150.000', '50.000'], [$this->balance($club, $bank), $this->balance($club, $drawer)]);
     }
 
+    public function test_an_account_whose_opening_nobody_set_holds_nothing_assumed_and_the_refusal_says_where_to_set_it(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        [$cash, $bank] = $this->asTenant($club, fn () => [app(ChartOfAccounts::class)->account('cash'), app(ChartOfAccounts::class)->account('bank')]);
+        $transfer = fn (string $amount) => $this->actingAs($owner)->post(route('club.finance.transfers.store'), ['from_id' => $cash->id, 'to_id' => $bank->id, 'amount' => $amount, 'date' => today()->toDateString(), 'client_key' => (string) Str::uuid()]);
+
+        // No opening set and nothing received: nothing is there to move, and the message says why.
+        $transfer('50')->assertSessionHasErrors(['amount' => 'رصيد «'.$cash->name.'» لا يكفي: المتاح 0.000 والمطلوب 50.000.'.AccountFunds::OPENING_NOT_SET]);
+        $this->assertSame('0.000', $this->asTenant($club, fn () => app(FinanceReports::class)->balance($cash)));
+
+        // Once set (even to what it really held), the refusal is about the money only, and what it holds can be moved.
+        $this->actingAs($owner)->post(route('club.finance.banks.opening', $cash), ['amount' => '30', 'date' => today()->toDateString()])->assertSessionHasNoErrors();
+        $transfer('50')->assertSessionHasErrors(['amount' => 'رصيد «'.$cash->name.'» لا يكفي: المتاح 30.000 والمطلوب 50.000.']);
+        $transfer('30')->assertSessionHasNoErrors();
+        $this->assertSame('0.000', $this->asTenant($club, fn () => app(FinanceReports::class)->balance($cash)));
+    }
+
     public function test_salaries_are_not_paid_beyond_the_cash_box(): void
     {
         $club = $this->club();
@@ -165,8 +183,8 @@ class AccountFundsTest extends TestCase
 
         $refunder = $this->staff($club, 'reception');
         $refunder->forceFill(['custom_permissions' => ['payments.refund']])->save(); // refunds, without the books
-        $this->actingAs($refunder)->post(route('club.credit-notes.refund', $note), $refund)->assertSessionHasErrors(['account_id' => 'رصيد «'.$cash->name.'» لا يكفي لهذا المبلغ.']);
-        $this->actingAs($owner)->post(route('club.credit-notes.refund', $note), $refund)->assertSessionHasErrors(['account_id' => 'رصيد «'.$cash->name.'» لا يكفي: المتاح 20.000 والمطلوب 30.000.']);
+        $this->actingAs($refunder)->post(route('club.credit-notes.refund', $note), $refund)->assertSessionHasErrors(['account_id' => 'رصيد «'.$cash->name.'» لا يكفي لهذا المبلغ.'.AccountFunds::OPENING_NOT_SET]);
+        $this->actingAs($owner)->post(route('club.credit-notes.refund', $note), $refund)->assertSessionHasErrors(['account_id' => 'رصيد «'.$cash->name.'» لا يكفي: المتاح 20.000 والمطلوب 30.000.'.AccountFunds::OPENING_NOT_SET]);
         $this->assertSame([0, '0.000'], [$this->asTenant($club, fn () => Payment::where('kind', Payment::KIND_REFUND)->count()), $note->fresh()->refunded_total]);
 
         $this->actingAs($owner)->post(route('club.credit-notes.refund', $note), ['amount' => '20'] + $refund)->assertSessionHasNoErrors();
