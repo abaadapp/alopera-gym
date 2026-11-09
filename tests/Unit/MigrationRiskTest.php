@@ -94,6 +94,25 @@ class MigrationRiskTest extends TestCase
         $this->assertStringNotContainsString('adds only', $out);
     }
 
+    /** @return iterable<string, array{string}> what migrations usually do, none of it lost by going back */
+    public static function safe(): iterable
+    {
+        yield 'a table with keys that cascade' => ["        Schema::create('t', function (Blueprint \$table) {\n            \$table->id();\n            \$table->foreignId('tenant_id')->constrained()->cascadeOnDelete()->cascadeOnUpdate();\n            \$table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();\n            \$table->foreignId('a_id')->constrained('a')->restrictOnDelete();\n            \$table->foreign('b_id')->references('id')->on('b')->onDelete('cascade')->onUpdate('cascade');\n            \$table->timestamp('seen_at')->useCurrentOnUpdate();\n            \$table->softDeletes();\n            \$table->timestamps();\n            \$table->unique(['tenant_id', 'user_id']);\n        });"];
+        yield 'a column, an index and a comment on a table' => ["        Schema::table('t', function (Blueprint \$table) {\n            \$table->string('status')->default('active')->index()->comment('Drop-in or member');\n            \$table->index(['a', 'b']);\n        });"];
+        yield 'rows added' => ["        DB::table('roles')->insert(['key' => 'coach', 'permissions' => json_encode(['classes.delete', 'classes.update'])]);"];
+        yield 'raw SQL that adds' => ["        DB::statement('CREATE EXTENSION IF NOT EXISTS pg_trgm');\n        DB::statement('CREATE UNIQUE INDEX t_a_unique ON t (a) WHERE deleted_at IS NULL');\n        DB::statement('ALTER TABLE t ADD CONSTRAINT t_a_positive CHECK (a >= 0)');\n        DB::statement('ALTER TABLE t ADD COLUMN type varchar(20)');"];
+        yield 'guards' => ["        if (! Schema::hasColumn('t', 'a')) {\n            Schema::table('t', fn (Blueprint \$table) => \$table->string('a')->nullable());\n        }"];
+    }
+
+    #[DataProvider('safe')]
+    public function test_what_usual_migrations_do_passes_as_adds_only(string $up): void
+    {
+        [$code, $out] = $this->scan(self::migration($up));
+
+        $this->assertSame(0, $code, $out);
+        $this->assertStringContainsString('adds only', $out);
+    }
+
     public function test_words_in_data_are_not_read_as_sql(): void
     {
         [$code, $out] = $this->scan(self::migration(
