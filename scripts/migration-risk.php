@@ -7,8 +7,9 @@
  *   php scripts/migration-risk.php <migration.php>...
  *
  * Looks inside up() only (down() drops what up() made, as it should), comments left out: dropping or renaming a table
- * or a column, changing a column's type, deleting or truncating rows, and SQL that does one of these, in any string of
- * up() (quoted, heredoc or nowdoc, or put together from pieces). A migration meant to do one of these says so with the
+ * or a column (from Schema or from the table's blueprint), dropping a key, an index or a constraint, changing a
+ * column's type, deleting or truncating rows (destroy() too), and SQL that does one of these, in any string of up()
+ * (quoted, heredoc or nowdoc, or put together from pieces). A migration meant to do one of these says so with the
  * marker below, which the owner sees in its pull request before merging (merging is deploying).
  *
  * Rewriting rows (update(), UPDATE … SET) is reported, not stopped: it is how a new column is filled and how a role is
@@ -24,16 +25,17 @@ const MARKER = '@deploy-destructive-reviewed';
 const SCHEMA = 'Schema::(?:connection\([^)]*\)->)?';
 
 const PATTERNS = [
-    'drops a table' => '/'.SCHEMA.'drop(?:IfExists|AllTables|AllViews|AllTypes)?\s*\(/',
+    'drops a table' => '/'.SCHEMA.'drop(?:IfExists|AllTables|AllViews|AllTypes|DatabaseIfExists)?\s*\(|->drop(?:IfExists)?\s*\(/',
     'renames a table' => '/'.SCHEMA.'rename\s*\(|->rename\s*\(/',
-    'drops a column' => '/->drop(?:Column|Columns|Timestamps|TimestampsTz|SoftDeletes|SoftDeletesTz|Morphs|NullableMorphs|RememberToken|ConstrainedForeignId)\s*\(|'.SCHEMA.'dropColumns\s*\(/',
+    'drops a column' => '/->drop(?:Column|Columns|Timestamps|TimestampsTz|SoftDeletes|SoftDeletesTz|Morphs|NullableMorphs|RememberToken|ConstrainedForeignId|ConstrainedForeignIdFor)\s*\(|'.SCHEMA.'dropColumns\s*\(/',
     'renames a column' => '/->renameColumn\s*\(/',
+    'drops a key, index or constraint' => '/->drop(?:Primary|Unique|Index|FullText|SpatialIndex|VectorIndex|Foreign|ForeignIdFor)\s*\(/',
     'changes a column' => '/->change\s*\(\s*\)/',
-    'deletes rows' => '/(?:->(?:delete|forceDelete|truncate)|DB::delete)\s*\(/',
+    'deletes rows' => '/(?:->(?:delete|forceDelete|truncate)|DB::delete|::destroy)\s*\(/',
 ];
 
 /** SQL that does the same, in the strings of up(): each keyword followed by what SQL puts after it. */
-const SQL_DESTRUCTIVE = '/\b(?:DROP|RENAME)\s+\w|\bTRUNCATE\b|\bDELETE\s+FROM\b|\bALTER\s+COLUMN\s+\S+\s+(?:SET\s+DATA\s+)?TYPE\b/i';
+const SQL_DESTRUCTIVE = '/\b(?:DROP|RENAME)\s+\w|\bTRUNCATE\b|\bDELETE\s+FROM\b|\bALTER\s+(?!TABLE\b)(?:COLUMN\s+)?\S+\s+(?:SET\s+DATA\s+)?TYPE\b/i';
 
 /** Reported, does not stop the deploy. */
 const REWRITES = '/(?:->update|DB::update)\s*\(/';

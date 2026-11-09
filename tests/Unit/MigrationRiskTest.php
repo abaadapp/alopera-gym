@@ -68,6 +68,13 @@ class MigrationRiskTest extends TestCase
         yield 'rename a table from its blueprint' => ["        Schema::table('t', fn (Blueprint \$table) => \$table->rename('u'));"];
         yield 'raw drop in a heredoc' => ["        DB::statement(<<<'SQL'\n            ALTER TABLE t DROP COLUMN a\n            SQL);"];
         yield 'raw drop put together' => ["        DB::statement('ALTER TABLE t '.'DROP '.'COLUMN a');"];
+        yield 'drop a table from its blueprint' => ["        Schema::table('t', fn (Blueprint \$table) => \$table->drop());"];
+        yield 'drop the database' => ["        Schema::dropDatabaseIfExists('alopera');"];
+        yield 'drop a foreign id column for a model' => ["        Schema::table('t', fn (Blueprint \$table) => \$table->dropConstrainedForeignIdFor(\\App\\Models\\User::class));"];
+        yield 'drop a unique key' => ["        Schema::table('t', fn (Blueprint \$table) => \$table->dropUnique(['a', 'b']));"];
+        yield 'drop a foreign key' => ["        Schema::table('t', fn (Blueprint \$table) => \$table->dropForeign(['a']));"];
+        yield 'destroy models' => ['        \\App\\Models\\User::destroy([1, 2]);'];
+        yield 'raw type change without COLUMN' => ["        DB::statement('ALTER TABLE t ALTER a TYPE bigint');"];
         yield 'raw drop kept in a variable' => ["        \$sql = \"ALTER TABLE t DROP COLUMN {\$this->column}\";\n        DB::statement(\$sql);"];
     }
 
@@ -90,7 +97,7 @@ class MigrationRiskTest extends TestCase
     public function test_words_in_data_are_not_read_as_sql(): void
     {
         [$code, $out] = $this->scan(self::migration(
-            "        DB::table('programs')->insert(['name' => 'Drop-in', 'note' => 'drop', 'permission' => 'members.delete']);",
+            "        DB::table('programs')->insert(['name' => 'Drop-in', 'note' => 'drop', 'permission' => 'members.delete']);\n        DB::statement('ALTER TABLE t ADD COLUMN type varchar(20)');",
         ));
 
         $this->assertSame(0, $code, $out);
@@ -186,12 +193,28 @@ class MigrationRiskTest extends TestCase
         $this->assertStringNotContainsString('nothing new', $deploy->getOutput(), 'stopped at the check, before going on');
     }
 
+    public function test_an_unreadable_migrated_mark_falls_back_to_the_last_deploy(): void
+    {
+        [$app, $deployed] = $this->serverAndMain();
+        mkdir($this->dir.'/state');
+        file_put_contents($this->dir.'/state/MIGRATED.txt', "not a commit\n");
+        file_put_contents($this->dir.'/state/DEPLOYED.txt', "v0.1\n{$deployed}\n2030-01-01T00:00:00+00:00\n");
+        ($this->git)($app, 'pull', '-q', '--ff-only', 'origin', 'main');
+
+        $deploy = $this->deploy($app);
+
+        $this->assertSame(1, $deploy->getExitCode(), $deploy->getOutput().$deploy->getErrorOutput());
+        $this->assertStringContainsString('NOT REVIEWED', $deploy->getOutput());
+    }
+
     public function test_migrations_that_have_run_are_not_checked_again(): void
     {
-        [$app, , $main] = $this->serverAndMain();
-        // A deploy that migrated main, then failed later (a cache, the site check): MIGRATED.txt says so.
+        [$app, $deployed, $main] = $this->serverAndMain();
+        // A deploy that migrated main, then failed later (a cache, the site check): MIGRATED.txt says so. The code was
+        // then put back by hand (rollback-code.sh writes the older commit in DEPLOYED.txt): its migrations stay run.
         mkdir($this->dir.'/state');
         file_put_contents($this->dir.'/state/MIGRATED.txt', $main."\n");
+        file_put_contents($this->dir.'/state/DEPLOYED.txt', "rollback\n{$deployed}\n2030-01-01T00:00:00+00:00\n");
         ($this->git)($app, 'pull', '-q', '--ff-only', 'origin', 'main');
 
         $deploy = $this->deploy($app);
