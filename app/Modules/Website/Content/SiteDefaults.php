@@ -31,6 +31,8 @@ final class SiteDefaults
         $heroTitle = $own($site->hero_title, $tenant->name);
         $heroSubtitle = $own($site->hero_subtitle, 'ناديك للياقة والصحة — برامج متنوعة، فريق تدريب محترف، وأجواء تناسبك.');
         $heroCta = $own($site->hero_cta_label, 'اشترك الآن');
+        $seoTitle = $own($site->seo_title, $tenant->name.' — نادٍ رياضي');
+        $seoDescription = $own($site->seo_description, 'اشترك في '.$tenant->name.': باقات مرنة، حصص جماعية، تدريب شخصي، وحجز أونلاين.');
         $facts = collect($site->features ?? [])->take(4)->map(fn ($f) => [
             'id' => Str::lower(Str::random(8)),
             'title' => mb_substr((string) ($f['title'] ?? ''), 0, 40),
@@ -44,10 +46,11 @@ final class SiteDefaults
 
         $sections = [
             $section('top', 'hero', [
-                'eyebrow' => $site->hero_badge ?: 'نادي الأوبرا الرياضي · للسيدات فقط',
+                // Facts only: the club's own name, never a claim the owner has not written (women only, certified…).
+                'eyebrow' => $site->hero_badge ?: $tenant->name,
                 'title' => $heroTitle ?? 'قوّتكِ',
                 'title_2' => $heroTitle ? '' : 'تبدأ هنا.',
-                'subtitle' => $heroSubtitle ?? 'نادٍ نسائي متكامل للياقة البدنية والتدريب الشخصي والتغذية، في مساحة خاصة صُممت لكِ بكل تفاصيلها.',
+                'subtitle' => $heroSubtitle ?? '',
                 'primary' => ['label' => $heroCta ?? 'ابدئي عضويتكِ', 'href' => '@join'],
                 'image' => $legacyImage($site->hero_image_path),
                 'facts' => $facts,
@@ -59,18 +62,18 @@ final class SiteDefaults
                 : $section('about', 'intro', ['title' => (string) $site->about_title, 'body' => (string) $site->about_body]);
         }
         array_push($sections,
-            $section('programs', 'programs', ['eyebrow' => 'البرامج', 'title' => 'مسارات متعددة، وهدف واحد: أنتِ.', 'subtitle' => 'اختاري المسار الذي يناسب هدفكِ، أو اجمعي بينها في خطة واحدة تُبنى حولكِ.']),
-            $section('schedule', 'schedule', ['eyebrow' => 'جدول الحصص', 'title' => 'احجزي مكانكِ في الحصة']),
-            $section('trainers', 'trainers', ['eyebrow' => 'المدربات', 'title' => 'فريق يعرف كيف يوصلكِ لهدفكِ', 'subtitle' => 'مدربات وأخصائيات معتمدات، يتابعن تقدّمكِ خطوة بخطوة.']),
-            $section('pricing', 'plans', ['eyebrow' => 'الباقات والأسعار', 'title' => 'عضوية واضحة، بلا رسوم مخفية']),
-            $section('facilities', 'services', ['eyebrow' => 'المرافق', 'title' => 'كل ما تحتاجينه، في مكان واحد']),
+            $section('programs', 'programs', ['eyebrow' => 'البرامج', 'title' => 'برامج النادي']),
+            $section('schedule', 'schedule', ['eyebrow' => 'جدول الحصص', 'title' => 'الحصص القادمة']),
+            $section('trainers', 'trainers', ['eyebrow' => 'المدربات', 'title' => 'فريق التدريب']),
+            $section('pricing', 'plans', ['eyebrow' => 'الباقات والأسعار', 'title' => 'اختاري باقتكِ']),
+            $section('facilities', 'services', ['eyebrow' => 'المرافق', 'title' => 'مرافق النادي']),
             $section('stats', 'stats', ['items' => collect($site->stats ?? [])->take(6)->map(fn ($s) => ['id' => Str::lower(Str::random(8)), 'value' => mb_substr((string) ($s['value'] ?? ''), 0, 20), 'label' => mb_substr((string) ($s['label'] ?? ''), 0, 60)])->values()->all()]),
-            $section('reviews', 'testimonials', ['eyebrow' => 'آراء العضوات', 'title' => 'بكلماتهن']),
+            $section('reviews', 'testimonials', ['eyebrow' => 'آراء العضوات', 'title' => '']),
             $section('news', 'posts', ['eyebrow' => 'العروض والأخبار', 'title' => 'جديد النادي']),
-            $section('gallery', 'gallery', ['eyebrow' => 'معرض الصور', 'title' => 'من داخل النادي', 'items' => self::galleryItems($register)]),
+            $section('gallery', 'gallery', ['eyebrow' => 'معرض الصور', 'title' => 'صور النادي', 'items' => self::galleryItems($register)]),
             $section('shop', 'products', ['eyebrow' => 'المتجر', 'title' => 'منتجات النادي']),
             $section('register', 'join', [
-                'eyebrow' => 'التسجيل', 'title' => 'ابدئي عضويتكِ خلال دقيقتين',
+                'eyebrow' => 'التسجيل', 'title' => 'ابدئي عضويتكِ',
                 'subtitle' => 'سجّلي بياناتكِ واختاري باقتكِ، ثم أكملي اشتراككِ.',
                 'steps' => collect(['بياناتكِ', 'الباقة', 'التأكيد'])->map(fn ($t) => ['id' => Str::lower(Str::random(8)), 'text' => $t])->all(),
             ]),
@@ -90,7 +93,7 @@ final class SiteDefaults
                 'show_login' => true,
             ],
             'footer' => [
-                'line' => 'نادي الأوبرا الرياضي — مساحة نسائية للياقة والتدريب والتغذية.',
+                'line' => '',
                 'links' => [$link('الباقات', '@plans'), $link('جدول الحصص', '@schedule'), $link('العروض والأخبار', '@news'), $link('تواصل معنا', '@contact')],
                 'show_hours' => true,
                 'show_social' => true,
@@ -104,7 +107,7 @@ final class SiteDefaults
                 'hours' => collect($site->working_hours ?? [])->take(7)->map(fn ($h) => ['id' => Str::lower(Str::random(8)), 'days' => (string) ($h['days'] ?? ''), 'hours' => (string) ($h['hours'] ?? '')])->values()->all(),
                 'social' => collect(['instagram', 'x', 'tiktok', 'snapchat', 'facebook', 'youtube'])->mapWithKeys(fn ($k) => [$k => (string) (($site->social_links ?? [])[$k] ?? '')])->all(),
             ],
-            'seo' => ['title' => (string) $site->seo_title, 'description' => (string) $site->seo_description],
+            'seo' => ['title' => (string) ($seoTitle ?? $tenant->name), 'description' => (string) ($seoDescription ?? '')],
             'sections' => $sections,
         ];
     }

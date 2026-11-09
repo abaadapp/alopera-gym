@@ -148,7 +148,7 @@ final class SectionTypes
                 'source' => 'من «باقات العضوية» في النظام: المنشورة والمفعّلة فقط.',
                 'tone' => 'white',
                 'fields' => [$eyebrow, $title, $subtitle, self::number('limit', 'أقصى عدد', 1, 12), self::text('featured_label', 'وسم الباقة المميزة', 30), self::text('button_label', 'نص زر الاشتراك', 30), $button('button', 'زر «كل الباقات»')],
-                'defaults' => ['eyebrow' => '', 'title' => '', 'subtitle' => '', 'limit' => 3, 'featured_label' => 'الأكثر طلباً', 'button_label' => 'اختاري الباقة', 'button' => ['label' => '', 'href' => '@plans']],
+                'defaults' => ['eyebrow' => '', 'title' => '', 'subtitle' => '', 'limit' => 3, 'featured_label' => 'باقة مميزة', 'button_label' => 'اختاري الباقة', 'button' => ['label' => '', 'href' => '@plans']],
             ],
             'products' => [
                 'label' => 'المنتجات',

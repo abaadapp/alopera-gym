@@ -92,6 +92,49 @@ class WebsiteContentTest extends TestCase
         $this->assertStringNotContainsString('دفع إلكتروني', json_encode($props, JSON_UNESCAPED_UNICODE));
     }
 
+    public function test_the_starting_site_makes_no_promise_or_claim_the_owner_has_not_written(): void
+    {
+        $club = $this->club();
+        $props = $this->home($club);
+        $visible = json_encode([$props['page'], $props['chrome'], $props['seo']], JSON_UNESCAPED_UNICODE);
+
+        foreach (['للسيدات فقط', 'نسائي', 'الأوبرا', 'معتمد', 'بلا رسوم', 'مخفية', 'دقيقتين', 'الأكثر طلب', 'تدفعين', 'بأمان', 'متكامل', 'تدريب شخصي', 'محترف', 'باقات مرنة', 'حجز أونلاين', 'سنتواصل', 'خطوة بخطوة'] as $claim) {
+            $this->assertStringNotContainsString($claim, $visible, "«{$claim}» is a claim only the owner may make");
+        }
+        // The club's name in place of a slogan line, and no search-engine description until the owner writes one.
+        $this->assertSame($club->name, $props['page']['sections'][0]['data']['eyebrow']);
+        $this->assertNull($props['seo']['description']);
+        $this->assertSame($club->name, $props['seo']['title']);
+    }
+
+    public function test_every_page_menu_links_only_to_sections_that_show(): void
+    {
+        $club = $this->club();
+        $labels = fn (string $route) => collect($this->get(route($route, ['club' => $club->slug]))->assertOk()->viewData('page')['props']['chrome']['header']['links'])->pluck('label')->all();
+
+        // A new club has no programs, classes, trainers, plans, facilities or reviews yet.
+        foreach (['site.home', 'site.join', 'site.plans', 'site.contact'] as $page) {
+            $this->assertSame(['تواصل معنا'], $labels($page), $page);
+        }
+        $this->plan($club, ['is_public' => true]);
+        $this->assertContains('الباقات', $labels('site.join'));
+    }
+
+    public function test_a_button_to_a_section_that_is_not_shown_is_left_out(): void
+    {
+        $club = $this->club();
+        // No classes yet: the timetable section is not shown, so the hero's «جدول الحصص» button has nowhere to go.
+        $hero = $this->home($club)['page']['sections'][0];
+        $this->assertNull($hero['data']['secondary']);
+        $this->assertSame(route('site.join', ['club' => $club->slug]), $hero['data']['primary']['href']);
+
+        $program = $this->program($club, ['is_public' => true]);
+        $this->classSession($club, $program, ['starts_at' => now()->addDay()->setTime(18, 0), 'ends_at' => now()->addDay()->setTime(19, 0)]);
+        $hero = $this->home($club)['page']['sections'][0];
+        $this->assertStringEndsWith('#schedule', $hero['data']['secondary']['href']);
+        $this->assertArrayNotHasKey('_href', $hero['data']['secondary']);
+    }
+
     public function test_a_saved_draft_stays_off_the_public_site_until_published(): void
     {
         $club = $this->club();

@@ -44,9 +44,9 @@ final class SiteRenderer
 
     /**
      * @param  array<string, mixed>  $doc
-     * @return array{chrome: array<string, mixed>, page: array{sections: list<array<string, mixed>>}, site: array<string, mixed>}
+     * @return array{chrome: array<string, mixed>, page: array{sections: list<array<string, mixed>>}, site: array<string, mixed>, seo: array{title: string, description: string}}
      */
-    public function render(array $doc, bool $preview = false, bool $withSections = true): array
+    public function render(array $doc, bool $preview = false): array
     {
         $this->tenant = $this->tenants->require();
         $this->homeUrl = route('site.home');
@@ -54,21 +54,21 @@ final class SiteRenderer
         $this->signup = (bool) $this->tenant->setting('member_signup_enabled', true);
 
         $sections = [];
-        if ($withSections) {
-            $this->loadMedia($doc);
-            foreach ($doc['sections'] ?? [] as $section) {
-                $rendered = ($section['visible'] ?? true) ? $this->section($section) : null;
-                if ($rendered) {
-                    $sections[] = $rendered;
-                }
+        $this->loadMedia($doc);
+        foreach ($doc['sections'] ?? [] as $section) {
+            $rendered = ($section['visible'] ?? true) ? $this->section($section) : null;
+            if ($rendered) {
+                $sections[] = $rendered;
             }
         }
         $anchors = array_flip(array_column($sections, 'id'));
-        // Anchors only exist on the home page; elsewhere (no sections built) a menu link to a section is kept.
-        $keep = fn (?array $link) => $link && (! $withSections || ! str_starts_with($link['_href'], '#') || isset($anchors[substr($link['_href'], 1)]));
+        // A link to a section of the home page is kept only when that section shows (it is not hidden or empty).
+        $keep = fn (?array $link) => $link && (! str_starts_with($link['_href'], '#') || isset($anchors[substr($link['_href'], 1)]));
         $links = fn (array $items) => collect($items)->map(fn ($l) => $this->link($l))->filter($keep)->map(fn ($l) => $this->public($l))->values()->all();
 
         $cta = $this->link($doc['header']['cta'] ?? []);
+        // A button inside a section that points at a section not shown (no classes yet, hidden) is dropped too.
+        $sections = array_map(fn ($s) => ['data' => $this->settleLinks($s['data'], $anchors)] + $s, $sections);
 
         return [
             'chrome' => [
@@ -81,7 +81,25 @@ final class SiteRenderer
             ],
             'page' => ['sections' => $sections],
             'site' => $this->siteInfo($doc),
+            'seo' => ['title' => (string) ($doc['seo']['title'] ?? ''), 'description' => (string) ($doc['seo']['description'] ?? '')],
         ];
+    }
+
+    /** @param array<string, mixed> $data @param array<string, int> $anchors @return array<string, mixed> */
+    private function settleLinks(array $data, array $anchors): array
+    {
+        foreach ($data as $key => $value) {
+            if (! is_array($value)) {
+                continue;
+            }
+            if (array_key_exists('_href', $value)) {
+                $data[$key] = str_starts_with($value['_href'], '#') && ! isset($anchors[substr($value['_href'], 1)]) ? null : $this->public($value);
+            } else {
+                $data[$key] = $this->settleLinks($value, $anchors);
+            }
+        }
+
+        return $data;
     }
 
     /** The contact block every site page shows (header, footer, contact page), from the document. @return array<string, mixed> */
@@ -131,7 +149,7 @@ final class SiteRenderer
             $value = $values[$field['key']] ?? null;
             $out[$field['key']] = match ($field['type']) {
                 'image' => $this->image($value),
-                'link' => ($l = $this->link(is_array($value) ? $value : [])) && $l['label'] !== '' ? $this->public($l) : null,
+                'link' => ($l = $this->link(is_array($value) ? $value : [])) && $l['label'] !== '' ? $l : null,
                 'href' => is_string($value) ? SiteLinks::resolve($value, $this->homeUrl, $this->shopOpen) : null,
                 'list' => collect(is_array($value) ? $value : [])->map(fn ($item) => ['id' => $item['id'] ?? null] + $this->fields($field['fields'], is_array($item) ? $item : []))->values()->all(),
                 default => $value,

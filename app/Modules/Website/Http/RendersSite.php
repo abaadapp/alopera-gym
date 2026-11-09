@@ -31,7 +31,8 @@ trait RendersSite
     {
         $tenant = app(TenantContext::class)->require();
         $site = $this->site();
-        $rendered ??= app(SiteRenderer::class)->render(app(SiteContent::class)->live($site), withSections: false);
+        // The home page's sections are worked out here too, so the menu on every page links only to sections that show.
+        $rendered ??= app(SiteRenderer::class)->render(app(SiteContent::class)->live($site));
 
         return Inertia::render($component, $props + [
             'site' => $rendered['site'] + [
@@ -42,8 +43,10 @@ trait RendersSite
             ],
             'chrome' => $rendered['chrome'],
             'seo' => [
-                'title' => $title ? $title.' | '.$tenant->name : ($site->seo_title ?: $tenant->name),
-                'description' => $description ?: ($site->seo_description ?: $site->hero_subtitle),
+                // From the content being shown (published, or the draft in the preview): never the starter text a
+                // new club was set up with, which promised services the club may not offer.
+                'title' => $title ? $title.' | '.$tenant->name : (($rendered['seo']['title'] ?? '') ?: $tenant->name),
+                'description' => $description ?: (($rendered['seo']['description'] ?? '') ?: null),
                 'canonical' => $this->canonical(),
                 'image' => $image ?: (SiteSetting::url($site->og_image_path ?: $site->hero_image_path) ?? $tenant->logoUrl()),
                 'jsonld' => $jsonld,

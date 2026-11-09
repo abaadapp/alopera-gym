@@ -342,7 +342,7 @@ export function Join({ section, site, joined }: SectionProps) {
                         <a href={target} className="inline-flex h-[52px] items-center justify-center rounded-xl bg-[var(--site-ink)] px-8 text-[15px] font-semibold text-white transition-colors hover:bg-[var(--site-accent)] sm:self-start">
                             {str(d.button_label) || 'ابدئي التسجيل'}
                         </a>
-                        <p className={cn('m-0 text-[13px]', metaText(tone))}>تكملين بياناتكِ وتدفعين بأمان في صفحة التسجيل.</p>
+                        <p className={cn('m-0 text-[13px]', metaText(tone))}>تكملين بياناتكِ في صفحة التسجيل.</p>
                     </div>
                 )}
             </div>
@@ -405,7 +405,7 @@ export function Contact({ section, site, chrome, joined }: SectionProps) {
                         {sent ? (
                             <div className="flex flex-col gap-2 py-6">
                                 <h3 className="m-0 text-2xl font-bold">وصلتنا رسالتكِ</h3>
-                                <p className={cn('m-0', bodyText(tone))}>سنتواصل معكِ قريبًا.</p>
+                                <p className={cn('m-0', bodyText(tone))}>شكرًا لتواصلكِ.</p>
                                 <button type="button" onClick={() => setSent(false)} className="mt-2 self-start border-b border-current bg-transparent p-0 text-[15px]">رسالة أخرى</button>
                             </div>
                         ) : (
