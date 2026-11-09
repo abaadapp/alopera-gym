@@ -123,6 +123,7 @@ class WebsiteContentTest extends TestCase
     public function test_a_button_to_a_section_that_is_not_shown_is_left_out(): void
     {
         $club = $this->club();
+        $this->plan($club, ['is_public' => true]);
         // No classes yet: the timetable section is not shown, so the hero's «جدول الحصص» button has nowhere to go.
         $hero = $this->home($club)['page']['sections'][0];
         $this->assertNull($hero['data']['secondary']);
@@ -133,6 +134,50 @@ class WebsiteContentTest extends TestCase
         $hero = $this->home($club)['page']['sections'][0];
         $this->assertStringEndsWith('#schedule', $hero['data']['secondary']['href']);
         $this->assertArrayNotHasKey('_href', $hero['data']['secondary']);
+    }
+
+    public function test_no_button_or_link_opens_a_page_with_nothing_on_it(): void
+    {
+        // A new club as it opens: no plans, classes, news or products yet.
+        $club = $this->club();
+        $props = $this->home($club);
+        $footer = array_column($props['chrome']['footer']['links'], 'label');
+        $this->assertSame(['تواصل معنا'], $footer, 'the plans, timetable and news pages are empty, so their links are left out');
+        $this->assertNull($props['chrome']['header']['cta'], 'nothing to sign up for yet: no «انضمي الآن»');
+        $this->assertNull($props['page']['sections'][0]['data']['primary'], 'nor a sign-up button in the hero');
+        $this->assertNotContains('join', $this->sectionsOf($props), 'nor a sign-up section');
+        $this->assertTrue($props['chrome']['header']['show_login']);
+        // The pages themselves still open for anyone who has their address.
+        $this->get(route('site.plans', ['club' => $club->slug]))->assertOk();
+
+        // Once there is something on the page, its links come back by themselves, without publishing again.
+        $this->plan($club, ['is_public' => true]);
+        $props = $this->home($club);
+        $this->assertSame(['الباقات', 'تواصل معنا'], array_column($props['chrome']['footer']['links'], 'label'));
+        $this->assertSame(route('site.join', ['club' => $club->slug]), $props['chrome']['header']['cta']['href']);
+        $this->assertSame(route('site.join', ['club' => $club->slug]), $props['page']['sections'][0]['data']['primary']['href']);
+        $this->assertContains('join', $this->sectionsOf($props));
+
+        // With online sign-up switched off, the sign-up buttons go again (the page answers 404).
+        $club->update(['settings' => ['member_signup_enabled' => false] + ($club->settings ?? [])]);
+        $props = $this->home($club);
+        $this->assertNull($props['chrome']['header']['cta']);
+        $this->assertNotContains('join', $this->sectionsOf($props));
+    }
+
+    public function test_the_editor_says_which_system_sections_wait_for_data(): void
+    {
+        $club = $this->club();
+        $props = $this->actingAs($this->owner($club))->get(route('club.website.edit'))->assertOk()->viewData('page')['props'];
+        $types = collect($props['doc']['sections'])->pluck('type', 'id');
+        $waiting = collect($props['waiting'])->keys()->map(fn ($id) => $types[$id])->sort()->values()->all();
+        $this->assertSame(['join', 'plans', 'posts', 'products', 'programs', 'schedule', 'trainers'], $waiting);
+        $this->assertStringContainsString('باقات', $props['waiting'][$types->search('plans')]);
+
+        $this->plan($club, ['is_public' => true]);
+        $props = $this->actingAs($this->owner($club))->get(route('club.website.edit'))->viewData('page')['props'];
+        $this->assertNotContains('plans', collect($props['waiting'])->keys()->map(fn ($id) => $types[$id])->all());
+        $this->assertNotContains('join', collect($props['waiting'])->keys()->map(fn ($id) => $types[$id])->all());
     }
 
     public function test_a_saved_draft_stays_off_the_public_site_until_published(): void
@@ -206,6 +251,7 @@ class WebsiteContentTest extends TestCase
     public function test_html_and_unsafe_links_never_reach_the_page(): void
     {
         $club = $this->club();
+        $this->plan($club, ['is_public' => true]);
         [$doc, $version] = $this->editor($club);
         $doc['sections'][0]['data']['title'] = '<script>alert(1)</script>';
         $doc['sections'][0]['data']['primary'] = ['label' => 'اضغطي', 'href' => 'javascript:alert(1)'];
@@ -431,6 +477,7 @@ class WebsiteContentTest extends TestCase
     public function test_shop_join_portal_and_payment_links_keep_working(): void
     {
         $club = $this->club();
+        $this->plan($club, ['is_public' => true]);
         $props = $this->home($club);
         $this->assertSame(route('site.join', ['club' => $club->slug]), $props['chrome']['header']['cta']['href']);
         $this->get(route('site.join', ['club' => $club->slug]))->assertOk();

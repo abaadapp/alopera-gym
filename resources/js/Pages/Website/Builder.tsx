@@ -95,7 +95,7 @@ export default function WebsiteBuilder(props: BuilderProps) {
     const errorMap = useMemo(() => errorIndex(errors), [errors]);
     const localUses = useMemo(() => imageUses(doc.sections, schemas), [doc.sections, schemas]);
 
-    const context: BuilderContextValue = { media, setMedia, targets, sections: doc.sections, schemas, limits, errors: errorMap, localUses };
+    const context: BuilderContextValue = { media, setMedia, targets, sections: doc.sections, schemas, limits, errors: errorMap, localUses, waiting: props.waiting ?? {} };
 
     const patch = useCallback((fn: (d: SiteDoc) => SiteDoc) => setDoc((d) => fn(d)), []);
     const setSections = (fn: (s: SectionDoc[]) => SectionDoc[]) => patch((d) => ({ ...d, sections: fn(d.sections) }));
@@ -384,7 +384,7 @@ export default function WebsiteBuilder(props: BuilderProps) {
                 {/* Saved on the server, not yet live: a quiet reminder at the foot of a long page. */}
                 {(dirty || canPublish) && (
                     <div className="sticky bottom-3 z-20 mt-6 flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-line bg-white/95 px-4 py-3 shadow-[0_8px_30px_rgba(0,0,0,0.10)] backdrop-blur">
-                        <span className="text-[13px] font-medium text-ink">{dirty ? 'لديك تعديلات غير محفوظة.' : 'المسودة محفوظة ولم تُنشر بعد.'}</span>
+                        <span className="text-[13px] font-medium text-ink">{dirty ? 'لديك تعديلات غير محفوظة.' : status.draft_saved_at ? 'المسودة محفوظة ولم تُنشر بعد.' : 'لم يُنشر الموقع بهذا التصميم بعد.'}</span>
                         <span className="flex flex-wrap gap-2">
                             {dirty && <Button size="sm" variant="outline" icon={<Save />} loading={busy === 'save'} disabled={busy !== null} onClick={() => save()}>حفظ المسودة</Button>}
                             <Button size="sm" variant="outline" icon={<Eye />} disabled={busy !== null} onClick={preview}>معاينة</Button>

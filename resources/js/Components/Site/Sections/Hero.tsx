@@ -10,7 +10,7 @@ interface NextClass { name: string; date: string; time: string; day_label?: stri
 
 /**
  * v2 hero: dark, a two-line title, the description and two buttons, and a bar of facts with the next class.
- * The layout follows the image (lib/smart-image heroLayout): none → text on dark; a wide image → shown whole as a
+ * The layout follows the image (lib/smart-image heroLayout): none → text on dark, as tall as the text needs; a wide image → shown whole as a
  * banner with the text over its lower part (under it on phones); a tall or square one → beside the text; only the
  * owner's «ملء المساحة» makes it a full-bleed background that may trim its edges.
  */
@@ -102,7 +102,15 @@ export default function Hero({ section }: SectionProps) {
     }
 
     return (
-        <section id={section.id} className="relative flex scroll-mt-20 flex-col justify-end overflow-hidden bg-[#2A251F] text-white lg:min-h-[calc(100svh-65px)]">
+        // Without an image the space kept for the photo would be an empty dark screen on a computer, so the band is
+        // only as tall as its text needs (the same colours and type); with an image it is the full screen, as in v2.
+        <section
+            id={section.id}
+            className={cn(
+                'relative flex scroll-mt-20 flex-col justify-end overflow-hidden bg-[#2A251F] text-white',
+                layout === 'background' && image ? 'lg:min-h-[calc(100svh-65px)]' : 'lg:min-h-[min(calc(100svh-65px),640px)]',
+            )}
+        >
             {layout === 'background' && image ? (
                 <div className="absolute inset-0">
                     <SmartImage image={image} mode="fill" eager sizes="100vw" />

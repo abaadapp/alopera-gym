@@ -7,6 +7,7 @@ use App\Models\Tenant;
 use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Models\Program;
+use App\Modules\Gym\Models\PtPackage;
 use App\Modules\Gym\Models\Trainer;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Services\ShopSettings;
@@ -20,8 +21,10 @@ use Illuminate\Support\Facades\Storage;
  * addresses, and the dynamic sections filled from the gym system at the moment of the request (so a plan or a
  * class changed in the panel shows on the site at once, without entering it twice).
  *
- * Hidden sections and sections with nothing to show are left out, and so are menu links to them. Only public
- * fields of public records are read: no member, staff contact or stock figure reaches the page.
+ * Hidden sections and sections with nothing to show are left out, and so are menu links to them. A button or
+ * link to a page of the site that has nothing to show yet (the plans page with no plans, the sign-up page with
+ * nothing to sign up for, the news page with no news…) is left out too, so a visitor never lands on an empty page.
+ * Only public fields of public records are read: no member, staff contact or stock figure reaches the page.
  */
 final class SiteRenderer
 {
@@ -38,6 +41,20 @@ final class SiteRenderer
 
     private bool $signup = true;
 
+    /** @var array<string, bool> page token => whether that page has something to show, worked out once per render */
+    private array $pages = [];
+
+    /** What a visible section of the gym system is waiting for before it shows. */
+    private const WAITING = [
+        'programs' => 'لا توجد برامج ظاهرة في الموقع بعد.',
+        'schedule' => 'لا توجد حصص مجدولة في الأيام القادمة.',
+        'trainers' => 'لا يوجد مدربون ظاهرون في الموقع بعد.',
+        'plans' => 'لا توجد باقات عضوية منشورة بعد.',
+        'products' => 'لا توجد منتجات معروضة في الموقع، أو المتجر مغلق.',
+        'posts' => 'لا توجد أخبار أو عروض منشورة بعد.',
+        'join' => 'لا توجد باقات منشورة للتسجيل بعد، أو التسجيل الإلكتروني متوقف.',
+    ];
+
     private Tenant $tenant;
 
     public function __construct(private TenantContext $tenants, private ShopSettings $shop) {}
@@ -52,6 +69,7 @@ final class SiteRenderer
         $this->homeUrl = route('site.home');
         $this->shopOpen = $this->shop->shopOpen($this->tenant);
         $this->signup = (bool) $this->tenant->setting('member_signup_enabled', true);
+        $this->pages = [];
 
         $sections = [];
         $this->loadMedia($doc);
@@ -83,6 +101,45 @@ final class SiteRenderer
             'site' => $this->siteInfo($doc),
             'seo' => ['title' => (string) ($doc['seo']['title'] ?? ''), 'description' => (string) ($doc['seo']['description'] ?? '')],
         ];
+    }
+
+    /**
+     * The visible sections fed by the gym system that show nothing at the moment, with what each is waiting for,
+     * so «إدارة الموقع» can tell the owner why a section is not on the site (it shows by itself once there is data).
+     *
+     * @param  array<string, mixed>  $doc
+     * @return array<string, string> section id => reason
+     */
+    public function waiting(array $doc): array
+    {
+        $shown = array_flip(array_column($this->render($doc, true)['page']['sections'], 'id'));
+
+        return collect($doc['sections'] ?? [])
+            ->filter(fn ($s) => ($s['visible'] ?? true) && isset(self::WAITING[$s['type'] ?? '']) && ! isset($shown[$s['id'] ?? '']))
+            ->mapWithKeys(fn ($s) => [$s['id'] => self::WAITING[$s['type']]])->all();
+    }
+
+    /**
+     * Whether a page of the site has something to show, the same way that page reads it. Anything that is not a
+     * page token (a section, an outside address) is not a page and is judged elsewhere.
+     */
+    private function pageShows(string $href): bool
+    {
+        if (! isset(SiteLinks::PAGES[$href])) {
+            return true;
+        }
+
+        return $this->pages[$href] ??= match ($href) {
+            '@join' => $this->signup && MembershipPlan::public()->exists(),
+            '@plans' => MembershipPlan::public()->exists() || PtPackage::where('is_active', true)->where('is_public', true)->exists(),
+            '@programs' => Program::public()->exists(),
+            '@trainers' => Trainer::public()->exists(),
+            '@schedule' => ClassSession::where('status', ClassSession::SCHEDULED)->whereHas('program', fn ($q) => $q->where('is_public', true))
+                ->between(CarbonImmutable::today(), CarbonImmutable::today()->addDays(7))->exists(),
+            '@news' => SitePost::visible()->exists(),
+            '@shop' => $this->shopOpen,
+            default => true,
+        };
     }
 
     /** @param array<string, mixed> $data @param array<string, int> $anchors @return array<string, mixed> */
@@ -150,7 +207,7 @@ final class SiteRenderer
             $out[$field['key']] = match ($field['type']) {
                 'image' => $this->image($value),
                 'link' => ($l = $this->link(is_array($value) ? $value : [])) && $l['label'] !== '' ? $l : null,
-                'href' => is_string($value) ? SiteLinks::resolve($value, $this->homeUrl, $this->shopOpen) : null,
+                'href' => is_string($value) && $this->pageShows($value) ? SiteLinks::resolve($value, $this->homeUrl, $this->shopOpen) : null,
                 'list' => collect(is_array($value) ? $value : [])->map(fn ($item) => ['id' => $item['id'] ?? null] + $this->fields($field['fields'], is_array($item) ? $item : []))->values()->all(),
                 default => $value,
             };
@@ -174,7 +231,7 @@ final class SiteRenderer
             case 'plans':
                 return ['plans' => $this->plans($limit(3)), 'all_url' => route('site.plans'), 'currency' => $this->tenant->currency];
             case 'join':
-                return $this->signup ? ['plans' => ($data['show_plans'] ?? false) ? $this->plans(6) : [], 'join_url' => route('site.join'), 'currency' => $this->tenant->currency] : null;
+                return $this->pageShows('@join') ? ['plans' => ($data['show_plans'] ?? false) ? $this->plans(6) : [], 'join_url' => route('site.join'), 'currency' => $this->tenant->currency] : null;
             case 'schedule':
                 return $this->schedule(max(1, min(14, (int) ($data['days'] ?? 7))), (bool) ($data['show_trainer'] ?? true));
             case 'products':
@@ -328,7 +385,7 @@ final class SiteRenderer
     private function link(array $link): ?array
     {
         $href = (string) ($link['href'] ?? '');
-        if ($href === '@join' && ! $this->signup) {
+        if (! $this->pageShows($href)) {
             return null;
         }
         $url = SiteLinks::resolve($href, $this->homeUrl, $this->shopOpen);

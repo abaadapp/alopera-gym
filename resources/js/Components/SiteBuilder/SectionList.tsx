@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, GripVertical, Plus, Trash2 } from 'lucide-react';
 import { Badge, Button, Modal } from '@/Components/ui';
 import { cn } from '@/lib/cn';
-import { hasErrorUnder, sectionSummary } from '@/lib/site-builder';
+import { hasErrorUnder, missingContent, sectionSummary } from '@/lib/site-builder';
 import type { SectionDoc } from '@/types/site';
 import { sectionLabel, useBuilder } from './context';
 import { useDragSort } from './useDragSort';
@@ -30,7 +30,7 @@ export default function SectionList({
     onDelete: (id: string) => void;
     onAdd: () => void;
 }) {
-    const { schemas, errors } = useBuilder();
+    const { schemas, errors, waiting } = useBuilder();
     const sort = useDragSort('sections', sections.length, onMove);
     const [removing, setRemoving] = useState<SectionDoc | null>(null);
 
@@ -63,6 +63,8 @@ export default function SectionList({
                                         <span className="num text-[11px] font-normal text-muted">{i + 1}</span>
                                         {sectionLabel(s, schemas)}
                                         {!s.visible && <Badge tone="gray">مخفي</Badge>}
+                                        {s.visible && waiting[s.id] && <Badge tone="amber">لا يظهر الآن</Badge>}
+                                        {s.visible && !waiting[s.id] && missingContent(s) && <Badge tone="amber">فارغ — لا يظهر</Badge>}
                                         {schema?.group === 'system' && <Badge tone="blue">من النظام</Badge>}
                                         {bad && <Badge tone="red">فيه خطأ</Badge>}
                                     </span>

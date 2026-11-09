@@ -257,6 +257,8 @@ export interface BuilderProps {
     version: number;
     status: BuilderStatus;
     schema: SectionTypeSchema[];
+    /** Sections of the saved draft fed by the gym system that show nothing now (no plans yet…): id => why. */
+    waiting: Record<string, string>;
     media: MediaItem[];
     revisions: RevisionItem[];
     /** Pages of the site a link can open: [{ value: '@plans', label: 'صفحة الباقات' }, …]. */

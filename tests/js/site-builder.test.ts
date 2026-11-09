@@ -13,6 +13,7 @@ import {
     hrefKind,
     imageUses,
     mapErrors,
+    missingContent,
     move,
     newSection,
     newSectionId,
@@ -190,5 +191,25 @@ describe('reading', () => {
         expect(autoLayoutHint('landscape', 'background')).toContain('أفقية');
         expect(autoLayoutHint('portrait', 'side')).toContain('عمودية');
         expect(autoLayoutHint(null, 'gallery')).toContain('دون قص');
+    });
+});
+
+describe('empty sections', () => {
+    const section = (type: string, data: Record<string, unknown>) => ({ id: `${type}-x`, type, visible: true, tone: 'auto' as const, data });
+
+    it('says what a content section needs before visitors see it, like the server', () => {
+        expect(missingContent(section('testimonials', { items: [{ id: 'a', quote: '  ', name: 'س' }] }))).toMatch(/رأيًا/);
+        expect(missingContent(section('testimonials', { items: [{ id: 'a', quote: 'نادٍ جميل', name: '' }] }))).toBeNull();
+        expect(missingContent(section('faq', { items: [{ id: 'a', q: 'متى؟', a: '' }] }))).toMatch(/سؤالًا/);
+        expect(missingContent(section('gallery', { items: [{ id: 'a', image: null }] }))).toMatch(/صورة/);
+        expect(missingContent(section('gallery', { items: [{ id: 'a', image: { id: 3, fit: 'auto' } }] }))).toBeNull();
+        expect(missingContent(section('hero', { title: '', title_2: '', image: null }))).not.toBeNull();
+        expect(missingContent(section('cta', { title: '', primary: { label: 'اشتركي', href: '' } }))).not.toBeNull();
+        expect(missingContent(section('video', { url: 'https://example.com/x' }))).not.toBeNull();
+        expect(missingContent(section('video', { url: 'https://youtu.be/dQw4w9WgXcQ' }))).toBeNull();
+    });
+
+    it('leaves the gym system sections to the server', () => {
+        expect(missingContent(section('plans', { title: '' }))).toBeNull();
     });
 });

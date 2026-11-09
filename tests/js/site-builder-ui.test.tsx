@@ -37,6 +37,7 @@ function context(over: Partial<BuilderContextValue> = {}): BuilderContextValue {
         limits: { max_image_kb: 4096, types: ['jpg', 'png', 'webp'] },
         errors: {},
         localUses: {},
+        waiting: {},
         ...over,
     };
 }
@@ -64,6 +65,19 @@ describe('the sections list', () => {
         expect((screen.getByLabelText('نقل «معرض صور» للأعلى') as HTMLButtonElement).disabled).toBe(true);
         fireEvent.click(screen.getByLabelText('إظهار القسم للزوار'));
         expect(onToggle).toHaveBeenCalledWith('plans-b');
+    });
+
+    it('says which shown section waits for data in the system, and why', () => {
+        const shown: SectionDoc[] = [{ ...sections[1], visible: true }];
+        const why = 'لا توجد باقات عضوية منشورة بعد.';
+        render(
+            <BuilderContext.Provider value={context({ sections: shown, waiting: { 'plans-b': why } })}>
+                <SectionList sections={shown} selected="plans-b" onSelect={() => {}} onMove={() => {}} onToggle={() => {}} onDuplicate={() => {}} onDelete={() => {}} onAdd={() => {}} />
+                <SectionEditor section={shown[0]} onChange={() => {}} />
+            </BuilderContext.Provider>,
+        );
+        expect(screen.getByText('لا يظهر الآن')).toBeTruthy();
+        expect(screen.getByText(new RegExp(`لا يظهر هذا القسم للزوار الآن: ${why}`))).toBeTruthy();
     });
 });
 

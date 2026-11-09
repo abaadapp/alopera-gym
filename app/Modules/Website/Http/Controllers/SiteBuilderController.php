@@ -35,9 +35,10 @@ class SiteBuilderController extends Controller
 
     public function __construct(private SiteContent $content, private TenantContext $tenants) {}
 
-    public function show(ShopSettings $shop): Response
+    public function show(ShopSettings $shop, SiteRenderer $renderer): Response
     {
         $tenant = $this->tenants->require();
+        URL::defaults(['club' => $tenant->slug]);
         $site = $this->content->site();
         $doc = $this->content->editable($site);
         $uses = MediaLibrary::uses($site);
@@ -47,6 +48,8 @@ class SiteBuilderController extends Controller
             'version' => (int) $site->draft_version,
             'status' => $this->content->status($site),
             'schema' => SectionTypes::forEditor(),
+            // Sections of the saved draft that wait for data in the system (no plans yet…) and are not on the site now.
+            'waiting' => $renderer->waiting($doc),
             'media' => SiteMedia::latest('id')->get()->map(fn ($m) => MediaLibrary::present($m, $uses))->all(),
             'revisions' => SiteRevision::with('publisher:id,name')->latest('number')->limit(20)->get()->map(fn (SiteRevision $r) => [
                 'id' => $r->id, 'number' => $r->number, 'note' => $r->note, 'published_at' => $r->published_at->format('Y-m-d H:i'), 'published_by' => $r->publisher?->name,

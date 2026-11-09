@@ -11,6 +11,8 @@ export interface BuilderContextValue {
     limits: { max_image_kb: number; types: string[] };
     /** Errors by path relative to the document (`sections.<id>.data.title`, `contact.email`). */
     errors: Record<string, string>;
+    /** Saved sections fed by the gym system that are not on the site now for want of data: id => why. */
+    waiting: Record<string, string>;
     /** Images the document open in the editor uses (saved or not), by media id: the sections' names. */
     localUses: Record<number, string[]>;
 }

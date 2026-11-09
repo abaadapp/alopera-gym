@@ -1,5 +1,6 @@
-import { Database, EyeOff } from 'lucide-react';
+import { Clock, Database, EyeOff } from 'lucide-react';
 import { Card, Field, Notice, Select, Toggle } from '@/Components/ui';
+import { missingContent } from '@/lib/site-builder';
 import type { SectionDoc, Tone } from '@/types/site';
 import { useBuilder } from './context';
 import FieldInput from './FieldInput';
@@ -13,7 +14,7 @@ const TONES: { value: Tone; label: string }[] = [
 
 /** The form of the chosen section, drawn from its template: background, shown or hidden, then its own fields. */
 export default function SectionEditor({ section, onChange }: { section: SectionDoc; onChange: (next: SectionDoc) => void }) {
-    const { schemas, errors } = useBuilder();
+    const { schemas, errors, waiting } = useBuilder();
     const schema = schemas[section.type];
     const path = `sections.${section.id}`;
 
@@ -36,6 +37,14 @@ export default function SectionEditor({ section, onChange }: { section: SectionD
                 <Notice tone="blue" icon={<Database />}>
                     {schema.source} تعديل هذه البيانات نفسها يكون من شاشتها في النظام، ويظهر في الموقع تلقائيًا. هنا تختار العناوين وعدد ما يُعرض فقط.
                 </Notice>
+            )}
+            {section.visible && waiting[section.id] && (
+                <Notice tone="amber" icon={<Clock />}>
+                    لا يظهر هذا القسم للزوار الآن: {waiting[section.id]} يظهر وحده حين تُضاف البيانات في النظام، دون نشر جديد. وتُخفى معه الأزرار والروابط التي تفتحه.
+                </Notice>
+            )}
+            {section.visible && missingContent(section) && (
+                <Notice tone="amber" icon={<Clock />}>لا يظهر هذا القسم للزوار وهو فارغ، فلا يرون إطارًا خاليًا: {missingContent(section)}</Notice>
             )}
             {!section.visible && (
                 <Notice tone="gray" icon={<EyeOff />}>هذا القسم مخفي: لا يظهر للزوار ولا في المعاينة حتى تُظهره.</Notice>

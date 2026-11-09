@@ -293,6 +293,32 @@ export function sectionSummary(section: SectionDoc): string {
     return '';
 }
 
+/**
+ * What a content section still needs before visitors see it, or null when it has enough to show. Mirrors the
+ * server's SiteRenderer::hasContent for the sections the owner writes (the gym system's sections are judged on
+ * the server, from its data), so the editor can say at once why a section is not on the site.
+ */
+export function missingContent(section: SectionDoc): string | null {
+    const d = section.data ?? {};
+    const text = (v: unknown) => typeof v === 'string' && v.trim() !== '';
+    const image = (v: unknown) => !!v && typeof v === 'object';
+    const some = (ok: (item: Record<string, unknown>) => boolean) => (Array.isArray(d.items) ? (d.items as Record<string, unknown>[]) : []).some((i) => !!i && ok(i));
+    const link = (v: unknown) => !!v && typeof v === 'object' && text((v as { label?: unknown }).label) && text((v as { href?: unknown }).href);
+    switch (section.type) {
+        case 'hero': return text(d.title) || text(d.title_2) || image(d.image) ? null : 'اكتب عنوانًا أو أضف صورة.';
+        case 'intro': return text(d.title) || text(d.body) ? null : 'اكتب عنوانًا أو نصًا.';
+        case 'image_text': return text(d.title) || text(d.body) || image(d.image) ? null : 'اكتب عنوانًا أو نصًا، أو أضف صورة.';
+        case 'gallery': return some((i) => image(i.image)) ? null : 'أضف صورة واحدة على الأقل.';
+        case 'services': return some((i) => text(i.title)) ? null : 'أضف بطاقة بعنوان واحدة على الأقل.';
+        case 'testimonials': return some((i) => text(i.quote)) ? null : 'أضف رأيًا واحدًا على الأقل.';
+        case 'stats': return some((i) => text(i.value)) ? null : 'أضف رقمًا واحدًا على الأقل.';
+        case 'faq': return some((i) => text(i.q) && text(i.a)) ? null : 'أضف سؤالًا وجوابه.';
+        case 'cta': return text(d.title) || link(d.primary) ? null : 'اكتب عنوانًا أو أضف زرًا.';
+        case 'video': return checkVideo(typeof d.url === 'string' ? d.url : '') === null && text(d.url) ? null : 'أضف رابط فيديو من YouTube أو Vimeo.';
+    }
+    return null;
+}
+
 /** Bytes as people read them: «850 ك.ب»، «2.4 م.ب». */
 export function fileSize(bytes: number): string {
     if (!bytes || bytes < 1024) return `${bytes || 0} بايت`;
