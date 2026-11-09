@@ -220,6 +220,36 @@ class BookingTest extends TestCase
         });
     }
 
+    public function test_a_class_moved_to_another_time_is_not_made_again_at_its_old_time(): void
+    {
+        $club = $this->club();
+        $program = $this->program($club);
+        $owner = $this->owner($club);
+        $day = now()->addDays(2);
+
+        [$first, $second] = $this->asTenant($club, function () use ($program, $day) {
+            ClassSchedule::create([
+                'program_id' => $program->id, 'weekday' => $day->dayOfWeek, 'starts_at' => '18:00',
+                'duration_minutes' => 60, 'capacity' => 12, 'valid_from' => today(),
+            ]);
+            app(ScheduleService::class)->generate(2);
+
+            return ClassSession::orderBy('starts_at')->take(2)->get()->all();
+        });
+        $form = fn (string $at) => ['capacity' => 12, 'starts_at' => $at];
+
+        // Moved an hour later; the hourly timetable run then leaves 18:00 empty.
+        $this->actingAs($owner)->put(route('club.sessions.update', $first), $form($day->toDateString().' 19:00'))->assertSessionHasNoErrors();
+        $this->asTenant($club, function () use ($day) {
+            $this->assertSame(0, app(ScheduleService::class)->generate(2));
+            $onThatDay = ClassSession::whereDate('starts_at', $day->toDateString())->pluck('starts_at')->map->format('H:i')->all();
+            $this->assertSame(['19:00'], $onThatDay, 'one class that day, at its new time');
+        });
+
+        // Onto another occurrence of the same line: refused, not a server error.
+        $this->actingAs($owner)->put(route('club.sessions.update', $first), $form($second->starts_at->format('Y-m-d H:i')))->assertSessionHasErrors('starts_at');
+    }
+
     public function test_member_books_from_the_portal_and_full_sessions_are_refused_with_a_message(): void
     {
         $club = $this->club();

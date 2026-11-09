@@ -30,11 +30,43 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'claude:ready'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # What CI has, so the agent can run the tests it is told to run (PostgreSQL, PHP 8.4, Node 22).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: alopera_gym_testing
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      LARAVEL_BYPASS_ENV_CHECK: 1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, gd, zip, bcmath, intl, pcntl, posix
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Dependencies for the tests
+        run: |
+          composer install --no-interaction --prefer-dist --quiet
+          cp .env.example .env && php artisan key:generate --quiet
+          npm ci --no-audit --no-fund --silent
 
       - name: Resolve issue number
         id: issue
@@ -64,6 +96,11 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
+          # The tools the prompt below needs, and nothing that merges or rewrites history. Without this list the agent
+          # may not even read the issue (the first trial, #28, stopped after two permission denials).
+          claude_args: >-
+            --allowedTools "Read,Edit,MultiEdit,Write,Glob,Grep,LS,Bash(gh issue view:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr edit:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git fetch:*),Bash(git pull:*),Bash(git checkout:*),Bash(git switch:*),Bash(git branch:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git rev-parse:*),Bash(php artisan test:*),Bash(vendor/bin/pint:*),Bash(npm test:*),Bash(npm run build:*),Bash(npx tsc:*),Bash(ls:*),Bash(cat:*),Bash(grep:*)"
+            --disallowedTools "Bash(gh pr merge:*),Bash(git push --force:*),Bash(git push -f:*),Bash(git push --force-with-lease:*),Bash(git reset --hard:*)"
           prompt: |
             Work on GitHub issue #${{ steps.issue.outputs.number }} in this repository.
             Read the entire issue first. The issue is the canonical task specification.
@@ -89,6 +126,7 @@ jobs:
             - Update the issue with the final Branch, GitHub PR URL, test result and concise implementation summary.
             - Finish at review-ready state only. Do not merge.
 
+      # In Review only when a pull request for this issue exists; a run that ends without one is Blocked, not In Review.
       - name: Mark task in review
         if: success()
         env:
@@ -97,9 +135,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          PR=$(gh pr list --state open --search "Closes #${ISSUE_NUMBER} in:body" --json url --jq '.[0].url // empty')
+          STATUS="In Review"
+          if [ -z "$PR" ]; then
+            STATUS="Blocked"
+            gh issue comment "$ISSUE_NUMBER" --body "Blocked: Claude Code finished without opening a pull request for this issue. See the run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          fi
           BODY="$(gh issue view "$ISSUE_NUMBER" --json body --jq .body)"
-          UPDATED="$(printf '%s' "$BODY" | python3 -c 'import sys,re; s=sys.stdin.read(); print(re.sub(r"(?m)(^### Status\s*\n\s*\n?)[^\n]+", r"\1In Review", s, count=1))')"
+          UPDATED="$(printf '%s' "$BODY" | STATUS="$STATUS" python3 -c 'import os,sys,re; s=sys.stdin.read(); print(re.sub(r"(?m)(^### Status\s*\n\s*\n?)[^\n]+", lambda m: m.group(1) + os.environ["STATUS"], s, count=1))')"
           gh issue edit "$ISSUE_NUMBER" --body "$UPDATED"
+          [ "$STATUS" = "In Review" ] || exit 1
 
       - name: Mark task blocked on failure
         if: failure()

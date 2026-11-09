@@ -85,6 +85,57 @@ class PosBasketTest extends TestCase
             ->component('Inventory/PosReceipts')->has('receipts', 4)->where('total', '106.000'));
     }
 
+    public function test_with_vat_the_till_is_told_the_rate_and_charges_what_each_document_is_issued_for(): void
+    {
+        $club = $this->club();
+        [$water, $plan, $package, $member] = $this->shop($club);
+        $this->asTenant($club, fn () => $club->forceFill(['settings' => array_merge($club->settings ?? [], ['vat_rate' => 5])])->save());
+        $cashier = $this->staff($club, 'cashier');
+
+        // The page gets the rate (resources/js/lib/vat.ts adds it to each document, as tests/js/vat.test.ts checks).
+        $this->actingAs($cashier)->get(route('club.pos.index'))->assertOk()->assertInertia(fn ($page) => $page->component('Inventory/Pos')->where('vatRate', 5));
+
+        $this->actingAs($cashier)->post(route('club.pos.checkout'), [
+            'items' => [['product_id' => $water->id, 'quantity' => 3]], 'memberships' => [['plan_id' => $plan->id]], 'packages' => [['package_id' => $package->id]],
+            'member_id' => $member->id, 'payment_method' => 'cash', 'client_key' => 'vat-basket',
+        ])->assertSessionHasNoErrors();
+
+        $this->asTenant($club, function () {
+            // 1.500 + 5% = 1.575 · 35.000 + 5% = 36.750 · 40.000 + 5% = 42.000: what the screen shows is what is taken.
+            $this->assertSame(['36.750', '1.575', '42.000'], Invoice::orderBy('type')->pluck('total')->all());
+            $this->assertSame(['1.575', '36.750', '42.000'], Payment::orderBy('amount')->pluck('amount')->all());
+        });
+    }
+
+    public function test_with_vat_odd_amounts_and_a_discount_the_screen_the_money_taken_and_the_invoices_agree(): void
+    {
+        $club = $this->club();
+        $plan = $this->plan($club, ['price' => 12.345, 'signup_fee' => 0]);
+        [$bar, $package] = $this->asTenant($club, fn () => [
+            Product::create(['name' => 'Bar', 'price' => 0.333, 'track_stock' => false]),
+            PtPackage::create(['name' => '5 جلسات', 'sessions_count' => 5, 'session_minutes' => 60, 'price' => 40, 'validity_days' => 60]),
+        ]);
+        $member = $this->member($club, ['full_name' => 'سالم']);
+        $this->asTenant($club, fn () => $club->forceFill(['settings' => array_merge($club->settings ?? [], ['vat_rate' => 5])])->save());
+        $owner = $this->owner($club);
+
+        // The screen prices the membership from this quote (before VAT) and adds the rate itself, as tests/js/vat.test.ts checks.
+        $this->actingAs($owner)->getJson(route('club.memberships.quote', ['member_id' => $member->id, 'membership_plan_id' => $plan->id]))
+            ->assertOk()->assertJsonPath('total', '12.345');
+
+        $this->actingAs($owner)->post(route('club.pos.checkout'), [
+            'items' => [['product_id' => $bar->id, 'quantity' => 3]], 'discount' => '0.100', 'memberships' => [['plan_id' => $plan->id]],
+            'packages' => [['package_id' => $package->id]], 'member_id' => $member->id, 'payment_method' => 'cash', 'client_key' => 'vat-odd',
+        ])->assertSessionHasNoErrors();
+
+        $this->asTenant($club, function () {
+            // 0.999 − 0.100 = 0.899 → +0.045 = 0.944 · 12.345 → +0.617 = 12.962 · 40.000 → +2.000 = 42.000; the screen shows 55.906.
+            $this->assertEqualsCanonicalizing(['0.944', '12.962', '42.000'], Invoice::pluck('total')->all());
+            $this->assertEqualsCanonicalizing(['0.944', '12.962', '42.000'], Payment::pluck('amount')->all(), 'each payment is its invoice, to the baisa');
+            $this->assertSame('0.000', Invoice::get()->reduce(fn ($s, $i) => bcadd($s, $i->balance(), 3), '0.000'), 'nothing left owing');
+        });
+    }
+
     public function test_memberships_need_a_member_and_their_own_permission_and_nothing_is_half_sold(): void
     {
         $club = $this->club();

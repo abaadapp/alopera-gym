@@ -1,5 +1,6 @@
 <?php
 
+use App\Core\Support\SubmittedOnceKey;
 use Illuminate\Support\Facades\Schedule;
 
 /*
@@ -20,4 +21,5 @@ Schedule::command('documents:alerts')->dailyAt('07:30')->withoutOverlapping()->o
 Schedule::command('notifications:sync')->hourly()->withoutOverlapping()->onOneServer();
 Schedule::command('backup:tenants')->dailyAt('03:00')->withoutOverlapping()->onOneServer();
 Schedule::command('queue:prune-failed --hours=720')->daily();
+Schedule::command('model:prune', ['--model' => [SubmittedOnceKey::class]])->dailyAt('04:20')->withoutOverlapping()->onOneServer();
 Schedule::command('whatsapp:prune-webhooks')->dailyAt('04:10')->withoutOverlapping()->onOneServer();

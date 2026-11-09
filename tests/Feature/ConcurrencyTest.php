@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Branch;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Modules\Accounting\Models\Account;
@@ -23,8 +24,11 @@ use App\Modules\Gym\Models\TrainerAvailability;
 use App\Modules\Gym\Services\PtService;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\Sale;
+use App\Modules\Inventory\Models\Stocktake;
 use App\Modules\Inventory\Models\Supplier;
+use App\Modules\Inventory\Services\InventoryService;
 use App\Modules\Inventory\Services\PurchaseService;
+use App\Modules\Inventory\Services\StockService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ViewErrorBag;
@@ -184,6 +188,90 @@ class ConcurrencyTest extends TestCase
 
             return $this->asTenant($club, fn () => app(PtService::class)->schedule(PtSubscription::findOrFail($id), $at)->id);
         }, $subscriptionIds));
+    }
+
+    // ── Stock counts: one open count per product and branch, its differences posted once ─────────────────────
+
+    /** @return array{0: User, 1: Branch, 2: Product} the owner, the main branch, a product with 10 in it */
+    private function counting(Tenant $club): array
+    {
+        return [$this->owner($club), ...$this->asTenant($club, function () {
+            $branch = Branch::orderByDesc('is_main')->orderBy('id')->firstOrFail();
+            $bar = Product::create(['name' => 'Protein bar', 'price' => 1.5]);
+            app(StockService::class)->move($bar, 10, 'adjustment', null, 'opening', 0.8, branchId: $branch->id);
+
+            return [$branch, $bar];
+        })];
+    }
+
+    public function test_two_counts_of_the_same_products_started_at_once_in_one_branch_open_once(): void
+    {
+        $club = $this->club();
+        [$owner, $branch] = $this->counting($club);
+
+        $results = $this->concurrently(array_fill(0, 2, function () use ($owner, $branch) {
+            // Each looks for an open count, then waits, so both would look before either has made one.
+            DB::listen(function ($q) {
+                if (str_starts_with($q->sql, 'select') && str_contains($q->sql, 'from "stocktakes"')) {
+                    usleep(600_000);
+                }
+            });
+            $response = $this->actingAs($owner)->post(route('club.inventory.counts.store'), ['branch_id' => $branch->id]);
+
+            return ['status' => $response->getStatusCode(), 'errors' => self::errors()];
+        }));
+
+        $this->assertSame(1, $this->asTenant($club, fn () => Stocktake::where('status', Stocktake::DRAFT)->count()), json_encode($results));
+        $refused = array_values(array_filter(array_column($results, 'value'), fn ($v) => $v['errors'] !== []));
+        $this->assertCount(1, $refused, json_encode($results));
+        $open = $this->asTenant($club, fn () => Stocktake::sole()->number);
+        $this->assertStringContainsString($open, json_encode($refused[0]['errors'], JSON_UNESCAPED_UNICODE), 'the refusal names the open count');
+    }
+
+    public function test_two_old_overlapping_counts_approved_at_once_post_the_difference_once(): void
+    {
+        $club = $this->club();
+        [$owner, $branch, $bar] = $this->counting($club);
+        // Two open counts of the same product, as could exist before one open count per product and branch was
+        // enforced, both counted 7 against the book of 10 (3 missing).
+        $ids = $this->asTenant($club, function () use ($branch) {
+            $first = app(InventoryService::class)->startCount($branch->id);
+            $second = $first->replicate();
+            $second->number = $first->number.'-B';
+            $second->save();
+            foreach ($first->lines()->get() as $line) {
+                $copy = $line->replicate();
+                $copy->stocktake_id = $second->id;
+                $copy->save();
+            }
+            foreach ([$first, $second] as $count) {
+                app(InventoryService::class)->saveCounts($count, [$count->lines()->sole()->id => ['counted' => 7]]);
+            }
+
+            return [$first->id, $second->id];
+        });
+        $this->travel(1)->seconds();
+
+        $results = $this->concurrently(array_map(fn (int $id) => function () use ($owner, $id) {
+            DB::listen(function ($q) {
+                if (str_starts_with($q->sql, 'select') && str_contains($q->sql, 'from "stocktakes"')) {
+                    usleep(300_000);
+                }
+            });
+            $response = $this->actingAs($owner)->put(route('club.inventory.counts.save', $id), ['counts' => [], 'approve' => true]);
+
+            return ['status' => $response->getStatusCode(), 'errors' => self::errors()];
+        }, $ids));
+
+        $this->asTenant($club, function () use ($bar, $branch, $results) {
+            $this->assertEquals(7.0, (float) (app(StockService::class)->quantities($branch->id)[$bar->id] ?? 0), json_encode($results));
+            $this->assertSame(1, Stocktake::where('status', Stocktake::APPROVED)->count());
+            $this->assertSame(1, Stocktake::where('status', Stocktake::DRAFT)->count(), 'the other is kept, not deleted');
+        });
+        $refused = array_values(array_filter(array_column($results, 'value'), fn ($v) => $v['errors'] !== []));
+        $this->assertCount(1, $refused, json_encode($results));
+        $approved = $this->asTenant($club, fn () => Stocktake::where('status', Stocktake::APPROVED)->sole()->number);
+        $this->assertStringContainsString('الجرد '.$approved.' لنفس المنتجات', json_encode($refused[0]['errors'], JSON_UNESCAPED_UNICODE), 'the refusal names the count approved');
     }
 
     public function test_one_trainer_is_not_booked_twice_for_the_same_hour_by_members_booking_at_once(): void
