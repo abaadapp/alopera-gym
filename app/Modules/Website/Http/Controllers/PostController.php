@@ -18,7 +18,7 @@ class PostController extends Controller
     public function index(): Response
     {
         return Inertia::render('Website/Posts', [
-            'posts' => SitePost::latest()->get()->map(fn (SitePost $p) => $p->only('id', 'type', 'title', 'slug', 'excerpt', 'body', 'is_published') + [
+            'posts' => SitePost::latest()->get()->map(fn (SitePost $p) => $p->only('id', 'type', 'title', 'title_en', 'slug', 'excerpt', 'excerpt_en', 'body', 'body_en', 'is_published') + [
                 'image_url' => SiteSetting::url($p->image_path),
                 'starts_on' => $p->starts_on?->toDateString(), 'ends_on' => $p->ends_on?->toDateString(),
                 'published_at' => $p->published_at?->format('Y-m-d'),
@@ -90,6 +90,10 @@ class PostController extends Controller
             'title' => ['required', 'string', 'max:160'],
             'excerpt' => ['nullable', 'string', 'max:500'],
             'body' => ['nullable', 'string', 'max:20000'],
+            // The English website's words (#68); without them the English site shows the Arabic.
+            'title_en' => ['nullable', 'string', 'max:160'],
+            'excerpt_en' => ['nullable', 'string', 'max:500'],
+            'body_en' => ['nullable', 'string', 'max:20000'],
             'starts_on' => ['nullable', 'date'],
             'ends_on' => ['nullable', 'date', 'after_or_equal:starts_on'],
             'is_published' => ['boolean'],

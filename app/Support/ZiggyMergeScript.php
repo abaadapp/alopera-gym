@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\SiteDomains;
 use Tighten\Ziggy\Output\MergeScript;
 
@@ -11,10 +12,12 @@ class ZiggyMergeScript extends MergeScript
     public function __toString(): string
     {
         $domains = app(SiteDomains::class);
-        if (! $domains->enabled()) {
+        if (! $domains->enabled() && ! SiteLanguage::isEnglish()) {
             return parent::__toString();
         }
-        $routes = json_encode(ZiggyScript::addresses($this->ziggy->toArray()['routes'], $domains));
+        $routes = $this->ziggy->toArray()['routes'];
+        $routes = $domains->enabled() ? ZiggyScript::addresses($routes, $domains) : $routes;
+        $routes = json_encode(SiteLanguage::isEnglish() ? ZiggyScript::inLanguage($routes, SiteLanguage::current()) : $routes);
 
         return <<<HTML
         <script type="text/javascript"{$this->nonce}>Object.assign(Ziggy.routes,{$routes});</script>

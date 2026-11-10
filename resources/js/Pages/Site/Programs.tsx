@@ -1,5 +1,6 @@
 import { Clock, Dumbbell } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
+import { useT } from '@/lib/i18n';
 import { PageHero } from './Plans';
 
 export interface ProgramData {
@@ -18,6 +19,7 @@ export const LEVELS: Record<string, string> = { all: 'لجميع المستوي�
 export const CATEGORIES: Record<string, string> = { class: 'حصة جماعية', program: 'برنامج تدريبي', pt: 'تدريب شخصي' };
 
 export function ProgramCard({ program }: { program: ProgramData }) {
+    const t = useT();
     return (
         <article className="group overflow-hidden rounded-3xl border border-line bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-brand/5">
             <div className="relative aspect-[4/3] overflow-hidden" style={{ background: `linear-gradient(135deg, ${program.color}22, ${program.color}55)` }}>
@@ -28,7 +30,7 @@ export function ProgramCard({ program }: { program: ProgramData }) {
                         <Dumbbell className="size-12 opacity-60" style={{ color: program.color }} />
                     </div>
                 )}
-                <span className="absolute top-3 start-3 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-ink backdrop-blur">{CATEGORIES[program.category] ?? program.category}</span>
+                <span className="absolute top-3 start-3 rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-ink backdrop-blur">{CATEGORIES[program.category] ? t(CATEGORIES[program.category]) : program.category}</span>
             </div>
             <div className="p-5">
                 <div className="flex items-center gap-2">
@@ -36,8 +38,8 @@ export function ProgramCard({ program }: { program: ProgramData }) {
                     <h3 className="font-display text-lg font-semibold text-ink">{program.name}</h3>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted">
-                    <span>{LEVELS[program.level] ?? program.level}</span>
-                    <span className="inline-flex items-center gap-1"><Clock className="size-3.5" /><span className="num">{program.duration_minutes}</span> دقيقة</span>
+                    <span>{LEVELS[program.level] ? t(LEVELS[program.level]) : program.level}</span>
+                    <span className="inline-flex items-center gap-1"><Clock className="size-3.5" /><span className="num">{program.duration_minutes}</span> {t('دقيقة')}</span>
                 </div>
                 {program.description && <p className="mt-3 line-clamp-3 text-sm leading-7 text-muted">{program.description}</p>}
             </div>
@@ -46,12 +48,13 @@ export function ProgramCard({ program }: { program: ProgramData }) {
 }
 
 export default function Programs({ site, seo, programs }: { site: SiteInfo; seo: { title: string }; programs: ProgramData[] }) {
+    const t = useT();
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero page="programs" title="البرامج التدريبية" icon={<Dumbbell className="size-6" />} />
+            <PageHero page="programs" title={t('البرامج التدريبية')} icon={<Dumbbell className="size-6" />} />
             <section className="mx-auto max-w-6xl px-4 py-12">
                 {programs.length === 0 ? (
-                    <p className="py-16 text-center text-muted">لا توجد برامج معروضة حاليًا.</p>
+                    <p className="py-16 text-center text-muted">{t('لا توجد برامج معروضة حاليًا.')}</p>
                 ) : (
                     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                         {programs.map((p) => <ProgramCard key={p.id} program={p} />)}
