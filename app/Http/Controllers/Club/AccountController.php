@@ -8,6 +8,7 @@ use App\Core\Tenancy\BranchContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -60,7 +61,8 @@ class AccountController extends Controller
         ], ['current_password.current_password' => 'كلمة المرور الحالية غير صحيحة.']);
 
         $user = $request->user();
-        $user->forceFill(['password' => $data['password']])->save();
+        // A new remember token ends the sessions remembered on other devices, as a reset does; this one stays signed in.
+        $user->forceFill(['password' => $data['password'], 'remember_token' => Str::random(60)])->save();
         $audit->log('user.password_changed', $user);
 
         return back()->with('success', 'تم تغيير كلمة المرور.');
