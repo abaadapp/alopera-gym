@@ -231,7 +231,7 @@ final class MembershipService
         }
 
         $membership->status = match (true) {
-            $membership->starts_on->gt($today), $this->heldByFreeze($membership) => Membership::SCHEDULED,
+            $membership->starts_on->gt($today), $membership->heldByFreeze() => Membership::SCHEDULED,
             $membership->ends_on->lt($today) => Membership::EXPIRED,
             default => Membership::ACTIVE,
         };
@@ -427,7 +427,7 @@ final class MembershipService
 
         Membership::where('status', Membership::SCHEDULED)->where('starts_on', '<=', $today)
             ->eachById(function (Membership $m) use (&$counts) {
-                if ($this->heldByFreeze($m)) {
+                if ($m->heldByFreeze()) {
                     return; // starts once the frozen period resumes, which moves it back by the days frozen
                 }
                 $m->forceFill(['status' => Membership::ACTIVE])->save();
@@ -445,13 +445,6 @@ final class MembershipService
             });
 
         return $counts;
-    }
-
-    /** An earlier period of the same member is frozen: this one cannot start before it resumes (and moves it back). */
-    private function heldByFreeze(Membership $membership): bool
-    {
-        return Membership::where('member_id', $membership->member_id)->whereKeyNot($membership->id)
-            ->where('status', Membership::FROZEN)->where('starts_on', '<', $membership->starts_on)->exists();
     }
 
     /**

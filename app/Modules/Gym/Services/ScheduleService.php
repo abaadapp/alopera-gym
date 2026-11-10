@@ -6,8 +6,10 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Gym\Models\ClassSchedule;
 use App\Modules\Gym\Models\ClassSession;
+use App\Modules\Gym\Models\PtSession;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use LogicException;
 
 /**
  * Turns the weekly timetable into dated class sessions and keeps them in sync.
@@ -40,6 +42,40 @@ final class ScheduleService
 
         if ($clash) {
             throw new BusinessRuleException('schedule.trainer_clash', 'المدرب لديه حصة أخرى في نفس الوقت.', 'trainer_id');
+        }
+    }
+
+    /**
+     * A dated class (one-off, moved, or given to another trainer) needs its trainer free: no other scheduled class of
+     * hers and no scheduled personal-training session overlaps it (ending as the other starts is not an overlap). The
+     * dated sessions are what counts, not the weekly timetable: the timetable's classes are made as sessions ahead of
+     * time, and one cancelled or moved no longer holds the trainer. Takes the trainer's lock — the one
+     * PtService::schedule takes — until the caller's transaction ends, so two classes, or a class and a PT session,
+     * made at once for one trainer cannot both pass. A class without a trainer never clashes.
+     */
+    public function assertTrainerFreeForSession(?int $trainerId, CarbonImmutable $start, CarbonImmutable $end, ?int $ignoreSessionId = null, string $field = 'trainer_id'): void
+    {
+        if (! $trainerId) {
+            return;
+        }
+        if (DB::transactionLevel() === 0) {
+            throw new LogicException('The trainer lock only lasts inside a transaction.');
+        }
+        DB::select('select pg_advisory_xact_lock(?, ?)', [PtService::TRAINER_LOCKS, $trainerId]);
+
+        $class = ClassSession::with('program:id,name')->where('trainer_id', $trainerId)->where('status', ClassSession::SCHEDULED)
+            ->when($ignoreSessionId, fn ($q) => $q->whereKeyNot($ignoreSessionId))
+            ->where('starts_at', '<', $end)->where('ends_at', '>', $start)->orderBy('starts_at')->first();
+        if ($class) {
+            throw new BusinessRuleException('session.trainer_busy', 'المدرب لديه حصة أخرى في هذا الوقت: '
+                .($class->program?->name ?? 'حصة').' '.$class->starts_at->format('Y/m/d H:i').'–'.$class->ends_at->format('H:i').'.', $field);
+        }
+
+        $pt = PtSession::where('trainer_id', $trainerId)->where('status', PtSession::SCHEDULED)
+            ->where('starts_at', '<', $end)->where('ends_at', '>', $start)->orderBy('starts_at')->first();
+        if ($pt) {
+            throw new BusinessRuleException('session.trainer_busy', 'المدرب لديه جلسة تدريب شخصي في هذا الوقت: '
+                .$pt->starts_at->format('Y/m/d H:i').'–'.$pt->ends_at->format('H:i').'.', $field);
         }
     }
 

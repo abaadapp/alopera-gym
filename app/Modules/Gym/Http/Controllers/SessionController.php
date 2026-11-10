@@ -18,6 +18,7 @@ use App\Modules\Gym\Services\ScheduleService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -84,16 +85,21 @@ class SessionController extends Controller
             'room' => ['nullable', 'string', 'max:60'],
         ]);
         $start = CarbonImmutable::parse($data['starts_at']);
+        $end = $start->addMinutes($data['duration_minutes']);
 
-        ClassSession::create([
-            'branch_id' => app(BranchContext::class)->assign(),
-            'program_id' => $data['program_id'],
-            'trainer_id' => $data['trainer_id'] ?? null,
-            'starts_at' => $start,
-            'ends_at' => $start->addMinutes($data['duration_minutes']),
-            'capacity' => $data['capacity'],
-            'room' => $data['room'] ?? null,
-        ]);
+        DB::transaction(function () use ($data, $start, $end) {
+            app(ScheduleService::class)->assertTrainerFreeForSession($data['trainer_id'] ?? null, $start, $end);
+
+            ClassSession::create([
+                'branch_id' => app(BranchContext::class)->assign(),
+                'program_id' => $data['program_id'],
+                'trainer_id' => $data['trainer_id'] ?? null,
+                'starts_at' => $start,
+                'ends_at' => $end,
+                'capacity' => $data['capacity'],
+                'room' => $data['room'] ?? null,
+            ]);
+        });
 
         return back()->with('success', 'تمت إضافة الحصة.');
     }
@@ -123,13 +129,30 @@ class SessionController extends Controller
             'starts_at' => ['required', 'date', 'after:now'],
         ]);
 
+        return DB::transaction(fn () => $this->applyUpdate($this->lockedForEdit($session, (int) $data['capacity']), $data));
+    }
+
+    /**
+     * The session re-read under its row lock, the one BookingService::book takes: a booking made meanwhile waits for
+     * this edit or is counted by it, so the capacity never goes below the bookings already confirmed.
+     */
+    private function lockedForEdit(ClassSession $session, int $capacity): ClassSession
+    {
+        $session = ClassSession::whereKey($session->id)->lockForUpdate()->firstOrFail();
+
         if ($session->status !== ClassSession::SCHEDULED) {
             throw new BusinessRuleException('session.closed', 'لا يمكن تعديل حصة ملغاة أو منتهية.');
         }
-        if ($data['capacity'] < $session->booked_count) {
+        if ($capacity < $session->booked_count) {
             throw new BusinessRuleException('session.capacity', 'السعة أقل من عدد الحجوزات الحالي ('.$session->booked_count.').', 'capacity');
         }
 
+        return $session;
+    }
+
+    /** The edit itself, inside update's transaction, on the locked session. */
+    private function applyUpdate(ClassSession $session, array $data): RedirectResponse
+    {
         $start = CarbonImmutable::parse($data['starts_at']);
         // Two classes of one timetable line at one time are one class twice.
         if ($session->class_schedule_id && ! $start->equalTo($session->starts_at) && ClassSession::where('class_schedule_id', $session->class_schedule_id)
@@ -148,18 +171,36 @@ class SessionController extends Controller
             $changes[] = 'القاعة: '.$data['room'];
         }
 
-        $session->forceFill([
-            'trainer_id' => $data['trainer_id'] ?? null,
-            'room' => $data['room'] ?? null,
-            'capacity' => $data['capacity'],
-            'starts_at' => $start,
-            'ends_at' => $start->addMinutes($duration),
-        ])->save();
+        DB::transaction(function () use ($session, $data, $start, $duration) {
+            $this->assertTrainerFreeAfterEdit($session, $data['trainer_id'] ?? null, $start, $start->addMinutes($duration));
+
+            $session->forceFill([
+                'trainer_id' => $data['trainer_id'] ?? null,
+                'room' => $data['room'] ?? null,
+                'capacity' => $data['capacity'],
+                'starts_at' => $start,
+                'ends_at' => $start->addMinutes($duration),
+            ])->save();
+        });
 
         if ($changes && app(TenantContext::class)->require()->setting('notify_class_changes', true)) {
             ClassSessionChanged::dispatch($session, implode('، ', $changes));
         }
 
         return back()->with('success', 'تم تعديل الحصة'.($changes ? ' وإبلاغ الأعضاء المحجوزين.' : '.'));
+    }
+
+    /**
+     * A new time or a new trainer: that trainer must be free then (the session itself aside). An edit that keeps both
+     * checks nothing, so an older overlap never blocks a change of room or capacity.
+     */
+    private function assertTrainerFreeAfterEdit(ClassSession $session, ?int $trainerId, CarbonImmutable $start, CarbonImmutable $end): void
+    {
+        $moved = ! $start->equalTo($session->starts_at);
+        if (! $moved && (int) $trainerId === (int) $session->trainer_id) {
+            return;
+        }
+
+        app(ScheduleService::class)->assertTrainerFreeForSession($trainerId, $start, $end, $session->id, $moved ? 'starts_at' : 'trainer_id');
     }
 }

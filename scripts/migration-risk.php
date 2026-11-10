@@ -15,6 +15,8 @@
  * Reported, not stopped (the deploy shows each as a warning to look at): rewriting rows (update(), UPDATE … SET), how a
  * new column is filled and a role given a permission, a third of the migrations so far; and a unique key or primary key
  * added to a table that has rows (Schema::table, CREATE UNIQUE INDEX, ADD … UNIQUE), which fails if they repeat.
+ * Also reported: up() calling other code (an artisan command, the container, a job or an event, a service, seeder or
+ * registry class), whose effect this scan cannot read.
  *
  * Exit 0: nothing found, only what is reported, or each finding marked as reviewed · 1: something not reviewed · 2: no
  * file, or unreadable.
@@ -43,6 +45,8 @@ const REWRITES = '/(?:->update|DB::update)\s*\(/';
 const SQL_REWRITES = '/\bUPDATE\s+\S+\s+SET\b/i';
 const UNIQUE = '/->(?:unique|primary)\s*\(/';
 const SQL_UNIQUE = '/\bCREATE\s+UNIQUE\s+INDEX\b|\bADD\s+(?:CONSTRAINT\s+\S+\s+)?(?:UNIQUE|PRIMARY\s+KEY)\b/i';
+/** Code this scan cannot read: an artisan command, the container, a job or an event, a service, seeder or registry. */
+const CALLS = '/\bArtisan::|(?<![\w>$])(?:app|resolve|dispatch|dispatch_sync|event)\s*\(|\bApp::make\s*\(|\b(?:Bus|Event|Queue)::|\b(?:require|include)(?:_once)?\b|\bnew\s+\\\\?[A-Z][\w\\\\]*(?:Service|Command|Job|Seeder|Action|Registry|Provisioner)\b|\b[A-Z]\w*(?:Service|Command|Job|Seeder|Action|Registry|Provisioner)::/';
 
 /** The body of up(), comments left out; the whole file (comments left out) if there is no up(). */
 function upBody(string $source): string
@@ -155,6 +159,9 @@ function notes(string $source): array
     }
     if ($onExistingTable || preg_match(SQL_UNIQUE, strings($body))) {
         $notes[] = 'adds a unique key to a table that may have rows (reported, not stopped: the migration fails if they repeat)';
+    }
+    if (preg_match(CALLS, $body)) {
+        $notes[] = 'calls other code (reported, not stopped: what that code does is not checked here, look at it)';
     }
 
     return $notes;
