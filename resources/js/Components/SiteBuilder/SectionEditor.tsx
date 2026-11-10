@@ -40,7 +40,7 @@ export default function SectionEditor({ section, onChange }: { section: SectionD
             )}
             {section.visible && waiting[section.id] && (
                 <Notice tone="amber" icon={<Clock />}>
-                    لا يظهر هذا القسم للزوار الآن: {waiting[section.id]} يظهر وحده حين تُضاف البيانات في النظام، دون نشر جديد. وتُخفى معه الأزرار والروابط التي تفتحه.
+                    لا يظهر هذا القسم للزوار الآن: {waiting[section.id]} ويظهر وحده بمجرد ذلك، دون نشر جديد. وتُخفى معه الأزرار والروابط التي تفتحه.
                 </Notice>
             )}
             {section.visible && missingContent(section) && (

@@ -10,6 +10,7 @@ use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Branch;
+use App\Modules\Accounting\Services\AccountFunds;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\CreditNoteService;
@@ -184,7 +185,12 @@ final class OrderService
      */
     public function cancel(Sale $sale, string $reason, ?string $refundMethod = null, bool $mayRefund = true): Sale
     {
-        return DB::transaction(function () use ($sale, $reason, $refundMethod, $mayRefund) {
+        // The money goes back out of an account: held before the order and invoice rows, as CreditNoteService::issue
+        // holds it (a payment's account never changes, so it is read before the lock).
+        $paidInvoice = $refundMethod !== null && $sale->invoice_id ? Invoice::find($sale->invoice_id) : null;
+        $account = $paidInvoice ? $this->payments->refundAccount($refundMethod, $this->payments->paidInto($paidInvoice, $refundMethod)) : null;
+
+        return app(AccountFunds::class)->exclusive($account, fn () => DB::transaction(function () use ($sale, $reason, $refundMethod, $mayRefund) {
             $sale = $this->lockOrder($sale);
             $invoice = Invoice::whereKey($sale->invoice_id)->lockForUpdate()->first();
             $paid = $invoice && ! Money::isZero($invoice->paid_total);
@@ -225,7 +231,7 @@ final class OrderService
             app(StaffNotifier::class)->resolve('order:'.$sale->id);
 
             return $sale;
-        });
+        }));
     }
 
     /** The invoice of a pending order was voided from the finance screens: release the order too. */
