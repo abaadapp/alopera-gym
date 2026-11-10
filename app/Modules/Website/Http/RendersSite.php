@@ -2,6 +2,7 @@
 
 namespace App\Modules\Website\Http;
 
+use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Inventory\Services\ShopSettings;
@@ -17,6 +18,9 @@ use Inertia\Response;
  */
 trait RendersSite
 {
+    /** The page in each language, when not this address with or without /en (the draft preview sets its own). @var array<string, string>|null */
+    protected ?array $alternates = null;
+
     protected function site(): SiteSetting
     {
         return SiteSetting::firstOrCreate([]);
@@ -50,7 +54,10 @@ trait RendersSite
                 // new club was set up with, which promised services the club may not offer.
                 'title' => $title ? $title.' | '.$tenant->name : (($rendered['seo']['title'] ?? '') ?: $tenant->name),
                 'description' => $description ?: (($rendered['seo']['description'] ?? '') ?: null),
-                'canonical' => $this->canonical(),
+                'canonical' => SiteLanguage::address(SiteLanguage::current()),
+                // The same page in each language (hreflang), Arabic also the default for any other language.
+                'alternates' => $this->alternates ?? SiteLanguage::alternates(),
+                'locale' => SiteLanguage::current(),
                 'image' => $image ?: (SiteSetting::url($site->og_image_path ?: $site->hero_image_path) ?? $tenant->logoUrl()),
                 'jsonld' => $jsonld,
             ],
@@ -70,19 +77,5 @@ trait RendersSite
         $text = $rendered['chrome']['pages'][$key];
 
         return $this->page($component, $props, $text['title'], $text['subtitle'] ?: null, null, $jsonld, $rendered);
-    }
-
-    private function canonical(): string
-    {
-        $tenant = app(TenantContext::class)->require();
-        $url = url()->current();
-
-        if ($tenant->domain) {
-            $path = preg_replace('#^/c/'.preg_quote($tenant->slug, '#').'#', '', (string) parse_url($url, PHP_URL_PATH)) ?: '/';
-
-            return 'https://'.$tenant->domain.$path;
-        }
-
-        return $url;
     }
 }
