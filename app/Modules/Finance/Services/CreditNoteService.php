@@ -6,6 +6,7 @@ use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
+use App\Modules\Accounting\Services\AccountFunds;
 use App\Modules\Finance\Events\InvoicePaid;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
@@ -47,7 +48,13 @@ final class CreditNoteService
 
     public function issue(Invoice $invoice, string|float $amount, string $reason, ?array $refund = null): CreditNote
     {
-        return DB::transaction(function () use ($invoice, $amount, $reason, $refund) {
+        // Money paid back with the note leaves an account: that account is held before the invoice row is locked, the
+        // order PaymentService::refund() and confirm() take them in. Taken the other way round, a refund confirmed on the
+        // same invoice at that moment held the account and waited for the invoice, and the two waited 15 seconds until
+        // the note failed (LockTimeoutException). refund() takes it again inside: the lock is re-entrant.
+        $account = $refund !== null ? $this->payments->refundAccount((string) ($refund['method'] ?? ''), $refund['account_id'] ?? null) : null;
+
+        return app(AccountFunds::class)->exclusive($account, fn () => DB::transaction(function () use ($invoice, $amount, $reason, $refund) {
             $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
 
             if ($invoice->status === Invoice::VOID) {
@@ -97,6 +104,6 @@ final class CreditNoteService
             }
 
             return $note->fresh();
-        });
+        }));
     }
 }
