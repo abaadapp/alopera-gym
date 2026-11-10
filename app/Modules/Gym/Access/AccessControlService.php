@@ -49,7 +49,10 @@ final class AccessControlService
             ->orderByDesc('ends_on')
             ->get();
 
-        $active = $memberships->first(fn (Membership $m) => $m->status === Membership::ACTIVE && $m->coversDate($today));
+        // By the period's dates in the club's day, from 00:00: a paid period starting today lets her in before the
+        // 00:10 job marks it active, and one that ended yesterday does not, though it still says active until then.
+        $active = $memberships->first(fn (Membership $m) => $m->status === Membership::ACTIVE && $m->grantsAccessOn($today))
+            ?? $memberships->first(fn (Membership $m) => $m->grantsAccessOn($today));
 
         if ($active) {
             if ($this->tenants->require()->setting('block_access_with_dues') && $this->hasOverdueDues($member)) {
