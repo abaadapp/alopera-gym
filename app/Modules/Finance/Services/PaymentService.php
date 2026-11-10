@@ -218,6 +218,7 @@ final class PaymentService
                 if (! Money::isZero($credit)) {
                     $payment->forceFill(['notes' => 'دفعة إلكترونية تتجاوز رصيد الفاتورة: '.$credit.' رصيد دائن للعميل، يُخصَّص لفاتورة أخرى أو يُرد.'])->save();
                     $this->audit->log('payment.gateway_overpayment', $payment, ['invoice' => $invoice->number, 'credit' => $credit]);
+                    app(StaffAlerts::class)->gatewayCredit($payment); // written with the payment: gone too if it rolls back
                 }
 
                 if (Money::isZero($fits)) {
@@ -364,6 +365,7 @@ final class PaymentService
                 $credit->forceFill(['credit_used' => Money::add($credit->credit_used, $amount)])->save();
             }
             $this->audit->log($waits ? 'payment.refund_requested' : 'payment.refunded', $refund, ['credit_of' => $credit->receipt_number, 'amount' => $refund->amount, 'method' => $method]);
+            $this->settleCreditAlert($credit);
 
             return $refund;
         }));
@@ -403,6 +405,7 @@ final class PaymentService
             $fullyPaid = $invoice->settledStatus() === Invoice::PAID;
             $invoice->forceFill(['status' => $fullyPaid ? Invoice::PAID : Invoice::PARTIALLY_PAID, 'paid_at' => $fullyPaid ? now() : null])->save();
             $this->audit->log('payment.credit_applied', $allocation, ['credit_of' => $credit->receipt_number, 'invoice' => $invoice->number, 'amount' => $allocation->amount]);
+            $this->settleCreditAlert($credit);
 
             if ($fullyPaid) {
                 InvoicePaid::dispatch($invoice);
@@ -491,6 +494,14 @@ final class PaymentService
         $this->audit->log('payment.refunded', $refund, ['credit_note' => $note?->number, 'invoice' => $invoice?->number, 'amount' => $refund->amount, 'confirmed' => true]);
 
         return $refund;
+    }
+
+    /** The bell's «online money left as credit» is done once none of it is left (a refund of it waiting to be made counts). */
+    private function settleCreditAlert(Payment $credit): void
+    {
+        if (Money::isZero($credit->creditLeft())) {
+            app(StaffNotifier::class)->resolve('payment-credit:'.$credit->id);
+        }
     }
 
     private function assertCredit(Payment $credit, string|float $amount): void
