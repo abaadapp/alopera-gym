@@ -133,10 +133,10 @@ class SiteController extends Controller
         return back()->with('success', __('تم استلام رسالتك بنجاح'));
     }
 
-    public function sitemap(TenantContext $tenants): HttpResponse
+    public function sitemap(TenantContext $tenants, SiteRenderer $renderer): HttpResponse
     {
-        $pages = collect(['site.home', 'site.plans', 'site.programs', 'site.trainers', 'site.schedule', 'site.news', 'site.contact', 'site.join'])
-            ->map(fn ($r) => [$r, []]);
+        // The pages with something to show, as the menu shows them: an empty page (no programs yet) is left out.
+        $pages = collect($renderer->pagesWithContent())->map(fn ($r) => [$r, []]);
         SitePost::visible()->get(['slug'])->each(fn ($p) => $pages->push(['site.post', ['slug' => $p->slug]]));
 
         // Each page in both languages, each entry naming the other (hreflang), Arabic the default (x-default).

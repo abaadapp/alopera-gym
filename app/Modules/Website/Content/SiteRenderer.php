@@ -66,13 +66,10 @@ final class SiteRenderer
      */
     public function render(array $doc, bool $preview = false): array
     {
-        $this->tenant = $this->tenants->require();
+        $this->begin();
         // The page's language: the English site takes the owner's English words (SiteTranslation).
         $doc = SiteTranslation::apply($doc, SiteLanguage::current());
         $this->homeUrl = route('site.home');
-        $this->shopOpen = $this->shop->shopOpen($this->tenant);
-        $this->signup = (bool) $this->tenant->setting('member_signup_enabled', true);
-        $this->pages = [];
 
         $sections = [];
         $this->loadMedia($doc);
@@ -127,6 +124,27 @@ final class SiteRenderer
      * Whether a page of the site has something to show, the same way that page reads it. Anything that is not a
      * page token (a section, an outside address) is not a page and is judged elsewhere.
      */
+    /**
+     * The route names of the site's own pages that have something to show, by the rule the menu drops the others with
+     * (pageShows): the sitemap lists these, so it never offers search engines a page the site itself hides as empty.
+     *
+     * @return list<string>
+     */
+    public function pagesWithContent(): array
+    {
+        $this->begin();
+
+        return collect(SiteLinks::PAGES)->except('@portal')->filter(fn ($page, $href) => $this->pageShows($href))->map(fn ($page) => $page[0])->values()->all();
+    }
+
+    private function begin(): void
+    {
+        $this->tenant = $this->tenants->require();
+        $this->shopOpen = $this->shop->shopOpen($this->tenant);
+        $this->signup = (bool) $this->tenant->setting('member_signup_enabled', true);
+        $this->pages = [];
+    }
+
     private function pageShows(string $href): bool
     {
         if (! isset(SiteLinks::PAGES[$href])) {
