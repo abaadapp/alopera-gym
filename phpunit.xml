@@ -33,6 +33,8 @@
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="WHATSAPP_DRIVER" value="log"/>
+        <!-- The gym the bare address opens: tests choose it (config gym.home_club), never a local .env. -->
+        <env name="GYM_HOME_CLUB" value=""/>
         <env name="FILESYSTEM_DISK" value="local"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
