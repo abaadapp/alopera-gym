@@ -31,6 +31,21 @@ final class StockService
     public function __construct(private readonly BranchContext $branches) {}
 
     /**
+     * Lock these products' rows by id before moving the stock of several of them: the order every basket takes
+     * (SaleLines::record, #55). A document that moved them one at a time in its own order (a count's lines by name, an
+     * invoice's as typed) deadlocked with a till sale of the same products.
+     *
+     * @param  iterable<int|null>  $productIds
+     */
+    public function lockInOrder(iterable $productIds): void
+    {
+        $ids = collect($productIds)->filter()->unique()->sort()->values();
+        if ($ids->isNotEmpty()) {
+            Product::withTrashed()->whereIn('id', $ids)->orderBy('id')->lockForUpdate()->pluck('id');
+        }
+    }
+
+    /**
      * @param  float  $quantity  signed: positive in, negative out
      * @param  int|null  $branchId  the branch whose shelf changes; none: the main branch
      */
