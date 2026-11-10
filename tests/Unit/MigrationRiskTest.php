@@ -130,6 +130,41 @@ class MigrationRiskTest extends TestCase
         $this->assertStringContainsString('adds a unique key', $out);
     }
 
+    /** @return iterable<string, array{string}> code whose effect the scan cannot read */
+    public static function callsOtherCode(): iterable
+    {
+        yield 'an artisan command' => ["        Artisan::call('gym:rebuild-balances', ['--force' => true]);"];
+        yield 'the container' => ["        app(PermissionRegistry::class)->grantToRole('reception', 'members.view');"];
+        yield 'resolve()' => ['        resolve(\\App\\Modules\\Gym\\Services\\MembershipService::class)->runDailyTransitions();'];
+        yield 'a service made by hand' => ['        (new \\App\\Modules\\Finance\\Services\\PaymentService)->recalculate();'];
+        yield 'a service called statically' => ['        OpeningBalanceService::rebuild();'];
+        yield 'a job' => ['        dispatch(new RebuildLedger());'];
+        yield 'an event' => ['        event(new BalancesMoved());'];
+        yield 'a seeder' => ['        (new RolesSeeder)->run();'];
+    }
+
+    #[DataProvider('callsOtherCode')]
+    public function test_a_migration_that_calls_other_code_is_reported_without_stopping(string $up): void
+    {
+        [$code, $out] = $this->scan(self::migration($up));
+
+        $this->assertSame(0, $code, $out);
+        $this->assertStringContainsString('calls other code', $out);
+        $this->assertStringNotContainsString('adds only', $out);
+    }
+
+    public function test_no_migration_of_the_project_reads_as_calling_other_code(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $files = [...glob($root.'/database/migrations/*.php'), ...glob($root.'/app/Modules/*/Database/migrations/*.php')];
+        $this->assertNotEmpty($files);
+
+        $p = new Process([PHP_BINARY, $root.'/scripts/migration-risk.php', ...$files]);
+        $p->run();
+
+        $this->assertStringNotContainsString('calls other code', $p->getOutput(), 'a usual migration is not flagged');
+    }
+
     public function test_a_unique_key_on_a_new_table_is_not_reported(): void
     {
         [$code, $out] = $this->scan(self::migration(
