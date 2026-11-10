@@ -37,6 +37,7 @@ use App\Modules\Inventory\Models\SupplierPayment;
 use App\Modules\Inventory\Models\SupplyRequest;
 use App\Modules\Reports\Services\ReportCatalog;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -73,6 +74,12 @@ class AppServiceProvider extends ServiceProvider
         DB::prohibitDestructiveCommands($this->app->isProduction());
 
         $this->registerSiteAddresses();
+
+        // A staff password-reset link is on the panel's own address (APP_URL), never on the Host of the request that
+        // asked for it: a request sent with a Host of someone's choosing would otherwise put the reset token in a genuine
+        // e-mail pointing at their server.
+        ResetPassword::createUrlUsing(fn ($user, string $token) => rtrim((string) config('app.url'), '/')
+            .route('password.reset', ['token' => $token, 'email' => $user->getEmailForPasswordReset()], false));
 
         // `composer dev`: the worker listens on both queues (WhatsApp goes through "notifications")
         // and the scheduler runs memberships, reminders and class generation, as in production.
