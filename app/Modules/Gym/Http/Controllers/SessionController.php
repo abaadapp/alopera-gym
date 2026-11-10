@@ -18,6 +18,7 @@ use App\Modules\Gym\Services\ScheduleService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -123,13 +124,30 @@ class SessionController extends Controller
             'starts_at' => ['required', 'date', 'after:now'],
         ]);
 
+        return DB::transaction(fn () => $this->applyUpdate($this->lockedForEdit($session, (int) $data['capacity']), $data));
+    }
+
+    /**
+     * The session re-read under its row lock, the one BookingService::book takes: a booking made meanwhile waits for
+     * this edit or is counted by it, so the capacity never goes below the bookings already confirmed.
+     */
+    private function lockedForEdit(ClassSession $session, int $capacity): ClassSession
+    {
+        $session = ClassSession::whereKey($session->id)->lockForUpdate()->firstOrFail();
+
         if ($session->status !== ClassSession::SCHEDULED) {
             throw new BusinessRuleException('session.closed', 'لا يمكن تعديل حصة ملغاة أو منتهية.');
         }
-        if ($data['capacity'] < $session->booked_count) {
+        if ($capacity < $session->booked_count) {
             throw new BusinessRuleException('session.capacity', 'السعة أقل من عدد الحجوزات الحالي ('.$session->booked_count.').', 'capacity');
         }
 
+        return $session;
+    }
+
+    /** The edit itself, inside update's transaction, on the locked session. */
+    private function applyUpdate(ClassSession $session, array $data): RedirectResponse
+    {
         $start = CarbonImmutable::parse($data['starts_at']);
         // Two classes of one timetable line at one time are one class twice.
         if ($session->class_schedule_id && ! $start->equalTo($session->starts_at) && ClassSession::where('class_schedule_id', $session->class_schedule_id)
