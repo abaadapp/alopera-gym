@@ -51,8 +51,13 @@ final class OrderService
      * @param  array{name: string, phone: string, email?: string|null, notes?: string|null}  $customer
      * @param  string  $method  paymob|pickup
      */
-    public function place(array $items, array $customer, string $method, ?Member $member = null, ?int $branchId = null): Sale
+    public function place(array $items, array $customer, string $method, ?Member $member = null, ?int $branchId = null, ?string $clientKey = null): Sale
     {
+        // One cart, one order: the same cart sent again (a double click, a retried request) returns the first order. Sent
+        // twice at the same moment, the second one stops on the unique key and its caller returns the first.
+        if ($clientKey !== null && ($first = Sale::where('client_key', $clientKey)->first())) {
+            return $first->load('items');
+        }
         if ($items === []) {
             throw new BusinessRuleException('order.empty', 'السلة فارغة.', 'items');
         }
@@ -65,7 +70,7 @@ final class OrderService
             throw new BusinessRuleException('order.branch', 'فرع الاستلام المختار غير متاح. اختر فرعًا آخر من السلة.', 'branch_id');
         }
 
-        return DB::transaction(function () use ($items, $customer, $method, $member, $branchId, $window) {
+        return DB::transaction(function () use ($items, $customer, $method, $member, $branchId, $window, $clientKey) {
             $products = Product::onWebsite()->whereIn('id', array_column($items, 'product_id'))->get()->keyBy('id');
             ['lines' => $lines, 'subtotal' => $subtotal] = $this->lines->price($products, $items, 'website');
 
@@ -78,6 +83,7 @@ final class OrderService
                 'customer_email' => $customer['email'] ?? null,
                 'notes' => $customer['notes'] ?? null,
                 'number' => NumberSequence::next('web_order'),
+                'client_key' => $clientKey,
                 'source' => Sale::WEBSITE,
                 'status' => Sale::PENDING,
                 'fulfillment' => 'new',
