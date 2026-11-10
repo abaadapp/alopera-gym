@@ -10,6 +10,7 @@ use App\Modules\Inventory\Services\ShopSettings;
 use App\Modules\Website\Content\MediaLibrary;
 use App\Modules\Website\Content\SectionTypes;
 use App\Modules\Website\Content\SiteContent;
+use App\Modules\Website\Content\SiteDataHints;
 use App\Modules\Website\Content\SiteLinks;
 use App\Modules\Website\Content\SitePages;
 use App\Modules\Website\Content\SiteRenderer;
@@ -37,7 +38,7 @@ class SiteBuilderController extends Controller
 
     public function __construct(private SiteContent $content, private TenantContext $tenants) {}
 
-    public function show(ShopSettings $shop, SiteRenderer $renderer): Response
+    public function show(ShopSettings $shop, SiteRenderer $renderer, SiteDataHints $hints): Response
     {
         $tenant = $this->tenants->require();
         URL::defaults(['club' => $tenant->slug]);
@@ -51,8 +52,9 @@ class SiteBuilderController extends Controller
             'status' => $this->content->status($site),
             'schema' => SectionTypes::forEditor(),
             'pageFields' => SitePages::forEditor(),
-            // Sections of the saved draft that wait for data in the system (no plans yet…) and are not on the site now.
-            'waiting' => $renderer->waiting($doc),
+            // Sections of the saved draft that wait for data in the system and are not on the site now, each saying
+            // whether nothing exists yet or rows exist behind a switch (and which one).
+            'waiting' => $hints->explain($renderer->waiting($doc), $doc),
             'media' => SiteMedia::latest('id')->get()->map(fn ($m) => MediaLibrary::present($m, $uses))->all(),
             'revisions' => SiteRevision::with('publisher:id,name')->latest('number')->limit(20)->get()->map(fn (SiteRevision $r) => [
                 'id' => $r->id, 'number' => $r->number, 'note' => $r->note, 'published_at' => $r->published_at->format('Y-m-d H:i'), 'published_by' => $r->publisher?->name,
