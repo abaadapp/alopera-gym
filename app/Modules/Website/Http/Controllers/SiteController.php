@@ -36,15 +36,19 @@ class SiteController extends Controller
         // What the owner published from «إدارة الموقع» (or the starting design until then), with the system's live data.
         $rendered = $renderer->render($content->live($site));
 
-        return $this->page('Site/Home', ['page' => $rendered['page']], null, null, null, [
+        // Only what the club has entered: a phone or an address not entered yet is left out, not sent as null (which
+        // search engines report as an invalid value).
+        $filled = fn (array $values) => array_filter($values, fn ($v) => $v !== null && $v !== '');
+
+        return $this->page('Site/Home', ['page' => $rendered['page']], null, null, null, $filled([
             '@context' => 'https://schema.org',
             '@type' => 'HealthClub',
             'name' => $tenant->name,
             'url' => route('site.home'),
             'telephone' => $rendered['site']['contact_phone'],
             'image' => $tenant->logoUrl(),
-            'address' => ['@type' => 'PostalAddress', 'streetAddress' => $rendered['site']['address'], 'addressLocality' => $tenant->city, 'addressCountry' => $tenant->country],
-        ], $rendered);
+            'address' => $filled(['@type' => 'PostalAddress', 'streetAddress' => $rendered['site']['address'], 'addressLocality' => $tenant->city, 'addressCountry' => $tenant->country]),
+        ]), $rendered);
     }
 
     public function plans(): Response
