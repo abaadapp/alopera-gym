@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Services;
 
 use App\Core\Support\BusinessRuleException;
+use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\BranchContext;
 use App\Models\Branch;
 use App\Modules\Inventory\Models\Product;
@@ -45,8 +46,11 @@ final class StockService
             $current = (float) $stock->quantity;
             $balance = round($current + $quantity, 3);
             if ($product->track_stock && $balance < 0 && ! $allowNegative) {
-                $where = Branch::count() > 1 ? ' في «'.Branch::whereKey($branch)->value('name').'»' : '';
-                throw new BusinessRuleException('stock.insufficient', "الكمية المتوفرة من «{$product->name}»{$where} غير كافية ({$current}).", 'items');
+                // In the page's language on the English website shop (the panel is Arabic): lang/en.json.
+                $words = ['product' => SiteLanguage::pick($product->name, $product->name_en), 'current' => $current];
+                throw new BusinessRuleException('stock.insufficient', Branch::count() > 1
+                    ? __('الكمية المتوفرة من «:product» في «:branch» غير كافية (:current).', $words + ['branch' => Branch::whereKey($branch)->value('name')])
+                    : __('الكمية المتوفرة من «:product» غير كافية (:current).', $words), 'items');
             }
 
             // Weighted average cost, for the club, on incoming stock with a known cost.

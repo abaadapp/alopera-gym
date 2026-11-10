@@ -22,7 +22,12 @@
         <meta property="og:description" content="{{ $seo['description'] ?? '' }}">
         <meta property="og:url" content="{{ $seo['canonical'] ?? url()->current() }}">
         @if (! empty($seo['image']))<meta property="og:image" content="{{ $seo['image'] }}">@endif
-        <meta property="og:locale" content="ar_OM">
+        @foreach ($seo['alternates'] ?? [] as $hreflang => $href)
+            <link rel="alternate" hreflang="{{ $hreflang }}" href="{{ $href }}">
+        @endforeach
+        @if (! empty($seo['alternates']['ar']))<link rel="alternate" hreflang="x-default" href="{{ $seo['alternates']['ar'] }}">@endif
+        <meta property="og:locale" content="{{ ($seo['locale'] ?? 'ar') === 'en' ? 'en_US' : 'ar_OM' }}">
+        @if (! empty($seo['alternates']))<meta property="og:locale:alternate" content="{{ ($seo['locale'] ?? 'ar') === 'en' ? 'ar_OM' : 'en_US' }}">@endif
         <meta name="twitter:card" content="summary_large_image">
         @if (! empty($seo['jsonld']))<script type="application/ld+json">{!! json_encode($seo['jsonld'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) !!}</script>@endif
     @else
