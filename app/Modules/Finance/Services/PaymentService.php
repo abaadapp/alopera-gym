@@ -330,6 +330,7 @@ final class PaymentService
         $account = $this->accountFor($method, $accountId);
 
         return app(AccountFunds::class)->exclusive($account, fn () => DB::transaction(function () use ($credit, $amount, $method, $reference, $account) {
+            $this->lockInvoices($credit->invoice_id);
             $credit = Payment::whereKey($credit->id)->lockForUpdate()->firstOrFail();
             $this->assertCredit($credit, $amount);
             if ($method === 'paymob' && $credit->method !== 'paymob') {
@@ -377,6 +378,7 @@ final class PaymentService
     public function allocate(Payment $credit, Invoice $invoice, string|float $amount): PaymentAllocation
     {
         return DB::transaction(function () use ($credit, $invoice, $amount) {
+            $this->lockInvoices($credit->invoice_id, $invoice->id);
             $credit = Payment::whereKey($credit->id)->lockForUpdate()->firstOrFail();
             $this->assertCredit($credit, $amount);
             $invoice = $this->lockOpen($invoice);
@@ -422,6 +424,7 @@ final class PaymentService
     public function cancel(Payment $payment, string $reason): Payment
     {
         return DB::transaction(function () use ($payment, $reason) {
+            $this->lockInvoices($payment->invoice_id);
             $payment = Payment::whereKey($payment->id)->lockForUpdate()->firstOrFail();
             if ($payment->kind !== Payment::KIND_PAYMENT || $payment->status !== Payment::COMPLETED) {
                 throw new BusinessRuleException('payment.not_cancellable', 'تُلغى الدفعة المكتملة فقط.');
@@ -544,6 +547,21 @@ final class PaymentService
         }
 
         return $account;
+    }
+
+    /**
+     * The invoices first, by id, then the payment held against them: the order confirming a refund of a customer's
+     * credit takes (the credit's invoice, then the credit), and the order a new refund row takes (it points at its
+     * invoice and its payment, so it waits on whoever holds them). Applying, cancelling or paying back a credit at the
+     * moment its refund is confirmed then waits for it instead of deadlocking (SQLSTATE 40P01). A payment's invoice
+     * never changes, so it is read from the payment as given.
+     */
+    private function lockInvoices(?int ...$ids): void
+    {
+        $ids = array_values(array_unique(array_filter($ids)));
+        if ($ids !== []) {
+            Invoice::whereIn('id', $ids)->orderBy('id')->lockForUpdate()->pluck('id');
+        }
     }
 
     private function lockOpen(Invoice $invoice): Invoice
