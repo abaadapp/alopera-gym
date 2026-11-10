@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { router } from '@inertiajs/react';
 import { ExternalLink, FileText, History } from 'lucide-react';
-import PortalLayout from '@/Layouts/PortalLayout';
+import PortalLayout, { rich } from '@/Layouts/PortalLayout';
 import type { SiteInfo } from '@/Layouts/SiteLayout';
 import { Badge } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { date, money } from '@/lib/format';
+import { useT } from '@/lib/i18n';
 import { invoiceStatus, label, membershipKind, membershipStatus, paymentMethod } from '@/lib/labels';
 import type { MembershipData } from './Dashboard';
 
@@ -25,6 +26,7 @@ interface PortalInvoice {
 
 export default function Invoices({ site, seo, invoices, onlinePayments, history }: { site: SiteInfo; seo: { title: string }; invoices: PortalInvoice[]; onlinePayments: boolean; history: MembershipData[] }) {
     const currency = useCurrency();
+    const t = useT();
     const [paying, setPaying] = useState<number | null>(null);
 
     const pay = (id: number) => {
@@ -34,9 +36,9 @@ export default function Invoices({ site, seo, invoices, onlinePayments, history 
 
     return (
         <PortalLayout site={site} title={seo.title}>
-            <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-semibold"><FileText className="size-5 text-brand" /> الفواتير</h2>
+            <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-semibold"><FileText className="size-5 text-brand" /> {t('الفواتير')}</h2>
             {invoices.length === 0 ? (
-                <p className="rounded-2xl border border-line bg-white p-8 text-center text-sm text-muted">لا توجد فواتير بعد.</p>
+                <p className="rounded-2xl border border-line bg-white p-8 text-center text-sm text-muted">{t('لا توجد فواتير بعد.')}</p>
             ) : (
                 <div className="space-y-4">
                     {invoices.map((inv) => {
@@ -50,7 +52,7 @@ export default function Invoices({ site, seo, invoices, onlinePayments, history 
                                         <p className="text-xs text-muted">{date(inv.issue_date)}</p>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <Badge tone={tone}>{statusLabel}</Badge>
+                                        <Badge tone={tone}>{t(statusLabel)}</Badge>
                                         <span className="font-display text-lg font-semibold num">{money(inv.total, currency)}</span>
                                     </div>
                                 </div>
@@ -63,7 +65,7 @@ export default function Invoices({ site, seo, invoices, onlinePayments, history 
                                     <div className="mt-3 rounded-xl bg-canvas p-3 text-xs text-muted">
                                         {inv.payments.map((p, i) => (
                                             <p key={i} className="flex justify-between gap-3">
-                                                <span>{p.kind === 'refund' ? 'استرداد' : 'إيصال'} <span className="num">{p.receipt_number}</span> · {paymentMethod[p.method] ?? p.method} · {p.paid_at}</span>
+                                                <span>{p.kind === 'refund' ? t('استرداد') : t('إيصال')} <span className="num">{p.receipt_number}</span> · {t(paymentMethod[p.method] ?? p.method)} · {p.paid_at}</span>
                                                 <span className="num">{money(p.amount, currency)}</span>
                                             </p>
                                         ))}
@@ -71,15 +73,15 @@ export default function Invoices({ site, seo, invoices, onlinePayments, history 
                                 )}
                                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
                                     <a href={inv.public_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm text-brand hover:underline">
-                                        <ExternalLink className="size-4" /> عرض وطباعة
+                                        <ExternalLink className="size-4" /> {t('عرض وطباعة')}
                                     </a>
                                     {open && (
                                         onlinePayments ? (
                                             <button onClick={() => pay(inv.id)} disabled={paying === inv.id} className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-60">
-                                                {paying === inv.id ? 'جارٍ التحويل…' : <>ادفع <span className="num">{money(inv.balance, currency)}</span></>}
+                                                {paying === inv.id ? t('جارٍ التحويل…') : rich(t('ادفع :amount'), { amount: <span className="num">{money(inv.balance, currency)}</span> })}
                                             </button>
                                         ) : (
-                                            <span className="text-sm text-muted">المتبقي <span className="num">{money(inv.balance, currency)}</span> — ادفع في الاستقبال</span>
+                                            <span className="text-sm text-muted">{rich(t('المتبقي :amount — ادفع في الاستقبال'), { amount: <span className="num">{money(inv.balance, currency)}</span> })}</span>
                                         )
                                     )}
                                 </div>
@@ -91,20 +93,20 @@ export default function Invoices({ site, seo, invoices, onlinePayments, history 
 
             {history.length > 0 && (
                 <section className="mt-10">
-                    <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-semibold"><History className="size-5 text-brand" /> سجل الاشتراكات</h2>
+                    <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-semibold"><History className="size-5 text-brand" /> {t('سجل الاشتراكات')}</h2>
                     <div className="overflow-x-auto rounded-2xl border border-line bg-white">
                         <table className="table-base">
-                            <thead><tr><th>الباقة</th><th>النوع</th><th>من</th><th>إلى</th><th>الحالة</th></tr></thead>
+                            <thead><tr><th>{t('الباقة')}</th><th>{t('النوع')}</th><th>{t('من')}</th><th>{t('إلى')}</th><th>{t('الحالة')}</th></tr></thead>
                             <tbody>
                                 {history.map((m) => {
                                     const [statusLabel, tone] = label(membershipStatus, m.status);
                                     return (
                                         <tr key={m.id}>
                                             <td className="font-medium">{m.plan}</td>
-                                            <td>{membershipKind[m.kind] ?? m.kind}</td>
+                                            <td>{t(membershipKind[m.kind] ?? m.kind)}</td>
                                             <td>{date(m.starts_on)}</td>
                                             <td>{date(m.ends_on)}</td>
-                                            <td><Badge tone={tone}>{statusLabel}</Badge></td>
+                                            <td><Badge tone={tone}>{t(statusLabel)}</Badge></td>
                                         </tr>
                                     );
                                 })}
