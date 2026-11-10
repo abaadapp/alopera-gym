@@ -213,7 +213,8 @@ class PortalController extends Controller
         }
         $member->fill(collect($data)->only('email', 'emergency_contact_name', 'emergency_contact_phone')->all());
         if (! empty($data['password'])) {
-            $member->forceFill(['password' => $data['password']]);
+            // A new remember token ends the sessions remembered on other devices; this one stays signed in.
+            $member->forceFill(['password' => $data['password'], 'remember_token' => Str::random(60)]);
         }
         $member->save();
 
