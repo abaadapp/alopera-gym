@@ -143,6 +143,7 @@ final class InventoryService
             if ($clash) {
                 throw new BusinessRuleException('stocktake.overlap', 'الجرد '.$clash.' لنفس المنتجات في هذا الفرع اعتُمد بعد بدء هذا الجرد، فاعتماد هذا يكرر تسوية المخزون. ألغِ الجرد '.$count->number.' وابدأ جردًا جديدًا.', 'counts');
             }
+            $this->stock->lockInOrder($lines->pluck('product_id'));
             foreach ($lines as $line) {
                 $difference = round((float) $line->counted_quantity - (float) $line->system_quantity, 3);
                 $line->update(['difference' => $difference, 'unit_cost' => $line->product->cost]);
