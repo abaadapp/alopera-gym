@@ -3,6 +3,7 @@
 namespace App\Modules\Gym\Models;
 
 use App\Core\Audit\Auditable;
+use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\BelongsToTenant;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -30,6 +31,7 @@ class MembershipPlan extends Model
             'price' => 'decimal:3',
             'signup_fee' => 'decimal:3',
             'features' => 'array',
+            'features_en' => 'array',
             'freeze_allowed' => 'boolean',
             'is_public' => 'boolean',
             'is_featured' => 'boolean',
@@ -63,6 +65,17 @@ class MembershipPlan extends Model
         };
 
         return $end->subDay();
+    }
+
+    /** The plan's length in the website's language: «3 أشهر» on the Arabic site, "3 months" on the English one. */
+    public function siteDurationLabel(): string
+    {
+        if (! SiteLanguage::isEnglish()) {
+            return $this->durationLabel();
+        }
+        $n = (int) $this->duration_value;
+
+        return $n.' '.$this->duration_unit.($n === 1 ? '' : 's');
     }
 
     /** Arabic number agreement: «شهر»، «شهران»، «3 أشهر»، «12 شهرًا». */

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import { Check, History, ImagePlus, Plus, Puzzle, Scale, Star, Trash2, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, Field, Input, PageHeader, Select, Switch, Tabs, Textarea, BackLink } from '@/Components/ui';
+import { Badge, Button, Card, EnglishFields, Field, Input, PageHeader, Select, Switch, Tabs, Textarea, BackLink } from '@/Components/ui';
 import { AdjustModal, MovementsModal } from '@/Components/Products/Stock';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
@@ -22,7 +22,7 @@ interface Addon {
 }
 
 interface Props {
-    product: (ProductRow & { description: string | null; reorder_level: string; photos: string[] }) | null;
+    product: (ProductRow & { description: string | null; name_en?: string | null; description_en?: string | null; reorder_level: string; photos: string[] }) | null;
     categories: Option[];
     addons: Addon[];
     maxPhotos: number;
@@ -31,7 +31,7 @@ interface Props {
 type Tab = 'basic' | 'pricing' | 'photos' | 'addons';
 
 const TAB_FIELDS: Record<Tab, string[]> = {
-    basic: ['name', 'description', 'product_category_id', 'category_name', 'sku', 'barcode'],
+    basic: ['name', 'description', 'name_en', 'description_en', 'product_category_id', 'category_name', 'sku', 'barcode'],
     pricing: ['price', 'reorder_level', 'opening_stock', 'opening_cost'],
     photos: ['photos'],
     addons: ['addon_ids'],
@@ -48,6 +48,8 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
     const form = useForm({
         name: product?.name ?? '',
         description: product?.description ?? '',
+        name_en: product?.name_en ?? '',
+        description_en: product?.description_en ?? '',
         product_category_id: product?.product_category_id ? String(product.product_category_id) : '',
         category_name: '',
         sku: product?.sku ?? '',
@@ -143,6 +145,14 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
                                     <Field label="الوصف" error={form.errors.description} hint="يظهر للعملاء في صفحة المنتج بمتجر الموقع" className="md:col-span-2">
                                         <Textarea rows={3} maxLength={2000} value={form.data.description} onChange={(e) => form.setData('description', e.target.value)} />
                                     </Field>
+                                    <EnglishFields filled={Boolean(form.data.name_en || form.data.description_en)} className="md:col-span-2">
+                                        <Field label="الاسم بالإنجليزية" error={form.errors.name_en}>
+                                            <Input dir="ltr" lang="en" maxLength={160} value={form.data.name_en} onChange={(e) => form.setData('name_en', e.target.value)} />
+                                        </Field>
+                                        <Field label="الوصف بالإنجليزية" error={form.errors.description_en}>
+                                            <Textarea dir="ltr" lang="en" rows={3} maxLength={2000} value={form.data.description_en} onChange={(e) => form.setData('description_en', e.target.value)} />
+                                        </Field>
+                                    </EnglishFields>
                                     <Field label="التصنيف" error={form.errors.product_category_id || form.errors.category_name}>
                                         {newCategory ? (
                                             <div className="flex gap-2">

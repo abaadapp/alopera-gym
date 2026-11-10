@@ -4,6 +4,7 @@
  */
 import { Plus } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { useT } from '@/lib/i18n';
 import { galleryCellSpan, imageOrientation, sideImageSpan } from '@/lib/smart-image';
 import SmartImage from '../SmartImage';
 import { SectionHeading, SectionShell, SiteButton, bodyText, hairline, isDark, metaText, twoDigits } from '../ui';
@@ -156,6 +157,7 @@ export function Services({ section, joined }: SectionProps) {
 }
 
 export function Video({ section, joined }: SectionProps) {
+    const t = useT();
     const d = section.data;
     const embed = typeof section.feed?.embed_url === 'string' ? (section.feed.embed_url as string) : '';
     return (
@@ -170,7 +172,7 @@ export function Video({ section, joined }: SectionProps) {
                         <div className="aspect-video w-full overflow-hidden rounded-2xl bg-black">
                             <iframe
                                 src={embed}
-                                title={str(d.title) || 'فيديو'}
+                                title={str(d.title) || t('فيديو')}
                                 loading="lazy"
                                 className="size-full border-0"
                                 allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen"

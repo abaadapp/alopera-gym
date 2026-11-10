@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react';
 import { Link } from '@inertiajs/react';
 import { CalendarDays, Clock, MapPin, UserRound } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
+import { phrase } from '@/Components/Site/ui';
 import { useShared } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { dayName, time } from '@/lib/format';
+import { useLocale, useT } from '@/lib/i18n';
 import { PageHero } from './Plans';
 
 export interface SessionData {
@@ -38,6 +40,7 @@ export function groupByDay<T extends { date: string }>(sessions: T[]): [string, 
 }
 
 export function DayChips({ days, value, onChange }: { days: string[]; value: string; onChange: (d: string) => void }) {
+    const en = useLocale() === 'en';
     return (
         <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
             {days.map((d) => {
@@ -52,7 +55,7 @@ export function DayChips({ days, value, onChange }: { days: string[]; value: str
                             value === d ? 'border-brand bg-brand text-white shadow-md shadow-brand/25' : 'border-line bg-white text-ink hover:border-brand-200',
                         )}
                     >
-                        <span className="text-xs opacity-80">{new Intl.DateTimeFormat('ar-OM', { weekday: 'short' }).format(dt)}</span>
+                        <span className="text-xs opacity-80">{new Intl.DateTimeFormat(en ? 'en-GB' : 'ar-OM', { weekday: 'short' }).format(dt)}</span>
                         <span className="mt-0.5 font-display text-lg font-semibold num">{dt.getDate()}</span>
                     </button>
                 );
@@ -62,20 +65,22 @@ export function DayChips({ days, value, onChange }: { days: string[]; value: str
 }
 
 export function SeatsBadge({ session }: { session: SessionData }) {
-    if (session.is_full) return <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">مكتملة</span>;
+    const t = useT();
+    if (session.is_full) return <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">{t('مكتملة')}</span>;
     return (
         <span className={cn('rounded-full px-2.5 py-1 text-xs font-medium', session.seats_left <= 3 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700')}>
-            متبقٍ <span className="num">{session.seats_left}</span> {session.seats_left === 1 ? 'مقعد' : 'مقاعد'}
+            {phrase(session.seats_left === 1 ? t('متبقٍ :n مقعد') : t('متبقٍ :n مقاعد'), { n: <span className="num">{session.seats_left}</span> })}
         </span>
     );
 }
 
 export function SessionLine({ session, action }: { session: SessionData; action?: React.ReactNode }) {
+    const t = useT();
     return (
         <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-line bg-white p-4 shadow-sm sm:flex-nowrap">
             <div className="w-24 shrink-0 text-center">
                 <p className="font-display text-lg font-semibold text-ink">{time(session.time)}</p>
-                <p className="text-xs text-muted">حتى {time(session.end_time)}</p>
+                <p className="text-xs text-muted">{t('حتى :time', { time: time(session.end_time) })}</p>
             </div>
             <span className="hidden h-12 w-1 shrink-0 rounded-full sm:block" style={{ background: session.color ?? 'var(--brand)' }} />
             <div className="min-w-0 flex-1">
@@ -96,6 +101,7 @@ export function SessionLine({ session, action }: { session: SessionData; action?
 
 export default function Schedule({ site, seo, sessions }: { site: SiteInfo; seo: { title: string }; sessions: SessionData[]; from: string }) {
     const { member } = useShared();
+    const t = useT();
     const days = useMemo(() => groupByDay(sessions), [sessions]);
     const [active, setActive] = useState(days[0]?.[0] ?? '');
     const current = days.find(([d]) => d === active)?.[1] ?? [];
@@ -103,10 +109,10 @@ export default function Schedule({ site, seo, sessions }: { site: SiteInfo; seo:
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero page="schedule" title="جدول الحصص" icon={<CalendarDays className="size-6" />} />
+            <PageHero page="schedule" title={t('جدول الحصص')} icon={<CalendarDays className="size-6" />} />
             <section className="mx-auto max-w-4xl px-4 py-10">
                 {days.length === 0 ? (
-                    <p className="py-16 text-center text-muted">لا توجد حصص مجدولة خلال الأيام القادمة.</p>
+                    <p className="py-16 text-center text-muted">{t('لا توجد حصص مجدولة خلال الأيام القادمة.')}</p>
                 ) : (
                     <>
                         <DayChips days={days.map(([d]) => d)} value={active} onChange={setActive} />
@@ -118,9 +124,9 @@ export default function Schedule({ site, seo, sessions }: { site: SiteInfo; seo:
                                     session={s}
                                     action={
                                         s.is_full ? (
-                                            <span className="rounded-full border border-line px-4 py-2 text-xs text-muted">مكتملة</span>
+                                            <span className="rounded-full border border-line px-4 py-2 text-xs text-muted">{t('مكتملة')}</span>
                                         ) : (
-                                            <Link href={bookHref} className="rounded-full bg-brand px-4 py-2 text-xs font-medium text-white hover:bg-brand-600">احجز</Link>
+                                            <Link href={bookHref} className="rounded-full bg-brand px-4 py-2 text-xs font-medium text-white hover:bg-brand-600">{t('احجز')}</Link>
                                         )
                                     }
                                 />
@@ -128,8 +134,8 @@ export default function Schedule({ site, seo, sessions }: { site: SiteInfo; seo:
                         </div>
                         {!member && (
                             <p className="mt-8 rounded-2xl bg-brand-50 p-4 text-center text-sm text-brand-900">
-                                الحجز متاح للأعضاء. <Link href={route('portal.login')} className="font-medium underline">سجّل الدخول</Link>
-                                {site.signup_enabled && <> أو <Link href={route('site.join')} className="font-medium underline">اشترك الآن</Link></>}.
+                                {t('الحجز متاح للأعضاء.')} <Link href={route('portal.login')} className="font-medium underline">{t('سجّل الدخول')}</Link>
+                                {site.signup_enabled && <> {t('أو')} <Link href={route('site.join')} className="font-medium underline">{/* Mid-sentence: lower case in English (Arabic has no case, so it is unchanged). */ t('اشترك الآن').toLowerCase()}</Link></>}.
                             </p>
                         )}
                     </>

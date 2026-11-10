@@ -17,7 +17,7 @@ class ProgramController extends Controller
     {
         return Inertia::render('Gym/Programs/Index', [
             'programs' => Program::withCount('schedules')->orderBy('sort')->orderBy('name')->get()->map(fn (Program $p) => $p->only(
-                'id', 'name', 'slug', 'category', 'level', 'description', 'color', 'duration_minutes', 'default_capacity', 'is_public', 'is_active', 'sort', 'schedules_count'
+                'id', 'name', 'name_en', 'slug', 'category', 'level', 'description', 'description_en', 'color', 'duration_minutes', 'default_capacity', 'is_public', 'is_active', 'sort', 'schedules_count'
             ) + ['image_url' => $p->imageUrl()]),
         ]);
     }
@@ -79,6 +79,8 @@ class ProgramController extends Controller
             'category' => ['required', 'in:class,program,pt'],
             'level' => ['required', 'in:'.implode(',', Program::LEVELS)],
             'description' => ['nullable', 'string', 'max:3000'],
+            'name_en' => ['nullable', 'string', 'max:120'],
+            'description_en' => ['nullable', 'string', 'max:3000'],
             'color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'duration_minutes' => ['required', 'integer', 'min:10', 'max:300'],
             'default_capacity' => ['required', 'integer', 'min:1', 'max:500'],
