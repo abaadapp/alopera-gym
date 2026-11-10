@@ -9,6 +9,7 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Core\Tenancy\TenantContext;
+use App\Models\Branch;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\CreditNoteService;
@@ -59,6 +60,10 @@ final class OrderService
             throw new BusinessRuleException('order.method', 'اختر طريقة دفع متاحة.', 'payment_method');
         }
         $window = ShopSettings::of($this->tenants->require())['payment_window_minutes'];
+        // Only a branch the cart offers (this club's active ones), even in a request written by hand. None: as before.
+        if ($branchId !== null && ! Branch::whereKey($branchId)->where('is_active', true)->exists()) {
+            throw new BusinessRuleException('order.branch', 'فرع الاستلام المختار غير متاح. اختر فرعًا آخر من السلة.', 'branch_id');
+        }
 
         return DB::transaction(function () use ($items, $customer, $method, $member, $branchId, $window) {
             $products = Product::onWebsite()->whereIn('id', array_column($items, 'product_id'))->get()->keyBy('id');
