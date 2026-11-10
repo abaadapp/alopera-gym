@@ -44,7 +44,9 @@ class AccountController extends Controller
             'phone' => ['nullable', 'string', 'max:32'],
         ]);
         $user = $request->user();
-        $user->fill(['name' => $data['name'], 'phone' => $data['phone'] ? Phone::normalize($data['phone']) : null])->save();
+        // A phone not sent at all stays as it is; one sent empty is cleared.
+        $phone = array_key_exists('phone', $data) ? ($data['phone'] ? Phone::normalize($data['phone']) : null) : $user->phone;
+        $user->fill(['name' => $data['name'], 'phone' => $phone])->save();
         $audit->log('user.profile_updated', $user);
 
         return back()->with('success', 'تم حفظ بيانات حسابك.');

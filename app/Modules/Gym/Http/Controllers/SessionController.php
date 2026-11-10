@@ -165,7 +165,7 @@ class SessionController extends Controller
             $changes[] = 'الموعد الجديد '.$start->format('Y/m/d H:i');
         }
         if ((int) ($data['trainer_id'] ?? 0) !== (int) $session->trainer_id) {
-            $changes[] = 'المدرب: '.(Trainer::find($data['trainer_id'])?->name ?? '—');
+            $changes[] = 'المدرب: '.(Trainer::find($data['trainer_id'] ?? null)?->name ?? '—');
         }
         if (($data['room'] ?? null) !== $session->room && ! empty($data['room'])) {
             $changes[] = 'القاعة: '.$data['room'];

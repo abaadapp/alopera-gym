@@ -173,6 +173,18 @@ class OwnerDecisionsTest extends TestCase
         });
     }
 
+    public function test_payroll_settings_without_the_payout_account_in_the_request_keep_it_instead_of_a_server_error(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $this->asTenant($club, fn () => $club->forceFill(['settings' => array_merge($club->settings ?? [], ['payroll' => ['payout_account_id' => 7, 'punch_window_seconds' => 60]])])->save());
+
+        $this->actingAs($owner)->put(route('club.settings.payroll.update'), ['punch_window_seconds' => 30])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $stored = $club->fresh()->settings['payroll'];
+        $this->assertSame([7, 30], [$stored['payout_account_id'], $stored['punch_window_seconds']]);
+    }
+
     /** @return array{0: Tenant, 1: User, 2: PayrollItem, 3: Branch} a bank-paid line of an employee of the main branch, and a second branch */
     private function paidByBank(): array
     {
