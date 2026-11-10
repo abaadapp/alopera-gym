@@ -305,6 +305,11 @@ final class MembershipService
 
             // Bookings during the freeze would consume a membership she cannot use.
             $this->bookings->cancelFutureForMembership($membership, 'تجميد العضوية');
+            // So would those on the paid periods after it: they now wait for the resume (heldByFreeze), book nothing and
+            // do not open the door, and the resume moves their dates back.
+            Membership::where('member_id', $membership->member_id)->whereKeyNot($membership->id)
+                ->where('status', Membership::SCHEDULED)->where('starts_on', '>', $membership->starts_on)->get()
+                ->each(fn (Membership $later) => $this->bookings->cancelFutureForMembership($later, 'تجميد العضوية'));
 
             $this->event($membership, 'frozen', ['days' => $days, 'reason' => $reason]);
             MembershipFrozen::dispatch($membership);
