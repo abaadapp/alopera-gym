@@ -1,9 +1,11 @@
 import { Link, usePage } from '@inertiajs/react';
 import { Check, Clock, Crown, Dumbbell, Snowflake, Sparkles, UserRound } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
+import { phrase } from '@/Components/Site/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { currencyLabel, money, number } from '@/lib/format';
+import { useLocale, useT } from '@/lib/i18n';
 import type { PageKey, PageText, SiteChrome } from '@/types/site';
 
 export interface PlanData {
@@ -51,9 +53,17 @@ export function PlanCard({
     cta?: { label: string; href: string };
 }) {
     const featured = plan.is_featured;
+    const t = useT();
+    const en = useLocale() === 'en';
     const perks: string[] = [
-        plan.sessions_limit ? `${plan.sessions_limit} حصة خلال مدة الاشتراك` : plan.type === 'gym' ? 'دخول غير محدود للنادي' : 'حصص غير محدودة',
-        ...(plan.freeze_allowed ? [plan.max_freeze_days > 0 ? `إمكانية التجميد حتى ${plan.max_freeze_days} يومًا` : 'إمكانية تجميد الاشتراك'] : []),
+        plan.sessions_limit
+            ? en && plan.sessions_limit === 1 ? '1 class during the membership' : t(':count حصة خلال مدة الاشتراك', { count: plan.sessions_limit })
+            : plan.type === 'gym' ? t('دخول غير محدود للنادي') : t('حصص غير محدودة'),
+        ...(plan.freeze_allowed
+            ? [plan.max_freeze_days > 0
+                ? en && plan.max_freeze_days === 1 ? 'Can be frozen for up to 1 day' : t('إمكانية التجميد حتى :count يومًا', { count: plan.max_freeze_days })
+                : t('إمكانية تجميد الاشتراك')]
+            : []),
         ...(plan.features ?? []),
     ];
 
@@ -61,7 +71,7 @@ export function PlanCard({
         <>
             {featured && (
                 <span className="absolute -top-3 start-6 inline-flex items-center gap-1 rounded-full bg-brand px-3 py-1 text-xs font-medium text-white shadow-md shadow-brand/30">
-                    <Crown className="size-3.5" /> الأكثر طلبًا
+                    <Crown className="size-3.5" /> {t('الأكثر طلبًا')}
                 </span>
             )}
             <div className="flex items-start justify-between gap-3">
@@ -80,7 +90,7 @@ export function PlanCard({
                 <span className="text-sm text-muted">{currencyLabel(currency)}</span>
                 <span className="text-sm text-muted">/ {plan.duration_label}</span>
             </div>
-            {Number(plan.signup_fee) > 0 && <p className="mt-1 text-xs text-muted">+ رسوم تسجيل لمرة واحدة {money(plan.signup_fee, currency)}</p>}
+            {Number(plan.signup_fee) > 0 && <p className="mt-1 text-xs text-muted">{t('+ رسوم تسجيل لمرة واحدة :amount', { amount: money(plan.signup_fee, currency) })}</p>}
             {plan.description && <p className="mt-4 text-sm leading-7 text-muted">{plan.description}</p>}
             <ul className="mt-5 space-y-2.5">
                 {perks.map((perk, i) => (
@@ -165,18 +175,20 @@ export function PageHero({ page, title: fixedTitle, subtitle: fixedSubtitle, ico
 export default function Plans({ site, seo, plans, ptPackages }: { site: SiteInfo; seo: { title: string }; plans: PlanData[]; ptPackages: PtPackage[] }) {
     const currency = useCurrency();
     const text = usePageText('plans');
+    const t = useT();
+    const en = useLocale() === 'en';
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero page="plans" title="الباقات والأسعار" icon={<Sparkles className="size-6" />} />
+            <PageHero page="plans" title={t('الباقات والأسعار')} icon={<Sparkles className="size-6" />} />
 
             <section className="mx-auto max-w-6xl px-4 py-12">
                 {plans.length === 0 ? (
-                    <p className="py-16 text-center text-muted">لا توجد باقات معروضة حاليًا.</p>
+                    <p className="py-16 text-center text-muted">{t('لا توجد باقات معروضة حاليًا.')}</p>
                 ) : (
                     <div className="grid gap-6 pt-3 sm:grid-cols-2 lg:grid-cols-3">
                         {plans.map((plan) => (
-                            <PlanCard key={plan.id} plan={plan} currency={currency} cta={site.signup_enabled ? { label: 'اشترك في هذه الباقة', href: route('site.join', { plan: plan.id }) } : undefined} />
+                            <PlanCard key={plan.id} plan={plan} currency={currency} cta={site.signup_enabled ? { label: t('اشترك في هذه الباقة'), href: route('site.join', { plan: plan.id }) } : undefined} />
                         ))}
                     </div>
                 )}
@@ -184,7 +196,7 @@ export default function Plans({ site, seo, plans, ptPackages }: { site: SiteInfo
 
             {ptPackages.length > 0 && (
                 <section className="mx-auto max-w-6xl px-4 py-12">
-                    <SectionTitle eyebrow="تدريب شخصي" title={text?.pt_title || 'التدريب الشخصي'} subtitle={text?.pt_subtitle || undefined} />
+                    <SectionTitle eyebrow={t('تدريب شخصي')} title={text?.pt_title || t('التدريب الشخصي')} subtitle={text?.pt_subtitle || undefined} />
                     <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                         {ptPackages.map((p) => (
                             <div key={p.id} className="rounded-3xl border border-line bg-white p-6 shadow-sm">
@@ -197,13 +209,13 @@ export default function Plans({ site, seo, plans, ptPackages }: { site: SiteInfo
                                     <span className="text-sm text-muted">{currencyLabel(currency)}</span>
                                 </div>
                                 <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-                                    <span className="rounded-2xl bg-brand-50/70 px-2 py-2"><Dumbbell className="mx-auto mb-1 size-4 text-brand" /><span className="num">{p.sessions_count}</span> جلسات</span>
-                                    <span className="rounded-2xl bg-brand-50/70 px-2 py-2"><Clock className="mx-auto mb-1 size-4 text-brand" /><span className="num">{p.session_minutes}</span> دقيقة</span>
-                                    <span className="rounded-2xl bg-brand-50/70 px-2 py-2"><Snowflake className="mx-auto mb-1 size-4 text-brand" />صالحة <span className="num">{p.validity_days}</span> يومًا</span>
+                                    <span className="rounded-2xl bg-brand-50/70 px-2 py-2"><Dumbbell className="mx-auto mb-1 size-4 text-brand" /><span className="num">{p.sessions_count}</span> {en && p.sessions_count === 1 ? 'session' : t('جلسات')}</span>
+                                    <span className="rounded-2xl bg-brand-50/70 px-2 py-2"><Clock className="mx-auto mb-1 size-4 text-brand" /><span className="num">{p.session_minutes}</span> {t('دقيقة')}</span>
+                                    <span className="rounded-2xl bg-brand-50/70 px-2 py-2"><Snowflake className="mx-auto mb-1 size-4 text-brand" />{phrase(en && p.validity_days === 1 ? 'Valid for :n day' : t('صالحة :n يومًا'), { n: <span className="num">{p.validity_days}</span> })}</span>
                                 </div>
                                 {p.description && <p className="mt-4 text-sm leading-7 text-muted">{p.description}</p>}
                                 <Link href={route('site.contact')} className="mt-5 block rounded-full border border-brand-200 py-2.5 text-center text-sm font-medium text-brand-700 hover:bg-brand-50">
-                                    احجز استشارة
+                                    {t('احجز استشارة')}
                                 </Link>
                             </div>
                         ))}

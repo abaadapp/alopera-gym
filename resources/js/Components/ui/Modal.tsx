@@ -3,6 +3,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { router } from '@inertiajs/react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { currentLocale } from '@/lib/locale';
 import { useAdmin } from './AdminScope';
 
 /**
@@ -171,7 +172,7 @@ export default function Modal({
                     {footer && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 px-5 pt-4 pb-5">{footer}</div>}
                     <DialogPrimitive.Close
                         disabled={locked}
-                        aria-label="إغلاق"
+                        aria-label={currentLocale() === 'en' ? 'Close' : 'إغلاق'}
                         className="absolute end-4 top-4 rounded-[8px] p-1.5 text-[#6b7280] transition-colors hover:bg-[#f2f2f0] hover:text-[#111] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#111]/15 disabled:pointer-events-none disabled:opacity-40"
                     >
                         <X className="size-4" />

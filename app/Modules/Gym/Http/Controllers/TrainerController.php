@@ -22,7 +22,7 @@ class TrainerController extends Controller
     {
         return Inertia::render('Gym/Trainers/Index', [
             'trainers' => BranchContext::scope(Trainer::with(['availabilities', 'user:id,name,email']))->orderBy('sort')->orderBy('name')->get()->map(fn (Trainer $t) => $t->only(
-                'id', 'name', 'phone', 'email', 'bio', 'specialties', 'color', 'is_public', 'is_active', 'sort', 'user_id', 'branch_id'
+                'id', 'name', 'name_en', 'phone', 'email', 'bio', 'bio_en', 'specialties', 'specialties_en', 'color', 'is_public', 'is_active', 'sort', 'user_id', 'branch_id'
             ) + [
                 'photo_url' => $t->photoUrl(),
                 'user' => $t->user?->only('id', 'name', 'email'),
@@ -100,6 +100,10 @@ class TrainerController extends Controller
             'bio' => ['nullable', 'string', 'max:2000'],
             'specialties' => ['nullable', 'array', 'max:10'],
             'specialties.*' => ['string', 'max:60'],
+            'name_en' => ['nullable', 'string', 'max:120'],
+            'bio_en' => ['nullable', 'string', 'max:2000'],
+            'specialties_en' => ['nullable', 'array', 'max:10'],
+            'specialties_en.*' => ['string', 'max:60'],
             'color' => ['nullable', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'is_public' => ['boolean'],
             'is_active' => ['boolean'],
