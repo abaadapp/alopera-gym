@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import { CalendarClock, ImagePlus, Link2, Mail, Pencil, Phone, Plus, Trash2, UserRound, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
+import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, EnglishFields, Field, Input, linesOf, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { WEEKDAYS, phone as fmtPhone } from '@/lib/format';
 import type { Option } from '@/types';
 
@@ -15,6 +15,9 @@ type Trainer = {
     email: string | null;
     bio: string | null;
     specialties: string[] | null;
+    name_en?: string | null;
+    bio_en?: string | null;
+    specialties_en?: string[] | null;
     color: string | null;
     is_public: boolean;
     is_active: boolean;
@@ -32,6 +35,9 @@ type TrainerForm = {
     email: string;
     bio: string;
     specialties: string[];
+    name_en: string;
+    bio_en: string;
+    specialties_en: string[];
     color: string;
     is_public: boolean;
     is_active: boolean;
@@ -47,6 +53,9 @@ const blank: TrainerForm = {
     email: '',
     bio: '',
     specialties: [],
+    name_en: '',
+    bio_en: '',
+    specialties_en: [],
     color: '#be185d',
     is_public: true,
     is_active: true,
@@ -64,6 +73,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
     const [open, setOpen] = useState(false);
     const [preview, setPreview] = useState<string | null>(null);
     const [tag, setTag] = useState('');
+    const [specialtiesEn, setSpecialtiesEn] = useState('');
     const [availabilityFor, setAvailabilityFor] = useState<Trainer | null>(null);
     const form = useForm<TrainerForm>(blank);
     const slotsForm = useForm<{ slots: Slot[] }>({ slots: [] });
@@ -74,6 +84,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
         setEditing(null);
         form.clearErrors();
         form.setData(blank);
+        setSpecialtiesEn('');
         setPreview(null);
         setOpen(true);
     };
@@ -87,6 +98,9 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
             email: t.email ?? '',
             bio: t.bio ?? '',
             specialties: t.specialties ?? [],
+            name_en: t.name_en ?? '',
+            bio_en: t.bio_en ?? '',
+            specialties_en: t.specialties_en ?? [],
             color: t.color ?? '#be185d',
             is_public: t.is_public,
             is_active: t.is_active,
@@ -95,6 +109,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
             user_id: t.user_id,
             photo: null,
         });
+        setSpecialtiesEn((t.specialties_en ?? []).join('\n'));
         setPreview(t.photo_url);
         setOpen(true);
     };
@@ -108,11 +123,13 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
     const submit = (e: FormEvent) => {
         e.preventDefault();
         const options = { forceFormData: true, preserveScroll: true, onSuccess: () => setOpen(false) };
+        // A multipart form drops an empty list: no English specialties go as an empty value, so clearing them sticks.
+        const english = (data: TrainerForm) => ({ ...data, specialties_en: data.specialties_en.length ? data.specialties_en : null });
         if (editing) {
-            form.transform((data) => ({ ...data, _method: 'put' }));
+            form.transform((data) => ({ ...english(data), _method: 'put' }));
             form.post(route('club.trainers.update', editing.id), options);
         } else {
-            form.transform((data) => data);
+            form.transform(english);
             form.post(route('club.trainers.store'), options);
         }
     };
@@ -246,6 +263,26 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                     <Field label="نبذة" error={form.errors.bio} className="sm:col-span-2" hint="تظهر في صفحة فريق التدريب على الموقع">
                         <Textarea value={form.data.bio} onChange={(e) => form.setData('bio', e.target.value)} rows={3} />
                     </Field>
+                    <EnglishFields filled={Boolean(form.data.name_en || form.data.bio_en || form.data.specialties_en.length)} className="sm:col-span-2">
+                        <Field label="الاسم بالإنجليزية" error={form.errors.name_en}>
+                            <Input dir="ltr" lang="en" maxLength={120} value={form.data.name_en} onChange={(e) => form.setData('name_en', e.target.value)} />
+                        </Field>
+                        <Field label="النبذة بالإنجليزية" error={form.errors.bio_en}>
+                            <Textarea dir="ltr" lang="en" rows={3} maxLength={2000} value={form.data.bio_en} onChange={(e) => form.setData('bio_en', e.target.value)} />
+                        </Field>
+                        <Field label="التخصصات بالإنجليزية (سطر لكل تخصص)" error={form.errors.specialties_en ?? Object.entries(form.errors as Record<string, string | undefined>).find(([k]) => k.startsWith('specialties_en.'))?.[1]}>
+                            <Textarea
+                                dir="ltr"
+                                lang="en"
+                                rows={3}
+                                value={specialtiesEn}
+                                onChange={(e) => {
+                                    setSpecialtiesEn(e.target.value);
+                                    form.setData('specialties_en', linesOf(e.target.value, 10));
+                                }}
+                            />
+                        </Field>
+                    </EnglishFields>
                     <Field label="اللون" error={form.errors.color}>
                         <input type="color" value={form.data.color} onChange={(e) => form.setData('color', e.target.value)} className="h-10 w-full cursor-pointer rounded-xl border border-line" />
                     </Field>

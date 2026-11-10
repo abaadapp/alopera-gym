@@ -70,6 +70,9 @@ final class SiteDocument
         }
         $doc['announcement'] = $this->text($input['announcement'] ?? '', 200, 'doc.announcement', false);
         $doc['sections'] = $this->sections($input['sections'] ?? null);
+        // The English words of the same site (SiteTranslation): one document, so both languages are saved, previewed,
+        // published and restored together.
+        $doc['en'] = $this->translation($doc, is_array($input['en'] ?? null) ? $input['en'] : []);
 
         $this->checkImages();
         if ($this->errors !== []) {
@@ -77,6 +80,93 @@ final class SiteDocument
         }
 
         return $doc;
+    }
+
+    /**
+     * The English words of the document: for every text field of the Arabic document (a heading, a paragraph, a
+     * button's or menu link's label, an item of a list), what the owner wrote in English, within the same length.
+     * Sections and list items are named by their id, so reordering or deleting them keeps the right words; words for
+     * a section or item that no longer exists are dropped. Everything else (images, links, colours, switches) is
+     * shared by both languages. Errors use the Arabic field's path under doc.en.
+     *
+     * @param  array<string, mixed>  $doc  the cleaned Arabic document
+     * @param  array<string, mixed>  $raw
+     * @return array<string, mixed>
+     */
+    private function translation(array $doc, array $raw): array
+    {
+        $out = [];
+        foreach (self::chromeFields() as $part => $fields) {
+            $words = $this->words($fields, is_array($doc[$part] ?? null) ? $doc[$part] : [], is_array($raw[$part] ?? null) ? $raw[$part] : [], "doc.en.$part");
+            if ($words !== []) {
+                $out[$part] = $words;
+            }
+        }
+        $announcement = $this->text($raw['announcement'] ?? '', 200, 'doc.en.announcement', false);
+        if ($announcement !== '') {
+            $out['announcement'] = $announcement;
+        }
+        $given = is_array($raw['sections'] ?? null) ? $raw['sections'] : [];
+        $sections = [];
+        foreach ($doc['sections'] as $i => $section) {
+            $words = $this->words(SectionTypes::get($section['type'])['fields'], $section['data'], is_array($given[$section['id']] ?? null) ? $given[$section['id']] : [], "doc.en.sections.$i.data");
+            if ($words !== []) {
+                $sections[$section['id']] = $words;
+            }
+        }
+        if ($sections !== []) {
+            $out['sections'] = $sections;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $fields
+     * @param  array<string, mixed>  $base
+     * @param  array<string, mixed>  $raw
+     * @return array<string, mixed>
+     */
+    private function words(array $fields, array $base, array $raw, string $path): array
+    {
+        $out = [];
+        foreach ($fields as $field) {
+            $key = $field['key'];
+            $value = $raw[$key] ?? null;
+            $words = match ($field['type']) {
+                'text' => $this->text($value ?? '', $field['max'] ?? 200, "$path.$key", false),
+                'textarea' => $this->text($value ?? '', $field['max'] ?? 2000, "$path.$key", true),
+                'link' => ($label = $this->text(is_array($value) ? ($value['label'] ?? '') : '', 40, "$path.$key.label", false)) === '' ? null : ['label' => $label],
+                'group' => $this->words($field['fields'], is_array($base[$key] ?? null) ? $base[$key] : [], is_array($value) ? $value : [], "$path.$key"),
+                'list' => $this->listWords($field['fields'], is_array($base[$key] ?? null) ? $base[$key] : [], is_array($value) ? $value : [], "$path.$key"),
+                default => null,
+            };
+            if ($words !== null && $words !== '' && $words !== []) {
+                $out[$key] = $words;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $fields
+     * @param  array<int, array<string, mixed>>  $items
+     * @param  array<string, mixed>  $raw  item id => its words
+     * @return array<string, array<string, mixed>>
+     */
+    private function listWords(array $fields, array $items, array $raw, string $path): array
+    {
+        $out = [];
+        foreach ($items as $j => $item) {
+            $id = (string) ($item['id'] ?? '');
+            $words = $id === '' ? [] : $this->words($fields, $item, is_array($raw[$id] ?? null) ? $raw[$id] : [], "$path.$j");
+            if ($words !== []) {
+                $out[$id] = $words;
+            }
+        }
+
+        return $out;
     }
 
     /** @return list<array<string, mixed>> */

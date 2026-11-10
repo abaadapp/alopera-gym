@@ -6,6 +6,7 @@ use App\Core\Auth\PermissionRegistry;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\Phone;
+use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -47,12 +48,12 @@ class ShopController extends Controller
     public function index(Request $request): Response
     {
         $this->ensureShop();
-        $products = Product::onWebsite()->with('category:id,name')->orderBy('name')->get();
+        $products = Product::onWebsite()->with('category:id,name,name_en')->orderBy('name')->get();
         $addons = $this->addons->map($products, 'website', true);
 
         return $this->sitePage('shop', 'Site/Shop', [
             'products' => $products->map(fn (Product $p) => $this->product($p, $addons[$p->id])),
-            'categories' => ProductCategory::whereIn('id', $products->pluck('product_category_id')->filter()->unique())->ordered()->pluck('name'),
+            'categories' => ProductCategory::whereIn('id', $products->pluck('product_category_id')->filter()->unique())->ordered()->get(['name', 'name_en'])->map(fn ($c) => SiteLanguage::pick($c->name, $c->name_en))->values(),
             'currency' => $this->tenants->require()->currency,
         ]);
     }
@@ -63,10 +64,10 @@ class ShopController extends Controller
         abort_unless($product->is_active && $product->show_on_website, 404);
 
         return $this->page('Site/ShopProduct', [
-            'product' => $this->product($product->load('category:id,name'), $this->addons->map([$product], 'website', true)[$product->id])
-                + ['description' => $product->description, 'photos' => $product->imageUrls()],
+            'product' => $this->product($product->load('category:id,name,name_en'), $this->addons->map([$product], 'website', true)[$product->id])
+                + ['description' => SiteLanguage::pick($product->description, $product->description_en), 'photos' => $product->imageUrls()],
             'currency' => $this->tenants->require()->currency,
-        ], $product->name, $product->description ? mb_substr($product->description, 0, 160) : null, $product->imageUrl());
+        ], SiteLanguage::pick($product->name, $product->name_en), ($d = SiteLanguage::pick($product->description, $product->description_en)) ? mb_substr($d, 0, 160) : null, $product->imageUrl());
     }
 
     public function cart(): Response
@@ -75,7 +76,7 @@ class ShopController extends Controller
         $tenant = $this->tenants->require();
         $member = Auth::guard('member')->user();
 
-        $products = Product::onWebsite()->with('category:id,name')->orderBy('name')->get();
+        $products = Product::onWebsite()->with('category:id,name,name_en')->orderBy('name')->get();
         $addons = $this->addons->map($products, 'website', true);
 
         return $this->page('Site/ShopCart', [
@@ -86,7 +87,7 @@ class ShopController extends Controller
             'windowMinutes' => ShopSettings::of($tenant)['payment_window_minutes'],
             'prefill' => $member instanceof Member ? ['name' => $member->full_name, 'phone' => $member->phone, 'email' => $member->email] : null,
             'currency' => $tenant->currency,
-        ], 'سلة المشتريات');
+        ], __('سلة المشتريات'));
     }
 
     public function store(Request $request): HttpResponse
@@ -130,7 +131,7 @@ class ShopController extends Controller
         }
 
         return redirect()->route('site.shop.order', ['club' => $tenant->slug, 'token' => $sale->public_token])
-            ->with('success', 'تم استلام طلبك رقم '.$sale->number.'. تتابع حالته من هذه الصفحة.');
+            ->with('success', __('تم استلام طلبك رقم :number. تتابع حالته من هذه الصفحة.', ['number' => $sale->number]));
     }
 
     public function order(string $token): Response
@@ -158,7 +159,7 @@ class ShopController extends Controller
             ],
             'pickupNote' => ShopSettings::of($tenant)['pickup_note'],
             'currency' => $tenant->currency,
-        ], 'طلب '.$sale->number);
+        ], __('طلب :number', ['number' => $sale->number]));
     }
 
     public function pay(string $token): HttpResponse
@@ -179,7 +180,7 @@ class ShopController extends Controller
             $intent = $this->online->start(Invoice::findOrFail($sale->invoice_id), 'shop');
         } catch (BusinessRuleException $e) {
             return redirect()->route('site.shop.order', ['club' => $tenant->slug, 'token' => $sale->public_token])
-                ->with('error', $e->getMessage().' طلبك محفوظ، ويمكنك المحاولة مرة أخرى من هذه الصفحة.');
+                ->with('error', SiteLanguage::word($e->getMessage()).' '.__('طلبك محفوظ، ويمكنك المحاولة مرة أخرى من هذه الصفحة.'));
         }
 
         return Inertia::location($intent->checkout_url);
@@ -233,9 +234,9 @@ class ShopController extends Controller
 
         return [
             'id' => $p->id,
-            'name' => $p->name,
+            'name' => SiteLanguage::pick($p->name, $p->name_en),
             'price' => $p->price,
-            'category' => $p->category?->name,
+            'category' => SiteLanguage::pick($p->category?->name, $p->category?->name_en),
             'image_url' => $p->imageUrl(),
             'in_stock' => $available === null || $available >= 1,
             // Only the limit a customer needs, not the club's stock figure.

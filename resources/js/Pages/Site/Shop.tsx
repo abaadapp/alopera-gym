@@ -6,6 +6,7 @@ import type { AddonOption, ChosenAddon } from '@/lib/addons';
 import { useCart } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { money } from '@/lib/format';
+import { useT } from '@/lib/i18n';
 import { PageHero } from './Plans';
 
 export interface ShopProduct {
@@ -35,14 +36,15 @@ export function AddToCart({ product, qty = 1, addons, className }: { product: Sh
     const cart = useCart();
     const inCart = cart.quantityOf(product.id);
     const full = inCart >= product.max;
+    const t = useT();
 
     if (!product.in_stock) {
-        return <span className={cn('inline-flex h-10 items-center justify-center rounded-full bg-stone-100 px-4 text-sm text-muted', className)}>نفدت الكمية</span>;
+        return <span className={cn('inline-flex h-10 items-center justify-center rounded-full bg-stone-100 px-4 text-sm text-muted', className)}>{t('نفدت الكمية')}</span>;
     }
     if (addons === undefined && product.addons.length > 0) {
         return (
             <Link href={route('site.shop.product', product.id)} className={cn('inline-flex h-10 items-center justify-center gap-2 rounded-full bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-600', className)}>
-                <SlidersHorizontal className="size-4" /> اختر الإضافات{inCart > 0 && ` (${inCart} في السلة)`}
+                <SlidersHorizontal className="size-4" /> {t('اختر الإضافات')}{inCart > 0 && ` ${t('(:count في السلة)', { count: inCart })}`}
             </Link>
         );
     }
@@ -54,7 +56,7 @@ export function AddToCart({ product, qty = 1, addons, className }: { product: Sh
             className={cn('inline-flex h-10 items-center justify-center gap-2 rounded-full bg-brand px-4 text-sm font-medium text-white transition hover:bg-brand-600 disabled:opacity-60', className)}
         >
             {inCart > 0 ? <Check className="size-4" /> : <Plus className="size-4" />}
-            {full ? 'الحد الأقصى في السلة' : inCart > 0 ? `في السلة (${inCart}) — أضف المزيد` : 'أضف إلى السلة'}
+            {full ? t('الحد الأقصى في السلة') : inCart > 0 ? t('في السلة (:count) — أضف المزيد', { count: inCart }) : t('أضف إلى السلة')}
         </button>
     );
 }
@@ -62,25 +64,26 @@ export function AddToCart({ product, qty = 1, addons, className }: { product: Sh
 export default function Shop({ site, seo, products, categories, currency }: { site: SiteInfo; seo: { title: string }; products: ShopProduct[]; categories: string[]; currency: string }) {
     const [category, setCategory] = useState('');
     const cart = useCart();
+    const t = useT();
     const visible = products.filter((p) => !category || p.category === category);
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero page="shop" title="المتجر" icon={<ShoppingBag className="size-6" />} />
+            <PageHero page="shop" title={t('المتجر')} icon={<ShoppingBag className="size-6" />} />
 
             <section className="mx-auto max-w-6xl px-4 py-12">
                 {categories.length > 1 && (
                     <div className="no-scrollbar mb-8 flex gap-2 overflow-x-auto pb-1">
                         {['', ...categories].map((c) => (
                             <button key={c || 'all'} type="button" onClick={() => setCategory(c)} className={cn('whitespace-nowrap rounded-full border px-4 py-2 text-sm transition', category === c ? 'border-brand bg-brand text-white' : 'border-line bg-white hover:border-brand-300')}>
-                                {c || 'الكل'}
+                                {c || t('الكل')}
                             </button>
                         ))}
                     </div>
                 )}
 
                 {visible.length === 0 ? (
-                    <p className="py-16 text-center text-muted">لا توجد منتجات معروضة حاليًا.</p>
+                    <p className="py-16 text-center text-muted">{t('لا توجد منتجات معروضة حاليًا.')}</p>
                 ) : (
                     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                         {visible.map((p) => (
@@ -92,7 +95,7 @@ export default function Shop({ site, seo, products, categories, currency }: { si
                                 <div className="flex flex-1 flex-col p-5">
                                     <Link href={route('site.shop.product', p.id)} className="font-display text-lg font-semibold text-ink hover:text-brand">{p.name}</Link>
                                     <p className="mt-1 text-lg font-semibold text-brand num">{money(p.price, currency)}</p>
-                                    {p.addons.length > 0 && <p className="mt-1 text-xs text-muted">مع إضافات اختيارية: {p.addons.slice(0, 3).map((a) => a.name).join('، ')}{p.addons.length > 3 && '…'}</p>}
+                                    {p.addons.length > 0 && <p className="mt-1 text-xs text-muted">{t('مع إضافات اختيارية: :names', { names: p.addons.slice(0, 3).map((a) => a.name).join(t('، ')) })}{p.addons.length > 3 && '…'}</p>}
                                     <div className="mt-auto pt-4"><AddToCart product={p} className="w-full" /></div>
                                 </div>
                             </article>
@@ -103,7 +106,7 @@ export default function Shop({ site, seo, products, categories, currency }: { si
                 {cart.count > 0 && (
                     <div className="sticky bottom-4 mt-10 flex justify-center">
                         <Link href={route('site.shop.cart')} className="inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-medium text-white shadow-lg">
-                            <ShoppingBag className="size-4" /> إتمام الطلب ({cart.count})
+                            <ShoppingBag className="size-4" /> {t('إتمام الطلب (:count)', { count: cart.count })}
                         </Link>
                     </div>
                 )}

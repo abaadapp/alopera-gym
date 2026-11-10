@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ExternalLink, Laptop, RefreshCw, Smartphone, Tablet } from 'lucide-react';
 import { Button, Modal } from '@/Components/ui';
 import { cn } from '@/lib/cn';
@@ -16,13 +16,18 @@ type Device = (typeof DEVICES)[number]['key'];
  * device's real width and scaled down to fit when the window is narrower. It is the club staff's page only: visitors
  * cannot open it.
  */
-export default function PreviewPanel({ open, onClose, url, stamp, dirty }: { open: boolean; onClose: () => void; url: string; stamp: number; dirty: boolean }) {
+export default function PreviewPanel({ open, onClose, url, stamp, dirty, english = false }: { open: boolean; onClose: () => void; url: string; stamp: number; dirty: boolean; english?: boolean }) {
     const [device, setDevice] = useState<Device>('phone');
+    // The Arabic site or the English one (the same saved draft); opens in the language being edited.
+    const [lang, setLang] = useState<'ar' | 'en'>(english ? 'en' : 'ar');
+    useEffect(() => {
+        if (open) setLang(english ? 'en' : 'ar');
+    }, [open, english]);
     const [reload, setReload] = useState(0);
     const box = useRef<HTMLDivElement>(null);
     const [size, setSize] = useState({ width: 0, height: 0 });
     const width = DEVICES.find((d) => d.key === device)!.width;
-    const src = `${url}${url.includes('?') ? '&' : '?'}v=${stamp}-${reload}`;
+    const src = `${url}${url.includes('?') ? '&' : '?'}lang=${lang}&v=${stamp}-${reload}`;
 
     useLayoutEffect(() => {
         if (!open) return;
@@ -59,6 +64,19 @@ export default function PreviewPanel({ open, onClose, url, stamp, dirty }: { ope
                                 <d.icon className="size-4" />
                                 {d.label}
                                 <span className="num text-[11px] opacity-70">{d.width}</span>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="flex rounded-[10px] border border-line p-0.5" role="group" aria-label="اللغة">
+                        {(['ar', 'en'] as const).map((l) => (
+                            <button
+                                key={l}
+                                type="button"
+                                aria-pressed={lang === l}
+                                onClick={() => setLang(l)}
+                                className={cn('rounded-[8px] px-3 py-1.5 text-[13px] font-medium transition', lang === l ? 'bg-ink text-white' : 'text-[#4b4b4b] hover:bg-[#f2f2f0]')}
+                            >
+                                {l === 'ar' ? 'العربية' : 'English'}
                             </button>
                         ))}
                     </div>

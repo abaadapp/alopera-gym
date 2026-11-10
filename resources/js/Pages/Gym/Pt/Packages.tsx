@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import { Package, Pencil, Plus, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle, BackLink } from '@/Components/ui';
+import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, EnglishFields, Field, Input, Modal, PageHeader, Select, Textarea, Toggle, BackLink } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { money } from '@/lib/format';
 import type { Option } from '@/types';
@@ -11,6 +11,8 @@ type PtPackage = {
     id: number;
     name: string;
     description: string | null;
+    name_en?: string | null;
+    description_en?: string | null;
     sessions_count: number;
     session_minutes: number;
     price: string;
@@ -24,6 +26,8 @@ type PtPackage = {
 type PackageForm = {
     name: string;
     description: string;
+    name_en: string;
+    description_en: string;
     sessions_count: number | string;
     session_minutes: number | string;
     price: number | string;
@@ -33,7 +37,7 @@ type PackageForm = {
     is_active: boolean;
 };
 
-const blank: PackageForm = { name: '', description: '', sessions_count: 8, session_minutes: 60, price: '', validity_days: 60, trainer_id: null, is_public: true, is_active: true };
+const blank: PackageForm = { name: '', description: '', name_en: '', description_en: '', sessions_count: 8, session_minutes: 60, price: '', validity_days: 60, trainer_id: null, is_public: true, is_active: true };
 
 export default function PtPackages({ packages, trainers }: { packages: PtPackage[]; trainers: Option[] }) {
     const currency = useCurrency();
@@ -45,7 +49,7 @@ export default function PtPackages({ packages, trainers }: { packages: PtPackage
         setEditing(p);
         form.clearErrors();
         form.setData(p ? {
-            name: p.name, description: p.description ?? '', sessions_count: p.sessions_count, session_minutes: p.session_minutes,
+            name: p.name, description: p.description ?? '', name_en: p.name_en ?? '', description_en: p.description_en ?? '', sessions_count: p.sessions_count, session_minutes: p.session_minutes,
             price: p.price, validity_days: p.validity_days, trainer_id: p.trainer_id, is_public: p.is_public, is_active: p.is_active,
         } : blank);
         setOpen(true);
@@ -131,6 +135,14 @@ export default function PtPackages({ packages, trainers }: { packages: PtPackage
                     <Field label="الوصف" error={form.errors.description} className="sm:col-span-2">
                         <Textarea value={form.data.description} onChange={(e) => form.setData('description', e.target.value)} rows={2} />
                     </Field>
+                    <EnglishFields filled={Boolean(form.data.name_en || form.data.description_en)} className="sm:col-span-2">
+                        <Field label="الاسم بالإنجليزية" error={form.errors.name_en}>
+                            <Input dir="ltr" lang="en" maxLength={120} value={form.data.name_en} onChange={(e) => form.setData('name_en', e.target.value)} />
+                        </Field>
+                        <Field label="الوصف بالإنجليزية" error={form.errors.description_en}>
+                            <Textarea dir="ltr" lang="en" rows={2} maxLength={1000} value={form.data.description_en} onChange={(e) => form.setData('description_en', e.target.value)} />
+                        </Field>
+                    </EnglishFields>
                     <div className="space-y-2 sm:col-span-2">
                         <Toggle checked={form.data.is_public} onChange={(v) => form.setData('is_public', v)} label="تظهر في الموقع" />
                         <Toggle checked={form.data.is_active} onChange={(v) => form.setData('is_active', v)} label="متاحة للبيع" />
