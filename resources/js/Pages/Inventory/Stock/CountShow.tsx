@@ -8,12 +8,15 @@ import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
 
-interface Line { id: number; product: string | null; sku: string | null; system_quantity: string; counted_quantity: string | null; difference: string; unit_cost: string; reason: string | null; note: string | null }
+interface Line { id: number; product: string | null; sku: string | null; system_quantity: string; held_quantity: string; counted_quantity: string | null; difference: string; unit_cost: string; reason: string | null; note: string | null }
 interface Count { id: number; number: string; status: string; notes: string | null; branch: string | null; by: string | null; approver: string | null; at: string; approved_at: string | null; lines: Line[] }
 
 const qty = (v: number | string) => number(v, Number(v) % 1 ? 3 : 0);
 
-/** One count: the branch's book for each product, what was counted, the difference and why; approved once. */
+/**
+ * One count: the branch's book for each product, what website orders hold on its shelf (off the book, still on the
+ * shelf until handed over, so counted with it), what was counted, the difference and why; approved once.
+ */
 export default function CountShow({ count, reasons }: { count: Count; reasons: Record<string, string> }) {
     const currency = useCurrency();
     const can = useCan();
@@ -21,7 +24,9 @@ export default function CountShow({ count, reasons }: { count: Count; reasons: R
     const [entries, setEntries] = useState<Record<number, { counted: string; reason: string; note: string }>>(() => Object.fromEntries(count.lines.map((l) => [l.id, { counted: l.counted_quantity === null ? '' : String(Number(l.counted_quantity)), reason: l.reason ?? 'count', note: l.note ?? '' }])));
     const [busy, setBusy] = useState(false);
     const set = (id: number, patch: Partial<{ counted: string; reason: string; note: string }>) => setEntries((e) => ({ ...e, [id]: { ...e[id], ...patch } }));
-    const diff = (l: Line) => (entries[l.id]?.counted === '' ? null : Number(entries[l.id].counted) - Number(l.system_quantity));
+    const expected = (l: Line) => Number(l.system_quantity) + Number(l.held_quantity);
+    const diff = (l: Line) => (entries[l.id]?.counted === '' ? null : Number(entries[l.id].counted) - expected(l));
+    const holds = count.lines.some((l) => Number(l.held_quantity) > 0);
     const value = count.lines.reduce((t, l) => t + (diff(l) ?? 0) * Number(l.unit_cost), 0);
     const save = (approve: boolean) => router.put(route('club.inventory.counts.save', count.id), { counts: entries, approve }, { preserveScroll: true, onStart: () => setBusy(true), onFinish: () => setBusy(false) });
 
@@ -36,7 +41,7 @@ export default function CountShow({ count, reasons }: { count: Count; reasons: R
             <Card padded={false} className="overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="table-base">
-                        <thead><tr><th>المنتج</th><th>رصيد النظام</th><th>الكمية المعدودة</th><th>الفرق</th><th>السبب</th><th>ملاحظة</th></tr></thead>
+                        <thead><tr><th>المنتج</th><th>رصيد النظام <span className="block text-[11px] font-normal text-[#9ca3af]">المتاح للبيع</span></th><th>محجوز لطلبات الموقع</th><th>المتوقع على الرف</th><th>الكمية المعدودة</th><th>الفرق</th><th>السبب</th><th>ملاحظة</th></tr></thead>
                         <tbody>
                             {count.lines.map((l) => {
                                 const d = draft ? diff(l) : l.counted_quantity === null ? null : Number(l.difference);
@@ -44,6 +49,8 @@ export default function CountShow({ count, reasons }: { count: Count; reasons: R
                                     <tr key={l.id}>
                                         <td><p className="font-medium">{l.product}</p><p className="text-[11px] text-[#9ca3af] num">{l.sku ?? '—'}</p></td>
                                         <td className="num">{qty(l.system_quantity)}</td>
+                                        <td className={cn('num', Number(l.held_quantity) > 0 ? 'font-semibold text-amber-700' : 'text-[#9ca3af]')}>{qty(l.held_quantity)}</td>
+                                        <td className="num font-medium">{qty(expected(l))}</td>
                                         <td>{draft ? <Input type="number" min="0" step="any" dir="ltr" className="w-28" value={entries[l.id].counted} onChange={(e) => set(l.id, { counted: e.target.value })} aria-label={`المعدود من ${l.product}`} /> : <span className="num">{l.counted_quantity === null ? '—' : qty(l.counted_quantity)}</span>}</td>
                                         <td>{d === null ? <span className="text-[#9ca3af]">لم يُعد</span> : <span className={cn('font-semibold num', d > 0 ? 'text-emerald-700' : d < 0 ? 'text-red-700' : 'text-[#9ca3af]')}>{d > 0 ? '+' : ''}{qty(d)} <span className="text-[11px] font-normal text-[#9ca3af]">← {qty(Number(l.system_quantity) + d)}</span></span>}</td>
                                         <td>{draft ? (
@@ -69,6 +76,7 @@ export default function CountShow({ count, reasons }: { count: Count; reasons: R
                     )}
                 </div>
             </Card>
+            {holds && <p className="mt-3 text-[12px] text-amber-700">القطع المحجوزة لطلبات الموقع لم تُسلَّم بعد: هي على الرف وتُعدّ معه، فالمتوقع على الرف = رصيد النظام + المحجوز. عند تسليم الطلب تُخرج من الرف دون خصم جديد، وعند إلغائه أو انتهاء مهلته تعود إلى رصيد النظام مرة واحدة.</p>}
             {draft && <p className="mt-3 text-[12px] text-[#9ca3af]">عند الاعتماد يُقرأ رصيد النظام من جديد وتُسجَّل الفروقات في سجل المخزون برقم هذا الجرد، مرة واحدة. الخانة الفارغة تعني أن المنتج لم يُعد ولا يتغير.</p>}
         </ClubLayout>
     );

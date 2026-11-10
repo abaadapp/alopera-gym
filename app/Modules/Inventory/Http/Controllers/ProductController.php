@@ -33,7 +33,7 @@ class ProductController extends Controller
     /** Photos per product: the main one and up to five more. */
     private const PHOTOS = 6;
 
-    /** @var array<int, string>|null the branch in view's quantities, by product id */
+    /** @var array<int, array{book: string, held: string}>|null the branch in view's book and held units, by product id */
     private ?array $shelf = null;
 
     public function index(Request $request): Response
@@ -202,7 +202,9 @@ class ProductController extends Controller
         $branch = $branches->assign() ?? $branches->mainId();
         $moved = DB::transaction(function () use ($product, $data, $branch, $inventory, $stock) {
             Product::whereKey($product->id)->lockForUpdate()->first();
-            $diff = round((float) $data['counted'] - (float) $stock->quantity($product, $branch), 3);
+            // Units website orders hold are on the shelf until handed over, so they are counted with it (#132).
+            $shelf = $stock->shelf($branch, [$product->id])[$product->id] ?? ['book' => 0, 'held' => 0];
+            $diff = round((float) $data['counted'] - (float) $shelf['book'] - (float) $shelf['held'], 3);
 
             return $diff == 0.0 ? null : $inventory->adjust($product, $branch, $diff, 'count', $data['reason']);
         });
@@ -253,10 +255,11 @@ class ProductController extends Controller
         $price = (float) $p->price;
 
         // The shelf of the branch in view, which a count from this page sets.
-        $this->shelf ??= app(StockService::class)->quantities(app(BranchContext::class)->assign());
+        $this->shelf ??= app(StockService::class)->shelf(app(BranchContext::class)->assign());
 
         return $p->only('id', 'name', 'sku', 'barcode', 'price', 'cost', 'stock_quantity', 'track_stock', 'is_active', 'show_on_website', 'product_category_id') + [
-            'shelf' => $p->track_stock ? (float) ($this->shelf[$p->id] ?? 0) : null,
+            'shelf' => $p->track_stock ? (float) ($this->shelf[$p->id]['book'] ?? 0) : null,
+            'held' => $p->track_stock ? (float) ($this->shelf[$p->id]['held'] ?? 0) : null,
             'category' => $p->category?->name,
             'image_url' => $p->imageUrl(),
             'photos_count' => count($p->imageUrls()),

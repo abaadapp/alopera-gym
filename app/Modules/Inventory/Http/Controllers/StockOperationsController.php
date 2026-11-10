@@ -73,7 +73,7 @@ class StockOperationsController extends Controller
             'count' => $stocktake->only('id', 'number', 'status', 'notes') + [
                 'branch' => $stocktake->branch?->name, 'by' => $stocktake->creator?->name, 'approver' => $stocktake->approver?->name,
                 'at' => $stocktake->created_at->format('Y-m-d H:i'), 'approved_at' => $stocktake->approved_at?->format('Y-m-d H:i'),
-                'lines' => $stocktake->lines->map(fn ($l) => $l->only('id', 'system_quantity', 'counted_quantity', 'difference', 'unit_cost', 'reason', 'note') + ['product' => $l->product?->name, 'sku' => $l->product?->sku]),
+                'lines' => $stocktake->lines->map(fn ($l) => $l->only('id', 'system_quantity', 'held_quantity', 'counted_quantity', 'difference', 'unit_cost', 'reason', 'note') + ['product' => $l->product?->name, 'sku' => $l->product?->sku]),
             ],
             'reasons' => array_diff_key(StockService::REASONS, ['opening' => true]),
         ]);
