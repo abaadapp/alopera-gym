@@ -5,6 +5,7 @@ namespace App\Modules\Messaging\Jobs;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Modules\Messaging\Models\Message;
+use App\Modules\Messaging\Services\CampaignService;
 use App\Modules\Messaging\Services\WhatsAppService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -37,6 +38,15 @@ class SendWhatsAppMessage implements ShouldQueue
         $tenants->run($tenant, function () use ($whatsapp) {
             $message = Message::find($this->messageId);
             if (! $message || ! in_array($message->status, [Message::QUEUED], true)) {
+                return;
+            }
+            // Consent may have been withdrawn while it waited in the queue: it is skipped, as it would have been then.
+            if ($reason = $whatsapp->consentRefusal($message)) {
+                $message->forceFill(['status' => Message::SKIPPED, 'error_code' => $reason])->save();
+                if ($message->campaign_id) {
+                    CampaignService::refreshCounts($message->campaign_id);
+                }
+
                 return;
             }
 
