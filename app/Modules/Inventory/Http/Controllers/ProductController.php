@@ -4,6 +4,7 @@ namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Core\Support\ImageStore;
 use App\Core\Tenancy\BranchContext;
+use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Inventory\Models\Product;
@@ -11,6 +12,7 @@ use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Models\ProductCategory;
 use App\Modules\Inventory\Models\StockMovement;
 use App\Modules\Inventory\Services\InventoryService;
+use App\Modules\Inventory\Services\ShopSettings;
 use App\Modules\Inventory\Services\StockService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -31,7 +33,7 @@ class ProductController extends Controller
     /** Photos per product: the main one and up to five more. */
     private const PHOTOS = 6;
 
-    /** @var array<int, string>|null the branch in view's quantities, by product id */
+    /** @var array<int, array{book: string, held: string}>|null the branch in view's book and held units, by product id */
     private ?array $shelf = null;
 
     public function index(Request $request): Response
@@ -136,16 +138,31 @@ class ProductController extends Controller
     }
 
     /** The switches on the list: available for sale, shown in the website shop. */
-    public function toggle(Request $request, Product $product): RedirectResponse
+    public function toggle(Request $request, Product $product, ShopSettings $shop, TenantContext $tenants): RedirectResponse
     {
         $data = $request->validate(['field' => ['required', 'in:is_active,show_on_website'], 'value' => ['required', 'boolean']]);
         $product->update([$data['field'] => (bool) $data['value']]);
 
         $message = $data['field'] === 'is_active'
             ? ($data['value'] ? 'أصبح «'.$product->name.'» متاحًا للبيع.' : 'أُوقف بيع «'.$product->name.'».')
-            : ($data['value'] ? 'يظهر «'.$product->name.'» الآن في متجر الموقع.' : 'أُخفي «'.$product->name.'» من متجر الموقع.');
+            : ($data['value'] ? $this->shownMessage($product, $shop->shopOpen($tenants->require())) : 'أُخفي «'.$product->name.'» من متجر الموقع.');
 
         return back()->with('success', $message);
+    }
+
+    /**
+     * What choosing a product for the website shop really does now: it is on the site only when it is also for
+     * sale and the shop itself is open, so the owner is never told it shows while visitors find nothing.
+     */
+    private function shownMessage(Product $product, bool $shopOpen): string
+    {
+        if (! $product->is_active) {
+            return 'اختير «'.$product->name.'» لمتجر الموقع، ويظهر فيه حين يصبح «متاح للبيع».';
+        }
+
+        return $shopOpen
+            ? 'يظهر «'.$product->name.'» الآن في متجر الموقع.'
+            : 'اختير «'.$product->name.'» لمتجر الموقع، لكن المتجر لا يظهر في الموقع الآن: فعّل «إظهار المتجر في موقع النادي» من «الإعدادات» ← «إعدادات المبيعات والمتجر».';
     }
 
     /** A photo of the product (0 is the main one): made the main photo, or removed. */
@@ -189,7 +206,9 @@ class ProductController extends Controller
         $branch = $branches->assign() ?? $branches->mainId();
         $moved = DB::transaction(function () use ($product, $data, $branch, $inventory, $stock) {
             Product::whereKey($product->id)->lockForUpdate()->first();
-            $diff = round((float) $data['counted'] - (float) $stock->quantity($product, $branch), 3);
+            // Units website orders hold are on the shelf until handed over, so they are counted with it (#132).
+            $shelf = $stock->shelf($branch, [$product->id])[$product->id] ?? ['book' => 0, 'held' => 0];
+            $diff = round((float) $data['counted'] - (float) $shelf['book'] - (float) $shelf['held'], 3);
 
             return $diff == 0.0 ? null : $inventory->adjust($product, $branch, $diff, 'count', $data['reason']);
         });
@@ -240,10 +259,11 @@ class ProductController extends Controller
         $price = (float) $p->price;
 
         // The shelf of the branch in view, which a count from this page sets.
-        $this->shelf ??= app(StockService::class)->quantities(app(BranchContext::class)->assign());
+        $this->shelf ??= app(StockService::class)->shelf(app(BranchContext::class)->assign());
 
         return $p->only('id', 'name', 'sku', 'barcode', 'price', 'cost', 'stock_quantity', 'track_stock', 'is_active', 'show_on_website', 'product_category_id') + [
-            'shelf' => $p->track_stock ? (float) ($this->shelf[$p->id] ?? 0) : null,
+            'shelf' => $p->track_stock ? (float) ($this->shelf[$p->id]['book'] ?? 0) : null,
+            'held' => $p->track_stock ? (float) ($this->shelf[$p->id]['held'] ?? 0) : null,
             'category' => $p->category?->name,
             'image_url' => $p->imageUrl(),
             'photos_count' => count($p->imageUrls()),

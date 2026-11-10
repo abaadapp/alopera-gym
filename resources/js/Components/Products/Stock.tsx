@@ -6,7 +6,7 @@ import { money, number } from '@/lib/format';
 
 /** A product's stock count (set the shelf quantity of the branch in view, the difference is recorded) and its stock card. */
 
-type Target = { id: number; name: string; stock_quantity: string; shelf?: number | null };
+type Target = { id: number; name: string; stock_quantity: string; shelf?: number | null; held?: number | null };
 
 interface Movement {
     id: number;
@@ -22,7 +22,10 @@ interface Movement {
 export const MOVEMENT_TYPES: Record<string, string> = { purchase: 'شراء', sale: 'بيع', adjustment: 'تعديل جرد', return: 'مرتجع', void: 'إلغاء بيع', order: 'محجوز لطلب من الموقع', release: 'إلغاء طلب من الموقع' };
 
 export function AdjustModal({ product, onClose }: { product: Target; onClose: () => void }) {
-    const onShelf = product.shelf ?? Number(product.stock_quantity);
+    const book = product.shelf ?? Number(product.stock_quantity);
+    // Units website orders hold are off the book but still on the shelf until handed over: they are counted with it.
+    const held = product.held ?? 0;
+    const onShelf = book + held;
     const form = useForm({ counted: String(onShelf), reason: '' });
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -33,7 +36,8 @@ export function AdjustModal({ product, onClose }: { product: Target; onClose: ()
     return (
         <Modal open onClose={onClose} size="compact" title={`جرد: ${product.name}`} footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="adjust-form" loading={form.processing}>حفظ الجرد</Button></>}>
             <form id="adjust-form" onSubmit={submit} className="space-y-4">
-                <p className="text-sm text-muted">الرصيد في النظام لهذا الفرع: <span className="font-medium text-ink num">{number(onShelf, 3)}</span></p>
+                <p className="text-sm text-muted">الرصيد في النظام لهذا الفرع: <span className="font-medium text-ink num">{number(book, 3)}</span></p>
+                {held > 0 && <p className="text-sm text-amber-700">محجوز لطلبات الموقع (على الرف حتى التسليم): <span className="font-medium num">{number(held, 3)}</span> · المتوقع على الرف: <span className="font-medium num">{number(onShelf, 3)}</span></p>}
                 <Field label="الكمية الفعلية على الرف" error={form.errors.counted} required>
                     <Input type="number" step="any" min="0" dir="ltr" value={form.data.counted} onChange={(e) => form.setData('counted', e.target.value)} required />
                 </Field>

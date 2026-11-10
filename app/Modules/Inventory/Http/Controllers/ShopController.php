@@ -22,6 +22,7 @@ use App\Modules\Inventory\Services\ProductAddons;
 use App\Modules\Inventory\Services\ShopSettings;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Http\RendersSite;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -113,20 +114,30 @@ class ShopController extends Controller
             'payment_method' => ['required', 'in:'.implode(',', $methods)],
             'branch_id' => ['nullable', 'integer', TenantRule::exists('branches')],
             'website' => ['prohibited'], // honeypot: people leave it empty
+            'client_key' => ['nullable', 'string', 'max:60', 'regex:/^[A-Za-z0-9-]+$/'], // made when the cart opens
         ]);
 
         $member = Auth::guard('member')->user();
         $branchId = $data['branch_id'] ?? Branch::where('is_active', true)->orderByDesc('is_main')->value('id');
+        // Its own prefix: the till's keys share the column.
+        $key = isset($data['client_key']) ? 'web-'.$data['client_key'] : null;
 
-        $sale = $this->orders->place(
-            self::lines($data['items']),
-            ['name' => $data['name'], 'phone' => Phone::normalize($data['phone']), 'email' => $data['email'] ?? null, 'notes' => $data['notes'] ?? null],
-            $data['payment_method'],
-            $member instanceof Member ? $member : null,
-            $branchId,
-        );
+        try {
+            $sale = $this->orders->place(
+                self::lines($data['items']),
+                ['name' => $data['name'], 'phone' => Phone::normalize($data['phone']), 'email' => $data['email'] ?? null, 'notes' => $data['notes'] ?? null],
+                $data['payment_method'],
+                $member instanceof Member ? $member : null,
+                $branchId,
+                $key,
+            );
+        } catch (UniqueConstraintViolationException $e) {
+            // The same cart sent twice at the same moment: the first one placed the order.
+            $sale = ($key ? Sale::where('client_key', $key)->first() : null) ?? throw $e;
+        }
 
-        if ($sale->payment_method === 'paymob' && ! Money::isZero($sale->total)) {
+        // A cart sent again lands on its order's page, where it can still be paid: no second checkout is opened.
+        if ($sale->wasRecentlyCreated && $sale->payment_method === 'paymob' && ! Money::isZero($sale->total)) {
             return $this->checkout($sale);
         }
 
