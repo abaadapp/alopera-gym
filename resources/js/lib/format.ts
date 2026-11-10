@@ -1,4 +1,6 @@
-/** Formatting helpers. Amounts are strings with 3 decimals (OMR has 1000 baisa). */
+/** Formatting helpers. Amounts are strings with 3 decimals (OMR has 1000 baisa). On the English website and portal
+ * (lib/locale) dates, times, day counts and the currency are written in English; everywhere else as before. */
+import { currentLocale } from '@/lib/locale';
 
 export function money(value: string | number | null | undefined, currency = 'OMR'): string {
     const n = Number(value ?? 0);
@@ -7,12 +9,16 @@ export function money(value: string | number | null | undefined, currency = 'OMR
 }
 
 export function currencyLabel(currency: string): string {
+    if (currentLocale() === 'en') return currency;
     return ({ OMR: 'ر.ع', SAR: 'ر.س', AED: 'د.إ', KWD: 'د.ك', QAR: 'ر.ق', BHD: 'د.ب' } as Record<string, string>)[currency] ?? currency;
 }
 
 export function number(value: number | string | null | undefined, digits = 0): string {
     return new Intl.NumberFormat('en-US', { maximumFractionDigits: digits }).format(Number(value ?? 0));
 }
+
+const MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const dayFmtEn = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
 export const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 const dayFmt = new Intl.DateTimeFormat('ar-OM-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -29,19 +35,21 @@ export function date(value: string | null | undefined): string {
     if (!value) return '—';
     const d = new Date(value.length <= 10 ? `${value}T00:00:00` : value.replace(' ', 'T'));
     // Written out rather than by Intl: Safari's Arabic puts a comma before the year («1 أكتوبر، 2026») that Chrome does not.
-    return Number.isNaN(d.getTime()) ? value : `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+    if (Number.isNaN(d.getTime())) return value;
+    return `${d.getDate()} ${(currentLocale() === 'en' ? MONTHS_EN : MONTHS)[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 export function dayName(value: string): string {
     const d = new Date(value.length <= 10 ? `${value}T00:00:00` : value.replace(' ', 'T'));
-    return dayFmt.format(d);
+    return (currentLocale() === 'en' ? dayFmtEn : dayFmt).format(d);
 }
 
 export function time(value: string | null | undefined): string {
     if (!value) return '';
     const t = value.length > 5 ? value.slice(11, 16) || value.slice(0, 5) : value;
     const [h, m] = t.split(':').map(Number);
-    const suffix = h >= 12 ? 'م' : 'ص';
+    const en = currentLocale() === 'en';
+    const suffix = h >= 12 ? (en ? 'PM' : 'م') : en ? 'AM' : 'ص';
     const hh = h % 12 === 0 ? 12 : h % 12;
     return `${hh}:${String(m).padStart(2, '0')} ${suffix}`;
 }
@@ -60,6 +68,7 @@ export function whatsappUrl(value: string | null | undefined, text = ''): string
 /** Day counts with Arabic number agreement: «يوم واحد»، «يومين»، «3 أيام»، «12 يومًا». */
 export function dayCount(value: number | null | undefined): string {
     const n = Number(value ?? 0);
+    if (currentLocale() === 'en') return `${n} ${n === 1 ? 'day' : 'days'}`;
     if (n === 1) return 'يوم واحد';
     if (n === 2) return 'يومين';
     if (n >= 3 && n <= 10) return `${n} أيام`;
@@ -69,6 +78,7 @@ export function dayCount(value: number | null | undefined): string {
 /** For searching: Arabic-Indic digits as digits, the interchangeable letters folded and Latin in lower case, so «احمد» finds «أحمد». */
 /** «إضافة واحدة»، «إضافتان»، «3 إضافات»، «11 إضافة». */
 export function addonCount(value: number): string {
+    if (currentLocale() === 'en') return `${number(value)} ${value === 1 ? 'add-on' : 'add-ons'}`;
     if (value === 1) return 'إضافة واحدة';
     if (value === 2) return 'إضافتان';
     return `${number(value)} ${value >= 3 && value <= 10 ? 'إضافات' : 'إضافة'}`;

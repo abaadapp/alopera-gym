@@ -26,7 +26,7 @@ class Trainer extends Model implements BranchOwned
 
     protected function casts(): array
     {
-        return ['specialties' => 'array', 'is_public' => 'boolean', 'is_active' => 'boolean'];
+        return ['specialties' => 'array', 'specialties_en' => 'array', 'is_public' => 'boolean', 'is_active' => 'boolean'];
     }
 
     public function user(): BelongsTo

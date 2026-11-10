@@ -7,6 +7,8 @@ import { describe, lineTotal, payload, unitPrice } from '@/lib/addons';
 import { useCart } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { money } from '@/lib/format';
+import { useCarryOver } from '@/lib/carry-over';
+import { useT } from '@/lib/i18n';
 import { PageHero } from './Plans';
 import { ProductImage, type ShopProduct } from './Shop';
 
@@ -29,6 +31,7 @@ const METHOD = {
 
 export default function ShopCart({ site, seo, products, methods, branches, pickupNote, windowMinutes, prefill, currency }: Props) {
     const cart = useCart();
+    const t = useT();
     const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
     // Add-ons no longer offered drop out of a line (describe); the server prices what is sent again.
     const lines = cart.lines.flatMap((l) => {
@@ -59,6 +62,8 @@ export default function ShopCart({ site, seo, products, methods, branches, picku
         website: '',
         items: [] as { product_id: number; quantity: number; addons: { addon_id: number; quantity: number }[] }[],
     });
+    // The customer's details survive the language switch (the cart itself is kept in the browser already).
+    useCarryOver('shop-cart', form.data, (saved) => form.setData((d) => ({ ...d, ...saved, items: d.items })), ['items']);
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -73,13 +78,13 @@ export default function ShopCart({ site, seo, products, methods, branches, picku
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
-            <PageHero title="سلة المشتريات" icon={<ShoppingBag className="size-6" />} />
+            <PageHero title={t('سلة المشتريات')} icon={<ShoppingBag className="size-6" />} />
 
             <section className="mx-auto max-w-5xl px-4 py-10">
                 {lines.length === 0 ? (
                     <div className="py-12 text-center">
-                        <p className="text-muted">السلة فارغة.</p>
-                        <Link href={route('site.shop')} className="mt-4 inline-flex rounded-full bg-brand px-6 py-2.5 text-sm font-medium text-white">تصفح المتجر</Link>
+                        <p className="text-muted">{t('السلة فارغة.')}</p>
+                        <Link href={route('site.shop')} className="mt-4 inline-flex rounded-full bg-brand px-6 py-2.5 text-sm font-medium text-white">{t('تصفح المتجر')}</Link>
                     </div>
                 ) : (
                     <div className="grid gap-8 lg:grid-cols-[1fr_400px]">
@@ -90,55 +95,55 @@ export default function ShopCart({ site, seo, products, methods, branches, picku
                                     <div className="min-w-0 flex-1">
                                         <Link href={route('site.shop.product', product.id)} className="block truncate font-medium hover:text-brand">{product.name}</Link>
                                         {addons.map((a) => <p key={a.id} className="truncate text-xs text-muted">+ {a.name}{a.qty > 1 && <span className="num"> ×{a.qty}</span>} <span className="num">({money(Number(a.price) * a.qty, currency)})</span></p>)}
-                                        <p className="text-sm text-muted num">{money(unitPrice(product.price, chosen, product.addons), currency)}{addons.length > 0 && ' للقطعة مع الإضافات'}</p>
+                                        <p className="text-sm text-muted num">{money(unitPrice(product.price, chosen, product.addons), currency)}{addons.length > 0 && ` ${t('للقطعة مع الإضافات')}`}</p>
                                     </div>
                                     <div className="flex items-center rounded-full border border-line">
-                                        <button type="button" onClick={() => cart.setQty(key, qty - 1, product.max)} className="grid size-9 place-items-center" aria-label={`إنقاص ${product.name}`}>{qty === 1 ? <Trash2 className="size-4 text-red-600" /> : <Minus className="size-4" />}</button>
+                                        <button type="button" onClick={() => cart.setQty(key, qty - 1, product.max)} className="grid size-9 place-items-center" aria-label={t('إنقاص :name', { name: product.name })}>{qty === 1 ? <Trash2 className="size-4 text-red-600" /> : <Minus className="size-4" />}</button>
                                         <span className="w-8 text-center text-sm font-medium num">{qty}</span>
-                                        <button type="button" disabled={cart.quantityOf(product.id) >= product.max} onClick={() => cart.setQty(key, qty + 1, product.max)} className="grid size-9 place-items-center disabled:opacity-40" aria-label={`زيادة ${product.name}`}><Plus className="size-4" /></button>
+                                        <button type="button" disabled={cart.quantityOf(product.id) >= product.max} onClick={() => cart.setQty(key, qty + 1, product.max)} className="grid size-9 place-items-center disabled:opacity-40" aria-label={t('زيادة :name', { name: product.name })}><Plus className="size-4" /></button>
                                     </div>
                                     <p className="w-24 text-end font-semibold num">{money(lineTotal(product.price, qty, chosen, product.addons), currency)}</p>
                                 </li>
                             ))}
-                            <li className="flex items-center justify-between py-4 text-lg font-semibold"><span>الإجمالي</span><span className="num">{money(total, currency)}</span></li>
+                            <li className="flex items-center justify-between py-4 text-lg font-semibold"><span>{t('الإجمالي')}</span><span className="num">{money(total, currency)}</span></li>
                         </ul>
 
                         <form onSubmit={submit} className="h-fit space-y-4 rounded-3xl border border-line bg-white p-5">
-                            <h2 className="font-display text-lg font-semibold">بيانات الطلب</h2>
+                            <h2 className="font-display text-lg font-semibold">{t('بيانات الطلب')}</h2>
                             {methods.length === 0 ? (
-                                <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">الطلب من الموقع غير متاح حاليًا. تواصل مع النادي.</p>
+                                <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">{t('الطلب من الموقع غير متاح حاليًا. تواصل مع النادي.')}</p>
                             ) : (
                                 <>
-                                    <Field label="الاسم" error={form.errors.name} required>
+                                    <Field label={t('الاسم')} error={form.errors.name} required>
                                         <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} autoComplete="name" maxLength={120} />
                                     </Field>
-                                    <Field label="رقم الهاتف" error={form.errors.phone} required>
+                                    <Field label={t('رقم الهاتف')} error={form.errors.phone} required>
                                         <Input dir="ltr" inputMode="tel" value={form.data.phone} onChange={(e) => form.setData('phone', e.target.value)} autoComplete="tel" />
                                     </Field>
-                                    <Field label="البريد الإلكتروني (اختياري)" error={form.errors.email}>
+                                    <Field label={t('البريد الإلكتروني (اختياري)')} error={form.errors.email}>
                                         <Input dir="ltr" type="email" value={form.data.email} onChange={(e) => form.setData('email', e.target.value)} autoComplete="email" />
                                     </Field>
                                     {branches.length > 1 && (
-                                        <Field label="فرع الاستلام" error={form.errors.branch_id} required>
-                                            <Select value={form.data.branch_id} onChange={(e) => form.setData('branch_id', e.target.value)} placeholder="اختر الفرع">
+                                        <Field label={t('فرع الاستلام')} error={form.errors.branch_id} required>
+                                            <Select value={form.data.branch_id} onChange={(e) => form.setData('branch_id', e.target.value)} placeholder={t('اختر الفرع')}>
                                                 {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                                             </Select>
                                         </Field>
                                     )}
-                                    <Field label="ملاحظات (اختياري)" error={form.errors.notes}>
+                                    <Field label={t('ملاحظات (اختياري)')} error={form.errors.notes}>
                                         <Textarea rows={2} maxLength={500} value={form.data.notes} onChange={(e) => form.setData('notes', e.target.value)} />
                                     </Field>
                                     {/* Left empty by people; filled by bots. */}
                                     <input type="text" name="website" value={form.data.website} onChange={(e) => form.setData('website', e.target.value)} className="hidden" tabIndex={-1} autoComplete="off" aria-hidden="true" />
 
                                     <div className="space-y-2">
-                                        <p className="label">طريقة الدفع</p>
+                                        <p className="label">{t('طريقة الدفع')}</p>
                                         {methods.map((m) => {
                                             const { label, hint, icon: Icon } = METHOD[m];
                                             return (
                                                 <button key={m} type="button" onClick={() => form.setData('payment_method', m)} className={cn('flex w-full items-start gap-3 rounded-2xl border p-3 text-start transition', form.data.payment_method === m ? 'border-brand bg-brand-50' : 'border-line')}>
                                                     <Icon className="mt-0.5 size-5 shrink-0 text-brand" />
-                                                    <span><span className="block text-sm font-medium">{label}</span><span className="block text-xs text-muted">{hint}{m === 'paymob' && ` تُحجز الكميات لمدة ${windowMinutes} دقيقة حتى يكتمل الدفع.`}</span></span>
+                                                    <span><span className="block text-sm font-medium">{t(label)}</span><span className="block text-xs text-muted">{t(hint)}{m === 'paymob' && ` ${t('تُحجز الكميات لمدة :count دقيقة حتى يكتمل الدفع.', { count: windowMinutes })}`}</span></span>
                                                 </button>
                                             );
                                         })}
@@ -147,7 +152,7 @@ export default function ShopCart({ site, seo, products, methods, branches, picku
                                     {pickupNote && <p className="rounded-2xl bg-stone-50 p-3 text-xs leading-6 text-muted">{pickupNote}</p>}
                                     {form.errors.items && <p className="text-xs text-red-600">{form.errors.items}</p>}
                                     <Button type="submit" size="lg" className="w-full rounded-full" loading={form.processing} icon={<Lock className="size-4" />}>
-                                        {form.data.payment_method === 'paymob' ? `متابعة إلى الدفع — ${money(total, currency)}` : 'إرسال الطلب'}
+                                        {form.data.payment_method === 'paymob' ? t('متابعة إلى الدفع — :amount', { amount: money(total, currency) }) : t('إرسال الطلب')}
                                     </Button>
                                 </>
                             )}

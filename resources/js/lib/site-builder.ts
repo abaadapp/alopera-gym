@@ -262,6 +262,12 @@ export function mapErrors(errors: Record<string, string | string[]>, sent: SiteD
             const section = sent.sections[Number(m[1])];
             if (section) return { path: `sections.${section.id}${m[2] ?? ''}`, message, sectionId: section.id };
         }
+        // The English words of a section (doc.en.sections.3.data.title): on that section's English text.
+        const en = path.match(/^en\.sections\.(\d+)(\..*)?$/);
+        if (en) {
+            const section = sent.sections[Number(en[1])];
+            if (section) return { path: `en.sections.${section.id}${en[2] ?? ''}`, message };
+        }
         return { path, message };
     });
 }
@@ -386,8 +392,11 @@ export function normalizeDoc(doc: SiteDoc, schemas: Record<string, SectionTypeSc
             const id = (item as { id?: unknown }).id;
             return { ...item, id: typeof id === 'string' && id !== '' ? id : newItemId() };
         });
+    const en = (doc as { en?: unknown }).en;
     return {
         ...doc,
+        // The English words: always an object (the server sends an empty one as []).
+        en: (en && typeof en === 'object' && !Array.isArray(en) ? en : Array.isArray(en) && en.length ? Object.fromEntries(en.map((v, i) => [String(i), v])) : {}) as Record<string, unknown>,
         header: { ...doc.header, links: ids(doc.header?.links) },
         footer: { ...doc.footer, links: ids(doc.footer?.links) },
         contact: { ...doc.contact, hours: ids(doc.contact?.hours) },
