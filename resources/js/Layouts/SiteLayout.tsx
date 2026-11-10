@@ -6,6 +6,7 @@ import { useShared } from '@/hooks/useShared';
 import { useCart } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { phone as fmtPhone, whatsappUrl } from '@/lib/format';
+import { announceLanguageSwitch } from '@/lib/carry-over';
 import { tr, useLocale, useT } from '@/lib/i18n';
 import type { LinkData, SiteChrome } from '@/types/site';
 
@@ -56,7 +57,7 @@ function LanguageSwitch({ className, long = false }: { className?: string; long?
     const query = typeof window !== 'undefined' && !href.includes('?') ? window.location.search : '';
     const name = to === 'en' ? 'English' : 'العربية';
     return (
-        <a href={href + query} hrefLang={to} className={className} aria-label={to === 'en' ? 'English version' : 'النسخة العربية'}>
+        <a href={href + query} hrefLang={to} lang={to} className={className} aria-label={to === 'en' ? 'English version' : 'النسخة العربية'} onClick={announceLanguageSwitch}>
             <Languages className="size-[18px] shrink-0" aria-hidden />
             {/* The name in its own language and direction; the link sits in the page's own direction. */}
             {long ? <span lang={to} dir={to === 'en' ? 'ltr' : 'rtl'}>{name}</span> : (<><span lang={to} className="hidden sm:inline">{name}</span><span lang={to} className="sm:hidden">{to === 'en' ? 'EN' : 'عربي'}</span></>)}

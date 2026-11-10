@@ -6,6 +6,7 @@ import { Button, Checkbox, Field, Input } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money } from '@/lib/format';
+import { useCarryOver } from '@/lib/carry-over';
 import { useT } from '@/lib/i18n';
 import { PageHero, PlanCard, type PlanData } from './Plans';
 
@@ -35,6 +36,9 @@ export default function Join({ site, seo, plans, selected, onlinePayments, payAt
         pay_now: onlinePayments,
         website: '',
     });
+
+    // What was typed survives the language switch (never the password); a plan no longer offered is not restored.
+    useCarryOver('join', form.data, (saved) => form.setData((d) => ({ ...d, ...saved, membership_plan_id: plans.some((p) => p.id === saved.membership_plan_id) ? (saved.membership_plan_id as number) : d.membership_plan_id })));
 
     const plan = useMemo(() => plans.find((p) => p.id === form.data.membership_plan_id) ?? null, [plans, form.data.membership_plan_id]);
     const payOnline = onlinePayments && form.data.pay_now;

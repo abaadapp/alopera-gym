@@ -4,12 +4,17 @@ namespace Tests\Feature;
 
 use App\Core\Tenancy\SiteDomains;
 use App\Models\Tenant;
+use App\Models\TenantIntegration;
 use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Models\Program;
 use App\Modules\Gym\Models\Trainer;
+use App\Modules\Gym\Services\MembershipService;
+use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Website\Models\SitePost;
 use App\Modules\Website\Models\SiteSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia;
@@ -303,5 +308,105 @@ class WebsiteBilingualTest extends TestCase
         $this->get($this->base($club, '/en/join'))->assertOk()->assertInertia(fn (AssertableInertia $p) => $p->component('Site/Join')->where('plans.0.name', 'Monthly'));
         // A member's area asks for sign-in on the English side.
         $this->get($this->base($club, '/en/portal'))->assertRedirect(url($this->base($club, '/en/portal/login')));
+    }
+
+    public function test_error_pages_of_the_english_site_are_in_english_and_the_panel_keeps_its_own(): void
+    {
+        $club = $this->club();
+
+        $this->get($this->base($club, '/en/no-such-page'))->assertNotFound()
+            ->assertSee('<html lang="en" dir="ltr">', false)->assertSee('Page not found')->assertSee('Back')
+            ->assertSee('href="'.$this->base($club, '/en').'"', false)->assertDontSee('الصفحة غير موجودة');
+        $this->get($this->base($club, '/en/news/no-such-post'))->assertNotFound()->assertSee('Page not found');
+        $this->get($this->base($club, '/no-such-page'))->assertNotFound()
+            ->assertSee('<html lang="ar" dir="rtl">', false)->assertSee('الصفحة غير موجودة');
+        // The staff panel's errors are as they were.
+        $this->actingAs($this->owner($club))->get('/app/no-such-page')->assertNotFound()->assertSee('الصفحة غير موجودة')->assertSee('<html lang="ar" dir="rtl">', false);
+
+        // A server error on the English site (rendered as the 500 page with the English site's language).
+        app()->setLocale('en');
+        $this->assertStringContainsString('Something went wrong', view('errors.500')->render());
+        app()->setLocale('ar');
+        $this->assertStringContainsString('حدث خطأ غير متوقع', view('errors.500')->render());
+    }
+
+    /** Everything a visitor's browser gets for a page: the HTML and, decoded, the page data (Arabic is \u-escaped in it). */
+    private function seen(string $path): string
+    {
+        $response = $this->get($path)->assertOk();
+        $page = $response->baseResponse instanceof Response && isset($response->original) && method_exists($response->original, 'getData') ? ($response->original->getData()['page'] ?? null) : null;
+
+        return $response->getContent().json_encode($page, JSON_UNESCAPED_UNICODE);
+    }
+
+    public function test_drafts_in_either_language_never_reach_visitors(): void
+    {
+        $club = $this->club();
+        $this->plan($club, ['is_public' => true]);
+        [$doc, $version] = $this->editor($club);
+        $i = collect($doc['sections'])->search(fn ($s) => $s['type'] === 'hero');
+        $hero = $doc['sections'][$i]['id'];
+        $doc['sections'][$i]['data']['title'] = 'مسودة عربية لم تنشر';
+        $doc['en'] = ['sections' => [$hero => ['title' => 'Unpublished English draft']], 'seo' => ['title' => 'Draft English title']];
+        $this->save($club, $doc, $version)->assertSessionHasNoErrors();
+
+        auth()->logout();
+        foreach (['', '/en', '/plans', '/en/plans', '/sitemap.xml', '/en/contact', '/en/join'] as $path) {
+            $seen = $this->seen($this->base($club, $path));
+            foreach (['مسودة عربية لم تنشر', 'Unpublished English draft', 'Draft English title'] as $draft) {
+                $this->assertStringNotContainsString($draft, $seen, "$path shows the draft");
+            }
+        }
+        $this->assertStringContainsString('قوّتكِ', $this->seen($this->base($club, '')), 'the check reads the Arabic page data');
+
+        // Published: both languages show it; a newer draft again stays with the staff.
+        [, $version] = $this->editor($club);
+        $this->actingAs($this->owner($club))->post(route('club.website.publish'), ['version' => $version])->assertSessionHasNoErrors();
+        [$doc, $version] = $this->editor($club);
+        $doc['en']['sections'][$hero]['title'] = 'A second English draft';
+        $this->save($club, $doc, $version)->assertSessionHasNoErrors();
+        auth()->logout();
+        $en = $this->seen($this->base($club, '/en'));
+        $this->assertStringContainsString('Unpublished English draft', $en);
+        $this->assertStringNotContainsString('A second English draft', $en);
+        $this->assertStringContainsString('مسودة عربية لم تنشر', $this->seen($this->base($club, '')));
+    }
+
+    public function test_paying_from_the_english_site_comes_back_to_the_english_page(): void
+    {
+        $club = $this->club();
+        Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_abc', 'intention_order_id' => 9911], 201)]);
+        $this->asTenant($club, fn () => TenantIntegration::create([
+            'provider' => 'paymob', 'is_enabled' => true, 'mode' => 'test',
+            'credentials' => ['secret_key' => 'sk_test', 'public_key' => 'pk_test', 'hmac_secret' => 'h', 'integration_ids' => '111'],
+        ]));
+        $member = $this->member($club);
+        $plan = $this->plan($club, ['price' => 25]);
+        $token = $this->asTenant($club, fn () => app(MembershipService::class)->sell($member, $plan)->invoice()->first()->public_token);
+
+        $this->get($this->base($club, '/en/pay/'.$token))->assertOk()
+            ->assertInertia(fn (AssertableInertia $p) => $p->component('Site/Pay')->where('locale', 'en')->where('seo.alternates.ar', url($this->base($club, '/pay/'.$token))));
+        // To the gateway's checkout page, which sends the payer back to the English result page.
+        $this->post($this->base($club, '/en/pay/'.$token))->assertRedirect();
+        Http::assertSent(fn ($request) => str_contains((string) ($request['redirection_url'] ?? ''), $this->base($club, '/en/pay/return/')));
+
+        $reference = $this->asTenant($club, fn () => PaymentIntent::latest('id')->value('reference'));
+        $this->get($this->base($club, '/en/pay/return/'.$reference))->assertOk()
+            ->assertInertia(fn (AssertableInertia $p) => $p->component('Site/PaymentReturn')->where('locale', 'en')->where('seo.title', 'Payment result | '.$club->name));
+        $this->get($this->base($club, '/en/invoice/'.$token))->assertOk()->assertInertia(fn (AssertableInertia $p) => $p->component('Site/Invoice')->where('locale', 'en'));
+    }
+
+    public function test_sign_up_errors_on_the_english_site_are_in_english(): void
+    {
+        $club = $this->club();
+        $plan = $this->plan($club, ['is_public' => true]);
+        $form = ['membership_plan_id' => $plan->id, 'full_name' => 'Sara', 'phone' => '96890001122', 'password' => 'secret-pass-1', 'password_confirmation' => 'secret-pass-1', 'accept_terms' => '1', 'coupon_code' => 'NOPE'];
+
+        $this->from($this->base($club, '/en/join'))->post($this->base($club, '/en/join'), $form)
+            ->assertRedirect($this->base($club, '/en/join'))->assertSessionHasErrors(['coupon_code' => 'The coupon code is not valid.']);
+        $this->from($this->base($club, '/en/join'))->post($this->base($club, '/en/join'), ['accept_terms' => '0'] + $form)
+            ->assertSessionHasErrors(['accept_terms' => 'Please accept the terms and conditions.']);
+        $this->from($this->base($club, '/join'))->post($this->base($club, '/join'), $form)
+            ->assertSessionHasErrors(['coupon_code' => 'كود الخصم غير صالح.']);
     }
 }

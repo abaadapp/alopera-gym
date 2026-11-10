@@ -4,12 +4,14 @@ import { Clock, Mail, MapPin, MessageCircle, Phone, Send } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
 import { Button, Field, Input, Textarea } from '@/Components/ui';
 import { phone as fmtPhone, whatsappUrl } from '@/lib/format';
+import { useCarryOver } from '@/lib/carry-over';
 import { useT } from '@/lib/i18n';
 import { PageHero } from './Plans';
 
 export default function Contact({ site, seo }: { site: SiteInfo; seo: { title: string } }) {
     const t = useT();
     const form = useForm({ name: '', phone: '', email: '', subject: '', message: '', website: '' });
+    useCarryOver('contact', form.data, (saved) => form.setData((d) => ({ ...d, ...saved })));
 
     const submit = (e: FormEvent) => {
         e.preventDefault();

@@ -7,6 +7,7 @@ import { describe, lineTotal, payload, unitPrice } from '@/lib/addons';
 import { useCart } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { money } from '@/lib/format';
+import { useCarryOver } from '@/lib/carry-over';
 import { useT } from '@/lib/i18n';
 import { PageHero } from './Plans';
 import { ProductImage, type ShopProduct } from './Shop';
@@ -61,6 +62,8 @@ export default function ShopCart({ site, seo, products, methods, branches, picku
         website: '',
         items: [] as { product_id: number; quantity: number; addons: { addon_id: number; quantity: number }[] }[],
     });
+    // The customer's details survive the language switch (the cart itself is kept in the browser already).
+    useCarryOver('shop-cart', form.data, (saved) => form.setData((d) => ({ ...d, ...saved, items: d.items })), ['items']);
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
