@@ -39,7 +39,7 @@ class PortalAuthController extends Controller
         abort_unless($tenants->require()->setting('member_signup_enabled', true), 404);
 
         return $this->sitePage('join', 'Site/Join', [
-            'plans' => MembershipPlan::public()->orderBy('sort')->get()->map(fn ($p) => GymPresenter::plan($p)),
+            'plans' => MembershipPlan::public()->orderBy('sort')->get()->map(fn ($p) => GymPresenter::sitePlan($p)),
             'selected' => $request->integer('plan') ?: null,
             'onlinePayments' => $online->available(),
             'payAtReception' => (bool) $tenants->require()->setting('allow_pay_at_reception', true),
@@ -63,10 +63,10 @@ class PortalAuthController extends Controller
             'accept_terms' => ['accepted'],
             'pay_now' => ['boolean'],
             'website' => ['prohibited'], // honeypot
-        ], ['accept_terms.accepted' => 'يجب الموافقة على الشروط والأحكام.']);
+        ], ['accept_terms.accepted' => __('يجب الموافقة على الشروط والأحكام.')]);
 
         if (Member::withTrashed()->where('phone', Phone::normalize($data['phone']))->exists()) {
-            throw ValidationException::withMessages(['phone' => 'رقم الهاتف مسجّل مسبقًا. سجّل الدخول إلى بوابة الأعضاء أو تواصل مع الاستقبال.']);
+            throw ValidationException::withMessages(['phone' => __('رقم الهاتف مسجّل مسبقًا. سجّل الدخول إلى بوابة الأعضاء أو تواصل مع الاستقبال.')]);
         }
 
         $membership = DB::transaction(function () use ($data, $members, $memberships) {
@@ -100,13 +100,13 @@ class PortalAuthController extends Controller
         }
 
         return redirect()->route('portal.dashboard')->with('success', $invoice->isOpen()
-            ? ($online->available() ? 'تم التسجيل! أكمل الدفع لتفعيل اشتراكك (أونلاين من صفحة الفواتير أو في الاستقبال).' : 'تم التسجيل! أكمل الدفع في الاستقبال لتفعيل اشتراكك.')
-            : 'تم التسجيل وتفعيل اشتراكك. أهلًا بك!');
+            ? ($online->available() ? __('تم التسجيل! أكمل الدفع لتفعيل اشتراكك (أونلاين من صفحة الفواتير أو في الاستقبال).') : __('تم التسجيل! أكمل الدفع في الاستقبال لتفعيل اشتراكك.'))
+            : __('تم التسجيل وتفعيل اشتراكك. أهلًا بك!'));
     }
 
     public function login(): Response
     {
-        return $this->page('Portal/Login', [], 'دخول الأعضاء');
+        return $this->page('Portal/Login', [], __('دخول الأعضاء'));
     }
 
     public function authenticate(Request $request): RedirectResponse
@@ -124,7 +124,7 @@ class PortalAuthController extends Controller
 
         if (! $member || ! $member->password || $member->status === Member::BLOCKED || DemoAccounts::blocked($member->email)
             || ! Auth::guard('member')->attempt(['id' => $member->id, 'password' => $data['password']], $request->boolean('remember'))) {
-            throw ValidationException::withMessages(['login' => 'بيانات الدخول غير صحيحة. إن لم تُفعّل حسابك بعد، تواصل مع الاستقبال.']);
+            throw ValidationException::withMessages(['login' => __('بيانات الدخول غير صحيحة. إن لم تُفعّل حسابك بعد، تواصل مع الاستقبال.')]);
         }
 
         $request->session()->regenerate();
