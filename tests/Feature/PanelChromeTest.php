@@ -272,6 +272,20 @@ class PanelChromeTest extends TestCase
         $this->assertTrue(Hash::check('NewPass#2026x', $user->fresh()->password));
     }
 
+    public function test_my_account_without_a_phone_in_the_request_keeps_the_phone_instead_of_a_server_error(): void
+    {
+        $club = $this->club();
+        $user = $this->staff($club, 'reception', ['phone' => '96891112222']);
+
+        $this->actingAs($user)->put(route('club.account.update'), ['name' => 'ريم السالمية'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('ريم السالمية', $user->fresh()->name);
+        $this->assertSame('96891112222', $user->fresh()->phone, 'a phone not sent is kept');
+
+        $this->actingAs($user)->put(route('club.account.update'), ['name' => 'ريم السالمية', 'phone' => ''])->assertSessionHasNoErrors();
+        $this->assertNull($user->fresh()->phone, 'a phone sent empty is cleared, as before');
+    }
+
     // ─── Search ───────────────────────────────────────────────────────────
 
     public function test_search_returns_only_what_the_user_may_open_with_arabic_letters_and_digits(): void

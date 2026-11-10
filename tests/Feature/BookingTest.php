@@ -8,6 +8,7 @@ use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\ClassSchedule;
 use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\Trainer;
 use App\Modules\Gym\Services\BookingService;
 use App\Modules\Gym\Services\MembershipService;
 use App\Modules\Gym\Services\ScheduleService;
@@ -248,6 +249,19 @@ class BookingTest extends TestCase
 
         // Onto another occurrence of the same line: refused, not a server error.
         $this->actingAs($owner)->put(route('club.sessions.update', $first), $form($second->starts_at->format('Y-m-d H:i')))->assertSessionHasErrors('starts_at');
+    }
+
+    public function test_editing_a_class_with_a_trainer_without_trainer_id_in_the_request_is_not_a_server_error(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $trainer = $this->asTenant($club, fn () => Trainer::create(['name' => 'مدربة', 'is_active' => true]));
+        $session = $this->classSession($club, null, ['trainer_id' => $trainer->id]);
+
+        // Not sent is the same as sent empty (the save takes `?? null`): the class is left without a trainer.
+        $this->actingAs($owner)->put(route('club.sessions.update', $session), ['capacity' => 10, 'starts_at' => $session->starts_at->format('Y-m-d H:i')])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertNull($session->fresh()->trainer_id);
     }
 
     public function test_member_books_from_the_portal_and_full_sessions_are_refused_with_a_message(): void
