@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import type { ComponentType } from 'react';
 import ErrorBoundary from './Components/ErrorBoundary';
 import { enterEndsTypingOnTouch } from './lib/enter-key';
+import { setLocale } from './lib/locale';
 import { watchOnScreenKeyboard } from './lib/keyboard';
 import { markTouchDevice } from './lib/touch';
 
@@ -38,10 +39,15 @@ createInertiaApp({
     },
     setup({ el, App, props }) {
         applyBrand(props.initialPage.props as Record<string, unknown>);
+        // The page's language (Arabic, or English on /en/...) for the formatting helpers and <html lang dir>.
+        setLocale((props.initialPage.props as Record<string, unknown>).locale);
         markTouchDevice();
         enterEndsTypingOnTouch();
         watchOnScreenKeyboard();
-        router.on('navigate', (event) => applyBrand(event.detail.page.props as Record<string, unknown>));
+        router.on('navigate', (event) => {
+            applyBrand(event.detail.page.props as Record<string, unknown>);
+            setLocale((event.detail.page.props as Record<string, unknown>).locale);
+        });
         router.on('error', revealFirstError);
         createRoot(el).render(
             <ErrorBoundary>

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Website\Content;
 
+use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Modules\Gym\Models\ClassSession;
@@ -66,6 +67,8 @@ final class SiteRenderer
     public function render(array $doc, bool $preview = false): array
     {
         $this->tenant = $this->tenants->require();
+        // The page's language: the English site takes the owner's English words (SiteTranslation).
+        $doc = SiteTranslation::apply($doc, SiteLanguage::current());
         $this->homeUrl = route('site.home');
         $this->shopOpen = $this->shop->shopOpen($this->tenant);
         $this->signup = (bool) $this->tenant->setting('member_signup_enabled', true);
@@ -226,9 +229,9 @@ final class SiteRenderer
             case 'hero':
                 return ['next_class' => ($data['show_next_class'] ?? false) ? $this->nextClass() : null];
             case 'programs':
-                return ['programs' => Program::public()->orderBy('sort')->limit($limit(6))->get()->map(fn (Program $p) => $p->only('id', 'name', 'description', 'category', 'level', 'duration_minutes') + ['image_url' => $p->imageUrl()])->all(), 'all_url' => route('site.programs')];
+                return ['programs' => Program::public()->orderBy('sort')->limit($limit(6))->get()->map(fn (Program $p) => ['name' => SiteLanguage::pick($p->name, $p->name_en), 'description' => SiteLanguage::pick($p->description, $p->description_en)] + $p->only('id', 'category', 'level', 'duration_minutes') + ['image_url' => $p->imageUrl()])->all(), 'all_url' => route('site.programs')];
             case 'trainers':
-                return ['trainers' => Trainer::public()->orderBy('sort')->limit($limit(4))->get()->map(fn (Trainer $t) => ['id' => $t->id, 'name' => $t->name, 'bio' => $t->bio, 'specialties' => $t->specialties, 'photo_url' => $t->photoUrl()])->all(), 'all_url' => route('site.trainers')];
+                return ['trainers' => Trainer::public()->orderBy('sort')->limit($limit(4))->get()->map(fn (Trainer $t) => ['id' => $t->id, 'name' => SiteLanguage::pick($t->name, $t->name_en), 'bio' => SiteLanguage::pick($t->bio, $t->bio_en), 'specialties' => SiteLanguage::pickList($t->specialties, $t->specialties_en), 'photo_url' => $t->photoUrl()])->all(), 'all_url' => route('site.trainers')];
             case 'plans':
                 return ['plans' => $this->plans($limit(3)), 'all_url' => route('site.plans'), 'currency' => $this->tenant->currency];
             case 'join':
@@ -241,7 +244,7 @@ final class SiteRenderer
                 $kind = $data['kind'] ?? 'all';
 
                 return ['posts' => SitePost::visible()->when($kind !== 'all', fn ($q) => $q->where('type', $kind))->latest('published_at')->limit(max(1, min(9, (int) ($data['limit'] ?? 3))))->get()
-                    ->map(fn (SitePost $p) => ['id' => $p->id, 'type' => $p->type, 'title' => $p->title, 'excerpt' => $p->excerpt, 'image_url' => $p->image_path ? Storage::disk('public')->url($p->image_path) : null, 'published_at' => $p->published_at?->toDateString(), 'ends_on' => $p->ends_on?->toDateString(), 'url' => route('site.post', ['slug' => $p->slug])])->all(),
+                    ->map(fn (SitePost $p) => ['id' => $p->id, 'type' => $p->type, 'title' => SiteLanguage::pick($p->title, $p->title_en), 'excerpt' => SiteLanguage::pick($p->excerpt, $p->excerpt_en), 'image_url' => $p->image_path ? Storage::disk('public')->url($p->image_path) : null, 'published_at' => $p->published_at?->toDateString(), 'ends_on' => $p->ends_on?->toDateString(), 'url' => route('site.post', ['slug' => $p->slug])])->all(),
                     'all_url' => route('site.news')];
             case 'contact':
                 return ['send_url' => route('site.contact.send')];
@@ -287,9 +290,9 @@ final class SiteRenderer
     private function plans(int $limit): array
     {
         return MembershipPlan::public()->orderByDesc('is_featured')->orderBy('sort')->limit($limit)->get()->map(fn (MembershipPlan $p) => [
-            'id' => $p->id, 'name' => $p->name, 'description' => $p->description, 'price' => (string) $p->price,
-            'signup_fee' => $p->signup_fee !== null ? (string) $p->signup_fee : null, 'duration_label' => $p->durationLabel(),
-            'type_label' => MembershipPlan::TYPES[$p->type] ?? $p->type, 'features' => $p->features, 'is_featured' => (bool) $p->is_featured,
+            'id' => $p->id, 'name' => SiteLanguage::pick($p->name, $p->name_en), 'description' => SiteLanguage::pick($p->description, $p->description_en), 'price' => (string) $p->price,
+            'signup_fee' => $p->signup_fee !== null ? (string) $p->signup_fee : null, 'duration_label' => $p->siteDurationLabel(),
+            'type_label' => SiteLanguage::word(MembershipPlan::TYPES[$p->type] ?? $p->type), 'features' => SiteLanguage::pickList($p->features, $p->features_en), 'is_featured' => (bool) $p->is_featured,
             'join_url' => route('site.join', ['plan' => $p->id]),
         ])->all();
     }
@@ -297,10 +300,10 @@ final class SiteRenderer
     /** @return list<array<string, mixed>> */
     private function products(int $limit): array
     {
-        return Product::onWebsite()->with('category:id,name')->orderBy('name')->limit($limit)->get()->map(function (Product $p) {
+        return Product::onWebsite()->with('category:id,name,name_en')->orderBy('name')->limit($limit)->get()->map(function (Product $p) {
             $available = $p->available();
 
-            return ['id' => $p->id, 'name' => $p->name, 'price' => (string) $p->price, 'category' => $p->category?->name, 'image_url' => $p->imageUrl(),
+            return ['id' => $p->id, 'name' => SiteLanguage::pick($p->name, $p->name_en), 'price' => (string) $p->price, 'category' => SiteLanguage::pick($p->category?->name, $p->category?->name_en), 'image_url' => $p->imageUrl(),
                 'in_stock' => $available === null || $available >= 1, 'url' => route('site.shop.product', ['product' => $p->id])];
         })->all();
     }
@@ -309,7 +312,7 @@ final class SiteRenderer
     private function schedule(int $days, bool $showTrainer): array
     {
         $start = CarbonImmutable::today();
-        $sessions = ClassSession::with(['program:id,name', 'trainer:id,name'])
+        $sessions = ClassSession::with(['program:id,name,name_en', 'trainer:id,name,name_en'])
             ->where('status', ClassSession::SCHEDULED)
             ->whereHas('program', fn ($q) => $q->where('is_public', true))
             ->where('starts_at', '>=', now())
@@ -324,8 +327,8 @@ final class SiteRenderer
                 'label' => $this->dayLabel($date),
                 'sessions' => ($byDay[$date->toDateString()] ?? collect())->map(fn (ClassSession $s) => [
                     'id' => $s->id,
-                    'program' => $s->program?->name,
-                    'trainer' => $showTrainer ? $s->trainer?->name : null,
+                    'program' => SiteLanguage::pick($s->program?->name, $s->program?->name_en),
+                    'trainer' => $showTrainer ? SiteLanguage::pick($s->trainer?->name, $s->trainer?->name_en) : null,
                     'date' => $s->starts_at->toDateString(),
                     'time' => $s->starts_at->format('H:i'),
                     'end_time' => $s->ends_at->format('H:i'),
@@ -342,15 +345,19 @@ final class SiteRenderer
     /** @return array<string, string>|null */
     private function nextClass(): ?array
     {
-        $s = ClassSession::with('program:id,name')->where('status', ClassSession::SCHEDULED)
+        $s = ClassSession::with('program:id,name,name_en')->where('status', ClassSession::SCHEDULED)
             ->whereHas('program', fn ($q) => $q->where('is_public', true))
             ->where('starts_at', '>', now())->where('starts_at', '<', now()->addDays(7))->orderBy('starts_at')->first();
 
-        return $s ? ['name' => (string) $s->program?->name, 'date' => $s->starts_at->toDateString(), 'time' => $s->starts_at->format('H:i'), 'day_label' => $this->dayLabel(CarbonImmutable::parse($s->starts_at))] : null;
+        return $s ? ['name' => (string) SiteLanguage::pick($s->program?->name, $s->program?->name_en), 'date' => $s->starts_at->toDateString(), 'time' => $s->starts_at->format('H:i'), 'day_label' => $this->dayLabel(CarbonImmutable::parse($s->starts_at))] : null;
     }
 
     private function dayLabel(CarbonImmutable $date): string
     {
+        if (SiteLanguage::isEnglish()) {
+            return $date->locale('en')->translatedFormat('l j F');
+        }
+
         return self::WEEKDAYS[$date->dayOfWeek].' '.$date->day.' '.self::MONTHS[$date->month - 1];
     }
 

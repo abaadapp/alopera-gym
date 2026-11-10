@@ -16,7 +16,7 @@ class PtPackageController extends Controller
     public function index(): Response
     {
         return Inertia::render('Gym/Pt/Packages', [
-            'packages' => PtPackage::with('trainer:id,name')->orderBy('price')->get()->map(fn ($p) => $p->only('id', 'name', 'description', 'sessions_count', 'session_minutes', 'price', 'validity_days', 'trainer_id', 'is_public', 'is_active') + ['trainer' => $p->trainer?->name]),
+            'packages' => PtPackage::with('trainer:id,name')->orderBy('price')->get()->map(fn ($p) => $p->only('id', 'name', 'name_en', 'description', 'description_en', 'sessions_count', 'session_minutes', 'price', 'validity_days', 'trainer_id', 'is_public', 'is_active') + ['trainer' => $p->trainer?->name]),
             'trainers' => Trainer::where('is_active', true)->get(['id', 'name']),
         ]);
     }
@@ -49,6 +49,8 @@ class PtPackageController extends Controller
         return $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:1000'],
+            'name_en' => ['nullable', 'string', 'max:120'],
+            'description_en' => ['nullable', 'string', 'max:1000'],
             'sessions_count' => ['required', 'integer', 'min:1', 'max:200'],
             'session_minutes' => ['required', 'integer', 'min:15', 'max:240'],
             'price' => ['required', 'numeric', 'min:0', 'max:99999'],

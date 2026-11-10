@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import { Clock, Dumbbell, Eye, EyeOff, ImagePlus, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
+import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, EnglishFields, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { number } from '@/lib/format';
 
 type Program = {
@@ -12,6 +12,8 @@ type Program = {
     category: string;
     level: string;
     description: string | null;
+    name_en?: string | null;
+    description_en?: string | null;
     color: string;
     duration_minutes: number;
     default_capacity: number;
@@ -30,6 +32,8 @@ type FormData = {
     category: string;
     level: string;
     description: string;
+    name_en: string;
+    description_en: string;
     color: string;
     duration_minutes: number | string;
     default_capacity: number | string;
@@ -44,6 +48,8 @@ const empty: FormData = {
     category: 'class',
     level: 'all',
     description: '',
+    name_en: '',
+    description_en: '',
     color: '#db2777',
     duration_minutes: 60,
     default_capacity: 15,
@@ -75,6 +81,8 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
             category: p.category,
             level: p.level,
             description: p.description ?? '',
+            name_en: p.name_en ?? '',
+            description_en: p.description_en ?? '',
             color: p.color,
             duration_minutes: p.duration_minutes,
             default_capacity: p.default_capacity,
@@ -222,6 +230,14 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                     <Field label="الوصف" error={form.errors.description} className="sm:col-span-2" hint="يظهر في صفحة البرامج على الموقع">
                         <Textarea value={form.data.description} onChange={(e) => form.setData('description', e.target.value)} rows={3} />
                     </Field>
+                    <EnglishFields filled={Boolean(form.data.name_en || form.data.description_en)} className="sm:col-span-2">
+                        <Field label="الاسم بالإنجليزية" error={form.errors.name_en}>
+                            <Input dir="ltr" lang="en" maxLength={120} value={form.data.name_en} onChange={(e) => form.setData('name_en', e.target.value)} />
+                        </Field>
+                        <Field label="الوصف بالإنجليزية" error={form.errors.description_en}>
+                            <Textarea dir="ltr" lang="en" rows={3} maxLength={3000} value={form.data.description_en} onChange={(e) => form.setData('description_en', e.target.value)} />
+                        </Field>
+                    </EnglishFields>
                     <Field label="صورة البرنامج" error={form.errors.image} className="sm:col-span-2" hint="تُضغط تلقائيًا لتسريع الموقع">
                         <label className="flex cursor-pointer items-center gap-4 rounded-xl border border-dashed border-line p-3 hover:border-brand-300">
                             {preview ? <img src={preview} alt="" className="size-16 rounded-lg object-cover" /> : <span className="grid size-16 place-items-center rounded-lg bg-brand-50 text-brand"><ImagePlus className="size-6" /></span>}

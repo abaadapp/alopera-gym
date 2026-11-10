@@ -4,6 +4,7 @@ export { Field, Input, Textarea, Select, Checkbox, Switch, Toggle, FileInput } f
 export { Card, CardFooter, CardHeader, FlatCards, PageHeader, BackLink, Badge, StatCard, StatGrid, TrendLine, EmptyState, Stat, cardHover, cardActive, type StatTrend } from './Card';
 export { SummaryCard, SummaryRow, NavCard, ReportCard, ItemCard, ChoiceCard, choiceClass, Notice, FormSection } from './Cards';
 export { default as Modal } from './Modal';
+export { default as EnglishFields, linesOf } from './EnglishFields';
 export { default as Tabs } from './Tabs';
 export { default as DataTable, type Column, type TableFilter, type TableSort, type PageMeta } from './DataTable';
 export { default as RowActions, type RowAction } from './RowActions';

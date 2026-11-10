@@ -10,6 +10,7 @@ import { number } from '@/lib/format';
 interface Category {
     id: number;
     name: string;
+    name_en?: string | null;
     products: number;
     active: number;
     website: number;
@@ -113,10 +114,13 @@ export default function CategoriesIndex({ categories, uncategorised }: { categor
 }
 
 function CategoryModal({ category, onClose }: { category: Category | null; onClose: () => void }) {
-    const form = useForm({ name: category?.name ?? '' });
+    // A row that came without its English name renames the Arabic only: no English goes, so the saved one is kept.
+    const english = category === null || category.name_en !== undefined;
+    const form = useForm({ name: category?.name ?? '', name_en: category?.name_en ?? '' });
     const submit = (e: FormEvent) => {
         e.preventDefault();
         const options = { preserveScroll: true, onSuccess: onClose };
+        form.transform((d) => (english ? d : { name: d.name }));
         if (category) form.put(route('club.product-categories.update', category.id), options);
         else form.post(route('club.product-categories.store'), options);
     };
@@ -127,6 +131,11 @@ function CategoryModal({ category, onClose }: { category: Category | null; onClo
                 <Field label="اسم التصنيف" error={form.errors.name} required>
                     <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} maxLength={80} placeholder="مثل: المكملات الغذائية" autoFocus />
                 </Field>
+                {english && (
+                    <Field label="الاسم بالإنجليزية (اختياري)" error={form.errors.name_en} hint="يظهر في الموقع الإنجليزي. ما تتركه فارغًا يظهر بالعربية." className="mt-4">
+                        <Input dir="ltr" lang="en" value={form.data.name_en} onChange={(e) => form.setData('name_en', e.target.value)} maxLength={80} />
+                    </Field>
+                )}
             </form>
         </Modal>
     );
