@@ -139,6 +139,28 @@ class Membership extends Model
         return $date->betweenIncluded($this->starts_on, $this->ends_on);
     }
 
+    /**
+     * Does this period let the member in on `$date` (the club's day)? Its dates decide from 00:00, not the 00:10 job
+     * that flips the statuses: a paid period whose start has come does, unless an earlier period of the member is
+     * frozen (it waits for the resume, which moves it back); a period past its end date does not, whatever its status
+     * still says. Frozen, pending, expired and cancelled periods never do.
+     */
+    public function grantsAccessOn(CarbonImmutable $date): bool
+    {
+        return $this->coversDate($date) && match ($this->status) {
+            self::ACTIVE => true,
+            self::SCHEDULED => ! $this->heldByFreeze(),
+            default => false,
+        };
+    }
+
+    /** An earlier period of the same member is frozen: this one cannot start before it resumes (and moves it back). */
+    public function heldByFreeze(): bool
+    {
+        return self::where('member_id', $this->member_id)->whereKeyNot($this->id)
+            ->where('status', self::FROZEN)->where('starts_on', '<', $this->starts_on)->exists();
+    }
+
     public function hasSessionsLeft(): bool
     {
         return $this->sessions_total === null || $this->sessions_used < $this->sessions_total;

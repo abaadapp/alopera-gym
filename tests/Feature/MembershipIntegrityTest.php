@@ -128,6 +128,34 @@ class MembershipIntegrityTest extends TestCase
         });
     }
 
+    public function test_a_frozen_member_books_no_class_on_the_dates_of_the_renewal_waiting_behind_the_freeze(): void
+    {
+        $club = $this->club();
+        $member = $this->member($club);
+        $plan = $this->plan($club, ['duration_value' => 10, 'duration_unit' => 'day', 'freeze_allowed' => true, 'max_freeze_days' => 30]);
+
+        $renewal = $this->asTenant($club, function () use ($member, $plan) {
+            $current = $this->activeMembership(app(TenantContext::class)->require(), $member, $plan);
+            $renewal = $this->svc()->renew($member, $plan);
+            $this->pay($renewal);
+            $this->svc()->freeze($current->fresh(), 30);
+
+            return $renewal->fresh();
+        });
+        // A class on a day the renewal still names, while the period before it is frozen.
+        $session = $this->classSession($club, null, ['starts_at' => $renewal->starts_on->addDays(2)->setTime(18, 0), 'ends_at' => $renewal->starts_on->addDays(2)->setTime(19, 0)]);
+
+        $this->asTenant($club, function () use ($member, $session) {
+            try {
+                app(BookingService::class)->book($member->fresh(), $session);
+                $this->fail('a frozen member booked a class on the renewal waiting behind the freeze');
+            } catch (BusinessRuleException $e) {
+                $this->assertSame('العضوية مجمّدة حاليًا.', $e->getMessage());
+            }
+            $this->assertSame(0, Booking::where('member_id', $member->id)->count());
+        });
+    }
+
     public function test_a_renewal_sold_or_paid_while_the_period_is_frozen_past_its_end_waits_for_it(): void
     {
         $club = $this->club();
