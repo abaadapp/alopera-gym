@@ -149,7 +149,8 @@ final class InboundProcessor
                 return;
             }
             $text = (string) $message->body;
-            $member = $conversation->member;
+            // A chat opened before she joined is not linked to her: the one member with this number is still who said it.
+            $member = $conversation->member ?? $this->conversations->matchMember($conversation->phone);
             if ($member && in_array(mb_strtolower(trim($text)), self::STOP_WORDS, true)) {
                 if ($member->marketing_opt_in) {
                     $member->forceFill(['marketing_opt_in' => false, 'marketing_opt_out_at' => now()])->save();
