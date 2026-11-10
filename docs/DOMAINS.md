@@ -20,6 +20,7 @@
 | الطلب | النتيجة |
 |---|---|
 | `aloperagym.om/plans` | صفحة الباقات، والعنوان في المتصفح يبقى `/plans` |
+| `aloperagym.om/en/plans` | صفحة الباقات بالإنجليزية (#68)، والعنوان يبقى `/en/plans`؛ وكل صفحة للموقع والبوابة كذلك تحت `/en` |
 | `aloperagym.om/c/alopera/plans` (رابط قديم، GET) | 301 إلى `aloperagym.om/plans` مع الاستعلام نفسه |
 | نموذج قديم يُرسل POST إلى `aloperagym.om/c/alopera/...` | يُنفَّذ كما هو، دون تحويل يُضيع بياناته |
 | `www.aloperagym.om/...` (GET) | 301 إلى `aloperagym.om/...` |

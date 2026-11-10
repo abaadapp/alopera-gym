@@ -1,16 +1,21 @@
 @php
     // Error pages must render even when the session, tenant or assets are unavailable.
     $home = '/';
+    // On the English website (/en/..., SiteLocale) the page is in English and its home link stays on the English site;
+    // everywhere else, the staff panel included, it is Arabic as before.
+    $english = app()->getLocale() === 'en';
     try {
         $user = auth()->user();
         if ($user && method_exists($user, 'homeRoute')) {
             $home = route($user->homeRoute());
+        } elseif ($english) {
+            $home = preg_match('#^/c/([a-z0-9-]+)#', request()->getPathInfo(), $m) ? '/c/'.$m[1].'/en' : '/en';
         }
     } catch (\Throwable) {
     }
 @endphp
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{{ $english ? 'en' : 'ar' }}" dir="{{ $english ? 'ltr' : 'rtl' }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -37,8 +42,8 @@
     <h1>@yield('title')</h1>
     <p>@yield('message')</p>
     <div class="actions">
-        <a class="primary" href="{{ $home }}">الصفحة الرئيسية</a>
-        <button class="ghost" type="button" onclick="history.length > 1 ? history.back() : location.assign('{{ $home }}')">رجوع</button>
+        <a class="primary" href="{{ $home }}">{{ __('الصفحة الرئيسية') }}</a>
+        <button class="ghost" type="button" onclick="history.length > 1 ? history.back() : location.assign('{{ $home }}')">{{ __('رجوع') }}</button>
     </div>
 </main>
 </body>

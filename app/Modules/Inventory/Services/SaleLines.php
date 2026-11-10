@@ -4,6 +4,7 @@ namespace App\Modules\Inventory\Services;
 
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
+use App\Core\Support\SiteLanguage;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Models\Sale;
@@ -52,10 +53,10 @@ final class SaleLines
                 $addon = $addons->get((int) $pick['addon_id']);
                 $count = (int) $pick['quantity'];
                 if (! $addon || ! $addon->fits($product) || isset($chosen[$addon->id])) {
-                    throw new BusinessRuleException($prefix.'.addon', 'إحدى الإضافات المختارة لم تعد متاحة مع «'.$product->name.'». حدّث السلة وحاول مرة أخرى.', 'items');
+                    throw new BusinessRuleException($prefix.'.addon', __('إحدى الإضافات المختارة لم تعد متاحة مع «:product». حدّث السلة وحاول مرة أخرى.', ['product' => SiteLanguage::pick($product->name, $product->name_en)]), 'items');
                 }
                 if ($count < 1 || $count > max(1, $addon->max_quantity)) {
-                    throw new BusinessRuleException($prefix.'.addon_quantity', 'الحد المسموح من «'.$addon->name.'» هو '.max(1, $addon->max_quantity).' لكل قطعة.', 'items');
+                    throw new BusinessRuleException($prefix.'.addon_quantity', __('الحد المسموح من «:addon» هو :max لكل قطعة.', ['addon' => $addon->name, 'max' => max(1, $addon->max_quantity)]), 'items');
                 }
                 $units = round($count * $qty, 3);
                 $total = Money::mul($addon->price, $units);

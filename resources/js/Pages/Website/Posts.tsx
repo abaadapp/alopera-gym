@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import { ImagePlus, Newspaper, Pencil, Plus, Tag, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Tabs, Textarea, Toggle } from '@/Components/ui';
+import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, EnglishFields, Field, Input, Modal, PageHeader, Select, Tabs, Textarea, Toggle } from '@/Components/ui';
 import { date } from '@/lib/format';
 
 interface Post {
@@ -12,6 +12,9 @@ interface Post {
     slug: string;
     excerpt: string | null;
     body: string | null;
+    title_en?: string | null;
+    excerpt_en?: string | null;
+    body_en?: string | null;
     is_published: boolean;
     image_url: string | null;
     starts_on: string | null;
@@ -24,6 +27,9 @@ type PostForm = {
     title: string;
     excerpt: string;
     body: string;
+    title_en: string;
+    excerpt_en: string;
+    body_en: string;
     starts_on: string;
     ends_on: string;
     is_published: boolean;
@@ -94,6 +100,9 @@ function PostModal({ post, onClose }: { post: Post | null; onClose: () => void }
         title: post?.title ?? '',
         excerpt: post?.excerpt ?? '',
         body: post?.body ?? '',
+        title_en: post?.title_en ?? '',
+        excerpt_en: post?.excerpt_en ?? '',
+        body_en: post?.body_en ?? '',
         starts_on: post?.starts_on ?? '',
         ends_on: post?.ends_on ?? '',
         is_published: post?.is_published ?? true,
@@ -137,6 +146,17 @@ function PostModal({ post, onClose }: { post: Post | null; onClose: () => void }
                 <Field label="المحتوى" error={form.errors.body}>
                     <Textarea rows={6} value={form.data.body} onChange={(e) => form.setData('body', e.target.value)} />
                 </Field>
+                <EnglishFields filled={Boolean(form.data.title_en || form.data.excerpt_en || form.data.body_en)}>
+                    <Field label="العنوان بالإنجليزية" error={form.errors.title_en}>
+                        <Input dir="ltr" lang="en" maxLength={160} value={form.data.title_en} onChange={(e) => form.setData('title_en', e.target.value)} />
+                    </Field>
+                    <Field label="الملخص بالإنجليزية" error={form.errors.excerpt_en}>
+                        <Textarea dir="ltr" lang="en" rows={2} maxLength={500} value={form.data.excerpt_en} onChange={(e) => form.setData('excerpt_en', e.target.value)} />
+                    </Field>
+                    <Field label="النص بالإنجليزية" error={form.errors.body_en}>
+                        <Textarea dir="ltr" lang="en" rows={6} maxLength={20000} value={form.data.body_en} onChange={(e) => form.setData('body_en', e.target.value)} />
+                    </Field>
+                </EnglishFields>
                 <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="يبدأ في" error={form.errors.starts_on}>
                         <Input type="date" value={form.data.starts_on} onChange={(e) => form.setData('starts_on', e.target.value)} />

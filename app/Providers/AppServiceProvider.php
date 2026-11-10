@@ -6,6 +6,7 @@ use App\Core\Audit\AuditLogger;
 use App\Core\Auth\PermissionRegistry;
 use App\Core\Notifications\StaffNotifier;
 use App\Core\Support\Phone;
+use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\IdPresenceVerifier;
 use App\Core\Tenancy\SiteDomains;
@@ -140,12 +141,16 @@ class AppServiceProvider extends ServiceProvider
         });
 
         URL::formatPathUsing(function (string $path, $route) {
-            $domains = $this->app->make(SiteDomains::class);
-            if (! SiteDomains::isSiteRoute($route) || ! $domains->enabled()) {
+            if (! SiteDomains::isSiteRoute($route)) {
                 return $path;
             }
+            $domains = $this->app->make(SiteDomains::class);
+            if ($domains->enabled()) {
+                $path = $domains->cleanPath($path) ?? $path;
+            }
 
-            return $domains->cleanPath($path) ?? $path;
+            // A page served in English links to English pages (/en/plans): SiteLocale.
+            return SiteLanguage::path($path, SiteLanguage::current());
         });
     }
 
