@@ -96,6 +96,20 @@ class ShopOrderBranchTest extends TestCase
         $this->assertSame($before, $this->counts($club));
     }
 
+    public function test_the_english_cart_is_told_in_english(): void
+    {
+        Http::fake();
+        $club = $this->club();
+        $closed = $this->branch($club, ['name' => 'فرع مغلق']);
+        $bar = $this->shop($club);
+        $this->asTenant($club, fn () => $closed->forceFill(['is_active' => false])->save());
+
+        $this->post('/c/'.$club->slug.'/en/shop/orders', [
+            'items' => [['product_id' => $bar->id, 'quantity' => 1]], 'name' => 'Salim', 'phone' => '91234567', 'payment_method' => 'pickup', 'branch_id' => $closed->id,
+        ])->assertSessionHasErrors(['branch_id' => 'The pickup branch you chose is not available. Choose another branch in the cart.']);
+        Http::assertNothingSent();
+    }
+
     public function test_another_clubs_branch_or_a_branch_that_does_not_exist_is_refused(): void
     {
         Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_abc', 'intention_order_id' => 5502], 201)]);
