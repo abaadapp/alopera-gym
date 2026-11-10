@@ -3,6 +3,7 @@
 namespace App\Modules\Website\Http\Controllers;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Inventory\Services\ShopSettings;
@@ -58,6 +59,9 @@ class SiteBuilderController extends Controller
             ])->all(),
             'targets' => SiteLinks::targets($shop->shopOpen($tenant)),
             'siteUrl' => route('site.home', ['club' => $tenant->slug]),
+            'siteUrlEn' => SiteLanguage::in('en', fn () => route('site.home', ['club' => $tenant->slug])),
+            // The site's own English for its standard phrases, shown where the owner has not written English yet.
+            'englishDefaults' => (object) app('translator')->getLoader()->load('en', '*', '*'),
             'previewUrl' => route('club.website.preview'),
             'limits' => ['max_image_kb' => (int) config('gym.max_image_kb'), 'types' => MediaLibrary::TYPES],
             'unread' => ContactMessage::where('status', 'new')->count(),
@@ -101,6 +105,11 @@ class SiteBuilderController extends Controller
     public function preview(Request $request, SiteRenderer $renderer): HttpResponse
     {
         URL::defaults(['club' => $this->tenants->require()->slug]);
+        // The same draft on the English site (?lang=en), and a language switch that stays in the preview.
+        if ($request->query('lang') === 'en') {
+            app()->setLocale('en');
+        }
+        $this->alternates = collect(SiteLanguage::ALL)->mapWithKeys(fn ($l) => [$l => route('club.website.preview', ['lang' => $l])])->all();
         $site = $this->content->site();
         $rendered = $renderer->render($this->content->editable($site), preview: true);
 

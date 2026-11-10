@@ -4,6 +4,7 @@ namespace App\Modules\Website\Http\Controllers;
 
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Phone;
+use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -33,6 +34,17 @@ class PortalController extends Controller
 {
     use RendersSite;
 
+    /** A membership as the portal shows it: on the English portal its plan's English name, when written. @return array<string, mixed> */
+    private function membership(Membership $m): array
+    {
+        $row = GymPresenter::membership($m);
+        if (SiteLanguage::isEnglish() && ($english = MembershipPlan::withTrashed()->whereKey($m->membership_plan_id)->value('name_en'))) {
+            $row['plan'] = $english;
+        }
+
+        return $row;
+    }
+
     private function member(Request $request): Member
     {
         /** @var Member $member */
@@ -49,17 +61,17 @@ class PortalController extends Controller
 
         return $this->page('Portal/Dashboard', [
             'profile' => $member->only('full_name', 'member_no', 'phone', 'email') + ['qr_token' => $member->status === Member::ACTIVE ? $member->qr_token : null, 'photo_url' => $member->photoUrl()],
-            'current' => $current ? GymPresenter::membership($current) : null,
-            'next' => $next ? GymPresenter::membership($next) : null,
-            'upcoming' => Booking::with(['session.program:id,name,color', 'session.trainer:id,name'])->where('member_id', $member->id)
+            'current' => $current ? $this->membership($current) : null,
+            'next' => $next ? $this->membership($next) : null,
+            'upcoming' => Booking::with(['session.program:id,name,name_en,color', 'session.trainer:id,name,name_en'])->where('member_id', $member->id)
                 ->where('status', Booking::BOOKED)->whereHas('session', fn ($q) => $q->where('starts_at', '>', now()))
                 ->get()->sortBy(fn ($b) => $b->session->starts_at)->values()->take(5)
-                ->map(fn ($b) => ['id' => $b->id, 'session' => GymPresenter::session($b->session)]),
+                ->map(fn ($b) => ['id' => $b->id, 'session' => GymPresenter::siteSession($b->session)]),
             'openInvoices' => Invoice::where('billable_type', 'member')->where('billable_id', $member->id)->open()->latest('id')->get()
                 ->map(fn ($i) => $i->only('id', 'number', 'total') + ['balance' => $i->balance(), 'issue_date' => $i->issue_date->toDateString()]),
             'visits' => CheckIn::where('member_id', $member->id)->where('result', 'allowed')->where('checked_in_at', '>=', now()->subDays(30))->count(),
             'onlinePayments' => $online->available(),
-        ], 'حسابي');
+        ], __('حسابي'));
     }
 
     public function renew(Request $request): Response
@@ -68,10 +80,10 @@ class PortalController extends Controller
         $last = Membership::where('member_id', $member->id)->whereNot('status', Membership::CANCELLED)->orderByDesc('ends_on')->first();
 
         return $this->page('Portal/Renew', [
-            'plans' => MembershipPlan::public()->orderBy('sort')->get()->map(fn ($p) => GymPresenter::plan($p)),
+            'plans' => MembershipPlan::public()->orderBy('sort')->get()->map(fn ($p) => GymPresenter::sitePlan($p)),
             'current' => $last ? GymPresenter::membership($last) : null,
             'hasPending' => Membership::where('member_id', $member->id)->where('status', Membership::PENDING)->exists(),
-        ], 'تجديد الاشتراك');
+        ], __('تجديد الاشتراك'));
     }
 
     public function storeRenewal(Request $request, MembershipService $memberships, OnlinePaymentService $online): HttpResponse
@@ -93,7 +105,7 @@ class PortalController extends Controller
             return Inertia::location($online->start($invoice, 'portal')->checkout_url);
         }
 
-        return redirect()->route('portal.invoices')->with('success', $invoice->isOpen() ? 'تم إنشاء فاتورة التجديد. ادفعها في الاستقبال لتفعيل الاشتراك.' : 'تم التجديد.');
+        return redirect()->route('portal.invoices')->with('success', $invoice->isOpen() ? __('تم إنشاء فاتورة التجديد. ادفعها في الاستقبال لتفعيل الاشتراك.') : __('تم التجديد.'));
     }
 
     public function invoices(Request $request, OnlinePaymentService $online): Response
@@ -112,7 +124,7 @@ class PortalController extends Controller
                 ]),
             'onlinePayments' => $online->available(),
             'history' => Membership::where('member_id', $member->id)->latest('id')->get()->map(fn ($m) => GymPresenter::membership($m)),
-        ], 'الفواتير والسجل');
+        ], __('الفواتير والسجل'));
     }
 
     public function pay(Request $request, Invoice $invoice, OnlinePaymentService $online): HttpResponse
@@ -133,25 +145,25 @@ class PortalController extends Controller
         $myBookings = Booking::where('member_id', $member->id)->where('status', Booking::BOOKED)->pluck('id', 'class_session_id');
 
         return $this->page('Portal/Classes', [
-            'sessions' => ClassSession::with(['program:id,name,color', 'trainer:id,name'])
+            'sessions' => ClassSession::with(['program:id,name,name_en,color', 'trainer:id,name,name_en'])
                 ->where('status', ClassSession::SCHEDULED)->where('starts_at', '>', $start)->where('starts_at', '<', $start->addDays($window))
                 ->orderBy('starts_at')->get()
-                ->map(fn ($s) => GymPresenter::session($s) + ['booking_id' => $myBookings[$s->id] ?? null]),
+                ->map(fn ($s) => GymPresenter::siteSession($s) + ['booking_id' => $myBookings[$s->id] ?? null]),
             'membership' => ($m = Membership::where('member_id', $member->id)
                 ->whereIn('status', [Membership::ACTIVE, Membership::FROZEN, Membership::SCHEDULED])
                 ->orderByRaw("case status when 'active' then 0 when 'frozen' then 1 else 2 end")->orderBy('starts_on')->first())
                 ? GymPresenter::membership($m) : null,
             'cutoffHours' => (int) $tenant->setting('booking_cancel_cutoff_hours', 3),
-            'history' => Booking::with('session.program:id,name')->where('member_id', $member->id)->latest('id')->limit(20)->get()
-                ->map(fn ($b) => ['id' => $b->id, 'status' => $b->status, 'program' => $b->session?->program?->name, 'starts_at' => $b->session?->starts_at->format('Y-m-d H:i')]),
-        ], 'حجز الحصص');
+            'history' => Booking::with('session.program:id,name,name_en')->where('member_id', $member->id)->latest('id')->limit(20)->get()
+                ->map(fn ($b) => ['id' => $b->id, 'status' => $b->status, 'program' => SiteLanguage::pick($b->session?->program?->name, $b->session?->program?->name_en), 'starts_at' => $b->session?->starts_at->format('Y-m-d H:i')]),
+        ], __('حجز الحصص'));
     }
 
     public function book(Request $request, ClassSession $session, BookingService $bookings): RedirectResponse
     {
         $bookings->book($this->member($request), $session, 'portal');
 
-        return back()->with('success', 'تم تأكيد حجزك.');
+        return back()->with('success', __('تم تأكيد حجزك.'));
     }
 
     public function cancelBooking(Request $request, Booking $booking, BookingService $bookings): RedirectResponse
@@ -159,7 +171,7 @@ class PortalController extends Controller
         abort_unless($booking->member_id === $this->member($request)->id, 404);
         $bookings->cancel($booking, false, 'إلغاء من العضو');
 
-        return back()->with('success', 'تم إلغاء الحجز.');
+        return back()->with('success', __('تم إلغاء الحجز.'));
     }
 
     public function profile(Request $request): Response
@@ -170,7 +182,7 @@ class PortalController extends Controller
             'profile' => $member->only('full_name', 'phone', 'email', 'marketing_opt_in', 'emergency_contact_name', 'emergency_contact_phone') + [
                 'date_of_birth' => $member->date_of_birth?->toDateString(),
             ],
-        ], 'ملفي الشخصي');
+        ], __('ملفي الشخصي'));
     }
 
     public function updateProfile(Request $request): RedirectResponse
@@ -205,6 +217,6 @@ class PortalController extends Controller
         }
         $member->save();
 
-        return back()->with('success', 'تم حفظ بياناتك.');
+        return back()->with('success', __('تم حفظ بياناتك.'));
     }
 }

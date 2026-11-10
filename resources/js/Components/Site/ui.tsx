@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import type { LinkData, RenderedSection } from '@/types/site';
 
@@ -110,6 +110,14 @@ export function PhotoFrame({ src, alt, className, imgClassName }: { src: string 
 
 /** Two digits, as v2 numbers its rows: 01, 02… */
 export const twoDigits = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * A translated phrase with elements in it: phrase(t('متبقٍ :n مقاعد'), { n: <span className="num">3</span> }) draws the
+ * words around the element in the page's language (the Arabic exactly as before). A name the nodes lack stays as typed.
+ */
+export function phrase(text: string, nodes: Record<string, ReactNode>): ReactNode[] {
+    return text.split(/:([A-Za-z_]+)/).map((part, i) => (i % 2 === 0 ? part : part in nodes ? <Fragment key={i}>{nodes[part]}</Fragment> : `:${part}`));
+}
 
 /** A plan or product price without trailing zeros: "29.000" → "29", "12.500" → "12.5". */
 export function priceText(value: string | number | null | undefined): string {

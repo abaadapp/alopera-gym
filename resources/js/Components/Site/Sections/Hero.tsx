@@ -1,5 +1,6 @@
 import { useShared } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
+import { useT } from '@/lib/i18n';
 import { heroLayout } from '@/lib/smart-image';
 import SmartImage from '../SmartImage';
 import { SiteButton } from '../ui';
@@ -16,6 +17,7 @@ interface NextClass { name: string; date: string; time: string; day_label?: stri
  */
 export default function Hero({ section }: SectionProps) {
     const { tenant } = useShared();
+    const t = useT();
     const d = section.data;
     const image = img(d.image);
     const layout = heroLayout(image);
@@ -29,7 +31,7 @@ export default function Hero({ section }: SectionProps) {
         <div className={cn('grid w-full gap-8', layout === 'split' ? 'lg:gap-10' : 'lg:grid-cols-2 lg:items-end lg:gap-20')}>
             <div className="flex min-w-0 flex-col gap-4 sm:gap-5">
                 {str(d.eyebrow) && <span className="text-[15px] text-[#E9DFC8]">{str(d.eyebrow)}</span>}
-                <h1 className={cn('m-0 font-bold leading-[1.15] break-words', layout === 'split' ? 'text-[clamp(42px,6.5vw,96px)]' : 'text-[clamp(44px,8vw,120px)]')}>
+                <h1 className={cn('m-0 font-bold leading-[1.15] break-words ltr:leading-[1.02]', layout === 'split' ? 'text-[clamp(42px,6.5vw,96px)]' : 'text-[clamp(44px,8vw,120px)]')}>
                     {heading.map((line, i) => <span key={i} className="block">{line}</span>)}
                 </h1>
             </div>
@@ -60,7 +62,7 @@ export default function Hero({ section }: SectionProps) {
                 )}
                 {next && (
                     <span className="text-[15px] text-[#D8CFBF]">
-                        الحصة القادمة: <span className="font-semibold text-white">{next.name}</span>{' '}
+                        {t('الحصة القادمة:')} <span className="font-semibold text-white">{next.name}</span>{' '}
                         {next.day_label && <span>{next.day_label} </span>}
                         <span dir="ltr" className="[unicode-bidi:isolate]">{next.time}</span>
                     </span>

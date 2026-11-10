@@ -44,7 +44,7 @@ final class BookingService
             }
             $window = (int) $tenant->setting('booking_window_days', 14);
             if (! $byStaff && $session->starts_at->gt(now()->addDays($window))) {
-                $this->fail('session.window', "الحجز متاح قبل {$window} يومًا فقط من موعد الحصة.");
+                $this->fail('session.window', __('الحجز متاح قبل :days يومًا فقط من موعد الحصة.', ['days' => $window]));
             }
             if ($member->status !== Member::ACTIVE) {
                 $this->fail('member.inactive', 'حساب العضو غير نشط.');

@@ -1,5 +1,5 @@
 @extends('errors.layout')
 
 @section('code', '401')
-@section('title', 'يلزم تسجيل الدخول')
-@section('message', 'سجّل الدخول للمتابعة.')
+@section('title', __('يلزم تسجيل الدخول'))
+@section('message', __('سجّل الدخول للمتابعة.'))

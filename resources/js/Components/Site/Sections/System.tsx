@@ -9,6 +9,7 @@ import { ArrowLeft } from 'lucide-react';
 import { CATEGORIES, LEVELS } from '@/Pages/Site/Programs';
 import { cn } from '@/lib/cn';
 import { currencyLabel, date as fmtDate, phone as fmtPhone, whatsappUrl } from '@/lib/format';
+import { useT } from '@/lib/i18n';
 import type { PlanFeed, PostFeed, ProductFeed, ProgramFeed, SessionFeed, TrainerFeed } from '@/types/site';
 import { PhotoFrame, SectionHeading, SectionShell, SiteButton, bodyText, hairline, isDark, metaText, priceText, twoDigits } from '../ui';
 import { bool, link, str, type SectionProps } from './types';
@@ -16,17 +17,20 @@ import { bool, link, str, type SectionProps } from './types';
 const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const url = (v: unknown): string => (typeof v === 'string' ? v : '');
 
+type Translate = ReturnType<typeof useT>;
+
 /** A quiet «كل …» link with an arrow, under or beside a list. */
 function MoreLink({ href, label, tone }: { href: string; label: string; tone: SectionProps['section']['tone'] }) {
     if (!href || !label) return null;
     return (
         <a href={href} className={cn('inline-flex items-center gap-2 border-b pb-0.5 text-[15px] font-medium transition-colors', isDark(tone) ? 'border-white/60 text-white hover:text-[#E9DFC8]' : 'border-[var(--site-ink)] hover:border-[var(--site-accent)] hover:text-[var(--site-accent)]')}>
-            {label} <ArrowLeft className="size-4" aria-hidden />
+            {label} <ArrowLeft className="size-4 ltr:rotate-180" aria-hidden />
         </a>
     );
 }
 
 export function Programs({ section, joined }: SectionProps) {
+    const t = useT();
     const d = section.data;
     const programs = arr<ProgramFeed>(section.feed?.programs);
     const more = link(d.button);
@@ -39,7 +43,7 @@ export function Programs({ section, joined }: SectionProps) {
                 </div>
                 <div className="flex flex-col">
                     {programs.map((p, i) => {
-                        const meta = [p.category ? CATEGORIES[p.category] ?? p.category : null, p.level ? LEVELS[p.level] ?? p.level : null, p.duration_minutes ? `${p.duration_minutes} دقيقة` : null].filter(Boolean).join(' · ');
+                        const meta = [p.category ? (CATEGORIES[p.category] ? t(CATEGORIES[p.category]) : p.category) : null, p.level ? (LEVELS[p.level] ? t(LEVELS[p.level]) : p.level) : null, p.duration_minutes ? t(':count دقيقة', { count: p.duration_minutes }) : null].filter(Boolean).join(' · ');
                         return (
                             <article key={p.id} className={cn('grid gap-5 border-t py-8 sm:py-10 lg:grid-cols-12 lg:items-start lg:gap-12', hairline(section.tone))}>
                                 <div className="flex min-w-0 items-baseline gap-5 lg:col-span-4">
@@ -63,14 +67,15 @@ export function Programs({ section, joined }: SectionProps) {
 
 interface Day { date: string; label: string; sessions: SessionFeed[] }
 
-function spots(s: SessionFeed): { text: string; tight: boolean } {
-    if (s.full || s.spots_left === 0) return { text: 'مكتملة', tight: true };
+function spots(s: SessionFeed, t: Translate): { text: string; tight: boolean } {
+    if (s.full || s.spots_left === 0) return { text: t('مكتملة'), tight: true };
     if (s.spots_left === null || s.spots_left === undefined) return { text: '', tight: false };
-    if (s.spots_left <= 3) return { text: s.spots_left === 1 ? 'بقي مقعد واحد' : `بقي ${s.spots_left} مقاعد`, tight: true };
-    return { text: `${s.spots_left} مقعدًا متاحًا`, tight: false };
+    if (s.spots_left <= 3) return { text: s.spots_left === 1 ? t('بقي مقعد واحد') : t('بقي :count مقاعد', { count: s.spots_left }), tight: true };
+    return { text: t(':count مقعدًا متاحًا', { count: s.spots_left }), tight: false };
 }
 
 export function Schedule({ section, joined }: SectionProps) {
+    const t = useT();
     const d = section.data;
     const days = arr<Day>(section.feed?.days);
     const firstBusy = Math.max(0, days.findIndex((day) => day.sessions.length > 0));
@@ -83,8 +88,8 @@ export function Schedule({ section, joined }: SectionProps) {
     return (
         <SectionShell section={section} joined={joined}>
             <div className="flex flex-col gap-8 lg:gap-9">
-                <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} tone={tone} aside={<MoreLink href={url(section.feed?.schedule_url)} label="الجدول الكامل" tone={tone} />} />
-                <div className={cn('-mx-5 flex overflow-x-auto border-b px-5 sm:mx-0 sm:px-0', hairline(tone))} role="tablist" aria-label="أيام الجدول">
+                <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} tone={tone} aside={<MoreLink href={url(section.feed?.schedule_url)} label={t('الجدول الكامل')} tone={tone} />} />
+                <div className={cn('-mx-5 flex overflow-x-auto border-b px-5 sm:mx-0 sm:px-0', hairline(tone))} role="tablist" aria-label={t('أيام الجدول')}>
                     {days.map((dd, i) => (
                         <button
                             key={dd.date}
@@ -97,19 +102,19 @@ export function Schedule({ section, joined }: SectionProps) {
                                 isDark(tone) && i === picked && 'border-white text-white')}
                         >
                             <span className="text-base font-semibold whitespace-nowrap">{dd.label}</span>
-                            <span className="text-xs">{dd.sessions.length === 0 ? 'لا حصص' : dd.sessions.length === 1 ? 'حصة واحدة' : dd.sessions.length === 2 ? 'حصتان' : `${dd.sessions.length} حصص`}</span>
+                            <span className="text-xs">{dd.sessions.length === 0 ? t('لا حصص') : dd.sessions.length === 1 ? t('حصة واحدة') : dd.sessions.length === 2 ? t('حصتان') : t(':count حصص', { count: dd.sessions.length })}</span>
                         </button>
                     ))}
                 </div>
                 <div className="flex flex-col">
                     {(day?.sessions ?? []).map((s) => {
-                        const sp = spots(s);
+                        const sp = spots(s, t);
                         const closed = s.full || s.spots_left === 0;
                         return (
                             <div key={s.id} className={cn('grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-5 gap-y-3 border-b py-4 sm:py-[18px] md:grid-cols-[90px_minmax(180px,2fr)_minmax(120px,1fr)_minmax(110px,1fr)_auto] md:gap-x-6', hairline(tone))}>
                                 <span dir="ltr" className="text-xl font-bold [unicode-bidi:isolate]">{s.time}</span>
                                 <div className="flex min-w-0 flex-col">
-                                    <span className="text-lg font-semibold break-words">{s.program ?? 'حصة'}</span>
+                                    <span className="text-lg font-semibold break-words">{s.program ?? t('حصة')}</span>
                                     <span className={cn('text-sm', metaText(tone))}>
                                         <span dir="ltr" className="[unicode-bidi:isolate]">{s.time} – {s.end_time}</span>
                                         {showTrainer && s.trainer && <span className="md:hidden"> · {s.trainer}</span>}
@@ -124,13 +129,13 @@ export function Schedule({ section, joined }: SectionProps) {
                                         className={cn('col-span-2 inline-flex h-[42px] min-w-[104px] items-center justify-center rounded-xl border px-[18px] text-sm font-semibold transition-colors md:col-span-1',
                                             closed ? 'cursor-not-allowed border-[rgba(22,19,15,0.15)] text-[#9A9284]' : 'border-[var(--site-ink)] bg-[var(--site-ink)] text-white hover:border-[var(--site-accent)] hover:bg-[var(--site-accent)]')}
                                     >
-                                        {closed ? 'مكتملة' : 'احجزي'}
+                                        {closed ? t('مكتملة') : t('احجزي')}
                                     </a>
                                 )}
                             </div>
                         );
                     })}
-                    {(day?.sessions ?? []).length === 0 && <p className={cn('m-0 py-12', metaText(tone))}>لا توجد حصص في هذا اليوم.</p>}
+                    {(day?.sessions ?? []).length === 0 && <p className={cn('m-0 py-12', metaText(tone))}>{t('لا توجد حصص في هذا اليوم.')}</p>}
                 </div>
             </div>
         </SectionShell>
@@ -180,6 +185,7 @@ export function Trainers({ section, joined }: SectionProps) {
 
 /** The plans grid of v2: one bordered block with hairlines between the plans; the featured plan is dark. */
 export function PlansGrid({ plans, currency, featuredLabel, buttonLabel }: { plans: PlanFeed[]; currency: string; featuredLabel: string; buttonLabel: string }) {
+    const t = useT();
     return (
         <div className={cn('grid overflow-hidden rounded-[20px] border border-[rgba(22,19,15,0.15)]', plans.length > 1 && 'md:grid-cols-2', plans.length > 2 && 'lg:grid-cols-3', plans.length === 1 && 'max-w-md')}>
             {plans.map((p) => {
@@ -196,7 +202,7 @@ export function PlansGrid({ plans, currency, featuredLabel, buttonLabel }: { pla
                                 <span dir="ltr" className="text-[clamp(40px,4.5vw,52px)] leading-[1.1] font-bold [unicode-bidi:isolate]">{priceText(p.price)}</span>
                                 <span className={cn('text-[15px]', featured ? 'text-[#CFC7B8]' : 'text-[#6B6356]')}>{currencyLabel(currency)}{p.duration_label ? ` / ${p.duration_label}` : ''}</span>
                             </div>
-                            {p.signup_fee && Number(p.signup_fee) > 0 && <span className={cn('text-[13px]', featured ? 'text-[#9A9284]' : 'text-[#6B6356]')}>رسوم تسجيل لمرة واحدة: <span dir="ltr" className="[unicode-bidi:isolate]">{priceText(p.signup_fee)}</span> {currencyLabel(currency)}</span>}
+                            {p.signup_fee && Number(p.signup_fee) > 0 && <span className={cn('text-[13px]', featured ? 'text-[#9A9284]' : 'text-[#6B6356]')}>{t('رسوم تسجيل لمرة واحدة:')} <span dir="ltr" className="[unicode-bidi:isolate]">{priceText(p.signup_fee)}</span> {currencyLabel(currency)}</span>}
                         </div>
                         <ul className="m-0 flex flex-1 list-none flex-col p-0">
                             {(p.features ?? []).filter(Boolean).map((f, i) => (
@@ -204,7 +210,7 @@ export function PlansGrid({ plans, currency, featuredLabel, buttonLabel }: { pla
                             ))}
                         </ul>
                         <a href={p.join_url} className={cn('inline-flex h-[52px] items-center justify-center rounded-xl border text-[15px] font-semibold transition-colors', featured ? 'border-white bg-white text-[var(--site-ink)] hover:border-[#E9DFC8] hover:bg-[#E9DFC8]' : 'border-[var(--site-ink)] bg-white text-[var(--site-ink)] hover:bg-[var(--site-ink)] hover:text-white')}>
-                            {buttonLabel || 'اختاري الباقة'}
+                            {buttonLabel || t('اختاري الباقة')}
                         </a>
                     </article>
                 );
@@ -228,6 +234,7 @@ export function Plans({ section, joined }: SectionProps) {
 }
 
 export function Products({ section, joined }: SectionProps) {
+    const t = useT();
     const d = section.data;
     const products = arr<ProductFeed>(section.feed?.products);
     const currency = str(section.feed?.currency) || 'OMR';
@@ -235,7 +242,7 @@ export function Products({ section, joined }: SectionProps) {
     return (
         <SectionShell section={section} joined={joined}>
             <div className="flex flex-col gap-10">
-                <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} tone={tone} aside={<MoreLink href={url(section.feed?.shop_url)} label="تسوّقي من المتجر" tone={tone} />} />
+                <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} tone={tone} aside={<MoreLink href={url(section.feed?.shop_url)} label={t('تسوّقي من المتجر')} tone={tone} />} />
                 <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-6 lg:grid-cols-4">
                     {products.map((p) => (
                         <a key={p.id} href={p.url} className="group flex min-w-0 flex-col gap-3">
@@ -247,7 +254,7 @@ export function Products({ section, joined }: SectionProps) {
                             <span className="text-base font-semibold break-words group-hover:text-[var(--site-accent)]">{p.name}</span>
                             <span className={cn('text-sm', metaText(tone))}>
                                 <span dir="ltr" className="[unicode-bidi:isolate]">{priceText(p.price)}</span> {currencyLabel(currency)}
-                                {!p.in_stock && <span className="text-[#A33A22]"> · نفدت الكمية</span>}
+                                {!p.in_stock && <span className="text-[#A33A22]"> · {t('نفدت الكمية')}</span>}
                             </span>
                         </a>
                     ))}
@@ -259,27 +266,29 @@ export function Products({ section, joined }: SectionProps) {
 
 /** A post (offer or news) in the v2 style: whole photo on a soft frame when there is one, then the words. */
 export function PostTile({ post }: { post: Pick<PostFeed, 'type' | 'title' | 'excerpt' | 'image_url' | 'published_at' | 'ends_on' | 'url'> }) {
+    const t = useT();
     const offer = post.type === 'offer';
     return (
         <a href={post.url} className="group flex min-w-0 flex-col gap-4">
             {post.image_url ? <PhotoFrame src={post.image_url} alt={post.title} className="aspect-[16/10] w-full transition-opacity group-hover:opacity-90" /> : <div className="border-t border-[rgba(22,19,15,0.14)]" />}
             <div className="flex flex-col gap-2">
-                <span className="text-[13px] font-semibold text-[var(--site-accent)]">{offer ? 'عرض' : 'خبر'}</span>
+                <span className="text-[13px] font-semibold text-[var(--site-accent)]">{offer ? t('عرض') : t('خبر')}</span>
                 <h3 className="m-0 text-xl leading-8 font-bold break-words group-hover:text-[var(--site-accent)]">{post.title}</h3>
                 {post.excerpt && <p className="m-0 line-clamp-2 text-[15px] leading-7 text-[#4A443A]">{post.excerpt}</p>}
-                <span className="text-[13px] text-[#6B6356]">{offer && post.ends_on ? <>ساري حتى {fmtDate(post.ends_on)}</> : fmtDate(post.published_at)}</span>
+                <span className="text-[13px] text-[#6B6356]">{offer && post.ends_on ? t('ساري حتى :date', { date: fmtDate(post.ends_on) }) : fmtDate(post.published_at)}</span>
             </div>
         </a>
     );
 }
 
 export function Posts({ section, joined }: SectionProps) {
+    const t = useT();
     const d = section.data;
     const posts = arr<PostFeed>(section.feed?.posts);
     return (
         <SectionShell section={section} joined={joined}>
             <div className="flex flex-col gap-10">
-                <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} tone={section.tone} aside={<MoreLink href={url(section.feed?.all_url)} label="كل العروض والأخبار" tone={section.tone} />} />
+                <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} tone={section.tone} aside={<MoreLink href={url(section.feed?.all_url)} label={t('كل العروض والأخبار')} tone={section.tone} />} />
                 <div className="grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">{posts.map((p) => <PostTile key={p.id} post={p} />)}</div>
             </div>
         </SectionShell>
@@ -289,6 +298,7 @@ export function Posts({ section, joined }: SectionProps) {
 interface Step { id?: string; text?: string }
 
 export function Join({ section, site, joined }: SectionProps) {
+    const t = useT();
     const d = section.data;
     const steps = arr<Step>(d.steps).filter((s) => str(s.text));
     const plans = bool(d.show_plans, true) ? arr<PlanFeed>(section.feed?.plans) : [];
@@ -318,8 +328,8 @@ export function Join({ section, site, joined }: SectionProps) {
                     <div className={cn('flex min-w-0 flex-col gap-5 rounded-xl border p-6 sm:p-10', isDark(tone) ? 'border-white/20' : 'border-[rgba(22,19,15,0.18)]')}>
                         {plans.length > 0 && (
                             <>
-                                <h3 className="m-0 text-[22px] font-bold">اختاري باقتكِ</h3>
-                                <div className="flex flex-col gap-2.5" role="radiogroup" aria-label="الباقات">
+                                <h3 className="m-0 text-[22px] font-bold">{t('اختاري باقتكِ')}</h3>
+                                <div className="flex flex-col gap-2.5" role="radiogroup" aria-label={t('الباقات')}>
                                     {plans.map((p) => (
                                         <button
                                             key={p.id}
@@ -340,9 +350,9 @@ export function Join({ section, site, joined }: SectionProps) {
                             </>
                         )}
                         <a href={target} className="inline-flex h-[52px] items-center justify-center rounded-xl bg-[var(--site-ink)] px-8 text-[15px] font-semibold text-white transition-colors hover:bg-[var(--site-accent)] sm:self-start">
-                            {str(d.button_label) || 'ابدئي التسجيل'}
+                            {str(d.button_label) || t('ابدئي التسجيل')}
                         </a>
-                        <p className={cn('m-0 text-[13px]', metaText(tone))}>تكملين بياناتكِ في صفحة التسجيل.</p>
+                        <p className={cn('m-0 text-[13px]', metaText(tone))}>{t('تكملين بياناتكِ في صفحة التسجيل.')}</p>
                     </div>
                 )}
             </div>
@@ -353,6 +363,7 @@ export function Join({ section, site, joined }: SectionProps) {
 const SOCIAL: Record<string, string> = { instagram: 'إنستغرام', x: 'إكس', tiktok: 'تيك توك', snapchat: 'سناب شات', facebook: 'فيسبوك', youtube: 'يوتيوب' };
 
 export function Contact({ section, site, chrome, joined }: SectionProps) {
+    const t = useT();
     const d = section.data;
     const tone = section.tone;
     const sendUrl = url(section.feed?.send_url);
@@ -369,12 +380,12 @@ export function Contact({ section, site, chrome, joined }: SectionProps) {
     };
 
     const info: { k: string; v: ReactNode }[] = [];
-    if (site.contact_phone) info.push({ k: 'الهاتف', v: <a href={`tel:+${site.contact_phone}`} dir="ltr" className="[unicode-bidi:isolate] hover:text-[var(--site-accent)]">{fmtPhone(site.contact_phone)}</a> });
-    if (site.whatsapp_number) info.push({ k: 'واتساب', v: <a href={whatsappUrl(site.whatsapp_number)} target="_blank" rel="noopener noreferrer" dir="ltr" className="[unicode-bidi:isolate] hover:text-[var(--site-accent)]">{fmtPhone(site.whatsapp_number)}</a> });
-    if (site.contact_email) info.push({ k: 'البريد الإلكتروني', v: <a href={`mailto:${site.contact_email}`} className="break-all hover:text-[var(--site-accent)]">{site.contact_email}</a> });
-    if (site.address) info.push({ k: 'العنوان', v: site.address });
-    if (hours.length > 0) info.push({ k: 'أوقات العمل', v: hours.map((h) => `${h.days}: ${h.hours}`).join('\n') });
-    if (social.length > 0) info.push({ k: 'تابعينا', v: <span className="flex flex-wrap gap-x-4 gap-y-1">{social.map(([key, href]) => <a key={key} href={href} target="_blank" rel="noopener noreferrer" className="border-b border-current hover:text-[var(--site-accent)]">{SOCIAL[key] ?? key}</a>)}</span> });
+    if (site.contact_phone) info.push({ k: t('الهاتف'), v: <a href={`tel:+${site.contact_phone}`} dir="ltr" className="[unicode-bidi:isolate] hover:text-[var(--site-accent)]">{fmtPhone(site.contact_phone)}</a> });
+    if (site.whatsapp_number) info.push({ k: t('واتساب'), v: <a href={whatsappUrl(site.whatsapp_number)} target="_blank" rel="noopener noreferrer" dir="ltr" className="[unicode-bidi:isolate] hover:text-[var(--site-accent)]">{fmtPhone(site.whatsapp_number)}</a> });
+    if (site.contact_email) info.push({ k: t('البريد الإلكتروني'), v: <a href={`mailto:${site.contact_email}`} className="break-all hover:text-[var(--site-accent)]">{site.contact_email}</a> });
+    if (site.address) info.push({ k: t('العنوان'), v: site.address });
+    if (hours.length > 0) info.push({ k: t('أوقات العمل'), v: hours.map((h) => `${h.days}: ${h.hours}`).join('\n') });
+    if (social.length > 0) info.push({ k: t('تابعينا'), v: <span className="flex flex-wrap gap-x-4 gap-y-1">{social.map(([key, href]) => <a key={key} href={href} target="_blank" rel="noopener noreferrer" className="border-b border-current hover:text-[var(--site-accent)]">{SOCIAL[key] ? t(SOCIAL[key]) : key}</a>)}</span> });
 
     const input = cn('h-[52px] w-full min-w-0 rounded-xl border bg-white px-3.5 text-base text-[var(--site-ink)] outline-none placeholder:text-[#9A9284] focus:border-[var(--site-ink)]', 'border-[rgba(22,19,15,0.2)]');
     const showForm = bool(d.show_form, true) && !!sendUrl;
@@ -396,7 +407,7 @@ export function Contact({ section, site, chrome, joined }: SectionProps) {
                     )}
                     {bool(d.show_map, true) && site.map_url && (
                         <a href={site.map_url} target="_blank" rel="noopener noreferrer" className={cn('inline-flex h-[52px] items-center justify-center self-start rounded-xl border px-7 text-[15px] font-semibold transition-colors', isDark(tone) ? 'border-white hover:bg-white hover:text-[var(--site-ink)]' : 'border-[var(--site-ink)] hover:bg-[var(--site-ink)] hover:text-white')}>
-                            الموقع على الخريطة
+                            {t('الموقع على الخريطة')}
                         </a>
                     )}
                 </div>
@@ -404,35 +415,35 @@ export function Contact({ section, site, chrome, joined }: SectionProps) {
                     <div className="flex min-w-0 flex-col gap-4">
                         {sent ? (
                             <div className="flex flex-col gap-2 py-6">
-                                <h3 className="m-0 text-2xl font-bold">تم استلام رسالتك بنجاح</h3>
-                                <button type="button" onClick={() => setSent(false)} className="mt-2 self-start border-b border-current bg-transparent p-0 text-[15px]">رسالة أخرى</button>
+                                <h3 className="m-0 text-2xl font-bold">{t('تم استلام رسالتك بنجاح')}</h3>
+                                <button type="button" onClick={() => setSent(false)} className="mt-2 self-start border-b border-current bg-transparent p-0 text-[15px]">{t('رسالة أخرى')}</button>
                             </div>
                         ) : (
                             <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-                                <h3 className="m-0 text-[22px] font-bold">أرسلي لنا رسالة</h3>
+                                <h3 className="m-0 text-[22px] font-bold">{t('أرسلي لنا رسالة')}</h3>
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <label className="flex min-w-0 flex-col gap-1.5">
-                                        <span className="sr-only">الاسم</span>
-                                        <input className={input} value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder="الاسم" autoComplete="name" maxLength={120} required />
+                                        <span className="sr-only">{t('الاسم')}</span>
+                                        <input className={input} value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder={t('الاسم')} autoComplete="name" maxLength={120} required />
                                         {form.errors.name && <span className="text-sm text-[#A33A22]">{form.errors.name}</span>}
                                     </label>
                                     <label className="flex min-w-0 flex-col gap-1.5">
-                                        <span className="sr-only">رقم الهاتف</span>
-                                        <input className={cn(input, 'text-start')} dir="ltr" inputMode="tel" value={form.data.phone} onChange={(e) => form.setData('phone', e.target.value)} placeholder="رقم الهاتف" autoComplete="tel" maxLength={32} />
+                                        <span className="sr-only">{t('رقم الهاتف')}</span>
+                                        <input className={cn(input, 'text-start')} dir="ltr" inputMode="tel" value={form.data.phone} onChange={(e) => form.setData('phone', e.target.value)} placeholder={t('رقم الهاتف')} autoComplete="tel" maxLength={32} />
                                         {form.errors.phone && <span className="text-sm text-[#A33A22]">{form.errors.phone}</span>}
                                     </label>
                                 </div>
                                 <label className="flex flex-col gap-1.5">
-                                    <span className="sr-only">رسالتكِ</span>
-                                    <textarea className={cn(input, 'h-auto resize-y py-3.5')} rows={4} value={form.data.message} onChange={(e) => form.setData('message', e.target.value)} placeholder="رسالتكِ" maxLength={3000} required />
+                                    <span className="sr-only">{t('رسالتكِ')}</span>
+                                    <textarea className={cn(input, 'h-auto resize-y py-3.5')} rows={4} value={form.data.message} onChange={(e) => form.setData('message', e.target.value)} placeholder={t('رسالتكِ')} maxLength={3000} required />
                                     {form.errors.message && <span className="text-sm text-[#A33A22]">{form.errors.message}</span>}
                                 </label>
                                 {/* Honeypot: people never see it; bots fill it and the server refuses the message. */}
                                 <input type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden className="hidden" value={form.data.website} onChange={(e) => form.setData('website', e.target.value)} />
                                 <button type="submit" disabled={form.processing || preview} className="inline-flex h-[52px] cursor-pointer items-center justify-center self-start rounded-xl bg-[var(--site-ink)] px-8 text-[15px] font-semibold text-white transition-colors hover:bg-[var(--site-accent)] disabled:cursor-not-allowed disabled:opacity-60">
-                                    {form.processing ? 'جارٍ الإرسال…' : 'إرسال'}
+                                    {form.processing ? t('جارٍ الإرسال…') : t('إرسال')}
                                 </button>
-                                {preview && <p className={cn('m-0 text-[13px]', metaText(tone))}>الإرسال معطّل في المعاينة.</p>}
+                                {preview && <p className={cn('m-0 text-[13px]', metaText(tone))}>{t('الإرسال معطّل في المعاينة.')}</p>}
                             </form>
                         )}
                     </div>
