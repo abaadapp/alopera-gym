@@ -34,6 +34,7 @@ class ProductCategoryController extends Controller
             'categories' => $categories->map(fn (ProductCategory $c) => [
                 'id' => $c->id,
                 'name' => $c->name,
+                'name_en' => $c->name_en,
                 'products' => $c->products_count,
                 'active' => $c->active_count,
                 'website' => $c->website_count,
@@ -47,16 +48,17 @@ class ProductCategoryController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $data = $request->validate(['name' => ['required', 'string', 'max:80', TenantRule::unique('product_categories', 'name')]]);
-        ProductCategory::create(['name' => trim($data['name']), 'sort_order' => (int) ProductCategory::max('sort_order') + 1]);
+        $data = $request->validate(['name' => ['required', 'string', 'max:80', TenantRule::unique('product_categories', 'name')], 'name_en' => ['nullable', 'string', 'max:80']]);
+        ProductCategory::create(['name' => trim($data['name']), 'name_en' => trim((string) ($data['name_en'] ?? '')) ?: null, 'sort_order' => (int) ProductCategory::max('sort_order') + 1]);
 
         return back()->with('success', 'أُضيف التصنيف «'.trim($data['name']).'».');
     }
 
     public function update(Request $request, ProductCategory $category): RedirectResponse
     {
-        $data = $request->validate(['name' => ['required', 'string', 'max:80', TenantRule::unique('product_categories', 'name')->ignore($category->id)]]);
-        $category->update(['name' => trim($data['name'])]);
+        $data = $request->validate(['name' => ['required', 'string', 'max:80', TenantRule::unique('product_categories', 'name')->ignore($category->id)], 'name_en' => ['nullable', 'string', 'max:80']]);
+        // The English name is kept when a form that does not show it renames the category.
+        $category->update(['name' => trim($data['name'])] + ($request->has('name_en') ? ['name_en' => trim((string) ($data['name_en'] ?? '')) ?: null] : []));
 
         return back()->with('success', 'تم حفظ التصنيف.');
     }

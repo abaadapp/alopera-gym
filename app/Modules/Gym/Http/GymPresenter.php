@@ -3,6 +3,7 @@
 namespace App\Modules\Gym\Http;
 
 use App\Core\Support\Phone;
+use App\Core\Support\SiteLanguage;
 use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
@@ -64,12 +65,33 @@ final class GymPresenter
     /** @return array<string, mixed> */
     public static function plan(MembershipPlan $p): array
     {
-        return $p->only('id', 'name', 'type', 'description', 'duration_value', 'duration_unit', 'price', 'signup_fee', 'sessions_limit',
-            'freeze_allowed', 'max_freeze_days', 'max_freezes', 'features', 'color', 'is_public', 'is_featured', 'is_active', 'sort') + [
+        return $p->only('id', 'name', 'name_en', 'type', 'description', 'description_en', 'duration_value', 'duration_unit', 'price', 'signup_fee', 'sessions_limit',
+            'freeze_allowed', 'max_freeze_days', 'max_freezes', 'features', 'features_en', 'color', 'is_public', 'is_featured', 'is_active', 'sort') + [
                 'duration_label' => $p->durationLabel(),
                 'type_label' => MembershipPlan::TYPES[$p->type] ?? $p->type,
                 'program_ids' => $p->relationLoaded('programs') ? $p->programs->pluck('id')->all() : [],
             ];
+    }
+
+    /** A plan as the website and portal show it, in the page's language (the English words when written). @return array<string, mixed> */
+    public static function sitePlan(MembershipPlan $p): array
+    {
+        return [
+            'name' => SiteLanguage::pick($p->name, $p->name_en),
+            'description' => SiteLanguage::pick($p->description, $p->description_en),
+            'features' => SiteLanguage::pickList($p->features, $p->features_en),
+            'duration_label' => $p->siteDurationLabel(),
+            'type_label' => SiteLanguage::word(MembershipPlan::TYPES[$p->type] ?? $p->type),
+        ] + self::plan($p);
+    }
+
+    /** A class as the website and portal show it, in the page's language. @return array<string, mixed> */
+    public static function siteSession(ClassSession $s): array
+    {
+        return [
+            'program' => $s->relationLoaded('program') ? SiteLanguage::pick($s->program?->name, $s->program?->name_en) : null,
+            'trainer' => $s->relationLoaded('trainer') ? SiteLanguage::pick($s->trainer?->name, $s->trainer?->name_en) : null,
+        ] + self::session($s);
     }
 
     /** @return array<string, mixed> */

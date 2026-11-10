@@ -72,6 +72,11 @@ export interface SiteDoc {
     };
     seo: { title: string; description: string };
     sections: SectionDoc[];
+    /**
+     * The English words of the same site (lib/site-words): the texts above by section and list item id. What is not
+     * written in English shows the site's own English for a standard phrase, else the Arabic.
+     */
+    en?: Record<string, unknown>;
 }
 
 /* ---------- Schema (sent by the server to the editor) ---------- */
@@ -282,4 +287,8 @@ export interface BuilderProps {
     previewUrl: string;
     limits: { max_image_kb: number; types: string[] };
     unread: number;
+    /** The site's own English for its standard phrases (default headings, buttons): Arabic => English. */
+    englishDefaults: Record<string, string>;
+    /** The English site's address. */
+    siteUrlEn: string;
 }

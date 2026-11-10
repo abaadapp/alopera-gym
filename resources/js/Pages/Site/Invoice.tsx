@@ -5,6 +5,7 @@ import type { PaperData } from '@/Components/Papers/PaperPanel';
 import type { SiteInfo } from '@/Layouts/SiteLayout';
 import { useCurrency, useShared } from '@/hooks/useShared';
 import { money } from '@/lib/format';
+import { useT } from '@/lib/i18n';
 
 interface Props {
     site: SiteInfo;
@@ -23,6 +24,7 @@ interface Props {
 export default function Invoice({ seo, invoice, paper, pay_url, print_url, pdf_url }: Props) {
     const currency = useCurrency();
     const { tenant } = useShared();
+    const t = useT();
 
     return (
         <>
@@ -33,19 +35,19 @@ export default function Invoice({ seo, invoice, paper, pay_url, print_url, pdf_u
                     <div className="flex flex-wrap gap-2">
                         {pay_url && (
                             <a href={pay_url} className="inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-600">
-                                <CreditCard className="size-4" /> ادفع المتبقي <span className="num">{money(invoice.balance, currency)}</span>
+                                <CreditCard className="size-4" /> {t('ادفع المتبقي')} <span className="num">{money(invoice.balance, currency)}</span>
                             </a>
                         )}
                         <a href={pdf_url + '?download=1'} className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-4 py-2 text-sm hover:bg-brand-50">
-                            <Download className="size-4" /> تنزيل PDF
+                            <Download className="size-4" /> {t('تنزيل PDF')}
                         </a>
                         <a href={print_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-4 py-2 text-sm hover:bg-brand-50">
-                            <Printer className="size-4" /> طباعة
+                            <Printer className="size-4" /> {t('طباعة')}
                         </a>
                     </div>
                 </div>
                 <div className="mx-auto max-w-4xl">
-                    <PaperFrame html={paper.html} paper={paper.size} height="auto" title={`فاتورة ${invoice.number}`} className="border-0 bg-transparent p-0" />
+                    <PaperFrame html={paper.html} paper={paper.size} height="auto" title={t('فاتورة :number', { number: invoice.number })} className="border-0 bg-transparent p-0" />
                 </div>
             </div>
         </>

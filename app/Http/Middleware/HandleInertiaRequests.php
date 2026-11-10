@@ -49,8 +49,9 @@ class HandleInertiaRequests extends Middleware
             'logo' => OfficialLogo::url(app(TenantContext::class)->get()),
             // The year from the server: a device's clock can be wrong.
             'year' => now()->year,
-            'locale' => app()->getLocale(),
-            'dir' => app()->getLocale() === 'ar' ? 'rtl' : 'ltr',
+            // Read when the page is made: the draft preview switches to English inside its controller.
+            'locale' => fn () => app()->getLocale(),
+            'dir' => fn () => app()->getLocale() === 'ar' ? 'rtl' : 'ltr',
             'auth' => fn () => $this->staff($request),
             'tenant' => fn () => $this->tenant(),
             'modules' => ['sales' => PermissionRegistry::moduleEnabled('sales'), 'inventory' => PermissionRegistry::moduleEnabled('inventory')],
