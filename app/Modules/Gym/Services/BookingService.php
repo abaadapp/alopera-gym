@@ -103,14 +103,16 @@ final class BookingService
             ->lockForUpdate()
             ->get();
 
-        $usable = $candidates->first(fn (Membership $m) => in_array($m->status, [Membership::ACTIVE, Membership::SCHEDULED], true)
+        // A renewal waiting behind a frozen period has no dates yet (the resume moves it back): it books nothing.
+        $held = $candidates->filter(fn (Membership $m) => $m->status === Membership::SCHEDULED && $m->heldByFreeze());
+        $usable = $candidates->diff($held)->first(fn (Membership $m) => in_array($m->status, [Membership::ACTIVE, Membership::SCHEDULED], true)
             && $this->programAllowed($m, $session) && $m->hasSessionsLeft());
 
         if ($usable) {
             return $usable;
         }
 
-        if ($candidates->contains(fn ($m) => $m->status === Membership::FROZEN)) {
+        if ($held->isNotEmpty() || $candidates->contains(fn ($m) => $m->status === Membership::FROZEN)) {
             $this->fail('membership.frozen', 'العضوية مجمّدة حاليًا.');
         }
         if ($candidates->contains(fn ($m) => $m->status === Membership::PENDING)) {
