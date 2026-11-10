@@ -7,6 +7,7 @@ import { Dropdown, DropdownItem } from '@/Components/ui/Dropdown';
 import AddSectionModal from '@/Components/SiteBuilder/AddSectionModal';
 import { BuilderContext, sectionLabel, type BuilderContextValue } from '@/Components/SiteBuilder/context';
 import { ContactPanel, MenuPanel, PagesPanel, SeoPanel, ThemePanel } from '@/Components/SiteBuilder/DocPanels';
+import EnglishPanel from '@/Components/SiteBuilder/EnglishPanel';
 import HistoryModal from '@/Components/SiteBuilder/HistoryModal';
 import MediaLibrary from '@/Components/SiteBuilder/MediaLibrary';
 import PreviewPanel from '@/Components/SiteBuilder/PreviewPanel';
@@ -17,10 +18,11 @@ import { date, time } from '@/lib/format';
 import { docKey, duplicateSection, errorIndex, hasErrorUnder, imageUses, mapErrors, move, newSection, normalizeDoc, type BuilderError } from '@/lib/site-builder';
 import type { BuilderProps, SectionDoc, SectionTypeSchema, SiteDoc } from '@/types/site';
 
-type Tab = 'sections' | 'pages' | 'menu' | 'contact' | 'colors' | 'media' | 'seo';
+type Tab = 'sections' | 'english' | 'pages' | 'menu' | 'contact' | 'colors' | 'media' | 'seo';
 type Busy = 'save' | 'publish' | 'discard' | null;
 
 const TAB_OF_PATH: [string, Tab][] = [
+    ['en.', 'english'],
     ['sections.', 'sections'],
     ['pages.', 'pages'],
     ['header.', 'menu'],
@@ -256,6 +258,7 @@ export default function WebsiteBuilder(props: BuilderProps) {
 
     const errorLabel = (e: BuilderError): string => {
         if (e.path === 'version') return '';
+        if (e.path.startsWith('en.')) return 'النسخة الإنجليزية';
         if (e.sectionId) {
             const s = doc.sections.find((x) => x.id === e.sectionId);
             const sch = s ? schemas[s.type] : undefined;
@@ -264,7 +267,7 @@ export default function WebsiteBuilder(props: BuilderProps) {
             return [s ? sectionLabel(s, schemas) : 'قسم محذوف', field?.label].filter(Boolean).join(' — ');
         }
         const t = tabOf(e.path);
-        return { menu: 'القائمة والتذييل', pages: 'الصفحات الداخلية', contact: 'التواصل', colors: 'الألوان', seo: 'الإعلان ومحركات البحث', sections: 'الأقسام', media: 'الصور' }[t ?? 'sections'] ?? '';
+        return ({ menu: 'القائمة والتذييل', pages: 'الصفحات الداخلية', contact: 'التواصل', colors: 'الألوان', seo: 'الإعلان ومحركات البحث', sections: 'الأقسام', media: 'الصور', english: 'النسخة الإنجليزية' } as Record<Tab, string>)[t ?? 'sections'] ?? '';
     };
 
     const goTo = (e: BuilderError) => {
@@ -276,6 +279,7 @@ export default function WebsiteBuilder(props: BuilderProps) {
     const tabErr = (t: Tab) => errors.some((e) => tabOf(e.path) === t);
     const tabs: { key: Tab; label: string; dot?: string }[] = [
         { key: 'sections', label: 'الأقسام', dot: tabErr('sections') ? '#dc2626' : undefined },
+        { key: 'english', label: 'النسخة الإنجليزية', dot: tabErr('english') ? '#dc2626' : undefined },
         { key: 'pages', label: 'الصفحات الداخلية', dot: tabErr('pages') ? '#dc2626' : undefined },
         { key: 'menu', label: 'القائمة العلوية والتذييل', dot: tabErr('menu') ? '#dc2626' : undefined },
         { key: 'contact', label: 'التواصل وأوقات العمل', dot: tabErr('contact') ? '#dc2626' : undefined },
@@ -373,6 +377,7 @@ export default function WebsiteBuilder(props: BuilderProps) {
                         </div>
                     </div>
                 )}
+                {tab === 'english' && <EnglishPanel doc={doc} patch={patch} schemas={schemas} pages={props.pageFields} defaults={props.englishDefaults ?? {}} siteUrlEn={props.siteUrlEn} />}
                 {tab === 'pages' && <PagesPanel doc={doc} patch={patch} pages={props.pageFields} />}
                 {tab === 'menu' && <MenuPanel doc={doc} patch={patch} />}
                 {tab === 'contact' && <ContactPanel doc={doc} patch={patch} />}
@@ -397,7 +402,7 @@ export default function WebsiteBuilder(props: BuilderProps) {
                 )}
 
                 <AddSectionModal open={adding} onClose={() => setAdding(false)} schema={schema} onPick={add} />
-                <PreviewPanel open={previewOpen} onClose={() => setPreviewOpen(false)} url={previewUrl} stamp={previewStamp} dirty={dirty} />
+                <PreviewPanel open={previewOpen} onClose={() => setPreviewOpen(false)} url={previewUrl} stamp={previewStamp} dirty={dirty} english={tab === 'english'} />
                 <HistoryModal open={historyOpen} onClose={() => setHistoryOpen(false)} revisions={revisions} dirty={dirty} />
 
                 <Modal

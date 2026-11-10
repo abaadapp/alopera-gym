@@ -60,6 +60,11 @@ class PlanController extends Controller
             'name' => ['required', 'string', 'max:120'],
             'type' => ['required', 'in:'.implode(',', array_keys(MembershipPlan::TYPES))],
             'description' => ['nullable', 'string', 'max:2000'],
+            // The English website's words (#68); without them the English site shows the Arabic.
+            'name_en' => ['nullable', 'string', 'max:120'],
+            'description_en' => ['nullable', 'string', 'max:2000'],
+            'features_en' => ['nullable', 'array', 'max:12'],
+            'features_en.*' => ['string', 'max:120'],
             'duration_value' => ['required', 'integer', 'min:1', 'max:1000'],
             'duration_unit' => ['required', 'in:'.implode(',', MembershipPlan::UNITS)],
             'price' => ['required', 'numeric', 'min:0', 'max:99999'],

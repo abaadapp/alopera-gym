@@ -2,7 +2,7 @@ import { useForm } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import { Check, Layers, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Card, CardFooter, Checkbox, ConfirmAction, EmptyState, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
+import { Badge, Button, Card, CardFooter, Checkbox, ConfirmAction, EmptyState, EnglishFields, Field, Input, linesOf, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { money, dayCount } from '@/lib/format';
 import { durationUnit } from '@/lib/labels';
@@ -14,6 +14,9 @@ interface Plan {
     type: string;
     type_label: string;
     description: string | null;
+    name_en?: string | null;
+    description_en?: string | null;
+    features_en?: string[] | null;
     duration_value: number;
     duration_unit: string;
     duration_label: string;
@@ -102,6 +105,9 @@ function PlanModal({ open, plan, programs, types, onClose }: { open: boolean; pl
         name: plan?.name ?? '',
         type: plan?.type ?? 'gym',
         description: plan?.description ?? '',
+        name_en: plan?.name_en ?? '',
+        description_en: plan?.description_en ?? '',
+        features_en: plan?.features_en ?? [],
         duration_value: String(plan?.duration_value ?? 1),
         duration_unit: plan?.duration_unit ?? 'month',
         price: plan?.price ?? '',
@@ -119,6 +125,7 @@ function PlanModal({ open, plan, programs, types, onClose }: { open: boolean; pl
         program_ids: plan?.program_ids ?? [],
     });
     const [feature, setFeature] = useState('');
+    const [featuresEn, setFeaturesEn] = useState(() => (plan?.features_en ?? []).join('\n'));
     const err = form.errors as Record<string, string | undefined>;
 
     const submit = (e: FormEvent) => {
@@ -179,6 +186,26 @@ function PlanModal({ open, plan, programs, types, onClose }: { open: boolean; pl
                     <Field label="الوصف" error={err.description}>
                         <Textarea rows={3} value={form.data.description} onChange={(e) => form.setData('description', e.target.value)} />
                     </Field>
+                    <EnglishFields filled={Boolean(form.data.name_en || form.data.description_en || form.data.features_en.length)}>
+                        <Field label="الاسم بالإنجليزية" error={err.name_en}>
+                            <Input dir="ltr" lang="en" maxLength={120} value={form.data.name_en} onChange={(e) => form.setData('name_en', e.target.value)} />
+                        </Field>
+                        <Field label="الوصف بالإنجليزية" error={err.description_en}>
+                            <Textarea dir="ltr" lang="en" rows={3} maxLength={2000} value={form.data.description_en} onChange={(e) => form.setData('description_en', e.target.value)} />
+                        </Field>
+                        <Field label="المزايا بالإنجليزية (سطر لكل ميزة)" error={err.features_en ?? Object.entries(err).find(([k]) => k.startsWith('features_en.'))?.[1]}>
+                            <Textarea
+                                dir="ltr"
+                                lang="en"
+                                rows={3}
+                                value={featuresEn}
+                                onChange={(e) => {
+                                    setFeaturesEn(e.target.value);
+                                    form.setData('features_en', linesOf(e.target.value, 12));
+                                }}
+                            />
+                        </Field>
+                    </EnglishFields>
                 </div>
 
                 <div className="space-y-4">

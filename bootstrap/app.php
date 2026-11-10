@@ -1,6 +1,7 @@
 <?php
 
 use App\Core\Support\BusinessRuleException;
+use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\CrossTenantWriteException;
 use App\Core\Tenancy\MissingTenantException;
 use App\Http\Middleware\AuthenticateDevice;
@@ -15,6 +16,7 @@ use App\Http\Middleware\ResolveCustomDomain;
 use App\Http\Middleware\ResolveSiteTenant;
 use App\Http\Middleware\ResolveTenantFromUser;
 use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\SiteLocale;
 use App\Models\User;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Foundation\Application;
@@ -36,7 +38,8 @@ return Application::configure(basePath: dirname(__DIR__))
             KeepFlashForThePage::class,
             HandleInertiaRequests::class,
         ]);
-        $middleware->prepend(ResolveCustomDomain::class);
+        // The club's domain onto its site routes, then the language out of the path (/en/plans → English /plans).
+        $middleware->prepend([ResolveCustomDomain::class, SiteLocale::class]);
         $middleware->append(SecurityHeaders::class);
         // Figures typed on an Arabic keyboard (١٢٫٥) read as figures, everywhere a form or a device posts.
         $middleware->append(NormalizeNumbers::class);
@@ -87,7 +90,8 @@ return Application::configure(basePath: dirname(__DIR__))
                 return response()->json(['message' => $e->getMessage(), 'rule' => $e->rule], 422);
             }
 
-            throw ValidationException::withMessages([$e->field => $e->getMessage()]);
+            // On the English website and portal, in English where the site has the words (lang/en.json).
+            throw ValidationException::withMessages([$e->field => SiteLanguage::word($e->getMessage())]);
         });
 
         $exceptions->render(function (MissingTenantException|CrossTenantWriteException $e, Request $request) {

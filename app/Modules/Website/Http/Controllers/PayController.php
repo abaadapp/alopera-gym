@@ -38,7 +38,7 @@ class PayController extends Controller
             'invoice' => $this->present($invoice),
             'token' => $token,
             'onlinePayments' => $online->available(),
-        ], 'دفع الفاتورة '.$invoice->number);
+        ], __('دفع الفاتورة :number', ['number' => $invoice->number]));
     }
 
     public function start(string $token, OnlinePaymentService $online): HttpResponse
@@ -60,7 +60,7 @@ class PayController extends Controller
             'invoice' => $intent->invoice?->only('number') + ['token' => $intent->invoice?->public_token],
             // A website order's payment returns to the order's own page link.
             'order' => $intent->invoice_id ? Sale::where('invoice_id', $intent->invoice_id)->where('source', Sale::WEBSITE)->value('public_token') : null,
-        ], 'نتيجة الدفع');
+        ], __('نتيجة الدفع'));
     }
 
     /** Polled by the return page until the webhook has arrived. */
@@ -82,7 +82,7 @@ class PayController extends Controller
             'pay_url' => $invoice->isOpen() && $online->available() ? route('site.pay.show', ['token' => $token]) : null,
             'print_url' => route('site.invoice.print', ['token' => $token]),
             'pdf_url' => route('site.invoice.pdf', ['token' => $token]),
-        ], 'فاتورة '.$invoice->number);
+        ], __('فاتورة :number', ['number' => $invoice->number]));
     }
 
     public function invoicePrint(string $token): HttpResponse

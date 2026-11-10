@@ -208,6 +208,8 @@ class ProductController extends Controller
         return Inertia::render('Inventory/Products/Form', [
             'product' => $product ? $this->row($product->load('category:id,name')) + [
                 'description' => $product->description,
+                'name_en' => $product->name_en,
+                'description_en' => $product->description_en,
                 'reorder_level' => $product->reorder_level,
                 'photos' => $product->imageUrls(),
             ] : null,
@@ -290,6 +292,9 @@ class ProductController extends Controller
             'sku' => ['nullable', 'string', 'max:60', TenantRule::unique('products', 'sku')->ignore($product?->id)],
             'barcode' => ['nullable', 'string', 'max:60', TenantRule::unique('products', 'barcode')->ignore($product?->id)],
             'description' => ['nullable', 'string', 'max:2000'],
+            // The English website shop's words (#68); without them it shows the Arabic.
+            'name_en' => ['nullable', 'string', 'max:160'],
+            'description_en' => ['nullable', 'string', 'max:2000'],
             'price' => ['required', 'numeric', 'min:0', 'max:99999'],
             'reorder_level' => ['nullable', 'numeric', 'min:0', 'max:1000000'],
             'track_stock' => ['boolean'],
