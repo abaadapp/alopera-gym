@@ -99,6 +99,11 @@ final class OrderService
                 $invoice->forceFill(['customer_phone' => $sale->customer_phone, 'customer_email' => $sale->customer_email])->save();
             }
             $sale->forceFill(['invoice_id' => $invoice->id, 'tax' => $invoice->tax_total, 'total' => $invoice->total])->save();
+            // Nothing to pay: the invoice was paid as it was issued, before it was linked to the order, so InvoicePaid
+            // found no order to note. Noted here, the order is not «unpaid» and the expiry job leaves it alone.
+            if ($invoice->status === Invoice::PAID) {
+                $this->markPaid($invoice);
+            }
 
             $this->audit->as('customer', $member?->id, $sale->customer_name, fn () => $this->audit->log('sale.order_placed', $sale, ['total' => $sale->total, 'method' => $method]));
 
