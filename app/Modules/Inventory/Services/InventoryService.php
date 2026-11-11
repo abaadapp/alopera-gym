@@ -54,7 +54,7 @@ final class InventoryService
 
     /**
      * Start a count of a branch: the products chosen (all its stocked products if none), each with the branch's
-     * book quantity now.
+     * book quantity now and what website orders hold on its shelf (on the shelf until handed over, so counted: #132).
      *
      * @param  list<int>  $productIds
      */
@@ -75,9 +75,9 @@ final class InventoryService
             }
             $count = new Stocktake(['branch_id' => $branchId, 'number' => NumberSequence::next('stocktake'), 'notes' => $notes, 'created_by' => Auth::guard('web')->id()]);
             $count->forceFill(['status' => Stocktake::DRAFT])->save();
-            $books = $this->stock->quantities($branchId);
+            $shelf = $this->stock->shelf($branchId);
             foreach ($products as $product) {
-                $count->lines()->create(['product_id' => $product->id, 'system_quantity' => $books[$product->id] ?? 0, 'unit_cost' => $product->cost]);
+                $count->lines()->create(['product_id' => $product->id, 'system_quantity' => $shelf[$product->id]['book'] ?? 0, 'held_quantity' => $shelf[$product->id]['held'] ?? 0, 'unit_cost' => $product->cost]);
             }
 
             return $count;
@@ -93,7 +93,7 @@ final class InventoryService
     {
         return DB::transaction(function () use ($count, $counts) {
             $count = $this->lockDraft($count);
-            $books = $this->stock->quantities($count->branch_id);
+            $shelf = $this->stock->shelf($count->branch_id);
             foreach ($count->lines()->get() as $line) {
                 if (! array_key_exists($line->id, $counts)) {
                     continue;
@@ -105,12 +105,15 @@ final class InventoryService
                 }
                 // The book is the one seen when this quantity was counted: saved again unchanged (as approving does,
                 // with every line), it is kept, or the sales made since the count would be added back to the stock.
+                // What orders held is read with it: those units were on the shelf, so they were counted (#132).
                 $unchanged = $counted !== null && $line->counted_quantity !== null && round((float) $line->counted_quantity, 3) === $counted;
-                $system = $unchanged ? (float) $line->system_quantity : (float) ($books[$line->product_id] ?? 0);
+                $system = $unchanged ? (float) $line->system_quantity : (float) ($shelf[$line->product_id]['book'] ?? 0);
+                $held = $unchanged ? (float) $line->held_quantity : (float) ($shelf[$line->product_id]['held'] ?? 0);
                 $line->update([
                     'system_quantity' => $system,
+                    'held_quantity' => $held,
                     'counted_quantity' => $counted,
-                    'difference' => $counted === null ? 0 : round($counted - $system, 3),
+                    'difference' => $counted === null ? 0 : round($counted - $system - $held, 3),
                     'reason' => isset(StockService::REASONS[$entry['reason'] ?? '']) ? $entry['reason'] : 'count',
                     'note' => $entry['note'] ?? null,
                 ]);
@@ -121,8 +124,9 @@ final class InventoryService
     }
 
     /**
-     * Approve the count: each counted line's difference from the book at the time it was counted is posted once onto
-     * today's balance, so what was sold or received since the count stays counted. Approving it a second time is refused.
+     * Approve the count: each counted line's difference from the shelf expected when it was counted (the book then,
+     * plus what website orders held on the shelf then) is posted once onto today's balance, so what was sold,
+     * received, ordered, released or handed over since the count stays counted. Approving it a second time is refused.
      */
     public function approveCount(Stocktake $count): Stocktake
     {
@@ -143,8 +147,9 @@ final class InventoryService
             if ($clash) {
                 throw new BusinessRuleException('stocktake.overlap', 'الجرد '.$clash.' لنفس المنتجات في هذا الفرع اعتُمد بعد بدء هذا الجرد، فاعتماد هذا يكرر تسوية المخزون. ألغِ الجرد '.$count->number.' وابدأ جردًا جديدًا.', 'counts');
             }
+            $this->stock->lockInOrder($lines->pluck('product_id'));
             foreach ($lines as $line) {
-                $difference = round((float) $line->counted_quantity - (float) $line->system_quantity, 3);
+                $difference = round((float) $line->counted_quantity - (float) $line->system_quantity - (float) $line->held_quantity, 3);
                 $line->update(['difference' => $difference, 'unit_cost' => $line->product->cost]);
                 if ($difference != 0.0) {
                     $this->stock->move($line->product, $difference, 'adjustment', $count, $line->note ?: 'جرد '.$count->number, allowNegative: true, branchId: $count->branch_id, reason: $line->reason ?: 'count');

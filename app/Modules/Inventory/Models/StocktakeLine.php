@@ -14,7 +14,7 @@ class StocktakeLine extends Model
 
     protected function casts(): array
     {
-        return ['system_quantity' => 'decimal:3', 'counted_quantity' => 'decimal:3', 'difference' => 'decimal:3', 'unit_cost' => 'decimal:3'];
+        return ['system_quantity' => 'decimal:3', 'held_quantity' => 'decimal:3', 'counted_quantity' => 'decimal:3', 'difference' => 'decimal:3', 'unit_cost' => 'decimal:3'];
     }
 
     public function product(): BelongsTo

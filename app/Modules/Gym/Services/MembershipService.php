@@ -305,6 +305,11 @@ final class MembershipService
 
             // Bookings during the freeze would consume a membership she cannot use.
             $this->bookings->cancelFutureForMembership($membership, 'تجميد العضوية');
+            // So would those on the paid periods after it: they now wait for the resume (heldByFreeze), book nothing and
+            // do not open the door, and the resume moves their dates back.
+            Membership::where('member_id', $membership->member_id)->whereKeyNot($membership->id)
+                ->where('status', Membership::SCHEDULED)->where('starts_on', '>', $membership->starts_on)->get()
+                ->each(fn (Membership $later) => $this->bookings->cancelFutureForMembership($later, 'تجميد العضوية'));
 
             $this->event($membership, 'frozen', ['days' => $days, 'reason' => $reason]);
             MembershipFrozen::dispatch($membership);
@@ -425,19 +430,37 @@ final class MembershipService
                 $counts['resumed']++;
             });
 
+        // Each period is read again under its lock before its status changes: staff may have cancelled, frozen or moved
+        // it since the list was read, and writing the status from that copy brought a cancelled period back to life.
         Membership::where('status', Membership::SCHEDULED)->where('starts_on', '<=', $today)
-            ->eachById(function (Membership $m) use (&$counts) {
-                if ($m->heldByFreeze()) {
-                    return; // starts once the frozen period resumes, which moves it back by the days frozen
-                }
-                $m->forceFill(['status' => Membership::ACTIVE])->save();
-                $this->event($m, 'started');
-                $counts['started']++;
+            ->eachById(function (Membership $m) use ($today, &$counts) {
+                $started = DB::transaction(function () use ($m, $today) {
+                    $m = Membership::whereKey($m->id)->lockForUpdate()->first();
+                    if (! $m || $m->status !== Membership::SCHEDULED || $m->starts_on->gt($today) || $m->heldByFreeze()) {
+                        return false; // changed since it was read, or waits for the frozen period to resume (which moves it back)
+                    }
+                    $m->forceFill(['status' => Membership::ACTIVE])->save();
+                    $this->event($m, 'started');
+
+                    return true;
+                });
+                $counts['started'] += (int) $started;
             });
 
         Membership::where('status', Membership::ACTIVE)->where('ends_on', '<', $today)
-            ->eachById(function (Membership $m) use (&$counts) {
-                $m->forceFill(['status' => Membership::EXPIRED])->save();
+            ->eachById(function (Membership $m) use ($today, &$counts) {
+                $m = DB::transaction(function () use ($m, $today) {
+                    $m = Membership::whereKey($m->id)->lockForUpdate()->first();
+                    if (! $m || $m->status !== Membership::ACTIVE || ! $m->ends_on->lt($today)) {
+                        return null; // cancelled, frozen or extended since it was read
+                    }
+                    $m->forceFill(['status' => Membership::EXPIRED])->save();
+
+                    return $m;
+                });
+                if (! $m) {
+                    return;
+                }
                 $this->bookings->cancelFutureForMembership($m, 'انتهاء العضوية');
                 $this->event($m, 'expired');
                 MembershipExpired::dispatch($m);

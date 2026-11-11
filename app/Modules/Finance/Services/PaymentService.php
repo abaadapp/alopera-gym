@@ -535,6 +535,24 @@ final class PaymentService
         return $account && Account::money()->postable()->whereKey($account)->whereIn('kind', Payment::METHOD_ACCOUNT_KINDS[$method] ?? [])->exists() ? (int) $account : null;
     }
 
+    /**
+     * The cash box or bank account a refund by `$method` pays out of, as refund() will choose it; null when the method or
+     * the account chosen is not one refund() accepts (it then refuses with its own message). A caller that locks the
+     * invoice before refunding holds this account first (AccountFunds::exclusive), the order refund() and confirm() take
+     * them in, so a refund confirmed at the same moment waits for it instead of both waiting until one gives up.
+     */
+    public function refundAccount(string $method, ?int $chosen): ?Account
+    {
+        if (! in_array($method, Payment::REFUND_METHODS, true)) {
+            return null;
+        }
+        try {
+            return $this->accountFor($method, $chosen);
+        } catch (BusinessRuleException) {
+            return null;
+        }
+    }
+
     private function accountFor(string $method, ?int $chosen): Account
     {
         $chart = app(ChartOfAccounts::class);
