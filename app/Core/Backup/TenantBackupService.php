@@ -30,6 +30,15 @@ final class TenantBackupService
 
     public const KEEP = 14;
 
+    /** On the private disk, inside the club's folder: what a restore found in the public part that may not be public. */
+    public const ISOLATED = 'restore-isolated';
+
+    /** What the public disk holds (ImageStore, OfficialLogo): extension => the image type its bytes must be. */
+    private const PUBLIC_IMAGES = [
+        'webp' => IMAGETYPE_WEBP, 'png' => IMAGETYPE_PNG, 'jpg' => IMAGETYPE_JPEG, 'jpeg' => IMAGETYPE_JPEG,
+        'gif' => IMAGETYPE_GIF, 'bmp' => IMAGETYPE_BMP,
+    ];
+
     public function __construct(private readonly AuditLogger $audit) {}
 
     public function disk(): Filesystem
@@ -146,6 +155,9 @@ final class TenantBackupService
             }
         }
 
+        // Every file too, before anything is replaced: a refused archive leaves the club's rows and files as they were.
+        $files = $this->archiveFiles($zip, $tenant);
+
         $counts = DB::transaction(function () use ($tenant, $data) {
             foreach (array_reverse(TenantTables::ORDER) as $table) {
                 $this->deleteTenantRows($tenant, $table);
@@ -169,17 +181,75 @@ final class TenantBackupService
             return $counts;
         });
 
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $entry = (string) $zip->getNameIndex($i);
-            if (preg_match('#^files/(private|public)/(tenants/'.$tenant->id.'/[^\0]+)$#', $entry, $m) && ! str_contains($m[2], '..')) {
-                Storage::disk($m[1] === 'private' ? 'local' : 'public')->put($m[2], (string) $zip->getFromIndex($i));
+        // The public disk is served as it is under /storage/ on the website's and the panel's domains: only an image
+        // goes back there. Anything else from the public part is kept on the private disk, which is never served.
+        $folder = 'tenants/'.$tenant->id.'/';
+        $report = ['written' => 0, 'kept_private' => [], 'hidden_skipped' => []];
+        foreach ($files as [$index, $part, $path]) {
+            if (preg_match('#(^|/)\.#', $path)) {
+                $report['hidden_skipped'][] = $path;
+
+                continue;
             }
+            $bytes = (string) $zip->getFromIndex($index);
+            if ($part === 'public' && ! self::isPublicImage($path, $bytes)) {
+                Storage::disk('local')->put($folder.self::ISOLATED.'/'.$path, $bytes);
+                $report['kept_private'][] = $path;
+
+                continue;
+            }
+            Storage::disk($part === 'private' ? 'local' : 'public')->put($folder.$path, $bytes);
+            $report['written']++;
         }
         $zip->close();
 
-        $this->audit->log('backup.restored', $tenant, ['counts' => $counts, 'from' => $data ? 'archive' : null], tenantId: $tenant->id);
+        $summary = ['written' => $report['written']] + array_map(fn ($list) => array_slice($list, 0, 50), array_filter([
+            'kept_private' => $report['kept_private'], 'hidden_skipped' => $report['hidden_skipped'],
+        ]));
+        $this->audit->log('backup.restored', $tenant, ['counts' => $counts, 'from' => $data ? 'archive' : null, 'files' => $summary], tenantId: $tenant->id);
 
         return $counts;
+    }
+
+    /**
+     * The archive's club files, read before anything is replaced. create() writes each one as
+     * files/{private|public}/tenants/{id}/…; an entry of another club or outside the club's folder, a path that
+     * climbs, has an empty part, a backslash or a control character, or a symbolic link refuses the whole archive.
+     *
+     * @return list<array{0: int, 1: string, 2: string}> entry index, private|public, path inside the club's folder
+     */
+    private function archiveFiles(ZipArchive $zip, Tenant $tenant): array
+    {
+        $files = [];
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $entry = (string) $zip->getNameIndex($i);
+            if (! str_starts_with($entry, 'files/') || str_ends_with($entry, '/')) {
+                continue;
+            }
+            $opsys = $attributes = 0;
+            $zip->getExternalAttributesIndex($i, $opsys, $attributes);
+            $link = $opsys === ZipArchive::OPSYS_UNIX && (($attributes >> 16) & 0170000) === 0120000;
+            if ($link || ! preg_match('#^files/(private|public)/tenants/'.$tenant->id.'/(.+)$#D', $entry, $m)
+                || preg_match('#[\x00-\x1f\x7f\\\\]#', $m[2]) || array_intersect(explode('/', $m[2]), ['', '.', '..']) !== []) {
+                $zip->close();
+                $this->audit->log('backup.restore_refused', $tenant, ['reason' => 'unsafe_file', 'entry' => mb_scrub(mb_substr($entry, 0, 200))], tenantId: $tenant->id);
+                throw new BusinessRuleException('backup.invalid', 'النسخة تحتوي على ملف خارج مجلد النادي أو بمسار غير صالح، ولم يُستبدل شيء: '.mb_scrub(mb_substr($entry, 0, 120)));
+            }
+            $files[] = [$i, $m[1], $m[2]];
+        }
+
+        return $files;
+    }
+
+    /** One extension (no "photo.php.png"), an image one, and bytes that really are that image. */
+    private static function isPublicImage(string $path, string $bytes): bool
+    {
+        if (! preg_match('/^[^.]+\.([a-z]+)$/i', basename($path), $m) || ! isset(self::PUBLIC_IMAGES[strtolower($m[1])])) {
+            return false;
+        }
+        $info = @getimagesizefromstring($bytes);
+
+        return $info !== false && $info[2] === self::PUBLIC_IMAGES[strtolower($m[1])];
     }
 
     /** @return list<array<string, mixed>> */
