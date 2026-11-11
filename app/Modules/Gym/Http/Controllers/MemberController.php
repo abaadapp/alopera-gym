@@ -138,14 +138,16 @@ class MemberController extends Controller
                 ->map(fn (Booking $b) => ['id' => $b->id, 'status' => $b->status, 'source' => $b->source, 'program' => $b->session?->program?->name, 'starts_at' => $b->session?->starts_at->format('Y-m-d H:i'), 'session_id' => $b->class_session_id]),
             'checkins' => CheckIn::where('member_id', $member->id)->latest('id')->limit(30)->get()
                 ->map(fn (CheckIn $c) => $c->only('id', 'method', 'result', 'reason') + ['at' => $c->checked_in_at->format('Y-m-d H:i')]),
-            'documents' => $member->documents()->with('uploader:id,name')->latest()->get()
-                ->map(fn ($d) => $d->only('id', 'type', 'title', 'original_name', 'size') + ['uploaded_by' => $d->uploader?->name, 'created_at' => $d->created_at->toDateString(), 'expires_on' => $d->expires_on?->toDateString()]),
+            // Sent only to whom the tab shows them (members.documents): a document's title and file name say what is in it.
+            'documents' => $user->can('members.documents') ? $member->documents()->with('uploader:id,name')->latest()->get()
+                ->map(fn ($d) => $d->only('id', 'type', 'title', 'original_name', 'size') + ['uploaded_by' => $d->uploader?->name, 'created_at' => $d->created_at->toDateString(), 'expires_on' => $d->expires_on?->toDateString()]) : [],
             'notes' => $member->notesLog()->with('user:id,name')->latest()->limit(50)->get()
                 ->map(fn ($n) => $n->only('id', 'channel', 'direction', 'body') + ['user' => $n->user?->name, 'at' => $n->created_at->format('Y-m-d H:i'), 'follow_up_on' => $n->follow_up_on?->toDateString()]),
             'messages' => $user->canAny(['whatsapp.view_all', 'whatsapp.view_reports']) ? Message::where('member_id', $member->id)->latest('id')->limit(50)->get()
                 ->map(fn ($m) => $m->only('id', 'direction', 'type', 'template_key', 'body', 'status', 'error_code') + ['at' => $m->created_at->format('Y-m-d H:i')]) : [],
-            'credentials' => AccessCredential::where('holder_type', 'member')->where('holder_id', $member->id)->get(['id', 'type', 'identifier', 'label', 'is_active'])
-                ->map(fn (AccessCredential $c) => ['identifier' => $c->shownIdentifier()] + $c->only('id', 'type', 'label', 'is_active')),
+            // Door cards only to whom «وسائل الدخول» shows them (members.manage), as the QR above: a card number opens the door.
+            'credentials' => $user->can('members.manage') ? AccessCredential::where('holder_type', 'member')->where('holder_id', $member->id)->get(['id', 'type', 'identifier', 'label', 'is_active'])
+                ->map(fn (AccessCredential $c) => ['identifier' => $c->shownIdentifier()] + $c->only('id', 'type', 'label', 'is_active')) : [],
             'pt' => $member->ptSubscriptions()->with(['package:id,name', 'trainer:id,name'])->latest()->get()
                 ->map(fn ($s) => $s->only('id', 'status', 'sessions_total', 'sessions_used', 'price') + ['package' => $s->package?->name, 'trainer' => $s->trainer?->name, 'expires_on' => $s->expires_on?->toDateString()]),
             'plans' => MembershipPlan::active()->with('programs:id')->orderBy('sort')->get()->map(fn ($p) => GymPresenter::plan($p)),

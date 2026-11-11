@@ -96,6 +96,13 @@ final class ManualInvoices
                 $draft = Invoice::drafts()->whereKey($draft->id)->lockForUpdate()->firstOrFail();
             }
             [$member, $lines, $options, $name] = $this->parts($data, $draft);
+            // The products whose stock this invoice moves, locked by id before its number is taken, as a till sale takes
+            // them (products, then the invoice): otherwise the two deadlock, on the products or on the invoice counter.
+            $this->stock->lockInOrder(collect($lines)->map(fn (array $line) => match (true) {
+                ($line['itemable'] ?? null) instanceof Product => $line['itemable']->id,
+                ($line['itemable'] ?? null) instanceof ProductAddon => $line['itemable']->stock_product_id,
+                default => null,
+            }));
             $invoice = $this->invoices->issue($member, $lines, $options, $name);
 
             // Products from the catalogue leave the shelf of the invoice's branch (none: the main branch), and so does
