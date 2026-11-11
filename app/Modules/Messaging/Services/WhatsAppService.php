@@ -51,6 +51,27 @@ final class WhatsAppService
     }
 
     /**
+     * Why a queued template message may no longer go, or null when it may: consent is checked again as it is sent, so a
+     * STOP (or consent withdrawn by staff) after it was queued wins. Marketing: a campaign's message or a marketing
+     * template, as queueTemplate() decides it.
+     */
+    public function consentRefusal(Message $message): ?string
+    {
+        if ($message->type !== 'template' || $message->member_id === null) {
+            return null;
+        }
+        $member = Member::find($message->member_id);
+        $marketing = $message->campaign_id !== null || MessageTemplate::where('key', $message->template_key)->value('category') === 'marketing';
+
+        return match (true) {
+            ! $member => 'member_missing',
+            ! $member->whatsapp_opt_in => 'opted_out',
+            $marketing && ! $member->canReceiveMarketing() => 'no_marketing_consent',
+            default => null,
+        };
+    }
+
+    /**
      * Queue a template message for an event.
      *
      * @param  array<string, string>  $values  available variable values by name
