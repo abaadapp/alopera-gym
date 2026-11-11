@@ -45,6 +45,10 @@ jobs:
           LARAVEL_BYPASS_ENV_CHECK: 1   # vitest loads vite.config, whose Laravel plugin refuses a dev server in CI
       - run: npm run build
       - run: vendor/bin/pint --test
+      - name: nginx (deploy/nginx on a throwaway copy, scripts/test-nginx-config.sh)
+        run: |
+          command -v nginx >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq nginx; }
+          bash scripts/test-nginx-config.sh
       - run: php artisan test
 
   # What passed, written down: the pull request, its head, and the tree tested (refs/pull/N/merge, main with the pull
