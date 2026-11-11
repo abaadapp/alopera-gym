@@ -25,7 +25,8 @@ trap cleanup EXIT
 
 command -v nginx >/dev/null || { echo "nginx is not installed"; exit 1; }
 mkdir -p "$T/sites" "$T/snippets" "$T/logs" "$T/tmp" "$T/acme/.well-known/acme-challenge" \
-    "$T/public/storage/sub" "$T/public/storage/mixed" "$T/public/storage/ext" "$T/public/build" "$T/public/.git"
+    "$T/public/storage/sub" "$T/public/storage/mixed" "$T/public/storage/ext" "$T/public/build" "$T/public/.git" \
+    "$T/public/storage/.git" "$T/public/storage/.well-known" "$T/public/storage/sub/.hidden" "$T/public/storage/v1.2"
 
 # Certificates: one per name the files expect, self-signed, valid for two days.
 cert() { # $1 certificate name, $2.. names it covers
@@ -54,6 +55,14 @@ echo 'png' > "$T/public/storage/photo.png"
 echo 'jpg' > "$T/public/storage/photo.jpg"
 echo 'webp' > "$T/public/storage/photo.webp"
 echo 'pdf' > "$T/public/storage/doc.pdf"
+# Hidden files and folders under storage/ (Laravel's own .gitignore is there on every server); and names with a dot
+# that do not start with one, which are served.
+for f in storage/.gitignore storage/.env storage/sub/.env storage/.hidden.png storage/.user.ini storage/.git/config \
+    storage/.well-known/x storage/sub/.hidden/photo.png; do
+    echo 'HIDDEN' > "$T/public/$f"
+done
+echo 'png' > "$T/public/storage/v1.2/photo.png"
+echo 'png' > "$T/public/storage/a.b.png"
 echo 'body{}' > "$T/public/build/app.css"
 echo 'APP_KEY=secret' > "$T/public/.env"
 echo '[core]' > "$T/public/.git/config"
@@ -200,13 +209,19 @@ for name in aloperagym.om app.aloperagym.om; do
         /storage/sub/../evil.php /storage//evil.php /storage/evil.php/x.png /storage/evil.php%3fx.png /other.php /missing.php; do
         check "$path" 404 "$(result "$name" "$path")"
     done
+    echo "== $name: nothing hidden under /storage/ is served (404)"
+    for path in /storage/.gitignore /storage/.env /storage/sub/.env /storage/.hidden.png /storage/.user.ini \
+        /storage/.git/config /storage/.well-known/x /storage/sub/.hidden/photo.png /storage/%2egitignore /storage/sub/%2Eenv \
+        /storage/sub/..%2f.env /storage//.env /storage/sub/../.env /storage/.GIT/config; do
+        check "$path" 404 "$(result "$name" "$path")"
+    done
     echo "== $name: files that are never served"
     check "/.env" 403 "$(https "$name" /.env)"
     check "/.git/config" 403 "$(https "$name" /.git/config)"
     check "/storage/../.env" 403 "$(https "$name" /storage/../.env)"
     check "/backup.sql" 403 "$(https "$name" /backup.sql)"
     echo "== $name: files that are"
-    for path in /storage/photo.png /storage/photo.jpg /storage/photo.webp /storage/doc.pdf; do
+    for path in /storage/photo.png /storage/photo.jpg /storage/photo.webp /storage/doc.pdf /storage/v1.2/photo.png /storage/a.b.png; do
         check "$path" 200 "$(result "$name" "$path")"
     done
     check "/storage/missing.png" 404 "$(result "$name" /storage/missing.png)"
