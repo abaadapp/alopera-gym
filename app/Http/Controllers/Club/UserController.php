@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Modules\Payroll\Models\Employee;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -126,6 +127,11 @@ class UserController extends Controller
             $user->setRememberToken(Str::random(60));
         }
         $user->save();
+        if (! empty($data['password']) && $user->is($request->user())) {
+            // Your own password, changed here: this device signs in with it from now on (auth.session keeps the
+            // signed-in account's fingerprint), so only your other devices are signed out.
+            Auth::guard('web')->setUser($user);
+        }
 
         $audit->log('user.updated', $user, old: $old, new: $user->only('role_id', 'is_active', 'email', 'custom_permissions'));
 

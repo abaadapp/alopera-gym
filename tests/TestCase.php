@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Http\Request;
 use Tests\Support\DatabaseIsolation;
@@ -21,6 +22,21 @@ abstract class TestCase extends BaseTestCase
         DatabaseIsolation::assert($app, ['testing'], 'The tests did not start, nothing was touched: ');
 
         return $app;
+    }
+
+    /**
+     * As a sign-in does (SessionGuard::login): the session carries the password fingerprint of whoever acts now, so
+     * auth.session (routes/web.php, the portal) treats a test that switches accounts like a real sign-in.
+     */
+    public function be(Authenticatable $user, $guard = null)
+    {
+        parent::be($user, $guard);
+        $name = $guard ?? $this->app['auth']->getDefaultDriver();
+        if ($user->getAuthPassword()) {
+            $this->app['session']->put('password_hash_'.$name, $this->app['auth']->guard($name)->hashPasswordForCookie($user->getAuthPassword()));
+        }
+
+        return $this;
     }
 
     protected function setUp(): void
