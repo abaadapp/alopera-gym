@@ -4,6 +4,7 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\CrossTenantWriteException;
 use App\Core\Tenancy\MissingTenantException;
+use App\Core\Tenancy\SiteDomains;
 use App\Http\Middleware\AuthenticateDevice;
 use App\Http\Middleware\EnforceBranchAccess;
 use App\Http\Middleware\EnsureClubFinance;
@@ -40,6 +41,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         // The club's domain onto its site routes, then the language out of the path (/en/plans → English /plans).
         $middleware->prepend([ResolveCustomDomain::class, SiteLocale::class]);
+        // Only the panel's, the site's and the clubs' own domains: a request naming any other Host is refused (400) before
+        // a link is built from it. Off in local development and in tests, as Laravel does.
+        $middleware->trustHosts(at: fn () => app(SiteDomains::class)->trustedHosts(), subdomains: false);
         $middleware->append(SecurityHeaders::class);
         // Figures typed on an Arabic keyboard (١٢٫٥) read as figures, everywhere a form or a device posts.
         $middleware->append(NormalizeNumbers::class);
