@@ -52,7 +52,17 @@ export default function ShopCart({ site, seo, products, methods, branches, picku
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [byId]);
 
+    // One key per cart, made when it opens: the same cart sent twice (a double click, a retry) places one order.
+    const clientKey = useMemo(() => {
+        try {
+            return crypto.randomUUID();
+        } catch {
+            return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+        }
+    }, []);
+
     const form = useForm({
+        client_key: clientKey,
         name: prefill?.name ?? '',
         phone: prefill?.phone ?? '',
         email: prefill?.email ?? '',

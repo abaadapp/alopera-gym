@@ -224,7 +224,11 @@ final class OnlinePaymentService
     /** @param array<string, mixed> $payload */
     private function log(?int $tenantId, string $transactionId, string $reference, bool $valid, string $outcome, array $payload, ?string $ip): string
     {
-        // Card data is never in Paymob callbacks beyond the masked PAN; keep the payload for investigations.
+        // Card data is never in Paymob callbacks beyond the masked PAN; keep the payload for investigations. One that is
+        // not signed, or names no payment of ours, could come from anyone with a body of any size: only what identifies it.
+        if (! $valid) {
+            $payload = self::identifying($payload);
+        }
         PaymentWebhookEvent::create([
             'tenant_id' => $tenantId,
             'provider' => 'paymob',
@@ -237,5 +241,21 @@ final class OnlinePaymentService
         ]);
 
         return $outcome;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed> the type, transaction, order, amount and result of a callback, nothing else
+     */
+    private static function identifying(array $payload): array
+    {
+        $keep = fn (array $from, array $keys) => array_filter(Arr::only($from, $keys), fn ($v) => is_scalar($v) && strlen((string) $v) <= 120);
+        $obj = (array) Arr::get($payload, 'obj', []);
+        $order = $keep((array) Arr::get($obj, 'order', []), ['id', 'merchant_order_id']);
+
+        return array_filter([
+            'type' => is_scalar($payload['type'] ?? null) ? mb_substr((string) $payload['type'], 0, 40) : null,
+            'obj' => $keep($obj, ['id', 'amount_cents', 'currency', 'success', 'pending', 'special_reference']) + ($order ? ['order' => $order] : []),
+        ], fn ($v) => $v !== null && $v !== []) + ['trimmed' => true];
     }
 }
