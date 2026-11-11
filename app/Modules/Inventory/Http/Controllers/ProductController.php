@@ -103,7 +103,11 @@ class ProductController extends Controller
                 $this->syncAddons($product, $data['addon_ids'] ?? []);
             }
             if (! empty($data['opening_stock']) && $product->track_stock) {
-                $stock->move($product, (float) $data['opening_stock'], 'adjustment', null, 'رصيد افتتاحي', (float) ($data['opening_cost'] ?? 0));
+                // On the shelf of the branch the user works in, as a stock count from the product page; the main branch's
+                // for whoever works for the whole club.
+                $branches = app(BranchContext::class);
+                $stock->move($product, (float) $data['opening_stock'], 'adjustment', null, 'رصيد افتتاحي', (float) ($data['opening_cost'] ?? 0),
+                    branchId: $branches->assign() ?? $branches->mainId());
             }
 
             return $product;
