@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Modules\Payroll\Models\Employee;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -121,6 +122,8 @@ class UserController extends Controller
         $user->custom_permissions = $custom;
         if (! empty($data['password'])) {
             $user->password = $data['password'];
+            // A new password ends the account's «remember me» logins, as one changed from «حسابي» does.
+            $user->setRememberToken(Str::random(60));
         }
         $user->save();
 
