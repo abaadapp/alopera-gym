@@ -9,6 +9,8 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Core\Tenancy\TenantContext;
+use App\Models\Branch;
+use App\Modules\Accounting\Services\AccountFunds;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\CreditNoteService;
@@ -50,8 +52,13 @@ final class OrderService
      * @param  array{name: string, phone: string, email?: string|null, notes?: string|null}  $customer
      * @param  string  $method  paymob|pickup
      */
-    public function place(array $items, array $customer, string $method, ?Member $member = null, ?int $branchId = null): Sale
+    public function place(array $items, array $customer, string $method, ?Member $member = null, ?int $branchId = null, ?string $clientKey = null): Sale
     {
+        // One cart, one order: the same cart sent again (a double click, a retried request) returns the first order. Sent
+        // twice at the same moment, the second one stops on the unique key and its caller returns the first.
+        if ($clientKey !== null && ($first = Sale::where('client_key', $clientKey)->first())) {
+            return $first->load('items');
+        }
         if ($items === []) {
             throw new BusinessRuleException('order.empty', 'السلة فارغة.', 'items');
         }
@@ -59,8 +66,12 @@ final class OrderService
             throw new BusinessRuleException('order.method', 'اختر طريقة دفع متاحة.', 'payment_method');
         }
         $window = ShopSettings::of($this->tenants->require())['payment_window_minutes'];
+        // Only a branch the cart offers (this club's active ones), even in a request written by hand. None: as before.
+        if ($branchId !== null && ! Branch::whereKey($branchId)->where('is_active', true)->exists()) {
+            throw new BusinessRuleException('order.branch', 'فرع الاستلام المختار غير متاح. اختر فرعًا آخر من السلة.', 'branch_id');
+        }
 
-        return DB::transaction(function () use ($items, $customer, $method, $member, $branchId, $window) {
+        return DB::transaction(function () use ($items, $customer, $method, $member, $branchId, $window, $clientKey) {
             $products = Product::onWebsite()->whereIn('id', array_column($items, 'product_id'))->get()->keyBy('id');
             ['lines' => $lines, 'subtotal' => $subtotal] = $this->lines->price($products, $items, 'website');
 
@@ -73,6 +84,7 @@ final class OrderService
                 'customer_email' => $customer['email'] ?? null,
                 'notes' => $customer['notes'] ?? null,
                 'number' => NumberSequence::next('web_order'),
+                'client_key' => $clientKey,
                 'source' => Sale::WEBSITE,
                 'status' => Sale::PENDING,
                 'fulfillment' => 'new',
@@ -93,6 +105,11 @@ final class OrderService
                 $invoice->forceFill(['customer_phone' => $sale->customer_phone, 'customer_email' => $sale->customer_email])->save();
             }
             $sale->forceFill(['invoice_id' => $invoice->id, 'tax' => $invoice->tax_total, 'total' => $invoice->total])->save();
+            // Nothing to pay: the invoice was paid as it was issued, before it was linked to the order, so InvoicePaid
+            // found no order to note. Noted here, the order is not «unpaid» and the expiry job leaves it alone.
+            if ($invoice->status === Invoice::PAID) {
+                $this->markPaid($invoice);
+            }
 
             $this->audit->as('customer', $member?->id, $sale->customer_name, fn () => $this->audit->log('sale.order_placed', $sale, ['total' => $sale->total, 'method' => $method]));
 
@@ -179,7 +196,12 @@ final class OrderService
      */
     public function cancel(Sale $sale, string $reason, ?string $refundMethod = null, bool $mayRefund = true): Sale
     {
-        return DB::transaction(function () use ($sale, $reason, $refundMethod, $mayRefund) {
+        // The money goes back out of an account: held before the order and invoice rows, as CreditNoteService::issue
+        // holds it (a payment's account never changes, so it is read before the lock).
+        $paidInvoice = $refundMethod !== null && $sale->invoice_id ? Invoice::find($sale->invoice_id) : null;
+        $account = $paidInvoice ? $this->payments->refundAccount($refundMethod, $this->payments->paidInto($paidInvoice, $refundMethod)) : null;
+
+        return app(AccountFunds::class)->exclusive($account, fn () => DB::transaction(function () use ($sale, $reason, $refundMethod, $mayRefund) {
             $sale = $this->lockOrder($sale);
             $invoice = Invoice::whereKey($sale->invoice_id)->lockForUpdate()->first();
             $paid = $invoice && ! Money::isZero($invoice->paid_total);
@@ -220,7 +242,7 @@ final class OrderService
             app(StaffNotifier::class)->resolve('order:'.$sale->id);
 
             return $sale;
-        });
+        }));
     }
 
     /** The invoice of a pending order was voided from the finance screens: release the order too. */

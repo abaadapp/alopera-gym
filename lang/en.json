@@ -105,6 +105,7 @@
     "سبق استخدام هذا الكود.": "You have already used this coupon code.",
     "السلة فارغة.": "The cart is empty.",
     "اختر طريقة دفع متاحة.": "Choose an available payment method.",
+    "فرع الاستلام المختار غير متاح. اختر فرعًا آخر من السلة.": "The pickup branch you chose is not available. Choose another branch in the cart.",
     "أحد المنتجات في السلة لم يعد متاحًا. حدّث السلة وحاول مرة أخرى.": "A product in your cart is no longer available. Refresh the cart and try again.",
     "إحدى الإضافات المختارة لم تعد متاحة مع «:product». حدّث السلة وحاول مرة أخرى.": "One of the add-ons you chose is no longer available with “:product”. Refresh the cart and try again.",
     "الحد المسموح من «:addon» هو :max لكل قطعة.": "The most “:addon” allowed is :max per item.",

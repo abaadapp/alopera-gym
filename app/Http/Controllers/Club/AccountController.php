@@ -8,6 +8,7 @@ use App\Core\Tenancy\BranchContext;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -44,7 +45,9 @@ class AccountController extends Controller
             'phone' => ['nullable', 'string', 'max:32'],
         ]);
         $user = $request->user();
-        $user->fill(['name' => $data['name'], 'phone' => $data['phone'] ? Phone::normalize($data['phone']) : null])->save();
+        // A phone not sent at all stays as it is; one sent empty is cleared.
+        $phone = array_key_exists('phone', $data) ? ($data['phone'] ? Phone::normalize($data['phone']) : null) : $user->phone;
+        $user->fill(['name' => $data['name'], 'phone' => $phone])->save();
         $audit->log('user.profile_updated', $user);
 
         return back()->with('success', 'تم حفظ بيانات حسابك.');
@@ -58,7 +61,8 @@ class AccountController extends Controller
         ], ['current_password.current_password' => 'كلمة المرور الحالية غير صحيحة.']);
 
         $user = $request->user();
-        $user->forceFill(['password' => $data['password']])->save();
+        // A new remember token ends the sessions remembered on other devices, as a reset does; this one stays signed in.
+        $user->forceFill(['password' => $data['password'], 'remember_token' => Str::random(60)])->save();
         $audit->log('user.password_changed', $user);
 
         return back()->with('success', 'تم تغيير كلمة المرور.');

@@ -137,6 +137,7 @@ class WebsiteBilingualTest extends TestCase
     public function test_the_sitemap_lists_each_page_in_both_languages(): void
     {
         $club = $this->club();
+        $this->plan($club, ['is_public' => true, 'is_active' => true]); // the plans page has something to show
         $xml = $this->get($this->base($club, '/sitemap.xml'))->assertOk()->getContent();
 
         $this->assertStringContainsString('<loc>'.url($this->base($club, '/plans')).'</loc>', $xml);

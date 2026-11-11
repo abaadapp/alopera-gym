@@ -30,7 +30,8 @@ class PayrollSettingsController extends Controller
             'punch_window_seconds' => ['required', 'integer', 'min:0', 'max:900'],
         ], [], ['punch_window_seconds' => 'مهلة البصمة المكررة']);
 
-        if ($data['payout_account_id'] && ! Account::money()->postable()->whereIn('kind', Account::PAYING_KINDS)->whereKey($data['payout_account_id'])->exists()) {
+        // Not sent at all: the stored account stays (array_merge below), as the hidden settings do.
+        if (! empty($data['payout_account_id']) && ! Account::money()->postable()->whereIn('kind', Account::PAYING_KINDS)->whereKey($data['payout_account_id'])->exists()) {
             $data['payout_account_id'] = null;
         }
 

@@ -103,14 +103,16 @@ final class BookingService
             ->lockForUpdate()
             ->get();
 
-        $usable = $candidates->first(fn (Membership $m) => in_array($m->status, [Membership::ACTIVE, Membership::SCHEDULED], true)
+        // A renewal waiting behind a frozen period has no dates yet (the resume moves it back): it books nothing.
+        $held = $candidates->filter(fn (Membership $m) => $m->status === Membership::SCHEDULED && $m->heldByFreeze());
+        $usable = $candidates->diff($held)->first(fn (Membership $m) => in_array($m->status, [Membership::ACTIVE, Membership::SCHEDULED], true)
             && $this->programAllowed($m, $session) && $m->hasSessionsLeft());
 
         if ($usable) {
             return $usable;
         }
 
-        if ($candidates->contains(fn ($m) => $m->status === Membership::FROZEN)) {
+        if ($held->isNotEmpty() || $candidates->contains(fn ($m) => $m->status === Membership::FROZEN)) {
             $this->fail('membership.frozen', 'العضوية مجمّدة حاليًا.');
         }
         if ($candidates->contains(fn ($m) => $m->status === Membership::PENDING)) {
@@ -143,8 +145,10 @@ final class BookingService
         $tenant = $this->tenants->require();
 
         return DB::transaction(function () use ($booking, $byStaff, $reason, $tenant) {
-            $booking = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+            // The class before the booking: the order cancelSession() and the releases on a freeze or expiry take them in,
+            // so the two never deadlock. A booking's class never changes, so it is read before the lock.
             $session = ClassSession::whereKey($booking->class_session_id)->lockForUpdate()->firstOrFail();
+            $booking = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
 
             if ($booking->status !== Booking::BOOKED) {
                 $this->fail('booking.not_active', 'الحجز غير قابل للإلغاء.');
@@ -216,13 +220,32 @@ final class BookingService
             ->whereHas('session', fn ($q) => $q->where('starts_at', '>', now()))
             ->get();
 
+        $released = 0;
         foreach ($bookings as $booking) {
-            $session = ClassSession::whereKey($booking->class_session_id)->lockForUpdate()->firstOrFail();
-            $this->release($booking, $session, $reason);
-            BookingCancelled::dispatch($booking, $reason);
+            $released += (int) DB::transaction(function () use ($booking, $reason) {
+                $session = ClassSession::whereKey($booking->class_session_id)->lockForUpdate()->firstOrFail();
+                // Read again under the class's lock: the member (or staff) may have cancelled it since the list was read,
+                // and releasing it from that copy gave its seat back twice.
+                $booking = $this->stillBooked($booking);
+                if (! $booking) {
+                    return false;
+                }
+                $this->release($booking, $session, $reason);
+                BookingCancelled::dispatch($booking, $reason);
+
+                return true;
+            });
         }
 
-        return $bookings->count();
+        return $released;
+    }
+
+    /** The booking re-read under its lock, or null when it is no longer booked. */
+    private function stillBooked(Booking $booking): ?Booking
+    {
+        $booking = Booking::whereKey($booking->id)->lockForUpdate()->first();
+
+        return $booking && $booking->status === Booking::BOOKED ? $booking : null;
     }
 
     /**
@@ -239,6 +262,10 @@ final class BookingService
 
         foreach ($bookings as $booking) {
             $session = ClassSession::whereKey($booking->class_session_id)->lockForUpdate()->firstOrFail();
+            $booking = $this->stillBooked($booking);
+            if (! $booking) {
+                continue; // cancelled since the list was read
+            }
             $target = Membership::whereKey($to->id)->lockForUpdate()->firstOrFail();
             $date = $session->starts_at->startOfDay();
             if (! ($target->starts_on->lte($date) && $target->ends_on->gte($date) && $this->programAllowed($target, $session) && $target->hasSessionsLeft())) {

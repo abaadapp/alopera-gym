@@ -36,15 +36,19 @@ class SiteController extends Controller
         // What the owner published from «إدارة الموقع» (or the starting design until then), with the system's live data.
         $rendered = $renderer->render($content->live($site));
 
-        return $this->page('Site/Home', ['page' => $rendered['page']], null, null, null, [
+        // Only what the club has entered: a phone or an address not entered yet is left out, not sent as null (which
+        // search engines report as an invalid value).
+        $filled = fn (array $values) => array_filter($values, fn ($v) => $v !== null && $v !== '');
+
+        return $this->page('Site/Home', ['page' => $rendered['page']], null, null, null, $filled([
             '@context' => 'https://schema.org',
             '@type' => 'HealthClub',
             'name' => $tenant->name,
             'url' => route('site.home'),
             'telephone' => $rendered['site']['contact_phone'],
             'image' => $tenant->logoUrl(),
-            'address' => ['@type' => 'PostalAddress', 'streetAddress' => $rendered['site']['address'], 'addressLocality' => $tenant->city, 'addressCountry' => $tenant->country],
-        ], $rendered);
+            'address' => $filled(['@type' => 'PostalAddress', 'streetAddress' => $rendered['site']['address'], 'addressLocality' => $tenant->city, 'addressCountry' => $tenant->country]),
+        ]), $rendered);
     }
 
     public function plans(): Response
@@ -133,10 +137,10 @@ class SiteController extends Controller
         return back()->with('success', __('تم استلام رسالتك بنجاح'));
     }
 
-    public function sitemap(TenantContext $tenants): HttpResponse
+    public function sitemap(TenantContext $tenants, SiteRenderer $renderer): HttpResponse
     {
-        $pages = collect(['site.home', 'site.plans', 'site.programs', 'site.trainers', 'site.schedule', 'site.news', 'site.contact', 'site.join'])
-            ->map(fn ($r) => [$r, []]);
+        // The pages with something to show, as the menu shows them: an empty page (no programs yet) is left out.
+        $pages = collect($renderer->pagesWithContent())->map(fn ($r) => [$r, []]);
         SitePost::visible()->get(['slug'])->each(fn ($p) => $pages->push(['site.post', ['slug' => $p->slug]]));
 
         // Each page in both languages, each entry naming the other (hreflang), Arabic the default (x-default).

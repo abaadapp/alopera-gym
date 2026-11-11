@@ -19,6 +19,7 @@ use App\Modules\Payroll\Models\PayrollItem;
 use App\Modules\Payroll\Models\PayrollPayout;
 use App\Modules\Payroll\Models\PayrollRun;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -45,7 +46,7 @@ final class PayrollService
             throw new BusinessRuleException('payroll.month', 'اختر شهرًا صحيحًا.', 'month');
         }
         if (PayrollRun::where('period', $period->toDateString())->exists()) {
-            throw new BusinessRuleException('payroll.exists', 'توجد مسيرة لهذا الشهر بالفعل.', 'month');
+            throw self::monthTaken();
         }
         // A closed month takes no salaries: a run opened for it could never be approved.
         app(AccountingPeriods::class)->assertOpen($period->endOfMonth(), 'month', 'هذا الشهر مقفل محاسبيًا؛ لا تُفتح له مسيرة رواتب.');
@@ -62,6 +63,23 @@ final class PayrollService
 
         $attendance = $this->attendance($employees, $period, $end);
 
+        // Two people opening the same month at once both find it free; the month's unique index lets one run in and the
+        // other is told the month has its run, as if it had come a moment later.
+        try {
+            return $this->createRun($period, $employees, $attendance);
+        } catch (UniqueConstraintViolationException $e) {
+            throw PayrollRun::where('period', $period->toDateString())->exists() ? self::monthTaken() : $e;
+        }
+    }
+
+    private static function monthTaken(): BusinessRuleException
+    {
+        return new BusinessRuleException('payroll.exists', 'توجد مسيرة لهذا الشهر بالفعل.', 'month');
+    }
+
+    /** @param  Collection<int, Employee>  $employees */
+    private function createRun(CarbonImmutable $period, Collection $employees, array $attendance): PayrollRun
+    {
         return DB::transaction(function () use ($period, $employees, $attendance) {
             $run = PayrollRun::create([
                 'number' => NumberSequence::next('payroll_run'),

@@ -35,6 +35,8 @@ use Illuminate\Database\Eloquent\Model;
  * | a website order                         | orders.manage, of the order's branch  | prepared, delivered or cancelled |
  * | a payment waiting for confirmation      | payments.confirm                      | confirmed or rejected            |
  * | an online payment that failed           | invoices.view                         | —                                |
+ * | online money left as credit (late, or   | payments.refund, of its branch        | the credit is applied or paid    |
+ * | over what the invoice still owed)       |                                       | back in full                     |
  * | memberships ending within 7 days (daily)| memberships.view                      | —                                |
  * | an integration error (once a day)       | integrations.manage                   | the next successful check        |
  * | a contact-form message                  | website.manage                        | marked read                      |
@@ -85,6 +87,23 @@ final class StaffAlerts
             'لم يكتمل دفع إلكتروني للفاتورة '.$intent->invoice->number,
             route('club.invoices.show', $intent->invoice_id),
             fn (User $u) => $this->branches->allows($u, $intent->invoice->owningBranchId()));
+    }
+
+    /**
+     * Money a gateway confirmed that its invoice no longer took — a website order cancelled before Paymob's
+     * confirmation came, an invoice voided or paid at the desk meanwhile — is the customer's credit. Someone who may
+     * pay it back is told, once per payment (a repeated callback records no new payment).
+     */
+    public function gatewayCredit(Payment $payment): void
+    {
+        $payment->loadMissing('invoice:id,number,customer_name');
+        $order = Sale::where('invoice_id', $payment->invoice_id)->where('source', Sale::WEBSITE)->where('status', Sale::CANCELLED)->value('number');
+        $this->notifier->notify('payments.refund', 'payment-credit:'.$payment->id, 'payment',
+            ($order ? 'دفعة إلكترونية وصلت بعد إلغاء الطلب '.$order : 'دفعة إلكترونية لم تُطبَّق على الفاتورة '.$payment->invoice?->number)
+                .': '.Money::normalize($payment->credit_amount).' '.$payment->currency.' رصيد دائن للعميل'
+                .($payment->invoice?->customer_name ? ' — '.$payment->invoice->customer_name : '').'. خصّصه لفاتورة أو رُدّه.',
+            route('club.invoices.show', $payment->invoice_id),
+            fn (User $u) => $this->branches->allows($u, $payment->owningBranchId()));
     }
 
     /** Once a day: how many memberships end within a week — for each recipient, in their own branch when tied to one. */

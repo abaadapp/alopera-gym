@@ -218,6 +218,7 @@ final class PaymentService
                 if (! Money::isZero($credit)) {
                     $payment->forceFill(['notes' => 'دفعة إلكترونية تتجاوز رصيد الفاتورة: '.$credit.' رصيد دائن للعميل، يُخصَّص لفاتورة أخرى أو يُرد.'])->save();
                     $this->audit->log('payment.gateway_overpayment', $payment, ['invoice' => $invoice->number, 'credit' => $credit]);
+                    app(StaffAlerts::class)->gatewayCredit($payment); // written with the payment: gone too if it rolls back
                 }
 
                 if (Money::isZero($fits)) {
@@ -329,6 +330,7 @@ final class PaymentService
         $account = $this->accountFor($method, $accountId);
 
         return app(AccountFunds::class)->exclusive($account, fn () => DB::transaction(function () use ($credit, $amount, $method, $reference, $account) {
+            $this->lockInvoices($credit->invoice_id);
             $credit = Payment::whereKey($credit->id)->lockForUpdate()->firstOrFail();
             $this->assertCredit($credit, $amount);
             if ($method === 'paymob' && $credit->method !== 'paymob') {
@@ -363,6 +365,7 @@ final class PaymentService
                 $credit->forceFill(['credit_used' => Money::add($credit->credit_used, $amount)])->save();
             }
             $this->audit->log($waits ? 'payment.refund_requested' : 'payment.refunded', $refund, ['credit_of' => $credit->receipt_number, 'amount' => $refund->amount, 'method' => $method]);
+            $this->settleCreditAlert($credit);
 
             return $refund;
         }));
@@ -375,6 +378,7 @@ final class PaymentService
     public function allocate(Payment $credit, Invoice $invoice, string|float $amount): PaymentAllocation
     {
         return DB::transaction(function () use ($credit, $invoice, $amount) {
+            $this->lockInvoices($credit->invoice_id, $invoice->id);
             $credit = Payment::whereKey($credit->id)->lockForUpdate()->firstOrFail();
             $this->assertCredit($credit, $amount);
             $invoice = $this->lockOpen($invoice);
@@ -401,6 +405,7 @@ final class PaymentService
             $fullyPaid = $invoice->settledStatus() === Invoice::PAID;
             $invoice->forceFill(['status' => $fullyPaid ? Invoice::PAID : Invoice::PARTIALLY_PAID, 'paid_at' => $fullyPaid ? now() : null])->save();
             $this->audit->log('payment.credit_applied', $allocation, ['credit_of' => $credit->receipt_number, 'invoice' => $invoice->number, 'amount' => $allocation->amount]);
+            $this->settleCreditAlert($credit);
 
             if ($fullyPaid) {
                 InvoicePaid::dispatch($invoice);
@@ -419,6 +424,7 @@ final class PaymentService
     public function cancel(Payment $payment, string $reason): Payment
     {
         return DB::transaction(function () use ($payment, $reason) {
+            $this->lockInvoices($payment->invoice_id);
             $payment = Payment::whereKey($payment->id)->lockForUpdate()->firstOrFail();
             if ($payment->kind !== Payment::KIND_PAYMENT || $payment->status !== Payment::COMPLETED) {
                 throw new BusinessRuleException('payment.not_cancellable', 'تُلغى الدفعة المكتملة فقط.');
@@ -490,6 +496,14 @@ final class PaymentService
         return $refund;
     }
 
+    /** The bell's «online money left as credit» is done once none of it is left (a refund of it waiting to be made counts). */
+    private function settleCreditAlert(Payment $credit): void
+    {
+        if (Money::isZero($credit->creditLeft())) {
+            app(StaffNotifier::class)->resolve('payment-credit:'.$credit->id);
+        }
+    }
+
     private function assertCredit(Payment $credit, string|float $amount): void
     {
         if ($credit->kind !== Payment::KIND_PAYMENT || $credit->status !== Payment::COMPLETED) {
@@ -521,6 +535,24 @@ final class PaymentService
         return $account && Account::money()->postable()->whereKey($account)->whereIn('kind', Payment::METHOD_ACCOUNT_KINDS[$method] ?? [])->exists() ? (int) $account : null;
     }
 
+    /**
+     * The cash box or bank account a refund by `$method` pays out of, as refund() will choose it; null when the method or
+     * the account chosen is not one refund() accepts (it then refuses with its own message). A caller that locks the
+     * invoice before refunding holds this account first (AccountFunds::exclusive), the order refund() and confirm() take
+     * them in, so a refund confirmed at the same moment waits for it instead of both waiting until one gives up.
+     */
+    public function refundAccount(string $method, ?int $chosen): ?Account
+    {
+        if (! in_array($method, Payment::REFUND_METHODS, true)) {
+            return null;
+        }
+        try {
+            return $this->accountFor($method, $chosen);
+        } catch (BusinessRuleException) {
+            return null;
+        }
+    }
+
     private function accountFor(string $method, ?int $chosen): Account
     {
         $chart = app(ChartOfAccounts::class);
@@ -533,6 +565,21 @@ final class PaymentService
         }
 
         return $account;
+    }
+
+    /**
+     * The invoices first, by id, then the payment held against them: the order confirming a refund of a customer's
+     * credit takes (the credit's invoice, then the credit), and the order a new refund row takes (it points at its
+     * invoice and its payment, so it waits on whoever holds them). Applying, cancelling or paying back a credit at the
+     * moment its refund is confirmed then waits for it instead of deadlocking (SQLSTATE 40P01). A payment's invoice
+     * never changes, so it is read from the payment as given.
+     */
+    private function lockInvoices(?int ...$ids): void
+    {
+        $ids = array_values(array_unique(array_filter($ids)));
+        if ($ids !== []) {
+            Invoice::whereIn('id', $ids)->orderBy('id')->lockForUpdate()->pluck('id');
+        }
     }
 
     private function lockOpen(Invoice $invoice): Invoice

@@ -8,6 +8,7 @@ use App\Core\Tenancy\BranchContext;
 use App\Models\Branch;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\ProductStock;
+use App\Modules\Inventory\Models\Sale;
 use App\Modules\Inventory\Models\StockMovement;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
@@ -28,6 +29,21 @@ final class StockService
     ];
 
     public function __construct(private readonly BranchContext $branches) {}
+
+    /**
+     * Lock these products' rows by id before moving the stock of several of them: the order every basket takes
+     * (SaleLines::record, #55). A document that moved them one at a time in its own order (a count's lines by name, an
+     * invoice's as typed) deadlocked with a till sale of the same products.
+     *
+     * @param  iterable<int|null>  $productIds
+     */
+    public function lockInOrder(iterable $productIds): void
+    {
+        $ids = collect($productIds)->filter()->unique()->sort()->values();
+        if ($ids->isNotEmpty()) {
+            Product::withTrashed()->whereIn('id', $ids)->orderBy('id')->lockForUpdate()->pluck('id');
+        }
+    }
 
     /**
      * @param  float  $quantity  signed: positive in, negative out
@@ -112,5 +128,31 @@ final class StockService
     public function quantities(?int $branchId = null): array
     {
         return ProductStock::where('branch_id', $branchId ?? $this->branches->mainId())->pluck('quantity', 'product_id')->all();
+    }
+
+    /**
+     * Each product's book in one branch and the units website orders still hold there, read in one statement (one
+     * moment). An order takes its units off the book when it is placed, but they stay on the shelf until handed over
+     * (the owner's rule, #132): on the shelf = book + held; what can still be sold = the book. A held unit is what an
+     * open order's movements took and its release would put back (SaleLines::restock), add-on stock included.
+     *
+     * @param  list<int>|null  $productIds  none: every product with stock in the branch
+     * @return array<int, array{book: string, held: string}> keyed by product id
+     */
+    public function shelf(?int $branchId = null, ?array $productIds = null): array
+    {
+        $branch = $branchId ?? $this->branches->mainId();
+        $main = $branch === $this->branches->mainId();
+        $held = StockMovement::query()->selectRaw('coalesce(-sum(stock_movements.quantity), 0)')
+            ->whereColumn('stock_movements.product_id', 'product_stocks.product_id')
+            // An old movement without a branch is the main branch's.
+            ->where(fn ($q) => $q->where('stock_movements.branch_id', $branch)->when($main, fn ($q) => $q->orWhereNull('stock_movements.branch_id')))
+            ->where('stock_movements.reference_type', (new Sale)->getMorphClass())
+            ->whereIn('stock_movements.reference_id', Sale::query()->select('id')->where('source', Sale::WEBSITE)->where('status', Sale::PENDING));
+
+        return ProductStock::where('branch_id', $branch)->when($productIds !== null, fn ($q) => $q->whereIn('product_id', $productIds))
+            ->select('product_id', 'quantity')->selectSub($held, 'held')->get()
+            ->mapWithKeys(fn (ProductStock $row) => [$row->product_id => ['book' => (string) $row->quantity, 'held' => number_format(max(0, (float) $row->held), 3, '.', '')]])
+            ->all();
     }
 }
