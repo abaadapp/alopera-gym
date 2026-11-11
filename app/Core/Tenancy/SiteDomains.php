@@ -2,7 +2,9 @@
 
 namespace App\Core\Tenancy;
 
+use App\Models\Tenant;
 use Illuminate\Routing\Route;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 /**
@@ -28,6 +30,11 @@ final class SiteDomains
     public function flush(): void
     {
         $this->known = null;
+        try {
+            Cache::forget('trusted-club-domains');
+        } catch (Throwable) {
+            // no cache store yet
+        }
     }
 
     public function enabled(): bool
@@ -45,6 +52,26 @@ final class SiteDomains
     public function adminHost(): ?string
     {
         return $this->known()['admin'];
+    }
+
+    /**
+     * The hosts this app answers on, as TrustHosts patterns: the panel's (APP_URL), the home gym's website and any other
+     * club domain entered in its settings, each with or without «www.». A request naming any other Host is refused
+     * before a link is built from it. A domain saved in a club's settings is answered at once (Tenant::saved flushes).
+     *
+     * @return list<string>
+     */
+    public function trustedHosts(): array
+    {
+        $hosts = [$this->adminHost(), $this->siteHost()];
+        try {
+            $hosts = [...$hosts, ...Cache::remember('trusted-club-domains', 300, fn () => Tenant::query()->whereNotNull('domain')->pluck('domain')->all())];
+        } catch (Throwable) {
+            // no database yet (a fresh install, a build step): the panel and the home gym's site only
+        }
+
+        return collect($hosts)->filter()->map(fn (string $host) => self::normalize($host))->filter()->unique()
+            ->map(fn (string $host) => '^(www\.)?'.preg_quote($host).'$')->values()->all();
     }
 
     /** The home gym's slug: the {club} the website routes are registered with. */
