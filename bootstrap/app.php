@@ -4,7 +4,6 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\CrossTenantWriteException;
 use App\Core\Tenancy\MissingTenantException;
-use App\Core\Tenancy\SiteDomains;
 use App\Http\Middleware\AuthenticateDevice;
 use App\Http\Middleware\EnforceBranchAccess;
 use App\Http\Middleware\EnsureClubFinance;
@@ -18,11 +17,13 @@ use App\Http\Middleware\ResolveSiteTenant;
 use App\Http\Middleware\ResolveTenantFromUser;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SiteLocale;
+use App\Http\Middleware\TrustHosts;
 use App\Models\User;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Validation\ValidationException;
@@ -39,11 +40,11 @@ return Application::configure(basePath: dirname(__DIR__))
             KeepFlashForThePage::class,
             HandleInertiaRequests::class,
         ]);
-        // The club's domain onto its site routes, then the language out of the path (/en/plans → English /plans).
-        $middleware->prepend([ResolveCustomDomain::class, SiteLocale::class]);
-        // Only the panel's, the site's and the clubs' own domains: a request naming any other Host is refused (400) before
-        // a link is built from it. Off in local development and in tests, as Laravel does.
-        $middleware->trustHosts(at: fn () => app(SiteDomains::class)->trustedHosts(), subdomains: false);
+        // First of all, only the panel's, the site's and the clubs' own domains: a request naming any other Host is refused
+        // (400) on every path, before anything is looked up, redirected or linked from it (TrustHosts; read after the proxy
+        // settings, so a forwarded Host is held to the same list). Then the club's domain onto its site routes, then the
+        // language out of the path (/en/plans → English /plans).
+        $middleware->prepend([TrustProxies::class, TrustHosts::class, ResolveCustomDomain::class, SiteLocale::class]);
         $middleware->append(SecurityHeaders::class);
         // Figures typed on an Arabic keyboard (١٢٫٥) read as figures, everywhere a form or a device posts.
         $middleware->append(NormalizeNumbers::class);
