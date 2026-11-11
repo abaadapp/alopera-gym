@@ -88,8 +88,12 @@ final class CashShifts
     /** Cash into the drawer (change from the safe) or out of it (taken to the bank): a transfer between the two accounts. */
     public function move(CashShift $shift, string $direction, string|float $amount, Account $counter, string $reason): CashShiftMovement
     {
-        // Into the drawer, the money leaves the other box or bank: only while that one holds it (AccountFunds).
-        return app(AccountFunds::class)->exclusive($direction === 'in' ? $counter : null, fn () => DB::transaction(function () use ($shift, $direction, $amount, $counter, $reason) {
+        // The account the money leaves is held while it moves: into the drawer, the other box or bank (only while that one
+        // holds it, AccountFunds); out of it, the drawer itself, as an expense, a refund or a salary paid from it holds
+        // it. Without that, cash taken to the bank and an expense paid from the drawer at once both passed their checks.
+        $source = $direction === 'in' ? $counter : Account::find($shift->account_id);
+
+        return app(AccountFunds::class)->exclusive($source, fn () => DB::transaction(function () use ($shift, $direction, $amount, $counter, $reason) {
             $shift = CashShift::whereKey($shift->id)->lockForUpdate()->firstOrFail();
             if (! $shift->isOpen()) {
                 throw new BusinessRuleException('shift.closed', 'الوردية مقفلة.');
