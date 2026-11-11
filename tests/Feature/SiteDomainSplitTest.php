@@ -135,6 +135,7 @@ class SiteDomainSplitTest extends TestCase
         $this->assertSame(self::ADMIN.'/app', route('club.dashboard'));
         $this->assertSame(self::SITE.'/plans', route('site.plans'));
 
+        $this->plan($club); // the plans page has something to show, so the sitemap lists it
         $sitemap = $this->get(self::SITE.'/sitemap.xml')->assertOk()->getContent();
         $this->assertStringContainsString('<loc>'.self::SITE.'/plans</loc>', $sitemap);
         $this->assertStringNotContainsString('/c/', $sitemap);
