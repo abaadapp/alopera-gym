@@ -82,16 +82,23 @@ sudo -u deploy bash scripts/deploy.sh vX.Y.Z      # وسم الإصدار الذ
 
 ```bash
 cd /var/www/alopera-gym/current
+bash scripts/test-nginx-config.sh                     # الملفات نفسها على nginx محلي مؤقت (يشغّله CI أيضًا)
 sudo cp deploy/nginx/snippets/alopera-laravel.conf /etc/nginx/snippets/
+sudo cp deploy/nginx/00-reject-unknown-hosts.conf /etc/nginx/sites-available/00-reject-unknown-hosts
 sudo cp deploy/nginx/aloperagym.om.conf /etc/nginx/sites-available/aloperagym.om
 diff <(sudo cat /etc/nginx/sites-enabled/*) /etc/nginx/sites-available/aloperagym.om   # راجع الفروق
 # صحّح مسارات الشهادات حسب `certbot certificates`، وانقل أي إعداد يدوي ما زال لازمًا
 sudo ln -sfn /etc/nginx/sites-available/aloperagym.om /etc/nginx/sites-enabled/aloperagym.om
+sudo ln -sfn /etc/nginx/sites-available/00-reject-unknown-hosts /etc/nginx/sites-enabled/00-reject-unknown-hosts
+sudo rm -f /etc/nginx/sites-enabled/default           # موقع أوبونتو الافتراضي: لا يبقى إلا default_server واحد
 sudo rm /etc/nginx/sites-enabled/<الملف القديم>     # بعد التأكد أنه منسوخ في الخطوة 0
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
 إن فشل `nginx -t` فلا تُعِد التحميل. أرجع الرابط القديم إلى `sites-enabled`.
+
+`00-reject-unknown-hosts` هو الخادم الافتراضي الوحيد على 80 و443. أي Host لا تسميه كتلة (عنوان مزيف، عنوان IP،
+بلا Host) يُغلق اتصاله دون رد، ودون اسم SNI معروف تُرفض مصافحة TLS. لا تحويل إلى عنوان مزيف، ولا صفحة nginx الافتراضية.
 
 القواعد اليدوية التي كانت تفصل المسارات لم تعد لازمة، لأن التطبيق يفصل بنفسه. يمكن إبقاؤها مؤقتًا إن كانت لا تحجب `/webhooks` أو `/api` أو `/build` أو `/storage`.
 
@@ -117,6 +124,9 @@ curl -sI https://app.aloperagym.om/c/alopera/plans | grep -i '^location'   # htt
 curl -s https://aloperagym.om/sitemap.xml | grep -c '/c/'                  # 0
 curl -sI https://aloperagym.om/up | head -1; curl -sI https://app.aloperagym.om/up | head -1   # 200 و200
 curl -s https://aloperagym.om/plans | grep -o '"domain":"[a-z.]*"' | sort -u                   # الدومينان فقط
+curl -s -o /dev/null -H 'Host: evil.example' https://aloperagym.om/; echo $?         # 52 أو 92: يُغلق دون رد
+curl -s -o /dev/null -H 'Host: evil.example' http://aloperagym.om/; echo $?          # 52
+curl -sI https://aloperagym.om/up | grep -i '^server'                              # server: nginx (دون رقم إصدار)
 ```
 
 ثم في المتصفح:
@@ -132,6 +142,28 @@ curl -s https://aloperagym.om/plans | grep -o '"domain":"[a-z.]*"' | sort -u    
 - عنوان الإشعار يبقى يعمل على الدومينين.
 - رابط العودة يُبنى الآن على `aloperagym.om/pay/return/...`.
 - الروابط القديمة تُحوَّل بـ301 مع الاستعلام، وهي طلبات GET.
+
+## الخادم والمستودع (2026-11-11)
+
+الخادم لا يستعمل ملفات المستودع حرفيًا. الملفات فيه: `alopera-gym` (اللوحة)، و`alopera-website` (الموقع)،
+و`www-aloperagym.om`، و`00-reject-unknown-hosts`. الحماية نفسها في الجهتين:
+
+- الخادم الافتراضي الوحيد يغلق أي Host مجهول.
+- لا يشغّل PHP إلا `index.php`، ولا شيء تحت `/storage/`.
+- لا يظهر رقم إصدار nginx.
+- TLS 1.2 و1.3 فقط.
+
+على الخادم يأتي إخفاء الإصدار وTLS من `nginx.conf`، وفي المستودع من كل كتلة.
+
+ما يختلف، ولا يمس الحماية:
+
+- قواعد مسارات يدوية على الخادم:
+  - `/` → `/login` على اللوحة.
+  - `/c/*` → 404 على اللوحة.
+  - مسارات اللوحة و`/webhooks` و`/api` → 404 على الموقع.
+- المستودع يضيف ترويسات الأمان وHSTS من nginx أيضًا. على الخادم يضيفها Laravel وحده (`SecurityHeaders`).
+
+أي إعادة بناء تتبع هذا الملف ولا تُنقص من حماية الخادم.
 
 ## الرجوع عند حدوث مشكلة
 

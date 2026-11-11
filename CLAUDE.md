@@ -28,6 +28,7 @@ Read `docs/ARCHITECTURE.md` first.
   `createdb <name>_testing`, then `DB_DATABASE=<name>_testing php artisan test` (the concurrency tests use `<name>_testing_concurrency`)
 - Browser checks: `scripts/serve-isolated.sh <name>_testing [port]` (its own database, migrated and seeded). Never
   `DB_DATABASE=… php artisan serve`: the override does not reach the server, which then serves the `.env` data
+- nginx files: `bash scripts/test-nginx-config.sh` (deploy/nginx on a local nginx with throwaway certificates; also in CI)
 - Types/build: `npx tsc --noEmit -p tsconfig.json` · `npm run build` · JS tests: `npm test` (vitest, `tests/js`)
 - Printing apps: `mobile/` (Android, iOS); the iOS printing package tests on macOS with `swift test` (see `mobile/README.md`)
 - Style: `vendor/bin/pint`

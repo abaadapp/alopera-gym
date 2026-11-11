@@ -26,10 +26,16 @@ bash scripts/provision-droplet.sh
 sudo -u deploy cp .env.production.example /var/www/alopera-gym/shared/.env
 sudo -u deploy nano /var/www/alopera-gym/shared/.env      # DB, APP_URL, APP_KEY, WhatsApp, Spaces…
 
-# 3) Nginx + SSL
-cp deploy/nginx/alopera-gym.conf /etc/nginx/sites-available/alopera-gym   # عدّلي server_name والشهادة
-ln -s /etc/nginx/sites-available/alopera-gym /etc/nginx/sites-enabled/
-certbot --nginx -d app.example.com -d alopera.om -d www.alopera.om
+# 3) Nginx + SSL (الملفات والتحقق: docs/DOMAINS.md، الخطوة 2)
+bash scripts/test-nginx-config.sh                     # ملفات deploy/nginx تُختبر على نسخة مؤقتة أولًا
+cp deploy/nginx/snippets/alopera-laravel.conf /etc/nginx/snippets/
+cp deploy/nginx/00-reject-unknown-hosts.conf /etc/nginx/sites-available/00-reject-unknown-hosts
+cp deploy/nginx/aloperagym.om.conf /etc/nginx/sites-available/aloperagym.om
+ln -s /etc/nginx/sites-available/00-reject-unknown-hosts /etc/nginx/sites-enabled/
+ln -s /etc/nginx/sites-available/aloperagym.om /etc/nginx/sites-enabled/
+rm /etc/nginx/sites-enabled/default                   # موقع أوبونتو الافتراضي: 00-reject-unknown-hosts يحل محله
+# الشهادات: أوامر certbot في رأس deploy/nginx/aloperagym.om.conf. على خادم جديد تُستخرج قبل تفعيل aloperagym.om،
+# فـ nginx -t يرفض ملفًا يشير إلى شهادة غير موجودة.
 nginx -t && systemctl reload nginx
 
 # 4) العمّال والمجدول
