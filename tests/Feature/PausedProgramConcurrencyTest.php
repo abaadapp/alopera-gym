@@ -108,6 +108,45 @@ class PausedProgramConcurrencyTest extends TestCase
         });
     }
 
+    public function test_a_cancellation_and_a_new_booking_while_the_pause_is_being_saved_give_back_one_credit_and_book_nothing(): void
+    {
+        $club = $this->club();
+        $zumba = $this->program($club);
+        $session = $this->classSession($club, $zumba);
+        [$booked, $late] = [$this->member($club), $this->member($club)];
+        $membership = $this->activeMembership($club, $booked, $this->plan($club, ['sessions_limit' => 8]));
+        $this->activeMembership($club, $late);
+        $existing = $this->asTenant($club, fn () => app(BookingService::class)->book($booked, $session, 'portal'));
+        $this->assertSame(1, $membership->fresh()->sessions_used);
+
+        $results = $this->concurrently([
+            $this->pausing($club, $zumba),
+            // The member cancels the booking she has: a paused program's bookings cancel as before.
+            function (string $dir) use ($club, $existing) {
+                self::waitFor("$dir/paused");
+
+                return $this->asTenant($club, fn () => app(BookingService::class)->cancel($existing, false, 'إلغاء من العضو')->status);
+            },
+            // Another member books the same class at that moment: she waits for the pause, then is refused.
+            function (string $dir) use ($club, $late, $session) {
+                self::waitFor("$dir/paused");
+
+                return $this->asTenant($club, fn () => app(BookingService::class)->book($late, $session, 'portal')->id);
+            },
+        ]);
+
+        $this->assertTrue($results[0]['ok'], json_encode($results, JSON_UNESCAPED_UNICODE));
+        $this->assertSame(['ok' => true, 'value' => Booking::CANCELLED], array_intersect_key($results[1], ['ok' => 1, 'value' => 1]), json_encode($results, JSON_UNESCAPED_UNICODE));
+        $this->assertFalse($results[2]['ok'], 'a booking went through on a paused program: '.json_encode($results, JSON_UNESCAPED_UNICODE));
+        $this->assertStringContainsString('هذا البرنامج موقوف', (string) $results[2]['error']);
+        $this->asTenant($club, function () use ($session, $membership) {
+            $this->assertSame(0, Booking::where('class_session_id', $session->id)->where('status', Booking::BOOKED)->count());
+            $this->assertSame(1, Booking::where('class_session_id', $session->id)->count(), 'no booking was added');
+            $this->assertSame(0, ClassSession::findOrFail($session->id)->booked_count);
+            $this->assertSame(0, $membership->fresh()->sessions_used, 'her credit came back once');
+        });
+    }
+
     public function test_the_generator_running_while_the_pause_is_being_saved_makes_no_class(): void
     {
         $club = $this->club();

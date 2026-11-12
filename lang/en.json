@@ -79,6 +79,7 @@
     "العضو محجوز في هذه الحصة بالفعل.": "You are already booked in this class.",
     "اكتملت مقاعد هذه الحصة.": "This class is full.",
     "هذا البرنامج موقوف، فلا حجوزات جديدة على حصصه.": "This programme is paused: its classes take no new bookings.",
+    "البرنامج موقوف؛ لا تُضاف له حصص جديدة.": "This programme is paused: no new classes are added to it.",
     "لدى العضو حجز آخر في نفس الوقت.": "You have another booking at the same time.",
     "العضوية مجمّدة حاليًا.": "The membership is frozen at the moment.",
     "العضوية بانتظار الدفع. تُفعّل بعد تأكيد الدفع.": "The membership is waiting for payment. It becomes active once the payment is confirmed.",

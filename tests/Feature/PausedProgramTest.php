@@ -25,6 +25,8 @@ class PausedProgramTest extends TestCase
 {
     use BuildsClubs, RefreshDatabase;
 
+    private const PAUSED = 'هذا البرنامج موقوف، فلا حجوزات جديدة على حصصه.';
+
     private function weekly(Tenant $club, Program $program, int $inDays = 2): ClassSchedule
     {
         return $this->asTenant($club, fn () => ClassSchedule::create([
@@ -146,7 +148,7 @@ class PausedProgramTest extends TestCase
         $this->actingAs($reception)->get(route('club.sessions.show', $session))->assertOk();
         $this->actingAs($reception)->post(route('club.bookings.cancel', $second))->assertRedirect()->assertSessionHasNoErrors();
         $this->assertSame(Booking::CANCELLED, $second->fresh()->status);
-        $this->actingAs($owner)->post(route('club.bookings.store', $later), ['member_id' => $b->id])->assertSessionHasErrors();
+        $this->actingAs($owner)->post(route('club.bookings.store', $later), ['member_id' => $b->id])->assertSessionHasErrors(['booking' => self::PAUSED]);
         $this->assertSame(Booking::BOOKED, $first->fresh()->status);
         // Pausing a program is for whoever manages classes, not the desk.
         $this->actingAs($reception)->put(route('club.programs.update', $zumba), ['name' => 'Zumba', 'is_active' => true])->assertForbidden();
@@ -171,18 +173,93 @@ class PausedProgramTest extends TestCase
         $this->post(route('portal.classes.book', ['club' => $club->slug, 'session' => $zumbaClass->id]))->assertSessionHasErrors('booking');
     }
 
-    public function test_no_one_off_class_is_added_to_a_paused_program(): void
+    public function test_a_one_off_class_tells_a_paused_program_from_one_that_does_not_exist(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
         [$zumba, $yoga] = [$this->program($club), $this->program($club, ['name' => 'Yoga'])];
+        $theirs = $this->program($elsewhere = $this->club('Other'));
         $this->pause($club, $zumba);
         $one = ['starts_at' => now()->addDays(2)->setTime(11, 0)->format('Y-m-d H:i'), 'duration_minutes' => 60, 'capacity' => 10];
+        $paused = 'البرنامج موقوف؛ لا تُضاف له حصص جديدة.';
 
-        $this->actingAs($owner)->post(route('club.sessions.store'), $one + ['program_id' => $zumba->id])->assertSessionHasErrors('program_id');
+        $this->actingAs($owner)->post(route('club.sessions.store'), $one + ['program_id' => $zumba->id])->assertSessionHasErrors(['program_id' => $paused]);
+        // Not this club's, not there at all, not a number: "does not exist", never "paused".
+        foreach ([$theirs->id, 999999, 'abc'] as $missing) {
+            $this->actingAs($owner)->post(route('club.sessions.store'), $one + ['program_id' => $missing])
+                ->assertSessionHasErrors(['program_id' => 'القيمة المختارة في البرنامج غير موجودة.'])
+                ->assertSessionDoesntHaveErrors(['program_id' => $paused]);
+        }
         $this->actingAs($owner)->post(route('club.sessions.store'), $one + ['program_id' => $yoga->id])->assertSessionHasNoErrors();
         $this->assertSame(0, $this->classesOf($club, $zumba));
         $this->assertSame(1, $this->classesOf($club, $yoga));
+        $this->assertSame(0, $this->asTenant($elsewhere, fn () => ClassSession::count()));
+    }
+
+    public function test_direct_requests_book_no_class_of_a_paused_program_and_an_active_one_books_as_before(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $reception = $this->staff($club, 'reception');
+        [$zumba, $yoga] = [$this->program($club), $this->program($club, ['name' => 'Yoga'])];
+        [$paused, $active] = [$this->classSession($club, $zumba), $this->classSession($club, $yoga)];
+        [$member, $other] = [$this->member($club, ['password' => 'secret123']), $this->member($club)];
+        $this->activeMembership($club, $member);
+        $this->activeMembership($club, $other);
+        $this->pause($club, $zumba);
+        $book = route('portal.classes.book', ['club' => $club->slug, 'session' => $paused->id]);
+        $bookInEnglish = str_replace('/c/'.$club->slug.'/', '/c/'.$club->slug.'/en/', parse_url($book, PHP_URL_PATH));
+
+        // The member's own request, in Arabic and in English, and the desk's, whoever sends it: refused in the service.
+        $this->actingAs($member, 'member')->post($book)->assertSessionHasErrors(['booking' => self::PAUSED]);
+        $this->actingAs($member, 'member')->post($bookInEnglish)->assertSessionHasErrors(['booking' => 'This programme is paused: its classes take no new bookings.']);
+        foreach ([$owner, $reception] as $staff) {
+            $this->actingAs($staff)->post(route('club.bookings.store', $paused), ['member_id' => $member->id])->assertSessionHasErrors(['booking' => self::PAUSED]);
+        }
+        $this->asTenant($club, function () use ($paused) {
+            $this->assertSame(0, Booking::where('class_session_id', $paused->id)->count());
+            $this->assertSame(0, $paused->fresh()->booked_count);
+        });
+
+        // An active program's class books as it always did, from the portal and from the desk.
+        $this->actingAs($member, 'member')->post(route('portal.classes.book', ['club' => $club->slug, 'session' => $active->id]))->assertSessionHasNoErrors();
+        $this->actingAs($reception)->post(route('club.bookings.store', $active), ['member_id' => $other->id])->assertSessionHasNoErrors();
+        $this->assertSame(2, $this->asTenant($club, fn () => $active->fresh()->booked_count));
+    }
+
+    public function test_the_bookings_a_paused_program_has_cancel_and_give_their_credit_back_as_before(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $zumba = $this->program($club);
+        [$one, $two, $three] = [
+            $this->classSession($club, $zumba, ['starts_at' => now()->addDays(2)->setTime(18, 0)]),
+            $this->classSession($club, $zumba, ['starts_at' => now()->addDays(3)->setTime(18, 0)]),
+            $this->classSession($club, $zumba, ['starts_at' => now()->addDays(4)->setTime(18, 0)]),
+        ];
+        $member = $this->member($club, ['password' => 'secret123']);
+        $membership = $this->activeMembership($club, $member, $this->plan($club, ['sessions_limit' => 8]));
+        [$first, $second, $third] = array_map(fn ($s) => $this->asTenant($club, fn () => app(BookingService::class)->book($member, $s, 'portal')), [$one, $two, $three]);
+        $this->assertSame(3, $membership->fresh()->sessions_used);
+
+        $this->pause($club, $zumba);
+        $this->assertSame(3, $membership->fresh()->sessions_used, 'pausing gives back or takes no credit');
+
+        // Her own cancellation in the portal, the desk's, and the whole class cancelled: each gives its credit back.
+        $this->actingAs($member, 'member')->post(route('portal.bookings.cancel', ['club' => $club->slug, 'booking' => $first->id]))->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.bookings.cancel', $second))->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.sessions.cancel', $three), ['reason' => 'سفر المدربة'])->assertSessionHasNoErrors();
+
+        $this->asTenant($club, function () use ($first, $second, $third, $one, $two, $three, $membership) {
+            foreach ([$first, $second, $third] as $booking) {
+                $this->assertSame(Booking::CANCELLED, $booking->fresh()->status);
+            }
+            foreach ([$one, $two] as $session) {
+                $this->assertSame(0, $session->fresh()->booked_count);
+            }
+            $this->assertSame(ClassSession::CANCELLED, $three->fresh()->status);
+            $this->assertSame(0, $membership->fresh()->sessions_used, 'every credit came back, once');
+        });
     }
 
     public function test_pausing_a_program_touches_no_other_club(): void
