@@ -12,6 +12,7 @@ use App\Modules\Gym\Models\Program;
 use App\Modules\Gym\Services\BookingService;
 use App\Modules\Gym\Services\ScheduleService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
 
@@ -260,6 +261,50 @@ class PausedProgramTest extends TestCase
             $this->assertSame(ClassSession::CANCELLED, $three->fresh()->status);
             $this->assertSame(0, $membership->fresh()->sessions_used, 'every credit came back, once');
         });
+    }
+
+    public function test_the_hourly_command_makes_no_class_for_a_paused_program_and_goes_on_for_the_others(): void
+    {
+        [$mine, $theirs] = [$this->club(), $this->club('Other')];
+        [$zumba, $yoga, $theirZumba] = [$this->program($mine), $this->program($mine, ['name' => 'Yoga']), $this->program($theirs)];
+        $this->weekly($mine, $zumba);
+        $this->weekly($mine, $yoga);
+        $this->weekly($theirs, $theirZumba);
+        $this->pause($mine, $zumba);
+
+        // What the scheduler runs every hour (routes/console.php), for every club.
+        $this->artisan('gym:sessions')->assertSuccessful();
+
+        $this->assertSame(0, $this->classesOf($mine, $zumba));
+        $this->assertGreaterThan(0, $this->classesOf($mine, $yoga), 'an active program of the same club');
+        $this->assertGreaterThan(0, $this->classesOf($theirs, $theirZumba), 'another club');
+    }
+
+    public function test_pausing_changes_no_invoice_payment_membership_or_ledger_entry(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $zumba = $this->program($club);
+        $this->weekly($club, $zumba);
+        $session = $this->classSession($club, $zumba);
+        [$member, $late] = [$this->member($club), $this->member($club)];
+        $this->activeMembership($club, $member, $this->plan($club, ['sessions_limit' => 8]));
+        $this->activeMembership($club, $late);
+        $this->asTenant($club, fn () => app(BookingService::class)->book($member, $session, 'portal'));
+        $tables = ['invoices', 'invoice_items', 'payments', 'payment_allocations', 'credit_notes', 'gym_memberships',
+            'gym_membership_events', 'gym_membership_freezes', 'gym_accounts', 'gym_journal_entries', 'gym_journal_lines'];
+        $snapshot = fn () => collect($tables)->mapWithKeys(fn ($t) => [$t => DB::table($t)->orderBy('id')->get()->map(fn ($row) => (array) $row)->all()])->all();
+        $before = $snapshot();
+        $this->assertNotEmpty($before['invoices'], 'the memberships were invoiced');
+        $this->assertNotEmpty($before['payments'], 'and paid');
+
+        // The pause, the bookings it refuses and the generator after it.
+        $this->pause($club, $zumba);
+        $this->bookingRefused($club, $late, $session, 'portal');
+        $this->actingAs($owner)->post(route('club.bookings.store', $session), ['member_id' => $late->id])->assertSessionHasErrors(['booking' => self::PAUSED]);
+        $this->assertSame(0, $this->generate($club));
+
+        $this->assertEquals($before, $snapshot(), 'pausing a program alone moves no money and changes no membership');
     }
 
     public function test_pausing_a_program_touches_no_other_club(): void
