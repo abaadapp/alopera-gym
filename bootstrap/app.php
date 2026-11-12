@@ -5,6 +5,7 @@ use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\CrossTenantWriteException;
 use App\Core\Tenancy\MissingTenantException;
 use App\Http\Middleware\AuthenticateDevice;
+use App\Http\Middleware\AuthenticateSession;
 use App\Http\Middleware\EnforceBranchAccess;
 use App\Http\Middleware\EnsureClubFinance;
 use App\Http\Middleware\EnsureMemberActive;
@@ -12,6 +13,7 @@ use App\Http\Middleware\EnsureModuleEnabled;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\KeepFlashForThePage;
 use App\Http\Middleware\NormalizeNumbers;
+use App\Http\Middleware\RedirectIfAuthenticated;
 use App\Http\Middleware\ResolveCustomDomain;
 use App\Http\Middleware\ResolveSiteTenant;
 use App\Http\Middleware\ResolveTenantFromUser;
@@ -57,6 +59,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'branch.guard' => EnforceBranchAccess::class,
             'club.finance' => EnsureClubFinance::class,
             'member.active' => EnsureMemberActive::class,
+            // Laravel's auth.session, plus: a session that cannot show it holds the current password signs in again (#135).
+            'auth.session' => AuthenticateSession::class,
+            // Laravel's guest, plus: such a session is a guest on the sign-in and password pages at once (#135).
+            'guest' => RedirectIfAuthenticated::class,
         ]);
 
         // The tenant must be known before route-model binding runs: the tenant

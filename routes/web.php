@@ -30,7 +30,9 @@ Route::middleware('guest')->group(function () {
 
 Route::post('/logout', [LoginController::class, 'destroy'])->middleware('auth')->name('logout');
 
-Route::prefix('app')->name('club.')->middleware(['auth', 'tenant.user', 'branch.guard'])->group(function () {
+// auth.session: a session signed in with a password that has since changed is ended on its next request (other devices
+// after a change, every device after a reset or a manager's change); the device that made the change keeps its own.
+Route::prefix('app')->name('club.')->middleware(['auth', 'auth.session', 'tenant.user', 'branch.guard'])->group(function () {
     require app_path('Http/club-routes.php');
     require app_path('Modules/Gym/Http/routes.php');
     require app_path('Modules/Finance/Http/routes.php');
