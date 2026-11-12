@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Core\Auth\SessionPassword;
 use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
@@ -38,6 +39,10 @@ class ResolveSiteTenant
         $member = Auth::guard('member')->user();
         if ($member && (int) $member->tenant_id !== $tenant->id) {
             Auth::guard('member')->logout();
+        } elseif ($member) {
+            // Signed in with a password changed since, or unable to show which (#135): a guest on the public pages (the
+            // shop's prefilled details and orders, the member named in the page), and the portal asks her to sign in again.
+            SessionPassword::forgetStale($request, 'member');
         }
 
         return $next($request);

@@ -2,111 +2,32 @@
 
 namespace Tests\Feature;
 
-use App\Core\Tenancy\TenantContext;
-use App\Models\Tenant;
-use App\Models\User;
-use App\Modules\Gym\Models\Member;
+use App\Http\Middleware\AuthenticateSession;
 use App\Modules\Payroll\Models\Employee;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
-use Illuminate\Testing\TestResponse;
-use PHPUnit\Framework\AssertionFailedError;
 use Tests\Concerns\BuildsClubs;
+use Tests\Concerns\SignsInDevices;
 use Tests\TestCase;
 
 /**
  * #135: a new password ends every session signed in with the old one, on its next request (auth.session on the panel
  * and the portal), except the device that made the change itself. Someone else's change (a manager, a reset link)
  * ends every session of that account and none of the person who made it, nor of any other account or club.
- *
- * Each "device" is a real session in the `sessions` table (the database driver, as on the server), signed in through
- * the real sign-in form. Before every request what a fresh PHP-FPM process would not have is dropped: the guards and
- * their cached user, the default guard, the session store, the tenant and the client's cookies. A request then carries
- * only that device's own cookies, so a device is signed in only if its own session row says so.
+ * Each device is a real session of its own (SignsInDevices).
  */
 class PasswordChangeEndsOtherSessionsTest extends TestCase
 {
-    use BuildsClubs, RefreshDatabase;
+    use BuildsClubs, RefreshDatabase, SignsInDevices;
 
     private const NEW = 'N3w-Pass!word-2026';
 
     protected function setUp(): void
     {
         parent::setUp();
-        config(['session.driver' => 'database']);
-        $this->app['session']->forgetDrivers();
-        $this->app->forgetInstance('session.store');
-    }
-
-    /** One request from one device, as a fresh process sees it: only $sid (and a remember cookie, if given) is sent. */
-    private function hit(?string &$sid, string $method, string $uri, array $data = [], array $cookies = []): TestResponse
-    {
-        $this->app['auth']->forgetGuards();
-        config(['auth.defaults.guard' => 'web']);
-        $this->app->forgetInstance('auth.driver');
-        $this->app['session']->forgetDrivers();
-        $this->app->forgetInstance('session.store');
-        $this->app->forgetInstance('redirect');
-        Facade::clearResolvedInstances();
-        app(TenantContext::class)->set(null);
-        $this->defaultCookies = [];
-        $this->unencryptedCookies = [];
-        if ($sid !== null) {
-            $this->withCookie(config('session.cookie'), $sid);
-        }
-        foreach ($cookies as $name => $value) {
-            $this->withCookie($name, $value);
-        }
-        $response = match ($method) {
-            'GET' => $this->get($uri),
-            'POST' => $this->post($uri, $data),
-            'PUT' => $this->put($uri, $data),
-            'DELETE' => $this->delete($uri, $data),
-        };
-        $sid = $this->app['session']->driver()->getId();
-        app(TenantContext::class)->set(null);
-
-        return $response;
-    }
-
-    private function signIn(User $user, string $password = 'password', bool $remember = false): string
-    {
-        $sid = null;
-        $this->hit($sid, 'POST', route('login.store'), ['email' => $user->email, 'password' => $password, 'remember' => $remember])
-            ->assertRedirect()->assertSessionHasNoErrors();
-        $this->hit($sid, 'GET', route('club.account.show'))->assertOk();
-
-        return $sid;
-    }
-
-    private function signInPortal(Tenant $club, Member $member, string $password = 'old-pass-123'): string
-    {
-        $sid = null;
-        $this->hit($sid, 'POST', route('portal.login.store', ['club' => $club->slug]), ['login' => $member->phone, 'password' => $password])
-            ->assertRedirect()->assertSessionHasNoErrors();
-        $this->hit($sid, 'GET', route('portal.dashboard', ['club' => $club->slug]))->assertOk();
-
-        return $sid;
-    }
-
-    private function assertPanel(string $sid, bool $signedIn, string $who): void
-    {
-        $response = $this->hit($sid, 'GET', route('club.account.show'));
-        try {
-            $signedIn ? $response->assertOk() : $response->assertRedirect(route('login'));
-        } catch (AssertionFailedError $e) {
-            throw new AssertionFailedError($who.': '.$e->getMessage());
-        }
-    }
-
-    private function assertPortal(Tenant $club, string $sid, bool $signedIn): void
-    {
-        $response = $this->hit($sid, 'GET', route('portal.dashboard', ['club' => $club->slug]));
-        $signedIn ? $response->assertOk() : $response->assertRedirect(route('portal.login', ['club' => $club->slug]));
+        $this->useDatabaseSessions();
     }
 
     private function changeOwnPassword(string $sid, string $current = 'password'): void
@@ -295,7 +216,10 @@ class PasswordChangeEndsOtherSessionsTest extends TestCase
         $this->assertPanel($o, true, 'the manager');
     }
 
-    /** The deploy: sessions opened before auth.session existed keep working; only a stale password is signed out. */
+    /**
+     * The deploy: a session opened before auth.session existed stored its password's fingerprint when it signed in, so it
+     * keeps working, and one whose password changed since is signed out.
+     */
     public function test_sessions_signed_in_before_this_change_stay_signed_in(): void
     {
         $club = $this->club();
