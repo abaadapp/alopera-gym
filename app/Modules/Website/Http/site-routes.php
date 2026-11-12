@@ -48,7 +48,8 @@ Route::prefix('portal')->name('portal.')->group(function () {
         Route::post('/login', [PortalAuthController::class, 'authenticate'])->middleware('throttle:login')->name('login.store');
     });
 
-    Route::middleware(['auth:member', 'member.active', 'throttle:portal'])->group(function () {
+    // auth.session: a member's session signed in with a password that has since changed ends on its next request.
+    Route::middleware(['auth:member', 'auth.session', 'member.active', 'throttle:portal'])->group(function () {
         Route::post('/logout', [PortalAuthController::class, 'logout'])->name('logout');
         Route::get('/', [PortalController::class, 'dashboard'])->name('dashboard');
         Route::get('/renew', [PortalController::class, 'renew'])->name('renew');
