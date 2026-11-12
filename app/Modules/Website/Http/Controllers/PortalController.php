@@ -147,6 +147,7 @@ class PortalController extends Controller
         return $this->page('Portal/Classes', [
             'sessions' => ClassSession::with(['program:id,name,name_en,color', 'trainer:id,name,name_en'])
                 ->where('status', ClassSession::SCHEDULED)->where('starts_at', '>', $start)->where('starts_at', '<', $start->addDays($window))
+                ->whereHas('program', fn ($q) => $q->where('is_active', true))
                 ->orderBy('starts_at')->get()
                 ->map(fn ($s) => GymPresenter::siteSession($s) + ['booking_id' => $myBookings[$s->id] ?? null]),
             'membership' => ($m = Membership::where('member_id', $member->id)

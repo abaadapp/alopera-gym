@@ -77,13 +77,14 @@ class SessionController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'program_id' => ['required', TenantRule::exists('gym_programs')],
+            // Not for a paused program: it takes no new class (#140).
+            'program_id' => ['required', TenantRule::exists('gym_programs')->where('is_active', true)],
             'trainer_id' => ['nullable', TenantRule::exists('gym_trainers')],
             'starts_at' => ['required', 'date', 'after:now'],
             'duration_minutes' => ['required', 'integer', 'min:10', 'max:300'],
             'capacity' => ['required', 'integer', 'min:1', 'max:500'],
             'room' => ['nullable', 'string', 'max:60'],
-        ]);
+        ], ['program_id.exists' => 'البرنامج موقوف؛ لا تُضاف له حصص جديدة.']);
         $start = CarbonImmutable::parse($data['starts_at']);
         $end = $start->addMinutes($data['duration_minutes']);
 

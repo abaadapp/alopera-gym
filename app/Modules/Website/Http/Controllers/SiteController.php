@@ -90,7 +90,7 @@ class SiteController extends Controller
         return $this->sitePage('schedule', 'Site/Schedule', [
             'sessions' => ClassSession::with(['program:id,name,name_en,color', 'trainer:id,name,name_en'])
                 ->where('status', ClassSession::SCHEDULED)
-                ->whereHas('program', fn ($q) => $q->where('is_public', true))
+                ->whereHas('program', fn ($q) => $q->where('is_public', true)->where('is_active', true))
                 ->between($start, $start->addDays(7))->orderBy('starts_at')->get()
                 ->map(fn ($s) => GymPresenter::siteSession($s)),
             'from' => $start->toDateString(),

@@ -156,7 +156,7 @@ final class SiteRenderer
             '@plans' => MembershipPlan::public()->exists() || PtPackage::where('is_active', true)->where('is_public', true)->exists(),
             '@programs' => Program::public()->exists(),
             '@trainers' => Trainer::public()->exists(),
-            '@schedule' => ClassSession::where('status', ClassSession::SCHEDULED)->whereHas('program', fn ($q) => $q->where('is_public', true))
+            '@schedule' => ClassSession::where('status', ClassSession::SCHEDULED)->whereHas('program', fn ($q) => $q->where('is_public', true)->where('is_active', true))
                 ->between(CarbonImmutable::today(), CarbonImmutable::today()->addDays(7))->exists(),
             '@news' => SitePost::visible()->exists(),
             '@shop' => $this->shopOpen,
@@ -332,7 +332,7 @@ final class SiteRenderer
         $start = CarbonImmutable::today();
         $sessions = ClassSession::with(['program:id,name,name_en', 'trainer:id,name,name_en'])
             ->where('status', ClassSession::SCHEDULED)
-            ->whereHas('program', fn ($q) => $q->where('is_public', true))
+            ->whereHas('program', fn ($q) => $q->where('is_public', true)->where('is_active', true))
             ->where('starts_at', '>=', now())
             ->between($start, $start->addDays($days))->orderBy('starts_at')->limit(200)->get();
 
@@ -364,7 +364,7 @@ final class SiteRenderer
     private function nextClass(): ?array
     {
         $s = ClassSession::with('program:id,name,name_en')->where('status', ClassSession::SCHEDULED)
-            ->whereHas('program', fn ($q) => $q->where('is_public', true))
+            ->whereHas('program', fn ($q) => $q->where('is_public', true)->where('is_active', true))
             ->where('starts_at', '>', now())->where('starts_at', '<', now()->addDays(7))->orderBy('starts_at')->first();
 
         return $s ? ['name' => (string) SiteLanguage::pick($s->program?->name, $s->program?->name_en), 'date' => $s->starts_at->toDateString(), 'time' => $s->starts_at->format('H:i'), 'day_label' => $this->dayLabel(CarbonImmutable::parse($s->starts_at))] : null;
