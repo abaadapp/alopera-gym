@@ -6,6 +6,7 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Gym\Models\ClassSchedule;
 use App\Modules\Gym\Models\ClassSession;
+use App\Modules\Gym\Models\Program;
 use App\Modules\Gym\Models\PtSession;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -92,6 +93,7 @@ final class ScheduleService
         $created = 0;
 
         $schedules = ClassSchedule::where('is_active', true)
+            ->whereHas('program', fn ($q) => $q->where('is_active', true))
             ->where('valid_from', '<=', $until)
             ->where(fn ($q) => $q->whereNull('valid_until')->orWhere('valid_until', '>=', $from))
             ->get();
@@ -122,18 +124,26 @@ final class ScheduleService
 
                         continue;
                     }
+                    // A paused program gets no new class: checked in the same transaction as the class is made, under
+                    // a share lock on the program, so a pause being saved waits for a class being made, and no class is
+                    // made once it is saved. Reactivated, it goes on from its free slots (the made ones are found above).
                     // Two runs at once (the hourly job and the generate button) both find the slot free: the unique
                     // slot index lets one of them make it, the other takes the one made instead of failing.
-                    $session = ClassSession::createOrFirst(['class_schedule_id' => $schedule->id, 'slot_starts_at' => $startsAt], [
-                        'starts_at' => $startsAt,
-                        'branch_id' => $schedule->branch_id,
-                        'program_id' => $schedule->program_id,
-                        'trainer_id' => $schedule->trainer_id,
-                        'ends_at' => $startsAt->addMinutes($schedule->duration_minutes),
-                        'capacity' => $schedule->capacity,
-                        'room' => $schedule->room,
-                        'status' => ClassSession::SCHEDULED,
-                    ]);
+                    $session = DB::transaction(fn () => Program::whereKey($schedule->program_id)->sharedLock()->value('is_active')
+                        ? ClassSession::createOrFirst(['class_schedule_id' => $schedule->id, 'slot_starts_at' => $startsAt], [
+                            'starts_at' => $startsAt,
+                            'branch_id' => $schedule->branch_id,
+                            'program_id' => $schedule->program_id,
+                            'trainer_id' => $schedule->trainer_id,
+                            'ends_at' => $startsAt->addMinutes($schedule->duration_minutes),
+                            'capacity' => $schedule->capacity,
+                            'room' => $schedule->room,
+                            'status' => ClassSession::SCHEDULED,
+                        ])
+                        : null);
+                    if ($session === null) {
+                        return $created;
+                    }
                     $created += $session->wasRecentlyCreated ? 1 : 0;
                 }
             }

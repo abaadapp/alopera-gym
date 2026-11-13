@@ -3,6 +3,7 @@
 namespace App\Modules\Gym\Http\Controllers;
 
 use App\Core\Support\BusinessRuleException;
+use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
@@ -16,6 +17,7 @@ use App\Modules\Gym\Models\Trainer;
 use App\Modules\Gym\Services\BookingService;
 use App\Modules\Gym\Services\ScheduleService;
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -77,7 +79,12 @@ class SessionController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'program_id' => ['required', TenantRule::exists('gym_programs')],
+            // A program of this club, and not a paused one: it takes no new class (#140). The two are told apart.
+            'program_id' => ['required', TenantRule::exists('gym_programs'), function (string $attribute, mixed $value, Closure $fail) {
+                if (is_scalar($value) && ctype_digit((string) $value) && Program::whereKey((int) $value)->where('is_active', false)->exists()) {
+                    $fail(SiteLanguage::word('البرنامج موقوف؛ لا تُضاف له حصص جديدة.'));
+                }
+            }],
             'trainer_id' => ['nullable', TenantRule::exists('gym_trainers')],
             'starts_at' => ['required', 'date', 'after:now'],
             'duration_minutes' => ['required', 'integer', 'min:10', 'max:300'],

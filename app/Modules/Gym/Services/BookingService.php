@@ -11,6 +11,7 @@ use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\Program;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -38,6 +39,12 @@ final class BookingService
 
             if ($session->status !== ClassSession::SCHEDULED) {
                 $this->fail('session.unavailable', 'هذه الحصة ملغاة أو منتهية.');
+            }
+            // A paused program takes no new bookings, from the website, the portal or the desk; the bookings it has keep
+            // going (attendance, cancelling). Read under a share lock on the program: a pause being saved waits for a
+            // booking already past this line, and a booking that comes after the pause is saved sees it.
+            if (! Program::whereKey($session->program_id)->sharedLock()->value('is_active')) {
+                $this->fail('program.paused', 'هذا البرنامج موقوف، فلا حجوزات جديدة على حصصه.');
             }
             if ($session->starts_at->lte(now())) {
                 $this->fail('session.started', 'بدأت الحصة، لا يمكن الحجز.');
