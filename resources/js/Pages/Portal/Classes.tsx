@@ -93,6 +93,9 @@ export default function Classes({ site, seo, sessions, membership, cutoffHours, 
                                                 </button>
                                             )}
                                         </span>
+                                    ) : membership?.books_classes === false ? (
+                                        // No «Book» for a membership without classes (the server refuses it too, membership.gym_only).
+                                        <span className="rounded-full border border-line px-4 py-2 text-xs text-muted">{t('غير مشمولة')}</span>
                                     ) : s.is_full ? (
                                         <span className="rounded-full border border-line px-4 py-2 text-xs text-muted">{t('مكتملة')}</span>
                                     ) : (
