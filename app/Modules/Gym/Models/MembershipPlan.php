@@ -116,6 +116,9 @@ class MembershipPlan extends Model
             'max_freeze_days' => $this->max_freeze_days,
             'max_freezes' => $this->max_freezes,
             'program_ids' => $this->programs()->pluck('gym_programs.id')->all(),
+            // Sold with the type as a rule (#70): the door and the classes follow it (Membership::opensDoorAnyDay,
+            // booksClasses). Periods sold before have no such key and keep the door and the classes until they end.
+            'type_enforced' => true,
         ];
     }
 }
