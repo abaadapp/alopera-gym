@@ -26,11 +26,13 @@ const current = "bg-[#f2f2f0] font-[650] text-[#111] before:absolute before:-sta
  *
  * `topbar` draws the bar (search, quick icons, bell, user).
  */
-export default function PanelShell({ identity, groups, topbar, children }: {
+export default function PanelShell({ identity, groups, topbar, children, fullBleed = false }: {
     identity: ReactNode;
     groups: PanelGroup[];
     topbar: (openMenu: () => void) => ReactNode;
     children: ReactNode;
+    /** The page fills the space under the top bar edge to edge, with no gutters and no page scroll (the WhatsApp inbox). */
+    fullBleed?: boolean;
 }) {
     const [open, setOpen] = useState(false);
     const main = useRef<HTMLElement>(null);
@@ -84,7 +86,16 @@ export default function PanelShell({ identity, groups, topbar, children }: {
             <div className="lg:ms-64">
                 {topbar(() => setOpen(true))}
 
-                <main ref={main} tabIndex={-1} className="mx-auto outline-none w-full max-w-[1600px] animate-[ui-in_0.28s_cubic-bezier(0.22,1,0.36,1)] p-4 lg:p-6">{children}</main>
+                <main
+                    ref={main}
+                    tabIndex={-1}
+                    className={cn(
+                        'w-full outline-none animate-[ui-in_0.28s_cubic-bezier(0.22,1,0.36,1)]',
+                        fullBleed ? 'flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden' : 'mx-auto max-w-[1600px] p-4 lg:p-6',
+                    )}
+                >
+                    {children}
+                </main>
             </div>
             <Flash />
         </AdminScope>
