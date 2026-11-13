@@ -40,14 +40,28 @@ return [
     // off until the owner approves the restore plan in docs/MEDIA.md; images kept before stay where they are.
     'originals' => env('MEDIA_ORIGINALS', 'local'),
 
+    // Settings of their own (MEDIA_SPACES_*), never the SPACES_* that scripts/backup-database.sh reads: the originals
+    // never share the database copies' bucket. The endpoint is the region's own (https://fra1.digitaloceanspaces.com),
+    // never the CDN one, which takes signed uploads only up to 8100 KiB.
     'spaces' => [
-        'key' => env('SPACES_KEY'),
-        'secret' => env('SPACES_SECRET'),
-        'region' => env('SPACES_REGION'),
-        'bucket' => env('SPACES_BUCKET'),
-        'endpoint' => env('SPACES_ENDPOINT'),
+        'key' => env('MEDIA_SPACES_KEY'),
+        'secret' => env('MEDIA_SPACES_SECRET'),
+        'region' => env('MEDIA_SPACES_REGION'),
+        'bucket' => env('MEDIA_SPACES_BUCKET'),
+        'endpoint' => env('MEDIA_SPACES_ENDPOINT'),
         // Uploads not yet used; the bucket's lifecycle rule removes them after a day.
         'prefix' => 'incoming',
         'ttl' => 600,
+    ],
+
+    // The independent copy of the originals (docs/MEDIA.md, restore plan): another bucket, in another region or with
+    // another provider, under a key of its own. Used only by media:originals-copy and media:originals-check, by hand or
+    // when scheduled after approval; nothing in the app writes to it.
+    'copy' => [
+        'key' => env('MEDIA_COPY_KEY'),
+        'secret' => env('MEDIA_COPY_SECRET'),
+        'region' => env('MEDIA_COPY_REGION'),
+        'bucket' => env('MEDIA_COPY_BUCKET'),
+        'endpoint' => env('MEDIA_COPY_ENDPOINT'),
     ],
 ];

@@ -12,6 +12,12 @@
             <directory>tests/Feature</directory>
         </testsuite>
     </testsuites>
+    <!-- Real buckets over the network: only when that group is asked for by name (see SpacesLiveTest). -->
+    <groups>
+        <exclude>
+            <group>spaces-live</group>
+        </exclude>
+    </groups>
     <source>
         <include>
             <directory>app</directory>
