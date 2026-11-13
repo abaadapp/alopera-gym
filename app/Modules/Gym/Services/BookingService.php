@@ -113,7 +113,7 @@ final class BookingService
         // A renewal waiting behind a frozen period has no dates yet (the resume moves it back): it books nothing.
         $held = $candidates->filter(fn (Membership $m) => $m->status === Membership::SCHEDULED && $m->heldByFreeze());
         $usable = $candidates->diff($held)->first(fn (Membership $m) => in_array($m->status, [Membership::ACTIVE, Membership::SCHEDULED], true)
-            && $this->programAllowed($m, $session) && $m->hasSessionsLeft());
+            && $m->booksClasses() && $this->programAllowed($m, $session) && $m->hasSessionsLeft());
 
         if ($usable) {
             return $usable;
@@ -125,7 +125,12 @@ final class BookingService
         if ($candidates->contains(fn ($m) => $m->status === Membership::PENDING)) {
             $this->fail('membership.unpaid', 'العضوية بانتظار الدفع. تُفعّل بعد تأكيد الدفع.');
         }
-        $active = $candidates->first(fn ($m) => in_array($m->status, [Membership::ACTIVE, Membership::SCHEDULED], true));
+        $paid = $candidates->filter(fn ($m) => in_array($m->status, [Membership::ACTIVE, Membership::SCHEDULED], true));
+        // A «gym» plan sold from #70 on opens the door, not the classes.
+        if ($paid->isNotEmpty() && ! $paid->contains(fn (Membership $m) => $m->booksClasses())) {
+            $this->fail('membership.gym_only', 'باقة العضو لدخول النادي فقط، ولا تشمل الحصص.');
+        }
+        $active = $paid->first(fn (Membership $m) => $m->booksClasses());
         if ($active && ! $this->programAllowed($active, $session)) {
             $this->fail('membership.program', 'باقة العضو لا تشمل هذا البرنامج.');
         }

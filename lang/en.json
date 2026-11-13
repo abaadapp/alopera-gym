@@ -84,6 +84,7 @@
     "العضوية مجمّدة حاليًا.": "The membership is frozen at the moment.",
     "العضوية بانتظار الدفع. تُفعّل بعد تأكيد الدفع.": "The membership is waiting for payment. It becomes active once the payment is confirmed.",
     "باقة العضو لا تشمل هذا البرنامج.": "Your plan does not include this program.",
+    "باقة العضو لدخول النادي فقط، ولا تشمل الحصص.": "This membership is for the gym only: it does not include classes.",
     "تم استهلاك جميع حصص الباقة.": "All the classes of your plan are used.",
     "لا توجد عضوية سارية بتاريخ هذه الحصة.": "You have no valid membership on the date of this class.",
     "الحجز غير قابل للإلغاء.": "This booking can't be cancelled.",

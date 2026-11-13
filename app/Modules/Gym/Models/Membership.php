@@ -161,6 +161,28 @@ class Membership extends Model
             ->where('status', self::FROZEN)->where('starts_on', '<', $this->starts_on)->exists();
     }
 
+    /**
+     * The plan's type decides the door and the classes (#70) for a period sold with that rule in its terms: every sale,
+     * renewal and upgrade from #70 on writes plan_snapshot['type_enforced']. A period sold before has no such key and
+     * keeps what it was sold with, the door and the classes whatever its type, until it ends. Nothing is rewritten.
+     */
+    public function enforcesPlanType(): bool
+    {
+        return ($this->plan_snapshot['type_enforced'] ?? false) === true;
+    }
+
+    /** «gym» and «combo» open the door any day of the period; «classes» only on a day with a class booked (the door checks). */
+    public function opensDoorAnyDay(): bool
+    {
+        return ! $this->enforcesPlanType() || in_array($this->plan_snapshot['type'] ?? null, ['gym', 'combo'], true);
+    }
+
+    /** «classes» and «combo» book classes (within the plan's programs, when it lists them); «gym» does not. */
+    public function booksClasses(): bool
+    {
+        return ! $this->enforcesPlanType() || in_array($this->plan_snapshot['type'] ?? null, ['classes', 'combo'], true);
+    }
+
     public function hasSessionsLeft(): bool
     {
         return $this->sessions_total === null || $this->sessions_used < $this->sessions_total;

@@ -97,6 +97,7 @@ export const checkinReason: Record<string, string> = {
     membership_expired: 'العضوية منتهية',
     membership_frozen: 'العضوية مجمّدة',
     membership_not_started: 'لم تبدأ بعد',
+    classes_without_booking: 'باقة حصص بلا حجز اليوم',
     pending_payment: 'بانتظار الدفع',
     dues_outstanding: 'مستحقات متأخرة',
     device_not_for_members: 'جهاز غير مخصص',

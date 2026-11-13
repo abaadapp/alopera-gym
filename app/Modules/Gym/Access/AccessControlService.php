@@ -10,6 +10,7 @@ use App\Modules\Gym\Models\AccessCredential;
 use App\Modules\Gym\Models\AccessDevice;
 use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\CheckIn;
+use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\StaffAttendance;
@@ -51,8 +52,13 @@ final class AccessControlService
 
         // By the period's dates in the club's day, from 00:00: a paid period starting today lets her in before the
         // 00:10 job marks it active, and one that ended yesterday does not, though it still says active until then.
-        $active = $memberships->first(fn (Membership $m) => $m->status === Membership::ACTIVE && $m->grantsAccessOn($today))
-            ?? $memberships->first(fn (Membership $m) => $m->grantsAccessOn($today));
+        // And by its plan (#70): «gym» and «combo» any day of the period, «classes» on a day she has a class booked here.
+        $covering = $memberships->filter(fn (Membership $m) => $m->grantsAccessOn($today));
+        $booked = null;
+        $opens = function (Membership $m) use ($member, $today, &$booked): bool {
+            return $m->opensDoorAnyDay() || ($m->booksClasses() && ($booked ??= $this->hasClassOn($member, $today)));
+        };
+        $active = $covering->first(fn (Membership $m) => $m->status === Membership::ACTIVE && $opens($m)) ?? $covering->first($opens);
 
         if ($active) {
             if ($this->tenants->require()->setting('block_access_with_dues') && $this->hasOverdueDues($member)) {
@@ -60,6 +66,9 @@ final class AccessControlService
             }
 
             return AccessDecision::allow($member, $active);
+        }
+        if ($covering->isNotEmpty()) {
+            return AccessDecision::deny('classes_without_booking', $member, $covering->first());
         }
 
         if ($frozen = $memberships->firstWhere('status', Membership::FROZEN)) {
@@ -76,6 +85,19 @@ final class AccessControlService
         }
 
         return AccessDecision::deny('no_membership', $member);
+    }
+
+    /**
+     * A booking still standing for a class of this club that day: booked, or attended already (she may step out and
+     * back in). A cancelled booking, a cancelled class, another day's class and another club's booking do not count.
+     */
+    private function hasClassOn(Member $member, CarbonImmutable $day): bool
+    {
+        return Booking::where('member_id', $member->id)
+            ->whereIn('status', [Booking::BOOKED, Booking::ATTENDED])
+            ->whereHas('session', fn ($q) => $q->where('status', '!=', ClassSession::CANCELLED)
+                ->where('starts_at', '>=', $day->startOfDay())->where('starts_at', '<', $day->addDay()->startOfDay()))
+            ->exists();
     }
 
     private function hasOverdueDues(Member $member): bool

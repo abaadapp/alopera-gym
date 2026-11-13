@@ -17,6 +17,7 @@ final class AccessDecision
         'membership_expired' => 'العضوية منتهية',
         'membership_frozen' => 'العضوية مجمّدة',
         'membership_not_started' => 'العضوية لم تبدأ بعد',
+        'classes_without_booking' => 'باقة حصص: الدخول يوم حصة محجوزة فقط',
         'pending_payment' => 'العضوية بانتظار الدفع',
         'dues_outstanding' => 'يوجد مبلغ مستحق متأخر',
         'device_not_for_members' => 'الجهاز غير مخصص للأعضاء',

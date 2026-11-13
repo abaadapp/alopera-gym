@@ -21,8 +21,8 @@ use Tests\TestCase;
  * 1. A sale with a chosen start date is not checked against the member's current period: two paid periods can cover
  *    the same days (the member pays twice for them). A renewal is safe: it always starts the day after the latest
  *    period ends.
- * 2. A plan's type (gym | classes | combo) is shown to the member but not enforced: a «classes» plan opens the door,
- *    and a «gym» plan books classes. What limits classes today is the plan's list of programs, when it has one.
+ * 2. Decided (#70): the plan's type decides the door and the classes for periods sold from #70 on (PlanTypeRulesTest).
+ *    Still pinned here: a period sold before keeps the door and the classes, whatever its type, until it ends.
  */
 class MembershipRulesPendingDecisionTest extends TestCase
 {
@@ -62,26 +62,34 @@ class MembershipRulesPendingDecisionTest extends TestCase
         });
     }
 
-    public function test_today_a_classes_plan_opens_the_door(): void
+    /** A period as it was sold before #70: its terms carry no type rule. */
+    private function soldBefore70(Membership $membership): void
+    {
+        $membership->forceFill(['plan_snapshot' => array_diff_key($membership->plan_snapshot, ['type_enforced' => true])])->save();
+    }
+
+    public function test_a_classes_plan_sold_before_70_still_opens_the_door(): void
     {
         $club = $this->club();
         $member = $this->member($club);
-        $this->activeMembership($club, $member, $this->plan($club, ['name' => 'Classes only', 'type' => 'classes']));
+        $membership = $this->activeMembership($club, $member, $this->plan($club, ['name' => 'Classes only', 'type' => 'classes']));
+        $this->asTenant($club, fn () => $this->soldBefore70($membership));
 
         $decision = $this->asTenant($club, fn () => app(AccessControlService::class)->evaluate($member->fresh()));
 
-        $this->assertTrue($decision->allowed, 'today: the plan type is not checked at the door');
+        $this->assertTrue($decision->allowed, 'a period sold before #70 keeps the door, whatever its type');
     }
 
-    public function test_today_a_gym_plan_books_a_class_unless_its_programs_are_limited(): void
+    public function test_a_gym_plan_sold_before_70_still_books_a_class_unless_its_programs_are_limited(): void
     {
         $club = $this->club();
         $member = $this->member($club);
-        $this->activeMembership($club, $member, $this->plan($club, ['name' => 'Gym only', 'type' => 'gym']));
+        $membership = $this->activeMembership($club, $member, $this->plan($club, ['name' => 'Gym only', 'type' => 'gym']));
+        $this->asTenant($club, fn () => $this->soldBefore70($membership));
         $session = $this->classSession($club);
 
         $booking = $this->asTenant($club, fn () => app(BookingService::class)->book($member->fresh(), $session));
 
-        $this->assertSame(Booking::BOOKED, $booking->status, 'today: the plan type is not checked when booking');
+        $this->assertSame(Booking::BOOKED, $booking->status, 'a period sold before #70 keeps the classes, whatever its type');
     }
 }
