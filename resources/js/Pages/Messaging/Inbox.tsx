@@ -280,45 +280,41 @@ export default function Inbox(props: Props) {
 
     const tabs: { key: '' | Status; label: string }[] = [{ key: '', label: 'الكل' }, ...(Object.keys(STATUSES) as Status[]).map((k) => ({ key: k, label: STATUSES[k][0] }))];
     const settingsAllowed = can('whatsapp.manage_settings') || can('integrations.manage');
+    // Notices run as thin full-width strips above the inbox, which keeps the rest of the screen.
+    const strip = 'shrink-0 rounded-none border-x-0 border-t-0';
 
     return (
-        <ClubLayout title="واتساب">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                    <h1 className="text-[20px] font-semibold text-ink">المحادثات</h1>
-                    <p className="text-[13px] text-muted">
-                        {props.scope === 'all' ? 'كل محادثات واتساب للنادي' : 'المحادثات المخصصة لك'}
-                        {unread > 0 && <span className="ms-2 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white num">{unread} غير مقروءة</span>}
-                    </p>
-                </div>
-            </div>
-
+        <ClubLayout title="واتساب" fullBleed>
             {props.connection.demo && (
-                <Notice tone="blue" icon={<Info />} className="mb-3">
+                <Notice tone="blue" icon={<Info />} className={strip}>
                     وضع التجربة: الرسائل لا تُرسل إلى واتساب فعليًا ولا تصل من العملاء، وما يظهر بشارة «تجريبية» بيانات نموذجية فقط.
                 </Notice>
             )}
             {!props.connection.demo && !props.connection.enabled && (
-                <Notice tone="amber" icon={<AlertTriangle />} className="mb-3" href={settingsAllowed ? route('club.integrations.whatsapp') : undefined}>
+                <Notice tone="amber" icon={<AlertTriangle />} className={strip} href={settingsAllowed ? route('club.integrations.whatsapp') : undefined}>
                     ربط واتساب غير مفعّل، فلا تصل رسائل جديدة ولا تُرسل الردود.{settingsAllowed && ' افتح إعدادات واتساب.'}
                 </Notice>
             )}
             {props.connection.failing && (
-                <Notice tone="red" icon={<AlertTriangle />} className="mb-3" href={settingsAllowed ? route('club.integrations.whatsapp') : undefined}>
+                <Notice tone="red" icon={<AlertTriangle />} className={strip} href={settingsAllowed ? route('club.integrations.whatsapp') : undefined}>
                     انقطع اتصال واتساب: {props.connection.error}
                 </Notice>
             )}
             {notice && (
-                <Notice tone="amber" className="mb-3" onClick={() => setNotice(null)}>
+                <Notice tone="amber" className={strip} onClick={() => setNotice(null)}>
                     {notice}
                 </Notice>
             )}
 
-            <div className="overflow-hidden rounded-[14px] border border-line bg-white">
-                <div className={cn('grid h-[calc(100dvh-13.5rem)] min-h-[520px]', 'lg:grid-cols-[minmax(300px,360px)_1fr]', thread && showDetails && 'min-[87.5rem]:grid-cols-[minmax(300px,360px)_1fr_300px]')}>
+            <div className="min-h-0 flex-1 overflow-hidden bg-white">
+                <div className={cn('grid h-full min-h-0', 'lg:grid-cols-[minmax(300px,360px)_1fr]', thread && showDetails && 'min-[87.5rem]:grid-cols-[minmax(300px,360px)_1fr_300px]')}>
                     {/* The chats */}
                     <aside className={cn('flex min-h-0 flex-col border-line lg:border-e', thread && 'hidden lg:flex')}>
                         <div className="space-y-2 border-b border-line bg-[#fafaf9] p-3">
+                            <div className="flex items-center justify-between gap-2 px-0.5">
+                                <h1 className="text-[18px] font-semibold text-ink">{props.scope === 'all' ? 'المحادثات' : 'محادثاتي'}</h1>
+                                {unread > 0 && <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white num">{unread} غير مقروءة</span>}
+                            </div>
                             <label className="flex h-10 items-center gap-2 rounded-xl border border-line bg-white px-3">
                                 <Search className="size-4 text-muted" />
                                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث بالاسم أو رقم الهاتف" className="h-full w-full bg-transparent text-sm outline-none" aria-label="بحث في المحادثات" />
@@ -464,7 +460,7 @@ function ChatView({ thread, onBack, onChanged, onDetails, showDetails, setThread
                         <Button size="sm" variant="outline" loading={olderLoading} onClick={older}>رسائل أقدم</Button>
                     </div>
                 )}
-                <div className="mx-auto flex max-w-3xl flex-col gap-1.5">
+                <div className="flex w-full flex-col gap-1.5 lg:px-[3%]">
                     {items.map((it) => {
                         const day = dayKey(it.at);
                         const separator = day !== lastDay ? <div key={`d${day}`} className="my-2 self-center rounded-lg bg-white/90 px-3 py-1 text-[11.5px] text-muted shadow-sm num">{dayLabel(it.at)}</div> : null;
