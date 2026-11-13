@@ -23,7 +23,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * The products section's first tab, and the one place products are created and changed: the list (table or cards)
@@ -170,7 +169,7 @@ class ProductController extends Controller
     }
 
     /** A photo of the product as it was uploaded, for download (0 is the main one). */
-    public function original(Product $product, int $index): StreamedResponse
+    public function original(Product $product, int $index): \Symfony\Component\HttpFoundation\Response
     {
         $paths = array_values(array_filter([$product->image_path, ...($product->images ?? [])]));
         abort_unless(isset($paths[$index]), 404);
@@ -380,6 +379,8 @@ class ProductController extends Controller
             'photos.*' => ImageRule::rules(required: true),
             'photos_preview' => ['nullable', 'array'],
             'photos_preview.*' => ImageRule::previewRules(),
+            'photos_direct' => ['nullable', 'array', 'max:'.self::PHOTOS],
+            'photos_direct.*' => ImageRule::ticketRules(),
             'addon_ids' => ['nullable', 'array'],
             'addon_ids.*' => ['integer', TenantRule::exists('product_addons')->whereNull('deleted_at')],
         ]);

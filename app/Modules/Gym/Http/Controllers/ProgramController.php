@@ -12,7 +12,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProgramController extends Controller
 {
@@ -29,7 +28,7 @@ class ProgramController extends Controller
     {
         $data = $this->validated($request);
         $data['slug'] = $this->slug($data['name']);
-        $program = new Program(collect($data)->except(['image', 'image_preview'])->all());
+        $program = new Program(collect($data)->except(['image', 'image_preview', 'image_direct'])->all());
         $image = ImageUpload::from($request, 'image');
         if (! $image) {
             $program->save();
@@ -44,7 +43,7 @@ class ProgramController extends Controller
     }
 
     /** The image as it was uploaded, for download. */
-    public function image(Program $program): StreamedResponse
+    public function image(Program $program): \Symfony\Component\HttpFoundation\Response
     {
         return ImageStore::download($program->image_path, $program->name);
     }
@@ -52,7 +51,7 @@ class ProgramController extends Controller
     public function update(Request $request, Program $program): RedirectResponse
     {
         $data = $this->validated($request, $program);
-        $program->fill(collect($data)->except(['image', 'image_preview'])->all());
+        $program->fill(collect($data)->except(['image', 'image_preview', 'image_direct'])->all());
         $image = ImageUpload::from($request, 'image');
         if (! $image) {
             $program->save();
@@ -109,6 +108,7 @@ class ProgramController extends Controller
             'sort' => ['nullable', 'integer'],
             'image' => ImageRule::rules(),
             'image_preview' => ImageRule::previewRules(),
+            'image_direct' => ImageRule::ticketRules(),
         ]);
     }
 }

@@ -35,7 +35,7 @@ final class MediaLibrary
         try {
             $stored = ImageStore::storeMeasured($upload, 'site');
         } catch (ImageRejected $e) {
-            throw ValidationException::withMessages(['images' => '«'.$upload->original->getClientOriginalName().'»: '.$e->getMessage()]);
+            throw ValidationException::withMessages(['images' => '«'.$upload->name().'»: '.$e->getMessage()]);
         }
 
         try {

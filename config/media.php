@@ -8,10 +8,6 @@
  * Nothing here is switched on by default beyond the local disks; Spaces, the CDN and direct upload stay off until set.
  */
 return [
-    // Whether the original is kept beside the display copy. Each original kept locally is also in every daily club
-    // archive (14 are kept): see docs/MEDIA.md before deciding. Off: only the display copy and the thumbnail are kept.
-    'keep_originals' => (bool) env('MEDIA_KEEP_ORIGINALS', true),
-
     // Where originals are kept. 'local' is storage/app/private, inside the club's folder that club archives collect.
     'originals_disk' => env('MEDIA_ORIGINALS_DISK', 'local'),
 
@@ -38,15 +34,19 @@ return [
     // An animated GIF up to this size is shown as it is (moving); a larger one is shown by its first frame.
     'animated_max_kb' => 4_096,
 
-    // Direct upload from the browser to a DigitalOcean Spaces bucket, through a short-lived signed address. Off unless
-    // MEDIA_DIRECT_UPLOAD=true and the bucket's settings are all set.
-    'direct_upload' => [
-        'enabled' => (bool) env('MEDIA_DIRECT_UPLOAD', false),
+    // Where originals are kept: 'local' (storage/app/private, in the club's folder) or 'spaces' — a private
+    // DigitalOcean Spaces bucket the browser uploads to directly, without the original passing through the app
+    // (App\Core\Support\Images\SpacesOriginals). 'spaces' is used only when every setting below is set too. It is
+    // off until the owner approves the restore plan in docs/MEDIA.md; images kept before stay where they are.
+    'originals' => env('MEDIA_ORIGINALS', 'local'),
+
+    'spaces' => [
         'key' => env('SPACES_KEY'),
         'secret' => env('SPACES_SECRET'),
         'region' => env('SPACES_REGION'),
         'bucket' => env('SPACES_BUCKET'),
         'endpoint' => env('SPACES_ENDPOINT'),
+        // Uploads not yet used; the bucket's lifecycle rule removes them after a day.
         'prefix' => 'incoming',
         'ttl' => 600,
     ],

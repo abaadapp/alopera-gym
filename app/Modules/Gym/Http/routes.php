@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Club\ImageTicketController;
 use App\Modules\Gym\Http\Controllers\BookingController;
 use App\Modules\Gym\Http\Controllers\CheckInController;
 use App\Modules\Gym\Http\Controllers\CouponController;
@@ -33,6 +34,10 @@ Route::get('/members', [MemberController::class, 'index'])->middleware('can:memb
 Route::get('/members/create', [MemberController::class, 'create'])->middleware('can:members.manage')->name('members.create');
 Route::post('/members', [MemberController::class, 'store'])->middleware('can:members.manage')->name('members.store');
 Route::get('/members/{member}', [MemberController::class, 'show'])->middleware('can:members.view')->name('members.show');
+// With originals in Spaces: a signed address for the browser to put one original (404 while they are kept locally).
+Route::post('/members/uploads', ImageTicketController::class)->defaults('folder', 'members')->middleware('can:members.manage')->name('members.uploads');
+Route::post('/trainers/uploads', ImageTicketController::class)->defaults('folder', 'trainers')->middleware('can:trainers.manage')->name('trainers.uploads');
+Route::post('/programs/uploads', ImageTicketController::class)->defaults('folder', 'programs')->middleware('can:classes.manage')->name('programs.uploads');
 // The photo as it was uploaded (the original, for download); the screens show the light display copy.
 Route::get('/members/{member}/photo', [MemberController::class, 'photo'])->middleware('can:members.view')->name('members.photo');
 Route::get('/members/{member}/edit', [MemberController::class, 'edit'])->middleware('can:members.manage')->name('members.edit');

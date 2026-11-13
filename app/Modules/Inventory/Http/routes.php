@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Club\ImageTicketController;
 use App\Modules\Inventory\Http\Controllers\OrderController;
 use App\Modules\Inventory\Http\Controllers\PosController;
 use App\Modules\Inventory\Http\Controllers\PosDeviceController;
@@ -88,6 +89,7 @@ Route::middleware('can:products.manage')->group(function () {
     Route::get('/products', [ProductController::class, 'index'])->name('products.index');
     Route::get('/products/create', [ProductController::class, 'create'])->name('products.create');
     Route::post('/products', [ProductController::class, 'store'])->name('products.store');
+    Route::post('/products/uploads', ImageTicketController::class)->defaults('folder', 'products')->name('products.uploads');
     Route::get('/products/{product}/edit', [ProductController::class, 'edit'])->whereNumber('product')->name('products.edit');
     Route::put('/products/{product}', [ProductController::class, 'update'])->whereNumber('product')->name('products.update');
     Route::delete('/products/{product}', [ProductController::class, 'destroy'])->whereNumber('product')->name('products.destroy');

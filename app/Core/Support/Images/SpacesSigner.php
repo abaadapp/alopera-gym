@@ -20,8 +20,10 @@ final class SpacesSigner
 
     /**
      * @param  array<string, string>  $headers  headers the request must carry exactly (e.g. content-type)
+     * @param  array<string, string>  $query  more query parameters, signed too (e.g. response-content-disposition)
+     * @param  string  $payload  the body's SHA-256 in hex when the store must check it (x-amz-content-sha256)
      */
-    public function presign(string $method, string $objectKey, int $ttl, array $headers = [], ?int $now = null): string
+    public function presign(string $method, string $objectKey, int $ttl, array $headers = [], ?int $now = null, array $query = [], string $payload = 'UNSIGNED-PAYLOAD'): string
     {
         $now ??= time();
         $date = gmdate('Ymd', $now);
@@ -44,12 +46,12 @@ final class SpacesSigner
             'X-Amz-Date' => $time,
             'X-Amz-Expires' => (string) $ttl,
             'X-Amz-SignedHeaders' => $signedNames,
-        ];
+        ] + $query;
         ksort($query);
         $canonicalQuery = implode('&', array_map(fn ($k, $v) => rawurlencode($k).'='.rawurlencode($v), array_keys($query), $query));
         $canonicalHeaders = implode('', array_map(fn ($k, $v) => $k.':'.$v."\n", array_keys($signed), $signed));
 
-        $canonical = implode("\n", [strtoupper($method), $path, $canonicalQuery, $canonicalHeaders, $signedNames, 'UNSIGNED-PAYLOAD']);
+        $canonical = implode("\n", [strtoupper($method), $path, $canonicalQuery, $canonicalHeaders, $signedNames, $payload]);
         $toSign = implode("\n", ['AWS4-HMAC-SHA256', $time, $scope, hash('sha256', $canonical)]);
 
         $k = hash_hmac('sha256', $date, 'AWS4'.$this->secret, true);

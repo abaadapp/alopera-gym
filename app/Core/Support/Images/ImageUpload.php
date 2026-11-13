@@ -9,14 +9,17 @@ use Illuminate\Http\UploadedFile;
  * One image as the form sent it: the original file and, when the browser made one, a light display source beside it
  * (`photo` and `photo_preview`; for a list, `photos[2]` and `photos_preview[2]`). The browser makes that source for a
  * HEIC/HEIF file, which most servers cannot decode, and for a very large photo, so the server never has to open it.
+ *
+ * With originals kept in Spaces, the browser puts the original straight into the bucket and the form sends its
+ * ticket instead (`photo_direct`), with the display source as usual: the original never passes through the app.
  */
 final class ImageUpload
 {
     public function __construct(
-        public readonly UploadedFile $original,
+        public readonly ?UploadedFile $original,
         public readonly ?UploadedFile $preview = null,
         public readonly ?string $field = null,
-        public readonly ?string $directKey = null,
+        public readonly ?string $ticket = null,
     ) {}
 
     public static function from(Request $request, string $field, ?int $index = null): ?self
@@ -34,21 +37,17 @@ final class ImageUpload
         if ($original) {
             return new self($original, $pick($field.'_preview'), $name);
         }
-        // Put straight into the bucket by the browser (DirectUploads): the form sends its key instead of the file.
-        $key = $request->input($field.'_direct'.($index === null ? '' : '.'.$index));
-        if (is_string($key) && $key !== '') {
-            return new self(DirectUploads::claim($key, $name), $pick($field.'_preview'), $name, $key);
-        }
+        $ticket = $request->input($field.'_direct'.($index === null ? '' : '.'.$index));
 
-        return null;
+        return is_string($ticket) && $ticket !== '' ? new self(null, $pick($field.'_preview'), $name, $ticket) : null;
     }
 
-    /** @return list<self> every file of a list field, each with its own display source */
+    /** @return list<self> every image of a list field, each with its own display source */
     public static function all(Request $request, string $field): array
     {
         $files = $request->file($field);
-        $keys = $request->input($field.'_direct');
-        $indexes = array_unique([...array_keys(is_array($files) ? $files : []), ...array_keys(is_array($keys) ? $keys : [])]);
+        $tickets = $request->input($field.'_direct');
+        $indexes = array_unique([...array_keys(is_array($files) ? $files : []), ...array_keys(is_array($tickets) ? $tickets : [])]);
         sort($indexes);
         $uploads = [];
         foreach ($indexes as $index) {
@@ -63,5 +62,11 @@ final class ImageUpload
     public static function wrap(UploadedFile|self $upload): self
     {
         return $upload instanceof self ? $upload : new self($upload);
+    }
+
+    /** The name the user's file had, for messages. */
+    public function name(): string
+    {
+        return $this->original?->getClientOriginalName() ?? 'الصورة';
     }
 }

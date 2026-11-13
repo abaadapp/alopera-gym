@@ -8,7 +8,7 @@ use Illuminate\Http\UploadedFile;
 
 /**
  * Accepts an image by what its bytes are: JPEG, PNG, GIF, WebP, AVIF, HEIC or HEIF within the size and pixel limits.
- * A display source made by the browser (the `_preview` beside an upload) must be a plain JPEG, PNG or WebP.
+ * A display source made by the browser (the `_preview` beside an upload) is a plain JPEG, PNG or WebP, or a GIF.
  */
 final class ImageRule implements ValidationRule
 {
@@ -19,6 +19,12 @@ final class ImageRule implements ValidationRule
     {
         // This rule first: its message says why (too large for the server, not an image…), before the generic ones.
         return [$required ? 'required' : 'nullable', new self, 'file', 'max:'.config('gym.max_image_kb')];
+    }
+
+    /** The ticket of an original the browser put straight into the Spaces bucket (SpacesOriginals). */
+    public static function ticketRules(): array
+    {
+        return ['nullable', 'string', 'max:4000'];
     }
 
     /** @return list<mixed> */
@@ -41,8 +47,10 @@ final class ImageRule implements ValidationRule
 
             return;
         }
-        if ($this->preview && (! in_array($facts->type, ['jpeg', 'png', 'webp'], true) || $facts->animated
-            || max($facts->width, $facts->height) > (int) config('media.preview_max_side'))) {
+        // A display source is a plain JPEG, PNG or WebP; or, for a GIF kept in the bucket, the GIF itself (the store
+        // checks it is the very same file as the original).
+        $plain = in_array($facts->type, ['jpeg', 'png', 'webp'], true) && ! $facts->animated;
+        if ($this->preview && (! ($plain || $facts->type === 'gif') || max($facts->width, $facts->height) > (int) config('media.preview_max_side'))) {
             $fail('نسخة العرض التي جهزها المتصفح غير صالحة. حاول رفع الصورة مرة أخرى.');
         }
     }

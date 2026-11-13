@@ -12,7 +12,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /** News and offers shown on the website. */
 class PostController extends Controller
@@ -32,7 +31,7 @@ class PostController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
-        $post = new SitePost(collect($data)->except(['image', 'image_preview'])->all());
+        $post = new SitePost(collect($data)->except(['image', 'image_preview', 'image_direct'])->all());
         $post->slug = $this->slug($data['title']);
         $post->created_by = $request->user()->id;
         $post->published_at = $post->is_published ? now() : null;
@@ -50,7 +49,7 @@ class PostController extends Controller
     }
 
     /** The image as it was uploaded, for download. */
-    public function image(SitePost $post): StreamedResponse
+    public function image(SitePost $post): \Symfony\Component\HttpFoundation\Response
     {
         return ImageStore::download($post->image_path, $post->title);
     }
@@ -59,7 +58,7 @@ class PostController extends Controller
     {
         $data = $this->validated($request);
         $wasPublished = $post->is_published;
-        $post->fill(collect($data)->except(['image', 'image_preview'])->all());
+        $post->fill(collect($data)->except(['image', 'image_preview', 'image_direct'])->all());
         if ($post->is_published && ! $wasPublished) {
             $post->published_at = now();
         }
@@ -113,6 +112,7 @@ class PostController extends Controller
             'is_published' => ['boolean'],
             'image' => ImageRule::rules(),
             'image_preview' => ImageRule::previewRules(),
+            'image_direct' => ImageRule::ticketRules(),
         ]);
     }
 }

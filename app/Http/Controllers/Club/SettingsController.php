@@ -17,7 +17,6 @@ use Illuminate\Support\Arr;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /** The settings hub, the club profile and business rules, and the notification rules. */
 class SettingsController extends Controller
@@ -82,6 +81,7 @@ class SettingsController extends Controller
             'currency' => ['sometimes', 'string', 'in:'.implode(',', array_keys(self::CURRENCIES))],
             'logo' => ImageRule::rules(),
             'logo_preview' => ImageRule::previewRules(),
+            'logo_direct' => ImageRule::ticketRules(),
             'remove_logo' => ['boolean'],
             'rules' => ['array'],
             'rules.booking_window_days' => ['integer', 'between:1,90'],
@@ -123,7 +123,7 @@ class SettingsController extends Controller
         }
         $logo = ImageUpload::from($request, 'logo');
         $removeLogo = (bool) ($data['remove_logo'] ?? false);
-        unset($data['rules'], $data['logo'], $data['logo_preview'], $data['remove_logo']);
+        unset($data['rules'], $data['logo'], $data['logo_preview'], $data['logo_direct'], $data['remove_logo']);
 
         $snapshot = fn () => $tenant->only(array_keys($data)) + Arr::only($tenant->settings ?? [], array_keys($rules));
         $before = $snapshot();
@@ -145,7 +145,7 @@ class SettingsController extends Controller
     }
 
     /** The club's uploaded logo as it was uploaded, for download. */
-    public function logo(TenantContext $tenants): StreamedResponse
+    public function logo(TenantContext $tenants): \Symfony\Component\HttpFoundation\Response
     {
         $tenant = $tenants->require();
         abort_unless(OfficialLogo::uploaded($tenant), 404);

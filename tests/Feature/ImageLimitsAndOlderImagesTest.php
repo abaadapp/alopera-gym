@@ -23,8 +23,7 @@ use Tests\TestCase;
 
 /**
  * The upload limits can be raised by settings without changing what production allows today, a file too large for
- * the server says so plainly, keeping originals can be switched off, and every image stored before this keeps
- * showing, printing and being replaced safely.
+ * the server says so plainly, and every image stored before this keeps showing, printing and being replaced safely.
  */
 class ImageLimitsAndOlderImagesTest extends TestCase
 {
@@ -60,7 +59,6 @@ class ImageLimitsAndOlderImagesTest extends TestCase
         $this->assertSame(4096, config('gym.max_image_kb'));
         $this->assertSame(40_000_000, config('media.max_pixels'));
         $this->assertSame(20_480, config('media.max_request_kb'));
-        $this->assertTrue(config('media.keep_originals'));
     }
 
     public function test_a_48_megapixel_phone_photo_passes_once_the_pixel_limit_is_raised(): void
@@ -116,22 +114,6 @@ class ImageLimitsAndOlderImagesTest extends TestCase
             ->assertSessionHas('error', fn ($m) => str_contains((string) $m, 'أكبر مما يقبله الخادم'));
 
         $this->call('POST', route('club.website.media.store'), [], [], [], ['CONTENT_LENGTH' => (string) (2 * 1024 ** 3), 'HTTP_ACCEPT' => 'application/json'])->assertStatus(413);
-    }
-
-    public function test_with_originals_switched_off_only_the_display_copy_and_thumbnail_are_kept(): void
-    {
-        config(['media.keep_originals' => false]);
-        $club = $this->club();
-
-        $this->actingAs($this->owner($club))
-            ->post(route('club.members.store'), ['full_name' => 'Noor', 'phone' => '96891112233', 'photo' => UploadedFile::fake()->image('p.jpg', 900, 600)])
-            ->assertSessionHasNoErrors();
-        $member = $this->asTenant($club, fn () => Member::firstOrFail());
-
-        $this->assertSame([], Storage::disk('local')->allFiles());
-        Storage::disk('public')->assertExists([$member->photo_path, ImageStore::parse($member->photo_path)['thumb']]);
-        $this->assertFalse(ImageStore::hasOriginal($member->photo_path));
-        $this->get(route('club.members.photo', $member))->assertOk()->assertHeader('content-type', 'image/webp');
     }
 
     public function test_an_older_member_photo_still_shows_and_is_replaced_only_after_the_save(): void

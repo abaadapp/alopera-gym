@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Club\ImageTicketController;
 use App\Modules\Website\Http\Controllers\CmsController;
 use App\Modules\Website\Http\Controllers\PostController;
 use App\Modules\Website\Http\Controllers\SiteBuilderController;
@@ -17,8 +18,9 @@ Route::middleware('can:website.manage')->prefix('website')->name('website.')->gr
     Route::post('/media', [SiteBuilderController::class, 'uploadMedia'])->middleware('throttle:30,1')->name('media.store');
     Route::patch('/media/{media}', [SiteBuilderController::class, 'updateMedia'])->whereNumber('media')->name('media.update');
     Route::delete('/media/{media}', [SiteBuilderController::class, 'deleteMedia'])->whereNumber('media')->name('media.destroy');
-    // Direct upload to the Spaces bucket (off unless configured): a signed address for one file.
-    Route::post('/media/direct', [SiteBuilderController::class, 'directUpload'])->middleware('throttle:60,1')->name('media.direct');
+    // With originals in Spaces: a signed address for the browser to put one original (404 while kept locally).
+    Route::post('/media/uploads', ImageTicketController::class)->defaults('folder', 'site')->middleware('throttle:120,1')->name('media.uploads');
+    Route::post('/posts/uploads', ImageTicketController::class)->defaults('folder', 'posts')->middleware('throttle:120,1')->name('posts.uploads');
     Route::get('/media/{media}/original', [SiteBuilderController::class, 'mediaOriginal'])->whereNumber('media')->name('media.original');
     // The old sections page now lives inside «إدارة الموقع».
     Route::get('/sections', fn () => redirect()->route('club.website.edit'))->name('sections');

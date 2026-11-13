@@ -17,7 +17,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TrainerController extends Controller
 {
@@ -41,7 +40,7 @@ class TrainerController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
-        $trainer = new Trainer(collect($data)->except(['photo', 'photo_preview'])->all());
+        $trainer = new Trainer(collect($data)->except(['photo', 'photo_preview', 'photo_direct'])->all());
         $photo = ImageUpload::from($request, 'photo');
         if (! $photo) {
             $trainer->save();
@@ -56,7 +55,7 @@ class TrainerController extends Controller
     }
 
     /** The photo as it was uploaded, for download. */
-    public function photo(Trainer $trainer): StreamedResponse
+    public function photo(Trainer $trainer): \Symfony\Component\HttpFoundation\Response
     {
         return ImageStore::download($trainer->photo_path, $trainer->name);
     }
@@ -66,7 +65,7 @@ class TrainerController extends Controller
         $data = $this->validated($request, $trainer);
         // Multipart forms drop empty arrays: a missing key means "no specialties".
         $data['specialties'] = $data['specialties'] ?? [];
-        $trainer->fill(collect($data)->except(['photo', 'photo_preview'])->all());
+        $trainer->fill(collect($data)->except(['photo', 'photo_preview', 'photo_direct'])->all());
         $photo = ImageUpload::from($request, 'photo');
         if (! $photo) {
             $trainer->save();
@@ -132,6 +131,7 @@ class TrainerController extends Controller
             'user_id' => ['nullable', Rule::exists('users', 'id')->where('tenant_id', $tenantId), Rule::unique('gym_trainers', 'user_id')->ignore($trainer?->id)],
             'photo' => ImageRule::rules(),
             'photo_preview' => ImageRule::previewRules(),
+            'photo_direct' => ImageRule::ticketRules(),
         ]);
 
         // Same format as members (968XXXXXXXX), so the number dials and links to WhatsApp correctly.

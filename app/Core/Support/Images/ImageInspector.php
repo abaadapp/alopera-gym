@@ -30,7 +30,23 @@ final class ImageInspector
     /** @throws ImageRejected */
     public static function inspect(string $path, ?int $maxBytes = null): ImageFacts
     {
-        $bytes = is_file($path) ? (int) @filesize($path) : 0;
+        return self::facts($path, is_file($path) ? (int) @filesize($path) : 0, $maxBytes, whole: true);
+    }
+
+    /**
+     * The same checks from the first bytes of a file kept elsewhere (an original in the Spaces bucket): $headPath
+     * holds those bytes, $bytes is the whole file's size as the store reports it. Nothing more is ever read.
+     *
+     * @throws ImageRejected
+     */
+    public static function inspectHead(string $headPath, int $bytes, ?int $maxBytes = null): ImageFacts
+    {
+        return self::facts($headPath, $bytes, $maxBytes, whole: false);
+    }
+
+    /** @throws ImageRejected */
+    private static function facts(string $path, int $bytes, ?int $maxBytes, bool $whole): ImageFacts
+    {
         if ($bytes < 1) {
             throw new ImageRejected('الملف فارغ أو تعذرت قراءته.');
         }
@@ -56,7 +72,7 @@ final class ImageInspector
             throw new ImageRejected('أبعاد الصورة أكبر من المسموح ('.$width.'×'.$height.').');
         }
 
-        return new ImageFacts($type, self::TYPES[$type][0], self::TYPES[$type][1], $width, $height, self::animated($type, $path, $head), $bytes);
+        return new ImageFacts($type, self::TYPES[$type][0], self::TYPES[$type][1], $width, $height, self::animated($type, $path, $head, $whole), $bytes);
     }
 
     /** The type the bytes say, or null for anything that is not one of the accepted images. */
@@ -129,12 +145,12 @@ final class ImageInspector
         return $info ? [(int) $info[0], (int) $info[1]] : [0, 0];
     }
 
-    private static function animated(string $type, string $path, string $head): bool
+    private static function animated(string $type, string $path, string $head, bool $whole): bool
     {
         return match ($type) {
             'webp' => substr($head, 12, 4) === 'VP8X' && (ord($head[20] ?? "\0") & 0x02) === 0x02,
             'avif' => substr($head, 8, 4) === 'avis',
-            'gif' => self::gifFrames($path) > 1,
+            'gif' => ($whole ? self::gifFrames($path) : substr_count($head, "\x00\x21\xF9\x04")) > 1,
             default => false,
         };
     }

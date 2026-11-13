@@ -2,16 +2,17 @@
 
 namespace App\Core\Support;
 
-use App\Core\Support\Images\DirectUploads;
 use App\Core\Support\Images\ImageFacts;
 use App\Core\Support\Images\ImageInspector;
 use App\Core\Support\Images\ImageRejected;
 use App\Core\Support\Images\ImageUpload;
+use App\Core\Support\Images\SpacesOriginals;
 use App\Core\Tenancy\TenantContext;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * The club's uploaded images (members, trainers, programs, products, posts, the website library, the logo).
@@ -33,7 +34,8 @@ final class ImageStore
     /** Larger than this many pixels is refused before decoding (a small file can unpack to gigabytes). */
     public const MAX_PIXELS = 40_000_000;
 
-    private const NAME = '#^(?<dir>tenants/(?<tenant>[^/]+)/(?<folder>.+))/(?<id>v2-[0-9a-z]{26})\.(?<ext>jpg|png|gif|webp|avif|heic|heif)\.(?<view>webp|png|gif)$#D';
+    // v2- : original on the local private disk; v2r- : original in the Spaces bucket (SpacesOriginals).
+    private const NAME = '#^(?<dir>tenants/(?<tenant>[^/]+)/(?<folder>.+))/(?<id>v2(?<remote>r?)-[0-9a-z]{26})\.(?<ext>jpg|png|gif|webp|avif|heic|heif)\.(?<view>webp|png|gif)$#D';
 
     /** Stores an image for a record and returns its display path (scaled to $maxWidth across). */
     public static function store(UploadedFile|ImageUpload $upload, string $folder, int $maxWidth = 1600, int $quality = 80): string
@@ -103,7 +105,12 @@ final class ImageStore
         }
         $parts = self::parse($path);
         Storage::disk('public')->delete(array_filter([$path, $parts['thumb'] ?? null]));
-        if ($parts) {
+        if ($parts && $parts['remote']) {
+            // A failed removal leaves an unused object in the bucket (found by its key later); never a missing one.
+            if (! SpacesOriginals::delete($parts['original'])) {
+                Log::warning('image original not removed from Spaces', ['key' => $parts['original']]);
+            }
+        } elseif ($parts) {
             Storage::disk(self::originalsDisk())->delete($parts['original']);
         }
     }
@@ -128,35 +135,38 @@ final class ImageStore
         return self::url($parts['thumb'] ?? $path);
     }
 
-    /** Whether the image was stored with its original kept (older uploads were not, nor any while it is off). */
+    /** Whether the image was stored with its original kept (images stored before this were not). */
     public static function hasOriginal(?string $path): bool
     {
         $parts = $path !== null ? self::parse($path) : null;
 
-        return $parts !== null && Storage::disk(self::originalsDisk())->exists($parts['original']);
-    }
-
-    public static function keepsOriginals(): bool
-    {
-        return (bool) config('media.keep_originals', true);
+        // An original in the bucket was checked when it was stored; asking again would cost a request per image.
+        return $parts !== null && ($parts['remote'] || Storage::disk(self::originalsDisk())->exists($parts['original']));
     }
 
     /**
      * Sends the original as a download (an older image without one: the stored file). The path must be the current
      * club's; anything else is not found.
      */
-    public static function download(?string $path, string $name): StreamedResponse
+    public static function download(?string $path, string $name): Response
     {
         $tenantId = app(TenantContext::class)->require()->id;
         abort_unless($path && str_starts_with($path, 'tenants/'.$tenantId.'/'), 404);
-        // The original when it was kept; otherwise the stored display copy is the best there is.
         $parts = self::parse($path);
+        $name = trim(preg_replace('/[\\\\\/:*?"<>|\x00-\x1F]+/u', ' ', $name) ?: 'image');
+        if ($parts && $parts['remote']) {
+            // From the bucket itself, through a 60-second signed address: the file does not pass through the app.
+            $mime = collect(ImageInspector::TYPES)->firstWhere(1, $parts['ext'])[0] ?? 'application/octet-stream';
+
+            return redirect()->away(SpacesOriginals::downloadUrl($parts['original'], $name.'.'.$parts['ext'], $mime))
+                ->withHeaders(['Cache-Control' => 'private, no-store']);
+        }
+        // The original when it was kept; otherwise the stored display copy is the best there is.
         [$disk, $file] = $parts && Storage::disk(self::originalsDisk())->exists($parts['original'])
             ? [self::originalsDisk(), $parts['original']] : ['public', $path];
         abort_unless(Storage::disk($disk)->exists($file), 404);
         $ext = pathinfo($file, PATHINFO_EXTENSION);
         $mime = collect(ImageInspector::TYPES)->firstWhere(1, $ext)[0] ?? 'application/octet-stream';
-        $name = trim(preg_replace('/[\\\\\/:*?"<>|\x00-\x1F]+/u', ' ', $name) ?: 'image');
 
         return Storage::disk($disk)->download($file, $name.'.'.$ext, [
             'Content-Type' => $mime,
@@ -168,7 +178,7 @@ final class ImageStore
     /**
      * The pieces of an image stored by this class: where its original and thumbnail are.
      *
-     * @return array{original: string, thumb: string, ext: string}|null
+     * @return array{original: string, thumb: string, ext: string, remote: bool}|null
      */
     public static function parse(string $path): ?array
     {
@@ -180,6 +190,7 @@ final class ImageStore
             'original' => 'tenants/'.$m['tenant'].'/originals/'.$m['folder'].'/'.$m['id'].'.'.$m['ext'],
             'thumb' => $m['dir'].'/'.$m['id'].'.'.$m['ext'].'.thumb.webp',
             'ext' => $m['ext'],
+            'remote' => $m['remote'] === 'r',
         ];
     }
 
@@ -195,48 +206,83 @@ final class ImageStore
      */
     private static function keep(ImageUpload $upload, string $folder, int $maxWidth, int $maxHeight, int $quality, string $view): array
     {
+        $folder = trim($folder, '/');
+        $remote = SpacesOriginals::enabled();
+        $head = null;
+        $ticket = null;
         try {
-            return self::keepChecked($upload, $folder, $maxWidth, $maxHeight, $quality, $view);
+            if ($upload->ticket !== null) {
+                // Put in the bucket by the browser: only its size, its recorded hash and its first 256 KB are read.
+                $ticket = SpacesOriginals::open($upload->ticket, $folder, $upload->field);
+                $object = SpacesOriginals::head($ticket['k']);
+                if (! $object || $object['size'] !== (int) $ticket['n'] || $object['sha256'] !== $ticket['s']) {
+                    throw new ImageRejected('لم يكتمل رفع الصورة. ارفعها مرة أخرى.');
+                }
+                $head = (string) tempnam(sys_get_temp_dir(), 'head-');
+                file_put_contents($head, SpacesOriginals::firstBytes($ticket['k']));
+                $facts = ImageInspector::inspectHead($head, $object['size']);
+            } else {
+                $facts = ImageInspector::inspect((string) $upload->original?->getRealPath());
+            }
+        } catch (ImageRejected $e) {
+            if ($head) {
+                @unlink($head);
+            }
+
+            throw $e->on($upload->field);
+        }
+
+        try {
+            $stored = self::keepChecked($upload, $facts, $folder, $maxWidth, $maxHeight, $quality, $view, $remote, $ticket);
         } finally {
-            if ($upload->directKey) {
-                // The browser's copy in the bucket and its local fetch are no longer needed, stored or refused.
-                DirectUploads::forget($upload->directKey);
-                @unlink((string) $upload->original->getRealPath());
+            if ($head) {
+                @unlink($head);
             }
         }
+        if ($ticket) {
+            // The browser's upload is now kept under its own name; a failure above leaves it for another try (the
+            // form keeps the ticket) and the bucket's lifecycle rule removes it after a day.
+            SpacesOriginals::delete($ticket['k']);
+        }
+
+        return $stored;
     }
 
     /**
+     * @param  array{k: string, s: string, n: int, f: string, o: string}|null  $ticket
      * @return array{path: string, width: int, height: int, mime: string, size: int}
      *
      * @throws ImageRejected
      */
-    private static function keepChecked(ImageUpload $upload, string $folder, int $maxWidth, int $maxHeight, int $quality, string $view): array
+    private static function keepChecked(ImageUpload $upload, ImageFacts $facts, string $folder, int $maxWidth, int $maxHeight, int $quality, string $view, bool $remote, ?array $ticket): array
     {
-        $source = (string) $upload->original->getRealPath();
-        try {
-            $facts = ImageInspector::inspect($source);
-        } catch (ImageRejected $e) {
-            throw $e->on($upload->field);
-        }
+        $source = $ticket ? null : (string) $upload->original?->getRealPath();
         $tenantId = app(TenantContext::class)->require()->id;
-        $folder = trim($folder, '/');
-        $name = 'v2-'.Str::lower((string) Str::ulid()).'.'.$facts->ext;
+        $name = ($remote ? 'v2r-' : 'v2-').Str::lower((string) Str::ulid()).'.'.$facts->ext;
         $written = [];
 
         try {
-            if (self::keepsOriginals()) {
-                $original = 'tenants/'.$tenantId.'/originals/'.$folder.'/'.$name;
-                self::putVerified(self::originalsDisk(), $original, $source);
+            $original = 'tenants/'.$tenantId.'/originals/'.$folder.'/'.$name;
+            if ($remote) {
+                $sha256 = $ticket['s'] ?? hash_file('sha256', (string) $source);
+                $ok = $ticket ? SpacesOriginals::copy($ticket['k'], $original) : SpacesOriginals::put($original, (string) $source, $sha256, $facts->mime);
+                $written[] = ['spaces', $original];
+                $kept = $ok ? SpacesOriginals::head($original) : null;
+                if (! $kept || $kept['size'] !== $facts->bytes || $kept['sha256'] !== $sha256) {
+                    throw new ImageRejected('تعذر حفظ الصورة الأصلية كما هي، فلم يُحفظ شيء. حاول مرة أخرى.');
+                }
+            } else {
+                self::putVerified(self::originalsDisk(), $original, (string) $source);
                 $written[] = [self::originalsDisk(), $original];
             }
 
             $image = self::displaySource($upload, $facts, $source);
-            $moving = $facts->type === 'gif' && $facts->animated && $facts->bytes <= (int) config('media.animated_max_kb') * 1024;
-            if ($moving) {
-                // A moving GIF is shown as it is: re-encoding would keep only its first frame.
+            // A moving GIF is shown as it is: re-encoding would keep only its first frame. Its bytes are the original
+            // itself, or the browser's copy of it when that is the very same file (same SHA-256 as the ticket).
+            $gif = $source ?? ($ticket && $upload->preview && hash_file('sha256', (string) $upload->preview->getRealPath()) === $ticket['s'] ? (string) $upload->preview->getRealPath() : null);
+            if ($facts->type === 'gif' && $facts->animated && $gif && $facts->bytes <= (int) config('media.animated_max_kb') * 1024) {
                 $display = 'tenants/'.$tenantId.'/'.$folder.'/'.$name.'.gif';
-                self::putVerified('public', $display, $source);
+                self::putVerified('public', $display, $gif);
                 [$width, $height, $mime, $size] = [$facts->width, $facts->height, 'image/gif', $facts->bytes];
             } else {
                 [$image, $width, $height] = self::fit($image, $maxWidth, $maxHeight);
@@ -254,7 +300,7 @@ final class ImageStore
             $written[] = ['public', $thumbPath];
         } catch (\Throwable $e) {
             foreach ($written as [$disk, $path]) {
-                Storage::disk($disk)->delete($path);
+                $disk === 'spaces' ? SpacesOriginals::delete($path) : Storage::disk($disk)->delete($path);
             }
             if (! $e instanceof ImageRejected) {
                 report($e);
@@ -266,13 +312,17 @@ final class ImageStore
         return ['path' => $display, 'width' => $width, 'height' => $height, 'mime' => $mime, 'size' => $size];
     }
 
-    /** The picture the display copy and the thumbnail are made from: the browser's display source, or the original. */
-    private static function displaySource(ImageUpload $upload, ImageFacts $facts, string $source): \GdImage
+    /**
+     * The picture the display copy and the thumbnail are made from: the browser's display source, or the original
+     * when the app has it ($source null: the original is only in the bucket, so the display source is required).
+     */
+    private static function displaySource(ImageUpload $upload, ImageFacts $facts, ?string $source): \GdImage
     {
         if ($upload->preview) {
             $path = (string) $upload->preview->getRealPath();
             $preview = ImageInspector::inspect($path, (int) config('media.preview_max_kb') * 1024);
-            if (! in_array($preview->type, ['jpeg', 'png', 'webp'], true) || $preview->animated
+            $plain = in_array($preview->type, ['jpeg', 'png', 'webp'], true) && ! $preview->animated;
+            if (! ($plain || ($preview->type === 'gif' && $facts->type === 'gif'))
                 || max($preview->width, $preview->height) > (int) config('media.preview_max_side')
                 || ! $facts->sameShapeAs($preview->width, $preview->height)) {
                 throw new ImageRejected('نسخة العرض التي جهزها المتصفح لا تطابق الصورة. حاول رفعها مرة أخرى.');
@@ -282,9 +332,12 @@ final class ImageStore
                 return $image;
             }
         }
+        if ($source === null) {
+            throw new ImageRejected('لم تصل نسخة العرض من المتصفح. ارفع الصورة مرة أخرى.');
+        }
         if (! self::decodable($facts)) {
             throw new ImageRejected(in_array($facts->type, ['heic', 'heif'], true)
-                ? 'لم يستطع هذا المتصفح تجهيز صورة HEIC/HEIF للعرض، ولا يقرؤها الخادم. ارفعها من Safari على iPhone أو Mac، أو صدّرها JPG ثم ارفعها.'
+                ? 'لم يستطع هذا المتصفح تجهيز صورة HEIC/HEIF للعرض، ولا يقرؤها الخادم. حدّث المتصفح أو صدّرها JPG ثم ارفعها.'
                 : 'الصورة كبيرة جدًا على معالجة الخادم. ارفعها من متصفح حديث ليجهز نسخة العرض تلقائيًا، أو صغّر أبعادها.');
         }
         $image = self::decode($facts, $source);

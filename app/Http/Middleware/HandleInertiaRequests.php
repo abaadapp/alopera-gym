@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Core\Auth\PermissionRegistry;
 use App\Core\Branding\OfficialLogo;
+use App\Core\Support\Images\SpacesOriginals;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Club\NotificationController;
@@ -56,7 +57,7 @@ class HandleInertiaRequests extends Middleware
             'tenant' => fn () => $this->tenant(),
             'modules' => ['sales' => PermissionRegistry::moduleEnabled('sales'), 'inventory' => PermissionRegistry::moduleEnabled('inventory')],
             // Upload limits, so a form can say a file is too large before sending it.
-            'media' => ['max_image_kb' => (int) config('gym.max_image_kb'), 'max_request_kb' => (int) config('media.max_request_kb')],
+            'media' => ['max_image_kb' => (int) config('gym.max_image_kb'), 'max_request_kb' => (int) config('media.max_request_kb'), 'direct' => SpacesOriginals::enabled()],
             'member' => fn () => $this->member(),
             // The bell of the club panel's top bar: unread count and the latest few (App\Core\Notifications).
             'notifications' => fn () => $request->routeIs('club.*') && $request->user('web') instanceof User && app(TenantContext::class)->id() === $request->user('web')->tenant_id

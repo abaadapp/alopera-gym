@@ -92,7 +92,7 @@ class MemberController extends Controller
         $data = $this->validated($request);
         $data['branch_id'] = app(BranchContext::class)->assign($data['branch_id'] ?? null);
         $photo = ImageUpload::from($request, 'photo');
-        unset($data['photo'], $data['photo_preview']);
+        unset($data['photo'], $data['photo_preview'], $data['photo_direct']);
 
         // The photo is stored first: a refused photo registers nothing, and a failed registration leaves no file.
         $path = $photo ? ImageStore::store($photo, 'members', 600) : null;
@@ -191,7 +191,7 @@ class MemberController extends Controller
     }
 
     /** The photo as it was uploaded, for download. */
-    public function photo(Member $member): StreamedResponse
+    public function photo(Member $member): \Symfony\Component\HttpFoundation\Response
     {
         return ImageStore::download($member->photo_path, $member->full_name);
     }
@@ -204,7 +204,7 @@ class MemberController extends Controller
         if ($photo = ImageUpload::from($request, 'photo')) {
             $member->photo_path = ImageStore::store($photo, 'members', 600);
         }
-        unset($data['photo'], $data['photo_preview']);
+        unset($data['photo'], $data['photo_preview'], $data['photo_direct']);
         try {
             $this->members->update($member, $data);
         } catch (Throwable $e) {
@@ -302,6 +302,7 @@ class MemberController extends Controller
             'branch_id' => ['nullable', ...app(BranchContext::class)->rule($member?->branch_id)],
             'photo' => ImageRule::rules(),
             'photo_preview' => ImageRule::previewRules(),
+            'photo_direct' => ImageRule::ticketRules(),
         ]);
     }
 }
