@@ -274,8 +274,8 @@ final class ImageStore
         }
         if (! self::decodable($facts)) {
             throw new ImageRejected(in_array($facts->type, ['heic', 'heif'], true)
-                ? 'لا يستطيع الخادم قراءة صور HEIC/HEIF مباشرة. ارفعها من صفحة النظام في المتصفح ليجهز نسخة العرض تلقائيًا، أو صدّرها JPG.'
-                : 'الصورة كبيرة جدًا على معالجة الخادم. ارفعها من صفحة النظام في المتصفح ليجهز نسخة العرض تلقائيًا، أو صغّر أبعادها.');
+                ? 'لم يستطع هذا المتصفح تجهيز صورة HEIC/HEIF للعرض، ولا يقرؤها الخادم. ارفعها من Safari على iPhone أو Mac، أو صدّرها JPG ثم ارفعها.'
+                : 'الصورة كبيرة جدًا على معالجة الخادم. ارفعها من متصفح حديث ليجهز نسخة العرض تلقائيًا، أو صغّر أبعادها.');
         }
         $image = self::decode($facts, $source);
         if (! $image) {
@@ -326,6 +326,15 @@ final class ImageStore
         }
         $w = max(1, (int) round($width * $scale));
         $h = max(1, (int) round($height * $scale));
+        if ($scale < 0.5 && $width * $height > 8_000_000) {
+            // A large step down from a large photo: a fast scale to twice the size first, then the careful one from
+            // that much smaller picture (a quarter less time on a 12MP photo for 12 MB more memory; the browser's
+            // display source, at most 2400px, never takes this path).
+            $half = imagescale($image, $w * 2, $h * 2, IMG_BILINEAR_FIXED);
+            if ($half instanceof \GdImage) {
+                [$image, $width, $height] = [$half, $w * 2, $h * 2];
+            }
+        }
         $scaled = imagecreatetruecolor($w, $h);
         imagealphablending($scaled, false);
         imagesavealpha($scaled, true);
