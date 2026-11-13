@@ -281,11 +281,12 @@ class MembershipLifecycleTest extends TestCase
             $m = $this->svc()->sell($member, $plan, ['coupon_code' => 'welcome10']);
             $this->assertSame('5.000', $m->discount);
             $this->assertSame('45.000', $m->invoice->total);
-            // Paid, so the next sale is not refused as a second one awaiting payment: the coupon's own limit is what refuses it.
+            // Paid, so the next sale is not refused as a second one awaiting payment, and sold as a renewal, so it covers
+            // no day twice (#70): the coupon's own limit is what refuses it.
             app(PaymentService::class)->record($m->invoice, $m->invoice->total, 'cash');
 
             try {
-                $this->svc()->sell($member, $plan, ['coupon_code' => 'WELCOME10']);
+                $this->svc()->renew($member, $plan, ['coupon_code' => 'WELCOME10']);
                 $this->fail('Per-member limit must apply.');
             } catch (BusinessRuleException $e) {
                 $this->assertSame('coupon.invalid', $e->rule);

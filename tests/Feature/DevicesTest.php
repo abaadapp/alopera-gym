@@ -52,7 +52,7 @@ class DevicesTest extends TestCase
         $this->activeMembership($club, $expired, $this->plan($club, ['duration_value' => 1, 'duration_unit' => 'day']));
         $this->travel(2)->days();
         $this->asTenant($club, fn () => app(MembershipService::class)->runDailyTransitions());
-        $this->activeMembership($club, $active, $this->plan($club, ['duration_value' => 1, 'duration_unit' => 'month']));
+        // $active's month still covers today; a second sale over it would be refused (#70).
 
         $this->withToken($token)->postJson(route('devices.access'), ['credential_type' => 'qr', 'credential' => $active->qr_token])
             ->assertOk()->assertJson(['allowed' => true, 'member' => ['id' => $active->id]]);

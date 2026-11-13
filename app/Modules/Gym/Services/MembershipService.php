@@ -137,6 +137,10 @@ final class MembershipService
             }
             $start = CarbonImmutable::parse($options['starts_on'] ?? today())->startOfDay();
             $end = $plan->endDateFrom($start);
+            // An upgrade replaces the period it starts in, and moves the ones after it, when it is paid (activate()).
+            if ($kind !== Membership::KIND_UPGRADE) {
+                $this->assertNoOverlap($member, $start, $end, isset($options['starts_on']) ? 'starts_on' : 'membership_plan_id');
+            }
 
             $isFirst = ! $member->memberships()->whereNot('status', Membership::CANCELLED)->exists();
             $signupFee = $kind === Membership::KIND_NEW && $isFirst ? Money::normalize($plan->signup_fee) : '0.000';
@@ -213,6 +217,30 @@ final class MembershipService
 
             return $membership;
         });
+    }
+
+    /**
+     * A sale or a renewal never covers a day that another paid, scheduled or frozen period of the member covers (#70),
+     * whatever the plan: the same days would be paid twice and counted twice, and a freeze would stop only one of them.
+     * A period sold after a frozen one waits behind it (heldByFreeze) and moves back with it when it resumes (pushBack),
+     * so the frozen period's dates are compared as they stand. A renewal starts the day after the last period, so it
+     * always passes. Read under the member's lock taken in create(), so two sales at once are checked one after the
+     * other. Overlaps already in the data are left as they are.
+     */
+    private function assertNoOverlap(Member $member, CarbonImmutable $start, CarbonImmutable $end, string $field): void
+    {
+        $covering = Membership::where('member_id', $member->id)
+            ->whereIn('status', [Membership::ACTIVE, Membership::SCHEDULED, Membership::FROZEN])
+            ->where('starts_on', '<=', $end->toDateString())
+            ->where('ends_on', '>=', $start->toDateString())
+            ->orderBy('starts_on')
+            ->first();
+
+        if ($covering) {
+            throw new BusinessRuleException('membership.overlap', 'للعضو عضوية '.(Membership::STATUS_LABELS[$covering->status] ?? '')
+                .' تغطي هذه الأيام (من '.$covering->starts_on->format('Y-m-d').' إلى '.$covering->ends_on->format('Y-m-d').'). '
+                .'اختر «تجديد» لتبدأ العضوية الجديدة بعد نهايتها، أو «ترقية» لتغيير الباقة.', $field);
+        }
     }
 
     /**
@@ -324,6 +352,9 @@ final class MembershipService
         $today ??= CarbonImmutable::today();
 
         return DB::transaction(function () use ($membership, $today) {
+            // The member first, as a sale takes it (create()): a period being sold meanwhile is saved before the resume
+            // reads what it moves back (pushBack), so it moves with the others and no day is covered twice (#70).
+            Member::whereKey($membership->member_id)->lockForUpdate()->first();
             $membership = Membership::whereKey($membership->id)->lockForUpdate()->firstOrFail();
 
             if ($membership->status !== Membership::FROZEN) {
