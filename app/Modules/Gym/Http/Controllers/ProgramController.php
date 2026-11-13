@@ -39,11 +39,19 @@ class ProgramController extends Controller
     {
         $data = $this->validated($request, $program);
         $program->fill(collect($data)->except('image')->all());
-        if ($request->hasFile('image')) {
-            ImageStore::delete($program->image_path);
-            $program->image_path = ImageStore::store($request->file('image'), 'programs');
+        if (! $request->hasFile('image')) {
+            $program->save();
+        } else {
+            // The new image is written and saved first; the old file goes only after that worked.
+            try {
+                ImageStore::replace($program->image_path, $request->file('image'), 'programs', 1600, function (string $path) use ($program) {
+                    $program->image_path = $path;
+                    $program->save();
+                });
+            } catch (\RuntimeException) {
+                return back()->withInput()->with('error', 'تعذر حفظ صورة البرنامج، فلم يُحفظ شيء وبقيت الصورة السابقة. حاول مرة أخرى.');
+            }
         }
-        $program->save();
 
         return back()->with('success', 'تم حفظ البرنامج.');
     }

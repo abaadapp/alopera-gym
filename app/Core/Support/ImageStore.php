@@ -23,7 +23,7 @@ final class ImageStore
         $image = function_exists('imagecreatefromstring') ? @imagecreatefromstring((string) file_get_contents($file->getRealPath())) : false;
 
         if ($image === false || ! function_exists('imagewebp')) {
-            return $file->storeAs($dir, $name.'.'.strtolower($file->guessExtension() ?: 'jpg'), 'public');
+            return self::written($file->storeAs($dir, $name.'.'.strtolower($file->guessExtension() ?: 'jpg'), 'public'));
         }
 
         $width = imagesx($image);
@@ -43,7 +43,46 @@ final class ImageStore
         imagedestroy($image);
 
         $path = $dir.'/'.$name.'.webp';
-        Storage::disk('public')->put($path, $bytes);
+
+        return self::written(Storage::disk('public')->put($path, $bytes) ? $path : false);
+    }
+
+    /**
+     * The path of a file that was really written, or an exception: a record must never point at a file that is not
+     * there, so the caller keeps the old image and tells the user instead of reporting success.
+     *
+     * @throws \RuntimeException
+     */
+    private static function written(string|false $path): string
+    {
+        if ($path === false || $path === '' || ! Storage::disk('public')->exists($path)) {
+            throw new \RuntimeException('could not write the image');
+        }
+
+        return $path;
+    }
+
+    /**
+     * Stores $file in place of $old and calls $save to record it. The old file is removed only after the save
+     * worked; if the save fails, the new file is removed and the old one stays, so an edit never loses an image.
+     *
+     * @param  callable(string): void  $save
+     *
+     * @throws \RuntimeException when the new image could not be written
+     */
+    public static function replace(?string $old, UploadedFile $file, string $folder, int $maxWidth, callable $save): string
+    {
+        $path = self::store($file, $folder, $maxWidth);
+        try {
+            $save($path);
+        } catch (\Throwable $e) {
+            self::delete($path);
+
+            throw $e;
+        }
+        if ($old && $old !== $path) {
+            self::delete($old);
+        }
 
         return $path;
     }

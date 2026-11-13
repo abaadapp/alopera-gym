@@ -52,11 +52,19 @@ class TrainerController extends Controller
         // Multipart forms drop empty arrays: a missing key means "no specialties".
         $data['specialties'] = $data['specialties'] ?? [];
         $trainer->fill(collect($data)->except('photo')->all());
-        if ($request->hasFile('photo')) {
-            ImageStore::delete($trainer->photo_path);
-            $trainer->photo_path = ImageStore::store($request->file('photo'), 'trainers', 800);
+        if (! $request->hasFile('photo')) {
+            $trainer->save();
+        } else {
+            // The new photo is written and saved first; the old file goes only after that worked.
+            try {
+                ImageStore::replace($trainer->photo_path, $request->file('photo'), 'trainers', 800, function (string $path) use ($trainer) {
+                    $trainer->photo_path = $path;
+                    $trainer->save();
+                });
+            } catch (\RuntimeException) {
+                return back()->withInput()->with('error', 'تعذر حفظ صورة المدرب، فلم يُحفظ شيء وبقيت الصورة السابقة. حاول مرة أخرى.');
+            }
         }
-        $trainer->save();
 
         return back()->with('success', 'تم حفظ بيانات المدرب.');
     }
