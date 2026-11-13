@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Core\Auth\Grants;
 use App\Core\Support\BusinessRuleException;
+use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Modules\Finance\Models\Invoice;
@@ -245,8 +247,8 @@ class PlanPermissionsTest extends TestCase
         $this->assertTrue($renewal->opensDoorAnyDay());
     }
 
-    // 13. Only the owner or a manager edits plans, and nothing sent with the form adds a permission.
-    public function test_permissions_are_set_on_the_server_by_who_may_manage_plans(): void
+    // 13. Only the owner, or whoever the owner grants plans.manage to by name, edits plans; nothing sent with the form adds a permission.
+    public function test_permissions_are_set_on_the_server_by_the_owner_or_whoever_the_owner_grants_it_to(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
@@ -255,18 +257,34 @@ class PlanPermissionsTest extends TestCase
         $plan = $this->planFromPanel($club, $owner, true, false);
         $form = ['name' => 'X', 'duration_value' => 1, 'duration_unit' => 'month', 'price' => 5, 'allows_gym' => true, 'allows_classes' => true];
 
-        $this->actingAs($reception)->get(route('club.plans.index'))->assertForbidden();
-        $this->actingAs($reception)->post(route('club.plans.store'), $form)->assertForbidden();
-        $this->actingAs($reception)->put(route('club.plans.update', $plan), $form)->assertForbidden();
-        $this->assertSame('gym', $this->asTenant($club, fn () => $plan->fresh()->type));
+        // Reception, and a manager the owner has not granted the plans to: refused, nothing changed.
+        foreach (['reception' => $reception, 'manager' => $manager] as $who => $staff) {
+            $this->actingAs($staff)->get(route('club.plans.index'))->assertForbidden();
+            $this->actingAs($staff)->post(route('club.plans.store'), $form)->assertForbidden();
+            $this->actingAs($staff)->put(route('club.plans.update', $plan), $form)->assertForbidden();
+            $this->assertFalse($staff->hasPermission('plans.manage'), $who);
+        }
+        $this->assertSame(['gym'], $this->asTenant($club, fn () => MembershipPlan::pluck('type')->all()));
 
         // A type sent alongside is not read: the switches decide.
         $this->actingAs($owner)->put(route('club.plans.update', $plan), ['type' => 'combo', 'allows_classes' => false, 'name' => $plan->name] + $form)
             ->assertSessionHasNoErrors();
         $this->assertSame('gym', $this->asTenant($club, fn () => $plan->fresh()->type));
 
-        $this->planFromPanel($club, $manager, false, true);
+        // The owner grants it to the manager role by name (the roles screen): from then on the manager may.
+        $role = $this->asTenant($club, fn () => Role::where('key', 'manager')->sole());
+        $this->assertNotContains('plans.manage', $role->permissions);
+        $this->actingAs($owner)->put(route('club.roles.update', $role), ['name' => $role->name, 'permissions' => [...$role->permissions, 'plans.manage']])
+            ->assertSessionHasNoErrors();
+        $this->planFromPanel($club, $manager->fresh(), false, true);
         $this->assertSame(['gym', 'classes'], $this->asTenant($club, fn () => MembershipPlan::orderBy('id')->pluck('type')->all()));
+
+        // Holding it, the manager still cannot hand it on: what the roles and accounts screens would store is without it.
+        $holder = $manager->fresh();
+        $this->assertTrue($holder->hasPermission('users.manage'));
+        $this->assertFalse(Grants::mayGive($holder, ['plans.manage']));
+        $this->assertSame([], Grants::merge($holder, [], ['plans.manage']));
+        $this->assertSame(['plans.manage'], Grants::merge($owner, [], ['plans.manage']));
     }
 
     // 14. A plan belongs to its club: not edited, sold or used in another one.
@@ -332,18 +350,57 @@ class PlanPermissionsTest extends TestCase
     {
         $club = $this->club();
         $owner = $this->owner($club);
-        $this->planFromPanel($club, $owner, true, false, ['name' => 'Door', 'sort' => 1]);
-        $this->planFromPanel($club, $owner, false, true, ['name' => 'Classes', 'sort' => 2, 'sessions_limit' => 8]);
+        // Names and prices that say the opposite: what the site shows follows the switches only.
+        $door = $this->planFromPanel($club, $owner, true, false, ['name' => 'حصص غير محدودة', 'name_en' => 'Unlimited classes', 'price' => 99, 'sessions_limit' => 30, 'sort' => 1]);
+        $this->planFromPanel($club, $owner, false, true, ['name' => 'دخول كامل للنادي', 'name_en' => 'Full gym access', 'price' => 1, 'sessions_limit' => 8, 'sort' => 2]);
         // A program left linked to the door-only plan from before (the panel now clears it on save) is not listed.
         $yoga = $this->program($club);
-        $this->asTenant($club, fn () => MembershipPlan::where('name', 'Door')->sole()->programs()->attach($yoga));
+        $this->asTenant($club, fn () => $door->programs()->attach($yoga));
 
         $this->get('/c/'.$club->slug.'/plans')->assertInertia(fn (AssertableInertia $p) => $p->where('plans.0.programs', [])->etc());
 
-        foreach (['/c/'.$club->slug.'/plans', '/c/'.$club->slug.'/en/plans', '/c/'.$club->slug.'/join'] as $url) {
+        foreach (['/c/'.$club->slug.'/plans', '/c/'.$club->slug.'/en/plans', '/c/'.$club->slug.'/join', '/c/'.$club->slug.'/en/join'] as $url) {
+            $english = str_contains($url, '/en/');
             $this->get($url)->assertOk()->assertInertia(fn (AssertableInertia $p) => $p
-                ->where('plans.0.allows_gym', true)->where('plans.0.allows_classes', false)
-                ->where('plans.1.allows_gym', false)->where('plans.1.allows_classes', true)->where('plans.1.sessions_limit', 8));
+                ->where('locale', $english ? 'en' : 'ar')
+                ->where('plans.0.name', $english ? 'Unlimited classes' : 'حصص غير محدودة')
+                ->where('plans.0.allows_gym', true)->where('plans.0.allows_classes', false)->where('plans.0.sessions_limit', null)
+                ->where('plans.0.type_label', $english ? 'Gym access' : 'دخول النادي')
+                ->where('plans.1.allows_gym', false)->where('plans.1.allows_classes', true)->where('plans.1.sessions_limit', 8)
+                ->where('plans.1.type_label', $english ? 'Group classes' : 'حصص جماعية'));
         }
+    }
+
+    // 6 and 17. The portal says why a booking is refused, in the page's language, and what the membership gives.
+    public function test_the_portal_says_why_a_booking_is_refused_in_arabic_and_in_english(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $door = $this->member($club);
+        $classes = $this->member($club);
+        $this->activeMembership($club, $door, $this->planFromPanel($club, $owner, true, false));
+        $this->activeMembership($club, $classes, $this->planFromPanel($club, $owner, false, true, ['sessions_limit' => 1]));
+        $first = $this->tonight($club);
+        $second = $this->tonight($club, ['starts_at' => today()->setTime(20, 0)]);
+        $base = '/c/'.$club->slug;
+
+        foreach (['' => ['باقة العضو لدخول النادي فقط، ولا تشمل الحصص.', 'تم استهلاك جميع حصص الباقة.'],
+            '/en' => ['This membership is for the gym only: it does not include classes.', 'All the classes of your plan are used.']] as $lang => [$gymOnly, $used]) {
+            $this->actingAs($door, 'member')->post("$base$lang/portal/classes/{$first->id}/book")->assertSessionHasErrors(['booking' => $gymOnly]);
+            foreach (['/portal', '/portal/classes'] as $page) {
+                $this->actingAs($door, 'member')->get("$base$lang$page")->assertOk()->assertInertia(fn (AssertableInertia $p) => $p
+                    ->where('locale', $lang === '' ? 'ar' : 'en')
+                    ->where($page === '/portal' ? 'current.books_classes' : 'membership.books_classes', false)
+                    ->where($page === '/portal' ? 'current.opens_door_any_day' : 'membership.opens_door_any_day', true));
+            }
+            $this->actingAs($classes, 'member')->get("$base$lang/portal")->assertInertia(fn (AssertableInertia $p) => $p
+                ->where('current.books_classes', true)->where('current.opens_door_any_day', false));
+        }
+
+        // The classes-only member books her one class, then the second is refused in both languages.
+        $this->actingAs($classes, 'member')->post("$base/portal/classes/{$first->id}/book")->assertSessionHasNoErrors();
+        $this->actingAs($classes, 'member')->post("$base/portal/classes/{$second->id}/book")->assertSessionHasErrors(['booking' => 'تم استهلاك جميع حصص الباقة.']);
+        $this->actingAs($classes, 'member')->post("$base/en/portal/classes/{$second->id}/book")->assertSessionHasErrors(['booking' => 'All the classes of your plan are used.']);
+        $this->assertSame(1, $this->asTenant($club, fn () => Booking::where('status', Booking::BOOKED)->count()));
     }
 }

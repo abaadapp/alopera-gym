@@ -16,7 +16,8 @@ use Inertia\Response;
 
 /**
  * Membership plans: what each gives (the door, the classes), prices, durations, freeze rules, linked programs. Only
- * plans.manage (the owner, the manager, or a role the owner grants it to) reaches these routes.
+ * plans.manage reaches these routes: the owner, or whoever the owner grants it to by name (a sensitive permission, so
+ * a holder cannot pass it on; a new club's manager does not hold it).
  */
 class PlanController extends Controller
 {

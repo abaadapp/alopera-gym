@@ -33,13 +33,15 @@ final class SystemRoles
             ],
             self::MANAGER => [
                 'name' => 'مدير النشاط أو الفرع',
-                'description' => 'إدارة النادي اليومية دون النسخ الاحتياطي والأدوار والرواتب السرية والموقع الإلكتروني.',
+                'description' => 'إدارة النادي اليومية دون النسخ الاحتياطي والأدوار والرواتب السرية والموقع الإلكتروني والباقات.',
                 'permissions' => array_values(array_diff(PermissionRegistry::all(), [
                     'roles.manage', 'backups.manage', 'integrations.manage', 'members.delete',
                     // The WhatsApp connection's keys go with the integrations: the owner's unless granted by name.
                     'whatsapp.manage_settings',
                     // The website is the owner's, or whoever the owner grants it to by name.
                     'website.manage',
+                    // So are the plans: what each gives (the door, the classes), its price and its discounts.
+                    'plans.manage',
                     // Salaries stay confidential: every payroll step shows them, so none is the manager's until the owner
                     // grants salaries by name. Suppliers are paid by finance.
                     'payroll.salaries', 'payroll.compensation', 'payroll.prepare', 'payroll.edit', 'payroll.approve', 'payroll.pay',

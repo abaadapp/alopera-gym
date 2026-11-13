@@ -1,5 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import { useCallback } from 'react';
+import panel from '@/i18n/panel.en.json';
 import portal from '@/i18n/portal.en.json';
 import site from '@/i18n/site.en.json';
 import { currentLocale, type Locale } from '@/lib/locale';
@@ -10,8 +11,11 @@ import { currentLocale, type Locale } from '@/lib/locale';
  * (/en/...) its English from resources/js/i18n/*.en.json, or the Arabic when a phrase has none yet. Values in a
  * phrase are named: t('متبقي :count مقاعد', { count: 3 }). The club's own words (plans, sections) come translated
  * from the server.
+ *
+ * The club panel is in Arabic and has no language switch; the one part shown in both languages at once, «صلاحيات
+ * الباقة» in the plan form, takes its English from panel.en.json here: tr(text, vars, 'en').
  */
-const EN: Record<string, string> = { ...(site as Record<string, string>), ...(portal as Record<string, string>) };
+const EN: Record<string, string> = { ...(panel as Record<string, string>), ...(site as Record<string, string>), ...(portal as Record<string, string>) };
 
 type Vars = Record<string, string | number | null | undefined>;
 

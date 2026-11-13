@@ -5,7 +5,9 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardFooter, Checkbox, ConfirmAction, EmptyState, EnglishFields, Field, Input, linesOf, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { money, dayCount } from '@/lib/format';
+import { tr } from '@/lib/i18n';
 import { durationUnit } from '@/lib/labels';
+import { PLAN_ACCESS_FORM } from '@/lib/plan-access';
 import type { Option } from '@/types';
 
 interface Plan {
@@ -289,12 +291,6 @@ function PlanModal({ open, plan, programs, onClose }: { open: boolean; plan: Pla
     );
 }
 
-const ACCESS_SUMMARY: Record<string, string> = {
-    'gym': 'دخول النادي فقط: يدخل المشترك أي يوم خلال مدة اشتراكه، ولا يحجز الحصص.',
-    'classes': 'حجز الحصص فقط: يحجز المشترك الحصص، ويدخل النادي يوم حصته المحجوزة فقط.',
-    'gym+classes': 'دخول النادي وحجز الحصص: يدخل أي يوم، ويحجز الحصص حسب رصيد الباقة.',
-};
-
 /**
  * «صلاحيات الباقة»: what a sale of the plan gives, chosen by the owner (the server works the plan's type out of them
  * and refuses a plan with neither). A change applies to sales and renewals from now on; periods already sold keep
@@ -309,27 +305,43 @@ function PlanAccessFields({ gym, classes, onGym, onClasses, error, changedFor }:
     changedFor: number;
 }) {
     const key = [gym && 'gym', classes && 'classes'].filter(Boolean).join('+');
-    const none = 'اختر صلاحية واحدة على الأقل: دخول النادي أو حجز الحصص.';
+    const w = PLAN_ACCESS_FORM;
 
     return (
         <div className="rounded-2xl border border-line p-4">
-            <p className="text-sm font-semibold text-ink">صلاحيات الباقة <span className="text-red-600">*</span></p>
-            <p className="mt-0.5 text-[12px] text-muted">اختر ما تسمح به الباقة. لا يُستنتج من اسمها أو سعرها.</p>
+            <p className="text-sm font-semibold text-ink">{w.title} <span className="text-red-600">*</span> <En text={w.title} inline /></p>
+            <p className="mt-0.5 text-[12px] text-muted">{w.intro}</p>
+            <En text={w.intro} />
             <div className="mt-2 divide-y divide-line">
-                <Toggle checked={gym} onChange={onGym} label="دخول النادي" hint="تفتح البوابة للمشترك في أي يوم خلال مدة اشتراكه." />
-                <Toggle checked={classes} onChange={onClasses} label="حجز الحصص" hint="يحجز المشترك الحصص حسب رصيد الباقة والبرامج المشمولة وسعة الحصة." />
+                <Toggle checked={gym} onChange={onGym} label={w.gym} hint={<>{w.gymHint}<En text={w.gym} hint={w.gymHint} /></>} />
+                <Toggle checked={classes} onChange={onClasses} label={w.classes} hint={<>{w.classesHint}<En text={w.classes} hint={w.classesHint} /></>} />
             </div>
-            <p className={`mt-3 rounded-xl px-3 py-2 text-[13px] ${key ? 'bg-brand-50 text-brand-900' : 'bg-red-50 text-red-700'}`}>
-                {key ? <><span className="font-semibold">الملخص:</span> {ACCESS_SUMMARY[key]}</> : none}
-            </p>
-            {/* The server's refusal of a plan with neither is the line above: said once. */}
-            {error && error !== none && <p className="mt-2 text-[13px] text-red-600">{error}</p>}
-            {changedFor > 0 && (
-                <p className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
-                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                    <span>لهذه الباقة <span className="num font-semibold">{changedFor}</span> اشتراك قائم. تغيير الصلاحيات يسري على المبيعات والتجديدات الجديدة فقط، ويحتفظ كل اشتراك قائم بصلاحياته حتى نهاية فترته.</span>
+            <div className={`mt-3 rounded-xl px-3 py-2 text-[13px] ${key ? 'bg-brand-50 text-brand-900' : 'bg-red-50 text-red-700'}`}>
+                <p>{key ? <><span className="font-semibold">{w.summary}</span> {w.summaries[key]}</> : w.none}</p>
+                <p lang="en" dir="ltr" className="mt-1 text-start text-[12px] opacity-80">
+                    {key ? <><span className="font-semibold">{tr(w.summary, undefined, 'en')}</span> {tr(w.summaries[key], undefined, 'en')}</> : tr(w.none, undefined, 'en')}
                 </p>
+            </div>
+            {/* The server's refusal of a plan with neither is the line above: said once. */}
+            {error && error !== w.none && <p className="mt-2 text-[13px] text-red-600">{error}</p>}
+            {changedFor > 0 && (
+                <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    <div>
+                        <p>{tr(w.live, { count: changedFor }, 'ar')}</p>
+                        <p lang="en" dir="ltr" className="mt-1 text-start text-[12px] opacity-80">{tr(w.live, { count: changedFor }, 'en')}</p>
+                    </div>
+                </div>
             )}
         </div>
     );
+}
+
+/** The English of a line of «صلاحيات الباقة», under the Arabic (panel.en.json): a label, or a label and its hint. */
+function En({ text, hint, inline = false }: { text: string; hint?: string; inline?: boolean }) {
+    const words = hint ? `${tr(text, undefined, 'en')} — ${tr(hint, undefined, 'en')}` : tr(text, undefined, 'en');
+
+    return inline
+        ? <span lang="en" dir="ltr" className="ms-1 text-[12px] font-normal text-muted">({words})</span>
+        : <span lang="en" dir="ltr" className="mt-0.5 block text-start text-[11px] text-muted">{words}</span>;
 }

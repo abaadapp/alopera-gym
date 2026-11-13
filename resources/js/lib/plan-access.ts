@@ -35,3 +35,24 @@ export function say(phrase: Phrase, t: (text: string, vars?: Record<string, numb
 
     return t(phrase.text, phrase.vars);
 }
+
+/**
+ * The words of «صلاحيات الباقة» in the plan form. The panel is in Arabic; this section also shows each line in English
+ * under it (resources/js/i18n/panel.en.json), so the owner reads both whatever language the staff prefer.
+ */
+export const PLAN_ACCESS_FORM = {
+    title: 'صلاحيات الباقة',
+    intro: 'اختر ما تسمح به الباقة. لا يُستنتج من اسمها أو سعرها.',
+    gym: 'دخول النادي',
+    gymHint: 'تفتح البوابة للمشترك في أي يوم خلال مدة اشتراكه.',
+    classes: 'حجز الحصص',
+    classesHint: 'يحجز المشترك الحصص حسب رصيد الباقة والبرامج المشمولة وسعة الحصة.',
+    summary: 'الملخص:',
+    summaries: {
+        'gym': 'دخول النادي فقط: يدخل المشترك أي يوم خلال مدة اشتراكه، ولا يحجز الحصص.',
+        'classes': 'حجز الحصص فقط: يحجز المشترك الحصص، ويدخل النادي يوم حصته المحجوزة فقط.',
+        'gym+classes': 'دخول النادي وحجز الحصص: يدخل أي يوم، ويحجز الحصص حسب رصيد الباقة.',
+    } as Record<string, string>,
+    none: 'اختر صلاحية واحدة على الأقل: دخول النادي أو حجز الحصص.',
+    live: 'لهذه الباقة :count اشتراك قائم. تغيير الصلاحيات يسري على المبيعات والتجديدات الجديدة فقط، ويحتفظ كل اشتراك قائم بصلاحياته حتى نهاية فترته.',
+};

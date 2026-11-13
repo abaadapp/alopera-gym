@@ -1,0 +1,13 @@
+{
+    "صلاحيات الباقة": "Plan permissions",
+    "اختر ما تسمح به الباقة. لا يُستنتج من اسمها أو سعرها.": "Choose what the plan allows. It is never guessed from its name or its price.",
+    "دخول النادي": "Gym access",
+    "تفتح البوابة للمشترك في أي يوم خلال مدة اشتراكه.": "The gate opens for the member on any day of the membership.",
+    "يحجز المشترك الحصص حسب رصيد الباقة والبرامج المشمولة وسعة الحصة.": "The member books classes within the plan's credit, its programs and each class's capacity.",
+    "الملخص:": "Summary:",
+    "دخول النادي فقط: يدخل المشترك أي يوم خلال مدة اشتراكه، ولا يحجز الحصص.": "Gym access only: the member comes in on any day of the membership and books no classes.",
+    "حجز الحصص فقط: يحجز المشترك الحصص، ويدخل النادي يوم حصته المحجوزة فقط.": "Classes only: the member books classes and comes in only on the day of a booked class.",
+    "دخول النادي وحجز الحصص: يدخل أي يوم، ويحجز الحصص حسب رصيد الباقة.": "Gym access and classes: the member comes in on any day and books classes within the plan's credit.",
+    "اختر صلاحية واحدة على الأقل: دخول النادي أو حجز الحصص.": "Choose at least one: gym access or classes.",
+    "لهذه الباقة :count اشتراك قائم. تغيير الصلاحيات يسري على المبيعات والتجديدات الجديدة فقط، ويحتفظ كل اشتراك قائم بصلاحياته حتى نهاية فترته.": "This plan has :count current memberships. A change applies to new sales and renewals only: each current membership keeps its permissions until its period ends."
+}

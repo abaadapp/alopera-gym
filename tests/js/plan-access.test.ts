@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { hasEnglish, tr } from '@/lib/i18n';
 import { setLocale } from '@/lib/locale';
-import { planAccess, say } from '@/lib/plan-access';
+import { PLAN_ACCESS_FORM, planAccess, say } from '@/lib/plan-access';
 
 const words = (p: Parameters<typeof planAccess>[0]) => {
     const access = planAccess(p);
@@ -44,5 +44,22 @@ describe('what a plan gives, before it is bought («صلاحيات الباقة�
         expect(say(one, t, true)).toBe('1 class during the membership');
         expect(tr('الدخول إلى النادي يوم الحصة المحجوزة فقط')).toBe('Club entry only on the day of a booked class');
         expect(tr('باقتك الحالية لا تشمل حجز الحصص.')).toBe('Your current membership does not include class bookings.');
+        expect(tr('غير مشمولة')).toBe('Not included');
+    });
+
+    it('shows the plan form section in Arabic and in English, line by line', () => {
+        const { summaries, ...lines } = PLAN_ACCESS_FORM;
+        for (const text of [...Object.values(lines), ...Object.values(summaries)]) {
+            expect(hasEnglish(text), text).toBe(true);
+            expect(tr(text, undefined, 'en'), text).not.toMatch(/[\u0600-\u06FF]/);
+            expect(tr(text, undefined, 'ar')).toBe(text);
+        }
+        expect(Object.keys(summaries).sort()).toEqual(['classes', 'gym', 'gym+classes']);
+        expect(tr(PLAN_ACCESS_FORM.live, { count: 18 }, 'en')).toBe(
+            'This plan has 18 current memberships. A change applies to new sales and renewals only: each current membership keeps its permissions until its period ends.',
+        );
+        expect(tr(PLAN_ACCESS_FORM.live, { count: 18 }, 'ar')).toContain('لهذه الباقة 18 اشتراك قائم.');
+        expect(tr(PLAN_ACCESS_FORM.summaries.classes, undefined, 'en')).toBe('Classes only: the member books classes and comes in only on the day of a booked class.');
+        expect(tr(PLAN_ACCESS_FORM.none, undefined, 'en')).toBe('Choose at least one: gym access or classes.');
     });
 });
