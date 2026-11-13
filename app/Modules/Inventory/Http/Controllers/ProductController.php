@@ -292,7 +292,7 @@ class ProductController extends Controller
     /** @return array<string, mixed> */
     private function attributes(array $data): array
     {
-        return collect($data)->only(['name', 'sku', 'barcode', 'description', 'price', 'reorder_level', 'track_stock', 'is_active', 'show_on_website'])->all();
+        return collect($data)->only(['name', 'name_en', 'sku', 'barcode', 'description', 'description_en', 'price', 'reorder_level', 'track_stock', 'is_active', 'show_on_website'])->all();
     }
 
     private function category(array $data): ?int
