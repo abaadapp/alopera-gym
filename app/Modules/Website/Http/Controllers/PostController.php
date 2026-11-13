@@ -2,6 +2,8 @@
 
 namespace App\Modules\Website\Http\Controllers;
 
+use App\Core\Support\Images\ImageRule;
+use App\Core\Support\Images\ImageUpload;
 use App\Core\Support\ImageStore;
 use App\Http\Controllers\Controller;
 use App\Modules\Website\Models\SitePost;
@@ -29,14 +31,19 @@ class PostController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
-        $post = new SitePost(collect($data)->except('image')->all());
+        $post = new SitePost(collect($data)->except(['image', 'image_preview'])->all());
         $post->slug = $this->slug($data['title']);
         $post->created_by = $request->user()->id;
         $post->published_at = $post->is_published ? now() : null;
-        if ($request->hasFile('image')) {
-            $post->image_path = ImageStore::store($request->file('image'), 'posts');
+        $image = ImageUpload::from($request, 'image');
+        if (! $image) {
+            $post->save();
+        } else {
+            ImageStore::commit(null, ImageStore::store($image, 'posts'), function (string $path) use ($post) {
+                $post->image_path = $path;
+                $post->save();
+            });
         }
-        $post->save();
 
         return back()->with('success', 'تم الحفظ.');
     }
@@ -45,19 +52,19 @@ class PostController extends Controller
     {
         $data = $this->validated($request);
         $wasPublished = $post->is_published;
-        $post->fill(collect($data)->except('image')->all());
+        $post->fill(collect($data)->except(['image', 'image_preview'])->all());
         if ($post->is_published && ! $wasPublished) {
             $post->published_at = now();
         }
-        // The new image is stored and saved first; the old file goes only after that worked.
-        $previous = null;
-        if ($request->hasFile('image')) {
-            $previous = $post->image_path;
-            $post->image_path = ImageStore::store($request->file('image'), 'posts');
-        }
-        $post->save();
-        if ($previous && $previous !== $post->image_path) {
-            ImageStore::delete($previous);
+        // The new image is stored and saved first; the old files go only after that worked.
+        $image = ImageUpload::from($request, 'image');
+        if (! $image) {
+            $post->save();
+        } else {
+            ImageStore::replace($post->image_path, $image, 'posts', 1600, function (string $path) use ($post) {
+                $post->image_path = $path;
+                $post->save();
+            });
         }
 
         return back()->with('success', 'تم الحفظ.');
@@ -97,7 +104,8 @@ class PostController extends Controller
             'starts_on' => ['nullable', 'date'],
             'ends_on' => ['nullable', 'date', 'after_or_equal:starts_on'],
             'is_published' => ['boolean'],
-            'image' => ['nullable', 'image', 'max:'.config('gym.max_image_kb')],
+            'image' => ImageRule::rules(),
+            'image_preview' => ImageRule::previewRules(),
         ]);
     }
 }

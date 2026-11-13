@@ -2,10 +2,13 @@
 
 namespace App\Modules\Website\Content;
 
+use App\Core\Support\Images\ImageInspector;
+use App\Core\Support\Images\ImageRejected;
+use App\Core\Support\Images\ImageRule;
+use App\Core\Support\Images\ImageUpload;
 use App\Core\Support\ImageStore;
 use App\Modules\Website\Models\SiteMedia;
 use App\Modules\Website\Models\SiteSetting;
-use Illuminate\Contracts\Validation\Rule;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -17,21 +20,22 @@ use Illuminate\Validation\ValidationException;
  */
 final class MediaLibrary
 {
-    /** Allowed upload formats (checked by extension, by the sniffed type and by GD actually decoding it). */
-    public const TYPES = ['jpg', 'jpeg', 'png', 'webp'];
+    /** Formats the file picker offers; the file's own bytes decide (ImageRule), not its name. */
+    public const TYPES = ImageInspector::EXTENSIONS;
 
-    /** @return list<string|Rule> */
+    /** @return list<mixed> */
     public static function rules(): array
     {
-        return ['file', 'mimes:'.implode(',', self::TYPES), 'mimetypes:image/jpeg,image/png,image/webp', 'max:'.config('gym.max_image_kb')];
+        return array_values(array_filter(ImageRule::rules(required: true), fn ($r) => $r !== 'required'));
     }
 
-    public static function upload(UploadedFile $file, ?string $title = null, bool $inGallery = false): SiteMedia
+    public static function upload(UploadedFile|ImageUpload $file, ?string $title = null, bool $inGallery = false): SiteMedia
     {
+        $upload = ImageUpload::wrap($file);
         try {
-            $stored = ImageStore::storeMeasured($file, 'site');
-        } catch (\RuntimeException) {
-            throw ValidationException::withMessages(['images' => 'تعذّر قراءة الصورة «'.$file->getClientOriginalName().'». استخدم صورة JPG أو PNG أو WebP سليمة.']);
+            $stored = ImageStore::storeMeasured($upload, 'site');
+        } catch (ImageRejected $e) {
+            throw ValidationException::withMessages(['images' => '«'.$upload->original->getClientOriginalName().'»: '.$e->getMessage()]);
         }
 
         try {
@@ -112,7 +116,9 @@ final class MediaLibrary
     {
         return [
             'id' => $m->id,
-            'url' => Storage::disk('public')->url($m->path),
+            'url' => ImageStore::url($m->path),
+            'thumb_url' => ImageStore::thumbUrl($m->path),
+            'has_original' => ImageStore::hasOriginal($m->path),
             'title' => $m->title,
             'alt' => $m->alt,
             'width' => $m->width,

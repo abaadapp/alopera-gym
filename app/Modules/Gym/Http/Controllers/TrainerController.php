@@ -2,6 +2,8 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Support\Images\ImageRule;
+use App\Core\Support\Images\ImageUpload;
 use App\Core\Support\ImageStore;
 use App\Core\Support\Phone;
 use App\Core\Tenancy\BranchContext;
@@ -37,11 +39,16 @@ class TrainerController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
-        $trainer = new Trainer(collect($data)->except('photo')->all());
-        if ($request->hasFile('photo')) {
-            $trainer->photo_path = ImageStore::store($request->file('photo'), 'trainers', 800);
+        $trainer = new Trainer(collect($data)->except(['photo', 'photo_preview'])->all());
+        $photo = ImageUpload::from($request, 'photo');
+        if (! $photo) {
+            $trainer->save();
+        } else {
+            ImageStore::commit(null, ImageStore::store($photo, 'trainers', 800), function (string $path) use ($trainer) {
+                $trainer->photo_path = $path;
+                $trainer->save();
+            });
         }
-        $trainer->save();
 
         return back()->with('success', 'تمت إضافة المدرب.');
     }
@@ -51,19 +58,16 @@ class TrainerController extends Controller
         $data = $this->validated($request, $trainer);
         // Multipart forms drop empty arrays: a missing key means "no specialties".
         $data['specialties'] = $data['specialties'] ?? [];
-        $trainer->fill(collect($data)->except('photo')->all());
-        if (! $request->hasFile('photo')) {
+        $trainer->fill(collect($data)->except(['photo', 'photo_preview'])->all());
+        $photo = ImageUpload::from($request, 'photo');
+        if (! $photo) {
             $trainer->save();
         } else {
-            // The new photo is written and saved first; the old file goes only after that worked.
-            try {
-                ImageStore::replace($trainer->photo_path, $request->file('photo'), 'trainers', 800, function (string $path) use ($trainer) {
-                    $trainer->photo_path = $path;
-                    $trainer->save();
-                });
-            } catch (\RuntimeException) {
-                return back()->withInput()->with('error', 'تعذر حفظ صورة المدرب، فلم يُحفظ شيء وبقيت الصورة السابقة. حاول مرة أخرى.');
-            }
+            // The new photo is stored and saved first; the old files go only after that worked.
+            ImageStore::replace($trainer->photo_path, $photo, 'trainers', 800, function (string $path) use ($trainer) {
+                $trainer->photo_path = $path;
+                $trainer->save();
+            });
         }
 
         return back()->with('success', 'تم حفظ بيانات المدرب.');
@@ -118,7 +122,8 @@ class TrainerController extends Controller
             'sort' => ['nullable', 'integer'],
             'branch_id' => ['nullable', ...app(BranchContext::class)->rule($trainer?->branch_id)],
             'user_id' => ['nullable', Rule::exists('users', 'id')->where('tenant_id', $tenantId), Rule::unique('gym_trainers', 'user_id')->ignore($trainer?->id)],
-            'photo' => ['nullable', 'image', 'max:'.config('gym.max_image_kb')],
+            'photo' => ImageRule::rules(),
+            'photo_preview' => ImageRule::previewRules(),
         ]);
 
         // Same format as members (968XXXXXXXX), so the number dials and links to WhatsApp correctly.

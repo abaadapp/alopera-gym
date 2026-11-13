@@ -3,6 +3,8 @@
 namespace App\Modules\Website\Http\Controllers;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Support\Images\ImageRule;
+use App\Core\Support\Images\ImageUpload;
 use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -126,17 +128,17 @@ class SiteBuilderController extends Controller
         $request->validate([
             'images' => ['required', 'array', 'max:12'],
             'images.*' => ['required', ...MediaLibrary::rules()],
+            'images_preview' => ['nullable', 'array'],
+            'images_preview.*' => ImageRule::previewRules(),
             'title' => ['nullable', 'string', 'max:120'],
             'gallery' => ['nullable', 'boolean'],
         ], [
-            'images.*.mimes' => 'الصيغ المسموحة: JPG وPNG وWebP.',
-            'images.*.mimetypes' => 'الصيغ المسموحة: JPG وPNG وWebP.',
             'images.*.max' => 'حجم الصورة أكبر من المسموح ('.(int) (config('gym.max_image_kb') / 1024).' ميجابايت).',
         ]);
 
         $created = [];
-        foreach ($request->file('images') as $file) {
-            $created[] = MediaLibrary::upload($file, $request->input('title'), $request->boolean('gallery'));
+        foreach (ImageUpload::all($request, 'images') as $upload) {
+            $created[] = MediaLibrary::upload($upload, $request->input('title'), $request->boolean('gallery'));
         }
         $audit->log('website.media_uploaded', null, ['ids' => array_map(fn ($m) => $m->id, $created)]);
 

@@ -2,6 +2,8 @@
 
 namespace App\Modules\Inventory\Http\Controllers;
 
+use App\Core\Support\Images\ImageRule;
+use App\Core\Support\Images\ImageUpload;
 use App\Core\Support\ImageStore;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
@@ -18,7 +20,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -92,10 +93,12 @@ class ProductController extends Controller
     public function store(Request $request, StockService $stock): RedirectResponse
     {
         $data = $this->validated($request);
-        $product = DB::transaction(function () use ($data, $request, $stock) {
+        // Photos are stored before anything is saved: a refused photo saves nothing, a failed save leaves no file.
+        $photos = $this->storePhotos($request, self::PHOTOS);
+        $product = $this->keepingPhotos($photos, fn () => DB::transaction(function () use ($data, $request, $stock, $photos) {
             $product = new Product($this->attributes($data));
             $product->product_category_id = $this->category($data);
-            $paths = $this->storePhotos($request->file('photos', []), self::PHOTOS);
+            $paths = $photos;
             $product->image_path = array_shift($paths);
             $product->images = $paths ?: null;
             $product->save();
@@ -111,7 +114,7 @@ class ProductController extends Controller
             }
 
             return $product;
-        });
+        }));
 
         return redirect()->route('club.products.index')->with('success', 'تمت إضافة المنتج «'.$product->name.'».');
     }
@@ -119,11 +122,11 @@ class ProductController extends Controller
     public function update(Request $request, Product $product): RedirectResponse
     {
         $data = $this->validated($request, $product);
-        DB::transaction(function () use ($data, $request, $product) {
+        $photos = $this->storePhotos($request, max(0, self::PHOTOS - count($product->imageUrls())));
+        $this->keepingPhotos($photos, fn () => DB::transaction(function () use ($data, $request, $product, $photos) {
             $product->fill($this->attributes($data));
             $product->product_category_id = $this->category($data);
-            $room = self::PHOTOS - count($product->imageUrls());
-            $paths = $this->storePhotos($request->file('photos', []), max(0, $room));
+            $paths = $photos;
             if ($paths && ! $product->image_path) {
                 $product->image_path = array_shift($paths);
             }
@@ -132,7 +135,7 @@ class ProductController extends Controller
             if ($request->boolean('link_addons')) {
                 $this->syncAddons($product, $data['addon_ids'] ?? []);
             }
-        });
+        }));
 
         return redirect()->route('club.products.index')->with('success', 'تم حفظ «'.$product->name.'».');
     }
@@ -172,15 +175,17 @@ class ProductController extends Controller
         $paths = array_values(array_filter([$product->image_path, ...($product->images ?? [])]));
         abort_unless(isset($paths[$index]), 404);
 
+        $removed = null;
         if ($data['action'] === 'remove') {
-            ImageStore::delete($paths[$index]);
-            array_splice($paths, $index, 1);
+            $removed = array_splice($paths, $index, 1)[0];
         } else {
             array_unshift($paths, ...array_splice($paths, $index, 1));
         }
         $product->image_path = $paths[0] ?? null;
         $product->images = array_slice($paths, 1) ?: null;
         $product->save();
+        // The file goes only once the product no longer points at it.
+        ImageStore::delete($removed);
 
         return back()->with('success', $data['action'] === 'remove' ? 'حُذفت الصورة.' : 'أصبحت الصورة الرئيسية.');
     }
@@ -300,12 +305,44 @@ class ProductController extends Controller
     }
 
     /**
-     * @param  array<int, UploadedFile>  $files
+     * Stores the uploaded photos that fit, all or none: when one is refused, those already stored are removed.
+     *
      * @return list<string>
      */
-    private function storePhotos(array $files, int $room): array
+    private function storePhotos(Request $request, int $room): array
     {
-        return array_map(fn ($file) => ImageStore::store($file, 'products', 1000), array_slice($files, 0, $room));
+        $paths = [];
+        try {
+            foreach (array_slice(ImageUpload::all($request, 'photos'), 0, $room) as $upload) {
+                $paths[] = ImageStore::store($upload, 'products', 1000);
+            }
+        } catch (\Throwable $e) {
+            array_map(ImageStore::delete(...), $paths);
+
+            throw $e;
+        }
+
+        return $paths;
+    }
+
+    /**
+     * Runs the save; if it fails, the photos stored for it are removed so no file is left without a product.
+     *
+     * @template T
+     *
+     * @param  list<string>  $photos
+     * @param  callable(): T  $save
+     * @return T
+     */
+    private function keepingPhotos(array $photos, callable $save): mixed
+    {
+        try {
+            return $save();
+        } catch (\Throwable $e) {
+            array_map(ImageStore::delete(...), $photos);
+
+            throw $e;
+        }
     }
 
     /** @return array<string, mixed> */
@@ -329,7 +366,9 @@ class ProductController extends Controller
             'opening_stock' => ['nullable', 'numeric', 'min:0', 'max:1000000'],
             'opening_cost' => ['nullable', 'numeric', 'min:0', 'max:99999'],
             'photos' => ['nullable', 'array', 'max:'.self::PHOTOS],
-            'photos.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:'.config('gym.max_image_kb')],
+            'photos.*' => ImageRule::rules(required: true),
+            'photos_preview' => ['nullable', 'array'],
+            'photos_preview.*' => ImageRule::previewRules(),
             'addon_ids' => ['nullable', 'array'],
             'addon_ids.*' => ['integer', TenantRule::exists('product_addons')->whereNull('deleted_at')],
         ]);

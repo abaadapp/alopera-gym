@@ -14,7 +14,7 @@ use Tests\TestCase;
 /**
  * Changing a trainer's photo or a program's image never loses the image: the new file is written and saved first,
  * the old one is removed only after that, and a write that fails keeps the old image, records no missing file and
- * reports an error instead of success.
+ * shows the reason on the image field instead of success.
  */
 class ImageReplaceSafetyTest extends TestCase
 {
@@ -26,6 +26,7 @@ class ImageReplaceSafetyTest extends TestCase
     {
         parent::setUp();
         Storage::fake('public');
+        Storage::fake('local');
     }
 
     protected function tearDown(): void
@@ -83,7 +84,7 @@ class ImageReplaceSafetyTest extends TestCase
 
         $this->actingAs($this->owner($club))
             ->put(route('club.programs.update', $program), ['name' => 'Yoga renamed'] + $this->programForm(UploadedFile::fake()->image('new.jpg', 800, 600)))
-            ->assertSessionHas('error')->assertSessionMissing('success');
+            ->assertSessionHasErrors('image')->assertSessionMissing('success');
 
         $fresh = $this->asTenant($club, fn () => $program->fresh());
         $this->assertSame('tenants/'.$club->id.'/programs/old.webp', $fresh->image_path);
@@ -100,7 +101,7 @@ class ImageReplaceSafetyTest extends TestCase
 
         $this->actingAs($this->owner($club))
             ->put(route('club.trainers.update', $trainer), ['name' => 'Sara', 'photo' => UploadedFile::fake()->image('p.jpg', 400, 400)])
-            ->assertSessionHas('error')->assertSessionMissing('success');
+            ->assertSessionHasErrors('photo')->assertSessionMissing('success');
 
         $this->assertSame($old, $this->asTenant($club, fn () => $trainer->fresh()->photo_path));
         Storage::disk('public')->assertExists($old);

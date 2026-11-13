@@ -1,6 +1,7 @@
 <?php
 
 use App\Core\Support\BusinessRuleException;
+use App\Core\Support\Images\ImageRejected;
 use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\CrossTenantWriteException;
 use App\Core\Tenancy\MissingTenantException;
@@ -103,6 +104,15 @@ return Application::configure(basePath: dirname(__DIR__))
 
             // On the English website and portal, in English where the site has the words (lang/en.json).
             throw ValidationException::withMessages([$e->field => SiteLanguage::word($e->getMessage())]);
+        });
+
+        // An image that was refused or could not be stored: the reason, on the field it came from; nothing was saved.
+        $exceptions->render(function (ImageRejected $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage(), 'errors' => [$e->field ?? 'image' => [$e->getMessage()]]], 422);
+            }
+
+            throw ValidationException::withMessages([$e->field ?? 'image' => $e->getMessage()]);
         });
 
         $exceptions->render(function (MissingTenantException|CrossTenantWriteException $e, Request $request) {

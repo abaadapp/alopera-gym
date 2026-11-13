@@ -2,6 +2,8 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Support\Images\ImageRule;
+use App\Core\Support\Images\ImageUpload;
 use App\Core\Support\ImageStore;
 use App\Http\Controllers\Controller;
 use App\Modules\Gym\Models\Program;
@@ -26,11 +28,16 @@ class ProgramController extends Controller
     {
         $data = $this->validated($request);
         $data['slug'] = $this->slug($data['name']);
-        $program = new Program(collect($data)->except('image')->all());
-        if ($request->hasFile('image')) {
-            $program->image_path = ImageStore::store($request->file('image'), 'programs');
+        $program = new Program(collect($data)->except(['image', 'image_preview'])->all());
+        $image = ImageUpload::from($request, 'image');
+        if (! $image) {
+            $program->save();
+        } else {
+            ImageStore::commit(null, ImageStore::store($image, 'programs'), function (string $path) use ($program) {
+                $program->image_path = $path;
+                $program->save();
+            });
         }
-        $program->save();
 
         return back()->with('success', 'تمت إضافة البرنامج.');
     }
@@ -38,19 +45,17 @@ class ProgramController extends Controller
     public function update(Request $request, Program $program): RedirectResponse
     {
         $data = $this->validated($request, $program);
-        $program->fill(collect($data)->except('image')->all());
-        if (! $request->hasFile('image')) {
+        $program->fill(collect($data)->except(['image', 'image_preview'])->all());
+        $image = ImageUpload::from($request, 'image');
+        if (! $image) {
             $program->save();
         } else {
-            // The new image is written and saved first; the old file goes only after that worked.
-            try {
-                ImageStore::replace($program->image_path, $request->file('image'), 'programs', 1600, function (string $path) use ($program) {
-                    $program->image_path = $path;
-                    $program->save();
-                });
-            } catch (\RuntimeException) {
-                return back()->withInput()->with('error', 'تعذر حفظ صورة البرنامج، فلم يُحفظ شيء وبقيت الصورة السابقة. حاول مرة أخرى.');
-            }
+            // The new image is stored and saved first; the old files go only after that worked. A refused image
+            // shows its reason on the field and saves nothing.
+            ImageStore::replace($program->image_path, $image, 'programs', 1600, function (string $path) use ($program) {
+                $program->image_path = $path;
+                $program->save();
+            });
         }
 
         return back()->with('success', 'تم حفظ البرنامج.');
@@ -95,7 +100,8 @@ class ProgramController extends Controller
             'is_public' => ['boolean'],
             'is_active' => ['boolean'],
             'sort' => ['nullable', 'integer'],
-            'image' => ['nullable', 'image', 'max:'.config('gym.max_image_kb')],
+            'image' => ImageRule::rules(),
+            'image_preview' => ImageRule::previewRules(),
         ]);
     }
 }

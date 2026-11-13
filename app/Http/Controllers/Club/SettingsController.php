@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Club;
 
 use App\Core\Audit\AuditLogger;
 use App\Core\Branding\OfficialLogo;
+use App\Core\Support\Images\ImageRule;
+use App\Core\Support\Images\ImageUpload;
+use App\Core\Support\ImageStore;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
@@ -75,7 +78,8 @@ class SettingsController extends Controller
             'primary_color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'secondary_color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'currency' => ['sometimes', 'string', 'in:'.implode(',', array_keys(self::CURRENCIES))],
-            'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:'.config('gym.max_image_kb')],
+            'logo' => ImageRule::rules(),
+            'logo_preview' => ImageRule::previewRules(),
             'remove_logo' => ['boolean'],
             'rules' => ['array'],
             'rules.booking_window_days' => ['integer', 'between:1,90'],
@@ -115,22 +119,24 @@ class SettingsController extends Controller
         if (isset($data['currency']) && $data['currency'] !== $tenant->currency && $this->hasMoney()) {
             throw ValidationException::withMessages(['currency' => 'لا يمكن تغيير العملة بعد تسجيل فواتير أو مدفوعات.']);
         }
-        $logo = $request->file('logo');
+        $logo = ImageUpload::from($request, 'logo');
         $removeLogo = (bool) ($data['remove_logo'] ?? false);
-        unset($data['rules'], $data['logo'], $data['remove_logo']);
+        unset($data['rules'], $data['logo'], $data['logo_preview'], $data['remove_logo']);
 
         $snapshot = fn () => $tenant->only(array_keys($data)) + Arr::only($tenant->settings ?? [], array_keys($rules));
         $before = $snapshot();
         $tenant->fill($data);
         $settings = array_replace($tenant->settings ?? [], $rules);
+        // A new logo is stored first and the old file goes only after the settings are saved, so a failed save
+        // keeps the logo the club had.
+        $oldLogo = $tenant->setting('logo_file');
         if ($logo) {
             $settings['logo_file'] = OfficialLogo::store($logo, $tenant);
         } elseif ($removeLogo) {
-            OfficialLogo::forget($tenant);
             unset($settings['logo_file']);
         }
         $tenant->settings = $settings;
-        $tenant->save();
+        ImageStore::commit(is_string($oldLogo) && ($logo || $removeLogo) ? $oldLogo : null, $logo ? $settings['logo_file'] : '', fn () => $tenant->save());
         app(AuditLogger::class)->logChanges('settings.club_updated', $tenant, $before, $snapshot(), $logo ? ['logo' => 'uploaded'] : ($removeLogo ? ['logo' => 'official'] : []));
 
         return back()->with('success', 'تم حفظ إعدادات النادي.');
