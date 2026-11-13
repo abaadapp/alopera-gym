@@ -146,7 +146,7 @@ export function RowMenu({ label, children }: { label: string; children: ReactNod
 
 export function ProductThumb({ url, className }: { url: string | null; className?: string }) {
     return url ? (
-        <img src={url} alt="" loading="lazy" className={cn('size-11 shrink-0 rounded-[8px] border border-line object-cover', className)} />
+        <img src={url} alt="" loading="lazy" decoding="async" className={cn('size-11 shrink-0 rounded-[8px] border border-line object-cover', className)} />
     ) : (
         <span className={cn('grid size-11 shrink-0 place-items-center rounded-[8px] border border-line bg-[#f7f7f5] text-[#9ca3af]', className)}><Package className="size-4" /></span>
     );

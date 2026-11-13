@@ -16,6 +16,7 @@ final class ImageUpload
         public readonly UploadedFile $original,
         public readonly ?UploadedFile $preview = null,
         public readonly ?string $field = null,
+        public readonly ?string $directKey = null,
     ) {}
 
     public static function from(Request $request, string $field, ?int $index = null): ?self
@@ -28,20 +29,29 @@ final class ImageUpload
 
             return $file instanceof UploadedFile ? $file : null;
         };
+        $name = $index === null ? $field : $field.'.'.$index;
         $original = $pick($field);
+        if ($original) {
+            return new self($original, $pick($field.'_preview'), $name);
+        }
+        // Put straight into the bucket by the browser (DirectUploads): the form sends its key instead of the file.
+        $key = $request->input($field.'_direct'.($index === null ? '' : '.'.$index));
+        if (is_string($key) && $key !== '') {
+            return new self(DirectUploads::claim($key, $name), $pick($field.'_preview'), $name, $key);
+        }
 
-        return $original ? new self($original, $pick($field.'_preview'), $index === null ? $field : $field.'.'.$index) : null;
+        return null;
     }
 
     /** @return list<self> every file of a list field, each with its own display source */
     public static function all(Request $request, string $field): array
     {
         $files = $request->file($field);
-        if (! is_array($files)) {
-            return [];
-        }
+        $keys = $request->input($field.'_direct');
+        $indexes = array_unique([...array_keys(is_array($files) ? $files : []), ...array_keys(is_array($keys) ? $keys : [])]);
+        sort($indexes);
         $uploads = [];
-        foreach (array_keys($files) as $index) {
+        foreach ($indexes as $index) {
             if ($upload = self::from($request, $field, (int) $index)) {
                 $uploads[] = $upload;
             }

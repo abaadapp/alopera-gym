@@ -67,7 +67,7 @@ final class AccessDecision
                 'id' => $this->member->id,
                 'name' => $this->member->full_name,
                 'member_no' => $this->member->member_no,
-                'photo_url' => $this->member->photoUrl(),
+                'photo_url' => $this->member->photoThumbUrl(),
             ] : null,
             'membership' => $this->membership ? [
                 'plan' => $this->membership->plan_snapshot['name'] ?? null,

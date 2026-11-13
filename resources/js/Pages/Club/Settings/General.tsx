@@ -3,6 +3,7 @@ import { Link, useForm } from '@inertiajs/react';
 import { Building2, CalendarClock, Globe, Landmark, Palette, Printer, Receipt } from 'lucide-react';
 import { PageActions, SettingsScreen, SettingsSection } from '@/Components/Settings';
 import { Field, FileInput, Input, Select, Textarea, Toggle } from '@/Components/ui';
+import { IMAGE_ACCEPT, pickImage } from '@/lib/image-prep';
 
 interface Club {
     name: string;
@@ -19,6 +20,7 @@ interface Club {
     currency: string;
     logo_url: string;
     logo_custom: boolean;
+    logo_download_url?: string | null;
     currency_locked: boolean;
 }
 
@@ -57,6 +59,7 @@ type SettingsForm = {
     secondary_color: string;
     currency: string;
     logo: File | null;
+    logo_preview: File | null;
     remove_logo: boolean;
     rules: Rules;
 };
@@ -75,6 +78,7 @@ export default function GeneralSettings({ club, rules, governorates, currencies 
         secondary_color: club.secondary_color,
         currency: club.currency,
         logo: null,
+        logo_preview: null,
         remove_logo: false,
         rules: {
             booking_window_days: Number(rules.booking_window_days),
@@ -101,12 +105,12 @@ export default function GeneralSettings({ club, rules, governorates, currencies 
 
     const errors = form.errors as Record<string, string | undefined>;
     const setRule = <K extends keyof Rules>(key: K, value: Rules[K]) => form.setData('rules', { ...form.data.rules, [key]: value });
-    const chosen = useMemo(() => (form.data.logo ? URL.createObjectURL(form.data.logo) : null), [form.data.logo]);
+    const chosen = useMemo(() => (form.data.logo ? URL.createObjectURL(form.data.logo_preview ?? form.data.logo) : null), [form.data.logo, form.data.logo_preview]);
     const logoShown = chosen ?? (form.data.remove_logo ? '/brand/alopera-gym-logo-screen.png' : club.logo_url);
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        const options = { preserveScroll: true, onSuccess: () => form.setData((d) => ({ ...d, logo: null, remove_logo: false })) };
+        const options = { preserveScroll: true, onSuccess: () => form.setData((d) => ({ ...d, logo: null, logo_preview: null, remove_logo: false })) };
         if (form.data.logo) {
             // A file needs a multipart POST; Laravel reads the intended PUT from _method.
             form.transform((d) => ({ ...d, _method: 'put' }));
@@ -166,12 +170,15 @@ export default function GeneralSettings({ club, rules, governorates, currencies 
                             </div>
                             <div className="min-w-0 flex-1 space-y-2">
                                 <Field label="شعار النادي" error={errors.logo} hint={club.logo_custom && !form.data.remove_logo ? 'شعار مرفوع. يظهر مرة واحدة في رأس كل ورقة.' : 'الشعار الرسمي المعتمد. ارفع صورة PNG شفافة لاستبداله، حتى 4 ميغابايت.'}>
-                                    <FileInput accept="image/png,image/jpeg,image/webp" file={form.data.logo} onChange={(f) => form.setData((d) => ({ ...d, logo: f, remove_logo: false }))} placeholder="اختيار صورة الشعار" />
+                                    <FileInput accept={IMAGE_ACCEPT} file={form.data.logo} onChange={(f) => pickImage(f, (file, source) => form.setData((d) => (source && d.logo !== file ? d : { ...d, logo: file, logo_preview: source, remove_logo: false })))} placeholder="اختيار صورة الشعار" />
                                 </Field>
                                 {club.logo_custom && !form.data.logo && (
                                     <button type="button" className="text-[13px] font-medium text-[#111] underline-offset-2 hover:underline" onClick={() => form.setData('remove_logo', !form.data.remove_logo)}>
                                         {form.data.remove_logo ? 'التراجع عن استعادة الشعار الرسمي' : 'استعادة الشعار الرسمي'}
                                     </button>
+                                )}
+                                {club.logo_download_url && !form.data.logo && !form.data.remove_logo && (
+                                    <a href={club.logo_download_url} className="text-[13px] text-[#6b7280] underline-offset-2 hover:text-[#111] hover:underline">تنزيل الشعار الأصلي</a>
                                 )}
                             </div>
                         </div>

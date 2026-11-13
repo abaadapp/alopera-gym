@@ -4,6 +4,7 @@ import { Clock, Dumbbell, Eye, EyeOff, ImagePlus, Pencil, Plus, Trash2, Users } 
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, EnglishFields, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { number } from '@/lib/format';
+import { IMAGE_ACCEPT, localPreview, pickImage } from '@/lib/image-prep';
 
 type Program = {
     id: number;
@@ -22,6 +23,7 @@ type Program = {
     sort: number;
     schedules_count: number;
     image_url: string | null;
+    image_download_url?: string | null;
 };
 
 const CATEGORIES: Record<string, string> = { class: 'حصة جماعية', program: 'برنامج تدريبي', pt: 'تدريب شخصي' };
@@ -41,6 +43,7 @@ type FormData = {
     is_active: boolean;
     sort: number | string;
     image: File | null;
+    image_preview: File | null;
 };
 
 const empty: FormData = {
@@ -57,6 +60,7 @@ const empty: FormData = {
     is_active: true,
     sort: 0,
     image: null,
+    image_preview: null,
 };
 
 export default function ProgramsIndex({ programs }: { programs: Program[] }) {
@@ -90,6 +94,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
             is_active: p.is_active,
             sort: p.sort,
             image: null,
+            image_preview: null,
         });
         setPreview(p.image_url);
         setOpen(true);
@@ -144,7 +149,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                     {programs.map((p) => (
                         <Card key={p.id} padded={false} fill className={p.is_active ? 'overflow-hidden' : 'overflow-hidden opacity-60'}>
                             <div className="relative h-32" style={{ background: `linear-gradient(135deg, ${p.color}, ${p.color}99)` }}>
-                                {p.image_url && <img src={p.image_url} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />}
+                                {p.image_url && <img src={p.image_url} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" decoding="async" />}
                                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent p-3">
                                     <p className="font-display text-lg font-semibold text-white">{p.name}</p>
                                 </div>
@@ -238,21 +243,23 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                             <Textarea dir="ltr" lang="en" rows={3} maxLength={3000} value={form.data.description_en} onChange={(e) => form.setData('description_en', e.target.value)} />
                         </Field>
                     </EnglishFields>
-                    <Field label="صورة البرنامج" error={form.errors.image} className="sm:col-span-2" hint="تُضغط تلقائيًا لتسريع الموقع">
+                    <Field label="صورة البرنامج" error={form.errors.image ?? form.errors.image_preview} className="sm:col-span-2" hint="تُحفظ الصورة الأصلية كما هي، ويظهر في الموقع نسخة خفيفة منها">
                         <label className="flex cursor-pointer items-center gap-4 rounded-xl border border-dashed border-line p-3 hover:border-brand-300">
                             {preview ? <img src={preview} alt="" className="size-16 rounded-lg object-cover" /> : <span className="grid size-16 place-items-center rounded-lg bg-brand-50 text-brand"><ImagePlus className="size-6" /></span>}
-                            <span className="text-sm text-muted">اختر صورة (JPG/PNG/WebP)</span>
+                            <span className="text-sm text-muted">اختر صورة (JPG وPNG وWebP وHEIC وAVIF وGIF)</span>
                             <input
                                 type="file"
-                                accept="image/*"
+                                accept={IMAGE_ACCEPT}
                                 className="hidden"
-                                onChange={(e) => {
-                                    const file = e.target.files?.[0] ?? null;
-                                    form.setData('image', file);
-                                    setPreview(file ? URL.createObjectURL(file) : editing?.image_url ?? null);
-                                }}
+                                onChange={(e) =>
+                                    pickImage(e.target.files?.[0] ?? null, (file, source) => {
+                                        form.setData((d) => (source && d.image !== file ? d : { ...d, image: file, image_preview: source }));
+                                        setPreview(file ? localPreview(file, source) : editing?.image_url ?? null);
+                                    })
+                                }
                             />
                         </label>
+                        {editing?.image_download_url && !form.data.image && <a href={editing.image_download_url} className="mt-2 inline-block text-[13px] text-muted underline-offset-2 hover:text-ink hover:underline">تنزيل الصورة الأصلية</a>}
                     </Field>
                     <div className="space-y-2 sm:col-span-2">
                         <Toggle checked={form.data.is_public} onChange={(v) => form.setData('is_public', v)} label="يظهر في الموقع" hint="صفحة البرامج وجدول الحصص العام" />

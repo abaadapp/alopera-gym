@@ -3,6 +3,7 @@
 namespace App\Modules\Gym\Models;
 
 use App\Core\Audit\Auditable;
+use App\Core\Support\ImageStore;
 use App\Core\Tenancy\BelongsToTenant;
 use App\Models\Branch;
 use App\Modules\Finance\Contracts\Billable;
@@ -18,7 +19,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -165,7 +165,13 @@ class Member extends Authenticatable implements Billable
 
     public function photoUrl(): ?string
     {
-        return $this->photo_path ? Storage::disk('public')->url($this->photo_path) : null;
+        return ImageStore::url($this->photo_path);
+    }
+
+    /** The light copy for lists, avatars and the door check (an older photo: the photo itself). */
+    public function photoThumbUrl(): ?string
+    {
+        return ImageStore::thumbUrl($this->photo_path);
     }
 
     public function canReceiveMarketing(): bool

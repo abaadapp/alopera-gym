@@ -18,7 +18,7 @@ export function TrainerCard({ trainer, compact = false }: { trainer: TrainerData
         <article className="overflow-hidden rounded-3xl border border-line bg-white text-center shadow-sm">
             <div className="relative aspect-square overflow-hidden" style={{ background: `color-mix(in oklab, ${tint} 14%, white)` }}>
                 {trainer.photo_url ? (
-                    <img src={trainer.photo_url} alt={trainer.name} loading="lazy" width={400} height={400} className="size-full object-cover" />
+                    <img src={trainer.photo_url} alt={trainer.name} loading="lazy" decoding="async" width={400} height={400} className="size-full object-cover" />
                 ) : (
                     <div className="grid size-full place-items-center">
                         <span className="grid size-24 place-items-center rounded-full bg-white/80 font-display text-4xl" style={{ color: tint }}>

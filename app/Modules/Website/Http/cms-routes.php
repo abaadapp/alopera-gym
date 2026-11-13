@@ -17,6 +17,9 @@ Route::middleware('can:website.manage')->prefix('website')->name('website.')->gr
     Route::post('/media', [SiteBuilderController::class, 'uploadMedia'])->middleware('throttle:30,1')->name('media.store');
     Route::patch('/media/{media}', [SiteBuilderController::class, 'updateMedia'])->whereNumber('media')->name('media.update');
     Route::delete('/media/{media}', [SiteBuilderController::class, 'deleteMedia'])->whereNumber('media')->name('media.destroy');
+    // Direct upload to the Spaces bucket (off unless configured): a signed address for one file.
+    Route::post('/media/direct', [SiteBuilderController::class, 'directUpload'])->middleware('throttle:60,1')->name('media.direct');
+    Route::get('/media/{media}/original', [SiteBuilderController::class, 'mediaOriginal'])->whereNumber('media')->name('media.original');
     // The old sections page now lives inside «إدارة الموقع».
     Route::get('/sections', fn () => redirect()->route('club.website.edit'))->name('sections');
     Route::get('/branding', [SiteDesignController::class, 'branding'])->name('branding');
@@ -26,5 +29,6 @@ Route::middleware('can:website.manage')->prefix('website')->name('website.')->gr
     Route::get('/posts', [PostController::class, 'index'])->name('posts.index');
     Route::post('/posts', [PostController::class, 'store'])->name('posts.store');
     Route::post('/posts/{post}', [PostController::class, 'update'])->name('posts.update');
+    Route::get('/posts/{post}/image', [PostController::class, 'image'])->name('posts.image');
     Route::delete('/posts/{post}', [PostController::class, 'destroy'])->name('posts.destroy');
 });

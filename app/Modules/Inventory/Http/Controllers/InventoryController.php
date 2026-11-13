@@ -60,7 +60,7 @@ class InventoryController extends Controller
 
         return Inertia::render('Inventory/Stock/Index', [
             'rows' => $rows->through(fn (Product $p) => [
-                'id' => $p->id, 'name' => $p->name, 'sku' => $p->sku, 'category' => $p->category?->name, 'image_url' => $p->imageUrl(),
+                'id' => $p->id, 'name' => $p->name, 'sku' => $p->sku, 'category' => $p->category?->name, 'image_url' => $p->thumbUrl(),
                 'quantity' => round((float) $p->branch_quantity, 3), 'min' => round((float) $p->branch_min, 3), 'cost' => $p->cost,
                 'value' => round(max(0, (float) $p->branch_quantity) * (float) $p->cost, 3),
                 'status' => (float) $p->branch_quantity <= 0 ? 'out' : ((float) $p->branch_quantity <= (float) $p->branch_min ? 'low' : 'in'),

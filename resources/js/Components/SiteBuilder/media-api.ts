@@ -1,3 +1,4 @@
+import { displaySource } from '@/lib/image-prep';
 import { xsrf } from '@/lib/http';
 import type { MediaItem } from '@/types/site';
 
@@ -26,9 +27,35 @@ async function read<T>(response: Response): Promise<T> {
     return body as T;
 }
 
-export async function uploadMedia(files: File[]): Promise<MediaItem[]> {
+/**
+ * Puts one original straight into the club's Spaces bucket through a short-lived signed address (when the server
+ * offers direct upload) and gives back its key: the large file then never passes through the server on its way in.
+ */
+async function putDirect(file: File): Promise<string> {
+    const ticket = await read<{ url: string; key: string; headers: Record<string, string> }>(
+        await fetch(route('club.website.media.direct'), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { ...headers(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: file.name, type: file.type, size: file.size }),
+        }),
+    );
+    const put = await fetch(ticket.url, { method: 'PUT', headers: ticket.headers, body: file });
+    if (!put.ok) throw new MediaError(`تعذر رفع «${file.name}». تحقق من الاتصال ثم حاول مرة أخرى.`);
+    return ticket.key;
+}
+
+export async function uploadMedia(files: File[], direct = false): Promise<MediaItem[]> {
     const form = new FormData();
-    files.forEach((f) => form.append('images[]', f));
+    // Each original as it is (or its key in the bucket), and beside it, at the same index, the browser's display
+    // source for a HEIC or a very large photo.
+    const sources = await Promise.all(files.map((f) => displaySource(f).catch(() => null)));
+    for (const [i, f] of files.entries()) {
+        if (direct) form.append(`images_direct[${i}]`, await putDirect(f));
+        else form.append(`images[${i}]`, f);
+        const source = sources[i];
+        if (source) form.append(`images_preview[${i}]`, source);
+    }
     const response = await fetch(route('club.website.media.store'), { method: 'POST', credentials: 'same-origin', headers: headers(), body: form });
     return (await read<{ media: MediaItem[] }>(response)).media;
 }
@@ -50,7 +77,7 @@ export async function deleteMedia(id: number): Promise<void> {
 
 /** The image types the server accepts (it may name them by extension or by type), as file types for the browser. */
 export function acceptedTypes(types: string[]): string[] {
-    const byExt: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+    const byExt: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', heic: 'image/heic', heif: 'image/heif' };
     const out = types.map((t) => (t.includes('/') ? t.toLowerCase() : byExt[t.toLowerCase().replace(/^\./, '')])).filter((t): t is string => !!t);
     return out.length ? [...new Set(out)] : ['image/jpeg', 'image/png', 'image/webp'];
 }
@@ -60,8 +87,10 @@ export function checkFiles(files: File[], limits: { max_image_kb: number; types:
     if (files.length === 0) return null;
     if (files.length > 12) return 'ارفع ١٢ صورة على الأكثر في المرة الواحدة.';
     const allowed = acceptedTypes(limits.types);
-    const wrong = files.find((f) => !allowed.includes(f.type));
-    if (wrong) return `«${wrong.name}» ليست صورة مقبولة. الصيغ المقبولة: JPG وPNG وWebP.`;
+    // Some browsers give no type for a HEIC file: its name then decides here, and the server checks its bytes.
+    const kind = (f: File) => f.type || acceptedTypes([f.name.split('.').pop() ?? ''])[0];
+    const wrong = files.find((f) => !allowed.includes(f.type) && !(f.type === '' && allowed.includes(kind(f)) && /\.(heic|heif|avif)$/i.test(f.name)));
+    if (wrong) return `«${wrong.name}» ليست صورة مقبولة. الصيغ المقبولة: JPG وPNG وWebP وHEIC وHEIF وAVIF وGIF.`;
     const big = files.find((f) => f.size > limits.max_image_kb * 1024);
     if (big) return `«${big.name}» أكبر من الحد المسموح (${Math.round(limits.max_image_kb / 1024)} م.ب).`;
     return null;

@@ -2,6 +2,7 @@
 
 namespace App\Core\Support;
 
+use App\Core\Support\Images\DirectUploads;
 use App\Core\Support\Images\ImageFacts;
 use App\Core\Support\Images\ImageInspector;
 use App\Core\Support\Images\ImageRejected;
@@ -185,6 +186,24 @@ final class ImageStore
      * @throws ImageRejected
      */
     private static function keep(ImageUpload $upload, string $folder, int $maxWidth, int $maxHeight, int $quality, string $view): array
+    {
+        try {
+            return self::keepChecked($upload, $folder, $maxWidth, $maxHeight, $quality, $view);
+        } finally {
+            if ($upload->directKey) {
+                // The browser's copy in the bucket and its local fetch are no longer needed, stored or refused.
+                DirectUploads::forget($upload->directKey);
+                @unlink((string) $upload->original->getRealPath());
+            }
+        }
+    }
+
+    /**
+     * @return array{path: string, width: int, height: int, mime: string, size: int}
+     *
+     * @throws ImageRejected
+     */
+    private static function keepChecked(ImageUpload $upload, string $folder, int $maxWidth, int $maxHeight, int $quality, string $view): array
     {
         $source = (string) $upload->original->getRealPath();
         try {

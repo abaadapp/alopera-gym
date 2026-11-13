@@ -31,7 +31,7 @@ export default function MediaLibrary({ onSelect, selectedId }: { onSelect?: (ite
         setBusy(true);
         setError(null);
         try {
-            const added = await uploadMedia(files);
+            const added = await uploadMedia(files, limits.direct === true);
             setMedia((current) => [...added, ...current.filter((m) => !added.some((a) => a.id === m.id))]);
             if (onSelect && added.length === 1) onSelect(added[0]);
         } catch (e) {
@@ -65,7 +65,7 @@ export default function MediaLibrary({ onSelect, selectedId }: { onSelect?: (ite
                 <Button type="button" variant="outline" size="sm" icon={<ImagePlus />} disabled={busy} onClick={() => input.current?.click()}>
                     اختيار صور من جهازك
                 </Button>
-                <p className="text-[12px] text-muted">JPG أو PNG أو WebP، حتى {Math.round(limits.max_image_kb / 1024)} م.ب للصورة و١٢ صورة في المرة. تُحفظ الصورة كاملة دون قص وبحجم أخف.</p>
+                <p className="text-[12px] text-muted">JPG وPNG وWebP وHEIC وAVIF وGIF، حتى {Math.round(limits.max_image_kb / 1024)} م.ب للصورة و١٢ صورة في المرة. تُحفظ الصورة الأصلية كما هي، ويظهر في الموقع نسخة كاملة دون قص وبحجم أخف.</p>
                 <input ref={input} type="file" multiple accept={accept} className="sr-only" onChange={(e) => { void upload(e.target.files); e.target.value = ''; }} />
             </div>
             {error && <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p>}
@@ -127,7 +127,7 @@ function MediaCard({ item, selected, onSelect }: { item: MediaItem; selected: bo
     return (
         <div className={cn('flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-white', selected ? 'border-ink ring-2 ring-ink/15' : 'border-line')}>
             <div className="relative grid aspect-square place-items-center bg-[repeating-conic-gradient(#f3f3f1_0_25%,#fbfbfa_0_50%)] bg-[length:16px_16px] p-2">
-                <img src={item.url} alt={item.alt ?? ''} loading="lazy" className="max-h-full max-w-full object-contain" />
+                <img src={item.thumb_url ?? item.url} alt={item.alt ?? ''} loading="lazy" decoding="async" className="max-h-full max-w-full object-contain" />
                 {selected && <span className="absolute top-2 start-2 grid size-6 place-items-center rounded-full bg-ink text-white"><Check className="size-4" /></span>}
             </div>
             <div className="flex flex-1 flex-col gap-2 p-3">
@@ -135,6 +135,9 @@ function MediaCard({ item, selected, onSelect }: { item: MediaItem; selected: bo
                     {item.orientation && <Badge tone="gray">{ORIENTATION_LABELS[item.orientation]}</Badge>}
                     {item.width && item.height && <span className="num" dir="ltr">{item.width}×{item.height}</span>}
                     <span>{fileSize(item.size)}</span>
+                    {item.download_url && (
+                        <a href={item.download_url} className="ms-auto underline-offset-2 hover:text-ink hover:underline">{item.has_original ? 'الأصلية' : 'تنزيل'}</a>
+                    )}
                 </div>
                 <label className="text-[12px] text-muted" htmlFor={`alt-${item.id}`}>وصف الصورة لقارئات الشاشة ومحركات البحث</label>
                 <Input id={`alt-${item.id}`} value={alt} maxLength={255} onChange={(e) => setAlt(e.target.value)} placeholder="مثال: صالة الأوزان الحرة" className="h-9 text-[13px]" />

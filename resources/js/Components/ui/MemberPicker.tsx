@@ -89,7 +89,7 @@ export default function MemberPicker({ onSelect, autoFocus, placeholder = 'اب�
                                 }}
                                 className="flex w-full items-center gap-3 px-3 py-2 text-start text-[13px] hover:bg-[#f7f7f5] focus-visible:bg-[#f7f7f5] focus-visible:outline-none"
                             >
-                                {m.photo_url ? <img src={m.photo_url} alt="" className="size-9 rounded-full object-cover" /> : <span className="grid size-9 place-items-center rounded-full bg-brand-50 text-brand"><UserRound className="size-4" /></span>}
+                                {m.photo_url ? <img src={m.photo_url} alt="" loading="lazy" decoding="async" className="size-9 rounded-full object-cover" /> : <span className="grid size-9 place-items-center rounded-full bg-brand-50 text-brand"><UserRound className="size-4" /></span>}
                                 <span className="min-w-0 flex-1">
                                     <span className="block truncate font-medium text-[#111]">{m.full_name}</span>
                                     <span className="block text-[11px] text-[#6b7280]"><span className="num">{m.member_no}</span> · <span className="num">{m.phone_display}</span></span>

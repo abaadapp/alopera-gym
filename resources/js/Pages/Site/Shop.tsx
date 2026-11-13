@@ -15,14 +15,17 @@ export interface ShopProduct {
     price: string;
     category: string | null;
     image_url: string | null;
+    thumb_url?: string | null;
     in_stock: boolean;
     max: number;
     addons: AddonOption[];
 }
 
 export function ProductImage({ product, className }: { product: ShopProduct; className?: string }) {
+    // The light copy (360px) where a card is small, the display copy where it is large: the browser picks.
+    const srcSet = product.thumb_url && product.thumb_url !== product.image_url ? `${product.thumb_url} 360w, ${product.image_url} 1000w` : undefined;
     return product.image_url ? (
-        <img src={product.image_url} alt={product.name} loading="lazy" className={cn('size-full object-cover', className)} />
+        <img src={product.image_url} srcSet={srcSet} sizes={srcSet ? '(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw' : undefined} alt={product.name} loading="lazy" decoding="async" className={cn('size-full object-cover', className)} />
     ) : (
         <div className="grid size-full place-items-center bg-gradient-to-br from-brand-50 to-white text-brand-300"><Package className="size-12" /></div>
     );

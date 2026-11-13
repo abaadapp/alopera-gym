@@ -3,6 +3,7 @@
 namespace App\Modules\Gym\Models;
 
 use App\Core\Audit\Auditable;
+use App\Core\Support\ImageStore;
 use App\Core\Tenancy\BelongsToTenant;
 use App\Core\Tenancy\BranchOwned;
 use App\Core\Tenancy\OwnedByBranch;
@@ -12,7 +13,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\Storage;
 
 class Trainer extends Model implements BranchOwned
 {
@@ -56,6 +56,11 @@ class Trainer extends Model implements BranchOwned
 
     public function photoUrl(): ?string
     {
-        return $this->photo_path ? Storage::disk('public')->url($this->photo_path) : null;
+        return ImageStore::url($this->photo_path);
+    }
+
+    public function photoThumbUrl(): ?string
+    {
+        return ImageStore::thumbUrl($this->photo_path);
     }
 }

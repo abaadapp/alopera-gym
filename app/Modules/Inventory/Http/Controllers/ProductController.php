@@ -23,6 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * The products section's first tab, and the one place products are created and changed: the list (table or cards)
@@ -122,7 +123,7 @@ class ProductController extends Controller
     public function update(Request $request, Product $product): RedirectResponse
     {
         $data = $this->validated($request, $product);
-        $photos = $this->storePhotos($request, max(0, self::PHOTOS - count($product->imageUrls())));
+        $photos = $this->storePhotos($request, max(0, self::PHOTOS - count($product->imagePaths())));
         $this->keepingPhotos($photos, fn () => DB::transaction(function () use ($data, $request, $product, $photos) {
             $product->fill($this->attributes($data));
             $product->product_category_id = $this->category($data);
@@ -166,6 +167,15 @@ class ProductController extends Controller
         return $shopOpen
             ? 'يظهر «'.$product->name.'» الآن في متجر الموقع.'
             : 'اختير «'.$product->name.'» لمتجر الموقع، لكن المتجر لا يظهر في الموقع الآن: فعّل «إظهار المتجر في موقع النادي» من «الإعدادات» ← «إعدادات المبيعات والمتجر».';
+    }
+
+    /** A photo of the product as it was uploaded, for download (0 is the main one). */
+    public function original(Product $product, int $index): StreamedResponse
+    {
+        $paths = array_values(array_filter([$product->image_path, ...($product->images ?? [])]));
+        abort_unless(isset($paths[$index]), 404);
+
+        return ImageStore::download($paths[$index], $product->name.($index ? ' '.($index + 1) : ''));
     }
 
     /** A photo of the product (0 is the main one): made the main photo, or removed. */
@@ -240,6 +250,7 @@ class ProductController extends Controller
                 'description_en' => $product->description_en,
                 'reorder_level' => $product->reorder_level,
                 'photos' => $product->imageUrls(),
+                'photo_downloads' => array_map(fn (int $i) => route('club.products.photo.original', [$product, $i]), array_keys($product->imagePaths())),
             ] : null,
             'categories' => ProductCategory::ordered()->get(['id', 'name']),
             // Add-ons chosen product by product are switched here; the others follow their own rule (all products,
@@ -270,8 +281,8 @@ class ProductController extends Controller
             'shelf' => $p->track_stock ? (float) ($this->shelf[$p->id]['book'] ?? 0) : null,
             'held' => $p->track_stock ? (float) ($this->shelf[$p->id]['held'] ?? 0) : null,
             'category' => $p->category?->name,
-            'image_url' => $p->imageUrl(),
-            'photos_count' => count($p->imageUrls()),
+            'image_url' => $p->thumbUrl(),
+            'photos_count' => count($p->imagePaths()),
             'low' => $p->isLowStock(),
             'out' => $p->track_stock && (float) $p->stock_quantity <= 0,
             'margin' => $price > 0 ? round(($price - (float) $p->cost) / $price * 100, 1) : null,

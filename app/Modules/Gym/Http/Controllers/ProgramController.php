@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProgramController extends Controller
 {
@@ -20,7 +21,7 @@ class ProgramController extends Controller
         return Inertia::render('Gym/Programs/Index', [
             'programs' => Program::withCount('schedules')->orderBy('sort')->orderBy('name')->get()->map(fn (Program $p) => $p->only(
                 'id', 'name', 'name_en', 'slug', 'category', 'level', 'description', 'description_en', 'color', 'duration_minutes', 'default_capacity', 'is_public', 'is_active', 'sort', 'schedules_count'
-            ) + ['image_url' => $p->imageUrl()]),
+            ) + ['image_url' => $p->imageUrl(), 'image_download_url' => $p->image_path ? route('club.programs.image', $p) : null]),
         ]);
     }
 
@@ -40,6 +41,12 @@ class ProgramController extends Controller
         }
 
         return back()->with('success', 'تمت إضافة البرنامج.');
+    }
+
+    /** The image as it was uploaded, for download. */
+    public function image(Program $program): StreamedResponse
+    {
+        return ImageStore::download($program->image_path, $program->name);
     }
 
     public function update(Request $request, Program $program): RedirectResponse

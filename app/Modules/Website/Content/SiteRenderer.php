@@ -321,7 +321,7 @@ final class SiteRenderer
         return Product::onWebsite()->with('category:id,name,name_en')->orderBy('name')->limit($limit)->get()->map(function (Product $p) {
             $available = $p->available();
 
-            return ['id' => $p->id, 'name' => SiteLanguage::pick($p->name, $p->name_en), 'price' => (string) $p->price, 'category' => SiteLanguage::pick($p->category?->name, $p->category?->name_en), 'image_url' => $p->imageUrl(),
+            return ['id' => $p->id, 'name' => SiteLanguage::pick($p->name, $p->name_en), 'price' => (string) $p->price, 'category' => SiteLanguage::pick($p->category?->name, $p->category?->name_en), 'image_url' => $p->imageUrl(), 'thumb_url' => $p->thumbUrl(),
                 'in_stock' => $available === null || $available >= 1, 'url' => route('site.shop.product', ['product' => $p->id])];
         })->all();
     }

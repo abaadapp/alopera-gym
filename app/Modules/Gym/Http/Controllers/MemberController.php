@@ -139,6 +139,8 @@ class MemberController extends Controller
             ) + [
                 'date_of_birth' => $member->date_of_birth?->toDateString(),
                 'health_notes' => $member->health_notes,
+                'photo_download_url' => $member->photo_path ? route('club.members.photo', $member) : null,
+                'photo_has_original' => ImageStore::hasOriginal($member->photo_path),
                 'branch' => $member->branch?->name,
                 'has_portal_access' => $member->password !== null,
                 'qr_token' => $user->can('members.manage') ? $member->qr_token : null,
@@ -181,9 +183,17 @@ class MemberController extends Controller
                     'date_of_birth' => $member->date_of_birth?->toDateString(),
                     'health_notes' => $member->health_notes,
                     'photo_url' => $member->photoUrl(),
+                    'photo_download_url' => $member->photo_path ? route('club.members.photo', $member) : null,
+                    'photo_has_original' => ImageStore::hasOriginal($member->photo_path),
                 ],
             'branches' => app(BranchContext::class)->choices(),
         ]);
+    }
+
+    /** The photo as it was uploaded, for download. */
+    public function photo(Member $member): StreamedResponse
+    {
+        return ImageStore::download($member->photo_path, $member->full_name);
     }
 
     public function update(Request $request, Member $member): RedirectResponse

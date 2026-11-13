@@ -5,6 +5,7 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import { BackLink, Button, Card, Field, FormSection, Input, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import type { Option } from '@/types';
 import { useBranchDefault } from '@/hooks/useShared';
+import { IMAGE_ACCEPT, localPreview, pickImage } from '@/lib/image-prep';
 
 interface MemberData {
     id: number;
@@ -28,6 +29,8 @@ interface MemberData {
     date_of_birth: string | null;
     health_notes: string | null;
     photo_url: string | null;
+    photo_download_url?: string | null;
+    photo_has_original?: boolean;
 }
 
 export const SOURCES: Record<string, string> = {
@@ -66,6 +69,7 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
         marketing_opt_in: member?.marketing_opt_in ?? false,
         branch_id: member ? (member.branch_id ? String(member.branch_id) : '') : branchDefault,
         photo: null as File | null,
+        photo_preview: null as File | null,
         _method: editing ? 'put' : 'post',
     });
 
@@ -127,19 +131,25 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
                             {preview ? <img src={preview} alt="" className="size-full object-cover" /> : <UserRound className="size-8 text-[#d1d5db]" />}
                         </div>
                         <div className="min-w-0 flex-1">
-                            <Field error={err.photo} hint="صورة واضحة للوجه، JPG أو PNG">
+                            <Field error={err.photo ?? err.photo_preview} hint="صورة واضحة للوجه. تُحفظ الصورة الأصلية كما هي، وتظهر منها نسخة خفيفة.">
                                 <input
                                     type="file"
-                                    accept="image/*"
+                                    accept={IMAGE_ACCEPT}
                                     capture="user"
                                     className="input h-auto py-2 file:me-3 file:rounded-lg file:border-0 file:bg-[#111] file:px-4 file:py-2 file:text-white"
-                                    onChange={(e) => {
-                                        const file = e.target.files?.[0] ?? null;
-                                        form.setData('photo', file);
-                                        if (file) setPreview(URL.createObjectURL(file));
-                                    }}
+                                    onChange={(e) =>
+                                        pickImage(e.target.files?.[0] ?? null, (file, source) => {
+                                            form.setData((d) => (source && d.photo !== file ? d : { ...d, photo: file, photo_preview: source }));
+                                            if (file) setPreview(localPreview(file, source));
+                                        })
+                                    }
                                 />
                             </Field>
+                            {member?.photo_download_url && !form.data.photo && (
+                                <a href={member.photo_download_url} className="mt-2 inline-block text-[13px] font-medium text-[#111] underline-offset-2 hover:underline">
+                                    {member.photo_has_original ? 'تنزيل الصورة الأصلية' : 'تنزيل الصورة'}
+                                </a>
+                            )}
                         </div>
                     </div>
                 </FormSection>

@@ -40,7 +40,7 @@ class ProductCategoryController extends Controller
                 'website' => $c->website_count,
                 'addons' => (int) ($addons[$c->id] ?? 0),
                 // A glimpse of what is in it; the products tab filtered on it shows them all.
-                'sample' => $c->products->take(4)->map(fn ($p) => ['name' => $p->name, 'image_url' => $p->imageUrl()])->all(),
+                'sample' => $c->products->take(4)->map(fn ($p) => ['name' => $p->name, 'image_url' => $p->thumbUrl()])->all(),
             ]),
             'uncategorised' => Product::whereNull('product_category_id')->count(),
         ]);

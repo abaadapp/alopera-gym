@@ -17,6 +17,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /** The settings hub, the club profile and business rules, and the notification rules. */
 class SettingsController extends Controller
@@ -55,6 +56,7 @@ class SettingsController extends Controller
             'club' => $tenant->only('name', 'legal_name', 'email', 'phone', 'address', 'city', 'primary_color', 'secondary_color', 'latitude', 'longitude', 'domain', 'currency') + [
                 'logo_url' => $tenant->logoUrl(),
                 'logo_custom' => OfficialLogo::uploaded($tenant) !== null,
+                'logo_download_url' => OfficialLogo::uploaded($tenant) ? route('club.settings.logo') : null,
                 'currency_locked' => $this->hasMoney(),
             ],
             'rules' => ['vat_registered' => $tenant->vatRegistered()] + $tenant->allSettings(),
@@ -140,6 +142,15 @@ class SettingsController extends Controller
         app(AuditLogger::class)->logChanges('settings.club_updated', $tenant, $before, $snapshot(), $logo ? ['logo' => 'uploaded'] : ($removeLogo ? ['logo' => 'official'] : []));
 
         return back()->with('success', 'تم حفظ إعدادات النادي.');
+    }
+
+    /** The club's uploaded logo as it was uploaded, for download. */
+    public function logo(TenantContext $tenants): StreamedResponse
+    {
+        $tenant = $tenants->require();
+        abort_unless(OfficialLogo::uploaded($tenant), 404);
+
+        return ImageStore::download($tenant->setting('logo_file'), 'logo');
     }
 
     public function notifications(TenantContext $tenants): Response

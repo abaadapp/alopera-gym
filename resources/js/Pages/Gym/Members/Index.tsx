@@ -40,7 +40,7 @@ export default function MembersIndex({ members, filters }: { members: Paginated<
 
     const Who = ({ m }: { m: MemberRow }) => (
         <div className="flex items-center gap-3">
-            {m.photo_url ? <img src={m.photo_url} alt="" className="size-9 rounded-full object-cover" /> : <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#f3f4f6] text-[#4b4b4b]"><UserRound className="size-4" /></span>}
+            {m.photo_url ? <img src={m.photo_url} alt="" loading="lazy" decoding="async" className="size-9 rounded-full object-cover" /> : <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#f3f4f6] text-[#4b4b4b]"><UserRound className="size-4" /></span>}
             <div className="min-w-0">
                 <Link href={route('club.members.show', m.id)} className="font-medium hover:underline">{m.full_name}</Link>
                 <p className="text-xs text-muted num">{m.member_no}</p>

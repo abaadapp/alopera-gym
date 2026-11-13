@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TrainerController extends Controller
 {
@@ -26,7 +27,8 @@ class TrainerController extends Controller
             'trainers' => BranchContext::scope(Trainer::with(['availabilities', 'user:id,name,email']))->orderBy('sort')->orderBy('name')->get()->map(fn (Trainer $t) => $t->only(
                 'id', 'name', 'name_en', 'phone', 'email', 'bio', 'bio_en', 'specialties', 'specialties_en', 'color', 'is_public', 'is_active', 'sort', 'user_id', 'branch_id'
             ) + [
-                'photo_url' => $t->photoUrl(),
+                'photo_url' => $t->photoThumbUrl(),
+                'photo_download_url' => $t->photo_path ? route('club.trainers.photo', $t) : null,
                 'user' => $t->user?->only('id', 'name', 'email'),
                 'availability' => $t->availabilities->map(fn ($a) => ['weekday' => $a->weekday, 'starts_at' => substr($a->starts_at, 0, 5), 'ends_at' => substr($a->ends_at, 0, 5)]),
             ]),
@@ -51,6 +53,12 @@ class TrainerController extends Controller
         }
 
         return back()->with('success', 'تمت إضافة المدرب.');
+    }
+
+    /** The photo as it was uploaded, for download. */
+    public function photo(Trainer $trainer): StreamedResponse
+    {
+        return ImageStore::download($trainer->photo_path, $trainer->name);
     }
 
     public function update(Request $request, Trainer $trainer): RedirectResponse

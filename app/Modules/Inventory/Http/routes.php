@@ -93,6 +93,7 @@ Route::middleware('can:products.manage')->group(function () {
     Route::delete('/products/{product}', [ProductController::class, 'destroy'])->whereNumber('product')->name('products.destroy');
     Route::patch('/products/{product}/toggle', [ProductController::class, 'toggle'])->whereNumber('product')->name('products.toggle');
     Route::post('/products/{product}/photos/{index}', [ProductController::class, 'photo'])->whereNumber(['product', 'index'])->name('products.photo');
+    Route::get('/products/{product}/photos/{index}', [ProductController::class, 'original'])->whereNumber(['product', 'index'])->name('products.photo.original');
     // A count from the product's page is a stock adjustment like any other: the same right and the same record.
     Route::post('/products/{product}/adjust', [ProductController::class, 'adjust'])->whereNumber('product')->middleware(['can:inventory.adjust', 'throttle:stock'])->name('products.adjust');
     Route::get('/products/{product}/movements', [ProductController::class, 'movements'])->whereNumber('product')->name('products.movements');

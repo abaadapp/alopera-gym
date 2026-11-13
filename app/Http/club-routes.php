@@ -50,6 +50,7 @@ Route::prefix('settings')->group(function () {
     Route::middleware('can:settings.manage')->group(function () {
         Route::get('/club', [SettingsController::class, 'edit'])->name('settings.edit');
         Route::put('/club', [SettingsController::class, 'update'])->name('settings.update');
+        Route::get('/club/logo', [SettingsController::class, 'logo'])->name('settings.logo');
         Route::get('/notifications', [SettingsController::class, 'notifications'])->name('settings.notifications');
         Route::put('/notifications', [SettingsController::class, 'updateNotifications'])->name('settings.notifications.update');
     });

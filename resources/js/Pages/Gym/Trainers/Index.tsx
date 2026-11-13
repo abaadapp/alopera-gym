@@ -5,6 +5,7 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, EnglishFields, Field, Input, linesOf, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { WEEKDAYS, phone as fmtPhone } from '@/lib/format';
 import type { Option } from '@/types';
+import { IMAGE_ACCEPT, localPreview, pickImage } from '@/lib/image-prep';
 
 type Slot = { weekday: number; starts_at: string; ends_at: string };
 
@@ -25,6 +26,7 @@ type Trainer = {
     user_id: number | null;
     branch_id: number | null;
     photo_url: string | null;
+    photo_download_url?: string | null;
     user: { id: number; name: string; email: string } | null;
     availability: Slot[];
 };
@@ -45,6 +47,7 @@ type TrainerForm = {
     branch_id: number | string | null;
     user_id: number | string | null;
     photo: File | null;
+    photo_preview: File | null;
 };
 
 const blank: TrainerForm = {
@@ -63,6 +66,7 @@ const blank: TrainerForm = {
     branch_id: null,
     user_id: null,
     photo: null,
+    photo_preview: null,
 };
 
 /** Saturday first, as the club week reads. */
@@ -108,6 +112,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
             branch_id: t.branch_id,
             user_id: t.user_id,
             photo: null,
+            photo_preview: null,
         });
         setSpecialtiesEn((t.specialties_en ?? []).join('\n'));
         setPreview(t.photo_url);
@@ -167,7 +172,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                         <Card key={t.id} fill className={t.is_active ? '' : 'opacity-60'}>
                             <div className="flex items-start gap-4">
                                 {t.photo_url ? (
-                                    <img src={t.photo_url} alt="" className="size-16 rounded-2xl object-cover" loading="lazy" />
+                                    <img src={t.photo_url} alt="" className="size-16 rounded-2xl object-cover" loading="lazy" decoding="async" />
                                 ) : (
                                     <span className="grid size-16 place-items-center rounded-2xl font-display text-xl text-white" style={{ background: t.color ?? 'var(--brand)' }}>{t.name[0]}</span>
                                 )}
@@ -289,16 +294,18 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                     <Field label="الترتيب" error={form.errors.sort}>
                         <Input type="number" value={form.data.sort} onChange={(e) => form.setData('sort', e.target.value)} />
                     </Field>
-                    <Field label="الصورة" error={form.errors.photo} className="sm:col-span-2">
+                    <Field label="الصورة" error={form.errors.photo ?? form.errors.photo_preview} className="sm:col-span-2" hint="تُحفظ الصورة الأصلية كما هي، وتظهر منها نسخة خفيفة.">
                         <label className="flex cursor-pointer items-center gap-4 rounded-xl border border-dashed border-line p-3 hover:border-brand-300">
                             {preview ? <img src={preview} alt="" className="size-16 rounded-xl object-cover" /> : <span className="grid size-16 place-items-center rounded-xl bg-brand-50 text-brand"><ImagePlus className="size-6" /></span>}
                             <span className="text-sm text-muted">اختر صورة</span>
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-                                const file = e.target.files?.[0] ?? null;
-                                form.setData('photo', file);
-                                setPreview(file ? URL.createObjectURL(file) : editing?.photo_url ?? null);
-                            }} />
+                            <input type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={(e) =>
+                                pickImage(e.target.files?.[0] ?? null, (file, source) => {
+                                    form.setData((d) => (source && d.photo !== file ? d : { ...d, photo: file, photo_preview: source }));
+                                    setPreview(file ? localPreview(file, source) : editing?.photo_url ?? null);
+                                })
+                            } />
                         </label>
+                        {editing?.photo_download_url && !form.data.photo && <a href={editing.photo_download_url} className="mt-2 inline-block text-[13px] text-muted underline-offset-2 hover:text-ink hover:underline">تنزيل الصورة الأصلية</a>}
                     </Field>
                     <div className="space-y-2 sm:col-span-2">
                         <Toggle checked={form.data.is_public} onChange={(v) => form.setData('is_public', v)} label="يظهر في الموقع" />

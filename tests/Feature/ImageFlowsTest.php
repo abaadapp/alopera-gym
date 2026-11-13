@@ -167,4 +167,40 @@ class ImageFlowsTest extends TestCase
         $this->assertSame(0, $this->asTenant($club, fn () => SiteMedia::count()));
         $this->assertSame([], $this->files());
     }
+
+    public function test_the_original_downloads_byte_for_byte_with_the_right_and_only_in_its_club(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $photo = UploadedFile::fake()->image('face.png', 320, 240);
+        $bytes = (string) file_get_contents($photo->getRealPath());
+        $this->actingAs($owner)->post(route('club.members.store'), ['full_name' => 'Noor', 'phone' => '96891112233', 'photo' => $photo])->assertSessionHasNoErrors();
+        $member = $this->asTenant($club, fn () => Member::firstOrFail());
+
+        $response = $this->get(route('club.members.photo', $member))->assertOk();
+        $this->assertSame($bytes, $response->streamedContent());
+        $this->assertStringContainsString('attachment', (string) $response->headers->get('content-disposition'));
+        $this->assertStringContainsString('Noor.png', (string) $response->headers->get('content-disposition'));
+        $this->assertSame('nosniff', $response->headers->get('x-content-type-options'));
+
+        $this->actingAs($this->staff($club, 'trainer'))->get(route('club.members.photo', $member))->assertForbidden();
+
+        $other = $this->club('Other');
+        $this->actingAs($this->owner($other))->get(route('club.members.photo', $member))->assertNotFound();
+    }
+
+    public function test_the_edit_pages_link_the_original_and_the_lists_show_thumbnails(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $this->actingAs($owner)->post(route('club.products.store'), ['name' => 'Bar', 'price' => 1, 'photos' => [$this->jpeg(1200, 900)]])->assertSessionHasNoErrors();
+        $product = $this->asTenant($club, fn () => Product::firstOrFail());
+
+        $this->get(route('club.products.edit', $product))->assertOk()
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('product.photo_downloads.0', route('club.products.photo.original', [$product, 0])));
+        $this->get(route('club.products.index'))->assertOk()
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('products.data.0.image_url', fn ($url) => str_ends_with((string) $url, '.thumb.webp')));
+        $this->get(route('club.products.photo.original', [$product, 0]))->assertOk();
+        $this->get(route('club.products.photo.original', [$product, 3]))->assertNotFound();
+    }
 }

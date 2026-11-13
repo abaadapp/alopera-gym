@@ -33,6 +33,8 @@ Route::get('/members', [MemberController::class, 'index'])->middleware('can:memb
 Route::get('/members/create', [MemberController::class, 'create'])->middleware('can:members.manage')->name('members.create');
 Route::post('/members', [MemberController::class, 'store'])->middleware('can:members.manage')->name('members.store');
 Route::get('/members/{member}', [MemberController::class, 'show'])->middleware('can:members.view')->name('members.show');
+// The photo as it was uploaded (the original, for download); the screens show the light display copy.
+Route::get('/members/{member}/photo', [MemberController::class, 'photo'])->middleware('can:members.view')->name('members.photo');
 Route::get('/members/{member}/edit', [MemberController::class, 'edit'])->middleware('can:members.manage')->name('members.edit');
 Route::put('/members/{member}', [MemberController::class, 'update'])->middleware('can:members.manage')->name('members.update');
 Route::delete('/members/{member}', [MemberController::class, 'destroy'])->middleware('can:members.delete')->name('members.destroy');
@@ -62,6 +64,8 @@ Route::resource('coupons', CouponController::class)->except(['show', 'create', '
 // ─── Training ──────────────────────────────────────────────────────────
 Route::resource('programs', ProgramController::class)->except(['show', 'create', 'edit'])->middleware('can:classes.manage');
 Route::resource('trainers', TrainerController::class)->except(['show', 'create', 'edit'])->middleware('can:trainers.manage');
+Route::get('/trainers/{trainer}/photo', [TrainerController::class, 'photo'])->middleware('can:trainers.manage')->name('trainers.photo');
+Route::get('/programs/{program}/image', [ProgramController::class, 'image'])->middleware('can:classes.manage')->name('programs.image');
 Route::put('/trainers/{trainer}/availability', [TrainerController::class, 'availability'])->middleware('can:trainers.manage')->name('trainers.availability');
 
 Route::get('/schedule', [ScheduleController::class, 'index'])->middleware('can:classes.view')->name('schedule.index');

@@ -207,7 +207,7 @@ export default function Dashboard({ site, seo, profile, current, next, upcoming,
                     <div className="rounded-2xl border border-line bg-white p-5">
                         <div className="flex items-center gap-3">
                             {profile.photo_url ? (
-                                <img src={profile.photo_url} alt="" width={48} height={48} className="size-12 rounded-full object-cover" />
+                                <img src={profile.photo_url} alt="" loading="lazy" decoding="async" width={48} height={48} className="size-12 rounded-full object-cover" />
                             ) : (
                                 <span className="grid size-12 place-items-center rounded-full bg-brand-50 text-brand"><UserRound className="size-5" /></span>
                             )}

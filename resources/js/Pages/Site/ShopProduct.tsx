@@ -36,7 +36,7 @@ export default function ShopProductPage({ site, seo, product, currency }: { site
                             <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
                                 {photos.map((url, i) => (
                                     <button key={url} type="button" onClick={() => setPhoto(i)} aria-label={t('الصورة :n', { n: i + 1 })} aria-pressed={photo === i} className={cn('size-16 shrink-0 overflow-hidden rounded-2xl border-2 transition', photo === i ? 'border-brand' : 'border-transparent opacity-70 hover:opacity-100')}>
-                                        <img src={url} alt="" className="size-full object-cover" />
+                                        <img src={url} alt="" loading="lazy" decoding="async" className="size-full object-cover" />
                                     </button>
                                 ))}
                             </div>

@@ -7,12 +7,12 @@ use App\Core\Support\Images\ImageUpload;
 use App\Core\Support\ImageStore;
 use App\Http\Controllers\Controller;
 use App\Modules\Website\Models\SitePost;
-use App\Modules\Website\Models\SiteSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /** News and offers shown on the website. */
 class PostController extends Controller
@@ -21,7 +21,8 @@ class PostController extends Controller
     {
         return Inertia::render('Website/Posts', [
             'posts' => SitePost::latest()->get()->map(fn (SitePost $p) => $p->only('id', 'type', 'title', 'title_en', 'slug', 'excerpt', 'excerpt_en', 'body', 'body_en', 'is_published') + [
-                'image_url' => SiteSetting::url($p->image_path),
+                'image_url' => ImageStore::thumbUrl($p->image_path),
+                'image_download_url' => $p->image_path ? route('club.website.posts.image', $p) : null,
                 'starts_on' => $p->starts_on?->toDateString(), 'ends_on' => $p->ends_on?->toDateString(),
                 'published_at' => $p->published_at?->format('Y-m-d'),
             ]),
@@ -46,6 +47,12 @@ class PostController extends Controller
         }
 
         return back()->with('success', 'تم الحفظ.');
+    }
+
+    /** The image as it was uploaded, for download. */
+    public function image(SitePost $post): StreamedResponse
+    {
+        return ImageStore::download($post->image_path, $post->title);
     }
 
     public function update(Request $request, SitePost $post): RedirectResponse

@@ -3,9 +3,9 @@
 namespace App\Modules\Website\Models;
 
 use App\Core\Audit\Auditable;
+use App\Core\Support\ImageStore;
 use App\Core\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 
 class SiteSetting extends Model
 {
@@ -39,6 +39,6 @@ class SiteSetting extends Model
     /** The public address of a file on the public disk. */
     public static function url(?string $path): ?string
     {
-        return $path ? Storage::disk('public')->url($path) : null;
+        return ImageStore::url($path);
     }
 }

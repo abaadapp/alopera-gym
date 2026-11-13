@@ -119,6 +119,7 @@ final class MediaLibrary
             'url' => ImageStore::url($m->path),
             'thumb_url' => ImageStore::thumbUrl($m->path),
             'has_original' => ImageStore::hasOriginal($m->path),
+            'download_url' => route('club.website.media.original', $m->id),
             'title' => $m->title,
             'alt' => $m->alt,
             'width' => $m->width,

@@ -3,12 +3,12 @@
 namespace App\Modules\Gym\Models;
 
 use App\Core\Audit\Auditable;
+use App\Core\Support\ImageStore;
 use App\Core\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\Storage;
 
 /** A training program or class type (Zumba, Pilates, Strength…). */
 class Program extends Model
@@ -45,6 +45,11 @@ class Program extends Model
 
     public function imageUrl(): ?string
     {
-        return $this->image_path ? Storage::disk('public')->url($this->image_path) : null;
+        return ImageStore::url($this->image_path);
+    }
+
+    public function imageThumbUrl(): ?string
+    {
+        return ImageStore::thumbUrl($this->image_path);
     }
 }

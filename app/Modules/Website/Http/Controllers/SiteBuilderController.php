@@ -3,8 +3,10 @@
 namespace App\Modules\Website\Http\Controllers;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Support\Images\DirectUploads;
 use App\Core\Support\Images\ImageRule;
 use App\Core\Support\Images\ImageUpload;
+use App\Core\Support\ImageStore;
 use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -28,6 +30,7 @@ use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * «إدارة الموقع»: the owner (or staff given website.manage) edits the official website as a draft, previews it,
@@ -67,7 +70,7 @@ class SiteBuilderController extends Controller
             // The site's own English for its standard phrases, shown where the owner has not written English yet.
             'englishDefaults' => (object) app('translator')->getLoader()->load('en', '*', '*'),
             'previewUrl' => route('club.website.preview'),
-            'limits' => ['max_image_kb' => (int) config('gym.max_image_kb'), 'types' => MediaLibrary::TYPES],
+            'limits' => ['max_image_kb' => (int) config('gym.max_image_kb'), 'types' => MediaLibrary::TYPES, 'direct' => DirectUploads::enabled()],
             'unread' => ContactMessage::where('status', 'new')->count(),
         ]);
     }
@@ -123,11 +126,27 @@ class SiteBuilderController extends Controller
             ->header('Cache-Control', 'no-store, private');
     }
 
+    /** A signed address to put one image straight into the Spaces bucket (404 while direct upload is off). */
+    public function directUpload(Request $request): JsonResponse
+    {
+        $data = $request->validate(['name' => ['required', 'string', 'max:255'], 'type' => ['nullable', 'string', 'max:100'], 'size' => ['required', 'integer', 'min:1', 'max:'.config('gym.max_image_kb') * 1024]]);
+
+        return response()->json(DirectUploads::begin($data['name'], (string) ($data['type'] ?? '')));
+    }
+
+    /** A library image as it was uploaded, for download. */
+    public function mediaOriginal(SiteMedia $media): StreamedResponse
+    {
+        return ImageStore::download($media->path, $media->title ?: 'image-'.$media->id);
+    }
+
     public function uploadMedia(Request $request, AuditLogger $audit): JsonResponse|RedirectResponse
     {
         $request->validate([
-            'images' => ['required', 'array', 'max:12'],
+            'images' => ['required_without:images_direct', 'array', 'max:12'],
             'images.*' => ['required', ...MediaLibrary::rules()],
+            'images_direct' => ['nullable', 'array', 'max:12'],
+            'images_direct.*' => ['string', 'max:200'],
             'images_preview' => ['nullable', 'array'],
             'images_preview.*' => ImageRule::previewRules(),
             'title' => ['nullable', 'string', 'max:120'],
