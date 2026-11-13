@@ -71,7 +71,7 @@ describe('the official home page', () => {
         const ids = [...container.querySelectorAll('main > section')].map((s) => s.id);
         expect(ids).toEqual(sections.filter((s) => s.type !== 'nonsense').map((s) => s.id));
         expect(container.textContent).not.toContain('لا يظهر');
-        expect(container.querySelector('h1')?.textContent).toBe('قوّتكِتبدأ هنا.');
+        expect(container.querySelector('h1')?.textContent).toBe('قوّتكِ تبدأ هنا.');
         expect(container.querySelector('iframe')?.getAttribute('src')).toBe('https://www.youtube-nocookie.com/embed/x');
         expect(container.querySelector('a[href="/join?plan=1"]')).not.toBeNull();
     });

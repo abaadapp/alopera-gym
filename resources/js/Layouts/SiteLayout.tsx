@@ -91,7 +91,8 @@ export default function SiteLayout({ site, children, seoTitle }: { site: SiteInf
     useEffect(() => router.on('navigate', () => setOpen(false)), []);
 
     const theme = chrome?.theme ?? { accent: '#8A6700', ink: '#16130F', surface: '#F6F3EE' };
-    const vars = { '--brand': theme.accent, '--site-accent': theme.accent, '--site-ink': theme.ink, '--site-surface': theme.surface } as CSSProperties;
+    // --site-gold: the warm gold of the design's buttons and bullets (the accent stays the deeper gold of small text).
+    const vars = { '--brand': theme.accent, '--site-accent': theme.accent, '--site-ink': theme.ink, '--site-surface': theme.surface, '--site-gold': '#C9A042' } as CSSProperties;
     const links = chrome ? chrome.header.links : fallbackLinks(site.shop_open);
     const cta: LinkData | null = chrome ? chrome.header.cta : site.signup_enabled ? { label: t('انضمي الآن'), href: route('site.join'), external: false } : null;
     const showLogin = chrome ? chrome.header.show_login : true;
@@ -121,7 +122,7 @@ export default function SiteLayout({ site, children, seoTitle }: { site: SiteInf
                         <a href={homeUrl} className="flex shrink-0" aria-label={tenant?.name ?? t('الرئيسية')}>
                             <img src={site.logo_url} alt={tenant?.name ?? ''} className="block h-11 w-auto object-contain" />
                         </a>
-                        <nav className="hidden min-w-0 flex-1 flex-wrap gap-x-[22px] xl:flex" aria-label={t('القائمة الرئيسية')}>
+                        <nav className="hidden min-w-0 flex-1 flex-wrap justify-center gap-x-[22px] xl:flex" aria-label={t('القائمة الرئيسية')}>
                             {links.map((l, i) => (
                                 <NavLink key={i} link={l} className="py-1.5 text-[15px] whitespace-nowrap text-[#3A342B] transition-colors hover:text-[var(--site-accent)]" />
                             ))}
@@ -133,14 +134,14 @@ export default function SiteLayout({ site, children, seoTitle }: { site: SiteInf
                                     {cart.count > 0 && <span className="absolute -top-0.5 -end-0.5 grid min-w-5 place-items-center rounded-full bg-[var(--site-accent)] px-1 text-[11px] font-semibold text-white">{cart.count}</span>}
                                 </Link>
                             )}
-                            <LanguageSwitch className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[rgba(22,19,15,0.15)] px-2.5 text-sm font-medium whitespace-nowrap text-[var(--site-ink)] transition-colors hover:border-[var(--site-accent)] hover:text-[var(--site-accent)] sm:px-3" />
+                            <LanguageSwitch className="inline-flex h-10 items-center gap-1.5 rounded-full border border-[rgba(22,19,15,0.15)] px-2.5 text-sm font-medium whitespace-nowrap text-[var(--site-ink)] transition-colors hover:border-[var(--site-accent)] hover:text-[var(--site-accent)] sm:px-3" />
                             {showLogin && (
                                 <a href={login.href} className="hidden py-1.5 text-[15px] whitespace-nowrap text-[var(--site-ink)] underline underline-offset-[5px] hover:text-[var(--site-accent)] sm:inline">
                                     {login.label}
                                 </a>
                             )}
                             {cta && cta.label && (
-                                <NavLink link={cta} className="inline-flex h-11 items-center rounded-xl bg-[var(--site-ink)] px-4 text-[15px] font-semibold whitespace-nowrap text-white transition-colors hover:bg-[var(--site-accent)] hover:text-white sm:px-[22px]" />
+                                <NavLink link={cta} className="inline-flex h-11 items-center rounded-full bg-[var(--site-gold)] px-4 text-[15px] font-semibold whitespace-nowrap text-[var(--site-ink)] transition-colors hover:bg-[#DDB85C] hover:text-[var(--site-ink)] sm:px-[22px]" />
                             )}
                             <button
                                 type="button"
@@ -168,7 +169,7 @@ export default function SiteLayout({ site, children, seoTitle }: { site: SiteInf
 
                 <main className="flex-1">{children}</main>
 
-                <footer className="bg-[var(--site-ink)] text-[#CFC7B8]">
+                <footer className="border-t border-[rgba(26,22,18,0.08)] bg-[var(--site-surface)] text-[#5E5648]">
                     <div className="mx-auto grid max-w-[1360px] gap-10 px-5 py-14 sm:px-10 md:grid-cols-2 lg:grid-cols-12 lg:gap-12">
                         <div className="flex min-w-0 flex-col gap-4 lg:col-span-4">
                             <img src={site.logo_url} alt={tenant?.name ?? ''} className="block h-[60px] w-auto self-start object-contain" />
@@ -176,31 +177,31 @@ export default function SiteLayout({ site, children, seoTitle }: { site: SiteInf
                         </div>
                         {footerLinks.length > 0 && (
                             <nav className="flex min-w-0 flex-col gap-2.5 text-sm lg:col-span-2" aria-label={t('روابط الموقع')}>
-                                {footerLinks.map((l, i) => <NavLink key={i} link={l} className="self-start text-[#CFC7B8] transition-colors hover:text-white" />)}
+                                {footerLinks.map((l, i) => <NavLink key={i} link={l} className="self-start text-[#5E5648] transition-colors hover:text-[var(--site-accent)]" />)}
                             </nav>
                         )}
                         <div className="flex min-w-0 flex-col gap-2.5 text-sm lg:col-span-3">
-                            {site.contact_phone && <a href={`tel:+${site.contact_phone}`} dir="ltr" className="self-start [unicode-bidi:isolate] hover:text-white">{fmtPhone(site.contact_phone)}</a>}
-                            {site.whatsapp_number && <a href={whatsappUrl(site.whatsapp_number)} target="_blank" rel="noopener noreferrer" className="self-start hover:text-white">{t('واتساب')}</a>}
-                            {site.contact_email && <a href={`mailto:${site.contact_email}`} className="self-start break-all hover:text-white">{site.contact_email}</a>}
+                            {site.contact_phone && <a href={`tel:+${site.contact_phone}`} dir="ltr" className="self-start [unicode-bidi:isolate] hover:text-[var(--site-accent)]">{fmtPhone(site.contact_phone)}</a>}
+                            {site.whatsapp_number && <a href={whatsappUrl(site.whatsapp_number)} target="_blank" rel="noopener noreferrer" className="self-start hover:text-[var(--site-accent)]">{t('واتساب')}</a>}
+                            {site.contact_email && <a href={`mailto:${site.contact_email}`} className="self-start break-all hover:text-[var(--site-accent)]">{site.contact_email}</a>}
                             {site.address && <p className="m-0 leading-7">{site.address}</p>}
                             {showSocial && social.length > 0 && (
                                 <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                                    {social.map(([key, href]) => <a key={key} href={href} target="_blank" rel="noopener noreferrer" className="border-b border-white/30 hover:border-white hover:text-white">{SOCIAL[key] ? t(SOCIAL[key]) : key}</a>)}
+                                    {social.map(([key, href]) => <a key={key} href={href} target="_blank" rel="noopener noreferrer" className="border-b border-[rgba(26,22,18,0.25)] hover:border-[var(--site-accent)] hover:text-[var(--site-accent)]">{SOCIAL[key] ? t(SOCIAL[key]) : key}</a>)}
                                 </div>
                             )}
                         </div>
                         {showHours && hours.length > 0 && (
                             <div className="flex min-w-0 flex-col gap-1.5 text-sm lg:col-span-3">
-                                <p className="m-0 mb-1 font-semibold text-white">{t('أوقات العمل')}</p>
+                                <p className="m-0 mb-1 font-semibold text-[var(--site-ink)]">{t('أوقات العمل')}</p>
                                 {hours.map((w, i) => (
                                     <p key={i} className="m-0 flex flex-wrap justify-between gap-x-4"><span>{w.days}</span><span>{w.hours}</span></p>
                                 ))}
                             </div>
                         )}
                     </div>
-                    <div className="border-t border-white/10">
-                        <p className="mx-auto m-0 max-w-[1360px] px-5 py-5 text-[13px] text-[#9A9284] sm:px-10">© {new Date().getFullYear()} {tenant?.name}</p>
+                    <div className="border-t border-[rgba(26,22,18,0.08)]">
+                        <p className="mx-auto m-0 max-w-[1360px] px-5 py-5 text-[13px] text-[#7A7060] sm:px-10">© {new Date().getFullYear()} {tenant?.name}</p>
                     </div>
                 </footer>
 

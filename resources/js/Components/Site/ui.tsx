@@ -2,7 +2,7 @@ import { Fragment, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import type { LinkData, RenderedSection } from '@/types/site';
 
-/** Section tones of the v2 design: white, the warm beige surface, and the dark ink. */
+/** Section tones of the design: white, the warm beige surface, and the dark ink. */
 export type SiteTone = RenderedSection['tone'];
 
 export const isDark = (tone: SiteTone) => tone === 'dark';
@@ -75,22 +75,29 @@ export function SiteAnchor({ link, className, children }: { link: LinkData; clas
     );
 }
 
-type ButtonVariant = 'solid' | 'underline';
+type ButtonVariant = 'solid' | 'outline' | 'underline';
 
 /**
- * v2 buttons: 'solid' is the dark button on light sections (gold on hover) and the white one on dark sections;
- * 'underline' is the quiet text link with a rule under it.
+ * The site's buttons, as the approved design draws them: 'solid' is the gold pill (the main action on any tone),
+ * 'outline' the quiet pill beside it, and 'underline' a text link with a rule under it.
  */
 export function SiteButton({ link, tone, variant = 'solid', className }: { link: LinkData | null | undefined; tone: SiteTone; variant?: ButtonVariant; className?: string }) {
     if (!link || !link.label || !link.href) return null;
     const dark = isDark(tone);
     const cls = variant === 'solid'
-        ? cn(
-            'inline-flex h-[52px] max-w-full items-center justify-center rounded-xl px-7 text-[15px] font-semibold transition-colors',
-            dark ? 'bg-white text-[var(--site-ink)] hover:bg-[#E9DFC8]' : 'bg-[var(--site-ink)] text-white hover:bg-[var(--site-accent)] hover:text-white',
-        )
-        : cn('inline-flex items-center border-b pb-0.5 text-base font-medium transition-colors', dark ? 'border-white text-white hover:text-[#E9DFC8]' : 'border-[var(--site-ink)] text-[var(--site-ink)] hover:border-[var(--site-accent)] hover:text-[var(--site-accent)]');
+        ? 'inline-flex h-[52px] max-w-full items-center justify-center rounded-full bg-[var(--site-gold)] px-7 text-[15px] font-semibold text-[var(--site-ink)] transition-colors hover:bg-[#DDB85C] hover:text-[var(--site-ink)]'
+        : variant === 'outline'
+            ? cn('inline-flex h-[52px] max-w-full items-center justify-center rounded-full border px-7 text-[15px] font-semibold transition-colors', dark ? 'border-white/35 text-white hover:bg-white/10' : 'border-[rgba(26,22,18,0.2)] text-[var(--site-ink)] hover:border-[var(--site-ink)]')
+            : cn('inline-flex items-center border-b pb-0.5 text-base font-medium transition-colors', dark ? 'border-white text-white hover:text-[#E9DFC8]' : 'border-[var(--site-ink)] text-[var(--site-ink)] hover:border-[var(--site-accent)] hover:text-[var(--site-accent)]');
     return <SiteAnchor link={link} className={cn(cls, className)} />;
+}
+
+/** A white card of the design: 24px corners and a faint ring, on white or beige bands alike. */
+export const siteCard = (tone: SiteTone) => cn('rounded-[24px]', isDark(tone) ? 'bg-white/5 ring-1 ring-white/10' : 'bg-white ring-1 ring-[rgba(26,22,18,0.08)]');
+
+/** The small gold diamond the design puts before each line of a list. */
+export function Diamond() {
+    return <span aria-hidden className="mt-[0.6em] size-[7px] shrink-0 rotate-45 rounded-[1px] bg-[var(--site-gold)]" />;
 }
 
 /**
@@ -102,7 +109,7 @@ export function PhotoFrame({ src, alt, className, imgClassName }: { src: string 
     const [failed, setFailed] = useState(false);
     if (!src || failed) return null;
     return (
-        <div className={cn('overflow-hidden rounded-2xl bg-[#F1EDE6]', className)}>
+        <div className={cn('overflow-hidden rounded-[18px] bg-[#F1ECE3]', className)}>
             <img src={src} alt={alt} loading="lazy" decoding="async" onError={() => setFailed(true)} className={cn('block size-full object-contain', imgClassName)} />
         </div>
     );

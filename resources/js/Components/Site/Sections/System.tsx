@@ -11,7 +11,7 @@ import { cn } from '@/lib/cn';
 import { currencyLabel, date as fmtDate, phone as fmtPhone, whatsappUrl } from '@/lib/format';
 import { useT } from '@/lib/i18n';
 import type { PlanFeed, PostFeed, ProductFeed, ProgramFeed, SessionFeed, TrainerFeed } from '@/types/site';
-import { PhotoFrame, SectionHeading, SectionShell, SiteButton, bodyText, hairline, isDark, metaText, priceText, twoDigits } from '../ui';
+import { Diamond, PhotoFrame, SectionHeading, SectionShell, bodyText, hairline, isDark, metaText, priceText, siteCard, twoDigits } from '../ui';
 import { bool, link, str, type SectionProps } from './types';
 
 const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
@@ -41,20 +41,24 @@ export function Programs({ section, joined }: SectionProps) {
                     <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} tone={section.tone} />
                     {str(d.subtitle) && <p className={cn('m-0 max-w-[460px] text-[17px] leading-8 whitespace-pre-line', bodyText(section.tone))}>{str(d.subtitle)}</p>}
                 </div>
-                <div className="flex flex-col">
+                <div className={cn('grid gap-5', programs.length > 1 && 'md:grid-cols-2', programs.length > 2 && 'lg:grid-cols-3')}>
                     {programs.map((p, i) => {
-                        const meta = [p.category ? (CATEGORIES[p.category] ? t(CATEGORIES[p.category]) : p.category) : null, p.level ? (LEVELS[p.level] ? t(LEVELS[p.level]) : p.level) : null, p.duration_minutes ? t(':count دقيقة', { count: p.duration_minutes }) : null].filter(Boolean).join(' · ');
+                        const meta = [p.category ? (CATEGORIES[p.category] ? t(CATEGORIES[p.category]) : p.category) : null, p.level ? (LEVELS[p.level] ? t(LEVELS[p.level]) : p.level) : null, p.duration_minutes ? t(':count دقيقة', { count: p.duration_minutes }) : null].filter(Boolean) as string[];
                         return (
-                            <article key={p.id} className={cn('grid gap-5 border-t py-8 sm:py-10 lg:grid-cols-12 lg:items-start lg:gap-12', hairline(section.tone))}>
-                                <div className="flex min-w-0 items-baseline gap-5 lg:col-span-4">
-                                    <span dir="ltr" className="text-[15px] text-[var(--site-accent)]">{twoDigits(i + 1)}</span>
-                                    <h3 className="m-0 text-[clamp(26px,3vw,40px)] leading-[1.2] font-bold break-words">{p.name}</h3>
+                            <article key={p.id} className={cn(siteCard(section.tone), 'flex min-w-0 flex-col p-2.5')}>
+                                <div className="relative">
+                                    {p.image_url ? <PhotoFrame src={p.image_url} alt={p.name} className="aspect-[4/3] w-full" /> : <div className="h-14" />}
+                                    <span dir="ltr" className="absolute start-3 bottom-3 grid h-8 min-w-8 place-items-center rounded-full bg-white px-2 text-sm font-semibold text-[var(--site-accent)] shadow-sm">{twoDigits(i + 1)}</span>
                                 </div>
-                                <div className={cn('flex min-w-0 flex-col gap-3.5', p.image_url ? 'lg:col-span-4' : 'lg:col-span-8')}>
-                                    {p.description && <p className={cn('m-0 text-[17px] leading-8 text-pretty whitespace-pre-line', bodyText(section.tone))}>{p.description}</p>}
-                                    {meta && <span className="text-[15px]">{meta}</span>}
+                                <div className="flex flex-1 flex-col gap-3 px-4 pt-5 pb-5 sm:px-5">
+                                    <h3 className="m-0 text-[24px] leading-[1.3] font-bold break-words">{p.name}</h3>
+                                    {p.description && <p className={cn('m-0 text-[15px] leading-7 text-pretty whitespace-pre-line', bodyText(section.tone))}>{p.description}</p>}
+                                    {meta.length > 0 && (
+                                        <ul className={cn('m-0 mt-auto flex list-none flex-col gap-2 border-t p-0 pt-4', hairline(section.tone))}>
+                                            {meta.map((m) => <li key={m} className="flex gap-2.5 text-sm font-medium"><Diamond />{m}</li>)}
+                                        </ul>
+                                    )}
                                 </div>
-                                {p.image_url && <PhotoFrame src={p.image_url} alt={p.name} className="h-[220px] lg:col-span-4" />}
                             </article>
                         );
                     })}
@@ -89,7 +93,7 @@ export function Schedule({ section, joined }: SectionProps) {
         <SectionShell section={section} joined={joined}>
             <div className="flex flex-col gap-8 lg:gap-9">
                 <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} tone={tone} aside={<MoreLink href={url(section.feed?.schedule_url)} label={t('الجدول الكامل')} tone={tone} />} />
-                <div className={cn('-mx-5 flex overflow-x-auto border-b px-5 sm:mx-0 sm:px-0', hairline(tone))} role="tablist" aria-label={t('أيام الجدول')}>
+                <div className={cn('flex gap-1 overflow-x-auto rounded-[18px] p-1.5', isDark(tone) ? 'bg-white/5' : 'bg-[#EEE8DC]')} role="tablist" aria-label={t('أيام الجدول')}>
                     {days.map((dd, i) => (
                         <button
                             key={dd.date}
@@ -97,12 +101,11 @@ export function Schedule({ section, joined }: SectionProps) {
                             role="tab"
                             aria-selected={i === picked}
                             onClick={() => setPicked(i)}
-                            className={cn('-mb-px flex min-w-[96px] flex-none cursor-pointer sm:flex-1 flex-col items-start border-b-[3px] bg-transparent px-3 py-3.5 text-start transition-colors sm:px-1.5',
-                                i === picked ? 'border-[var(--site-ink)] text-[var(--site-ink)]' : cn('border-transparent', metaText(tone), 'hover:text-[var(--site-ink)]'),
-                                isDark(tone) && i === picked && 'border-white text-white')}
+                            className={cn('flex min-w-[96px] flex-none cursor-pointer flex-col items-center rounded-[14px] px-3 py-3 text-center transition-colors sm:flex-1',
+                                i === picked ? 'bg-[var(--site-ink)] text-white' : cn('bg-transparent', isDark(tone) ? 'text-[#CFC7B8] hover:text-white' : 'text-[#5E5648] hover:text-[var(--site-ink)]'))}
                         >
                             <span className="text-base font-semibold whitespace-nowrap">{dd.label}</span>
-                            <span className="text-xs">{dd.sessions.length === 0 ? t('لا حصص') : dd.sessions.length === 1 ? t('حصة واحدة') : dd.sessions.length === 2 ? t('حصتان') : t(':count حصص', { count: dd.sessions.length })}</span>
+                            <span className="text-xs opacity-75">{dd.sessions.length === 0 ? t('لا حصص') : dd.sessions.length === 1 ? t('حصة واحدة') : dd.sessions.length === 2 ? t('حصتان') : t(':count حصص', { count: dd.sessions.length })}</span>
                         </button>
                     ))}
                 </div>
@@ -121,13 +124,13 @@ export function Schedule({ section, joined }: SectionProps) {
                                     </span>
                                 </div>
                                 <span className={cn('hidden text-[15px] md:block', isDark(tone) ? 'text-[#CFC7B8]' : 'text-[#3A342B]')}>{showTrainer ? s.trainer ?? '' : ''}</span>
-                                <span className={cn('col-start-2 text-sm md:col-start-auto', sp.tight ? 'text-[#A33A22]' : metaText(tone))}>{sp.text}</span>
+                                <span className={cn('col-start-2 text-sm md:col-start-auto', sp.tight ? 'font-semibold text-[var(--site-accent)]' : metaText(tone))}>{sp.text}</span>
                                 {bookingUrl && (
                                     <a
                                         href={closed ? undefined : bookingUrl}
                                         aria-disabled={closed}
-                                        className={cn('col-span-2 inline-flex h-[42px] min-w-[104px] items-center justify-center rounded-xl border px-[18px] text-sm font-semibold transition-colors md:col-span-1',
-                                            closed ? 'cursor-not-allowed border-[rgba(22,19,15,0.15)] text-[#9A9284]' : 'border-[var(--site-ink)] bg-[var(--site-ink)] text-white hover:border-[var(--site-accent)] hover:bg-[var(--site-accent)]')}
+                                        className={cn('col-span-2 inline-flex h-[42px] min-w-[104px] items-center justify-center rounded-full border px-[18px] text-sm font-semibold transition-colors md:col-span-1',
+                                            closed ? 'cursor-not-allowed border-[rgba(22,19,15,0.15)] text-[#9A9284]' : 'border-[var(--site-ink)] bg-[var(--site-ink)] text-white hover:border-[var(--site-gold)] hover:bg-[var(--site-gold)] hover:text-[var(--site-ink)]')}
                                     >
                                         {closed ? t('مكتملة') : t('احجزي')}
                                     </a>
@@ -145,71 +148,75 @@ export function Schedule({ section, joined }: SectionProps) {
 export function Trainers({ section, joined }: SectionProps) {
     const d = section.data;
     const trainers = arr<TrainerFeed>(section.feed?.trainers);
-    const [lead, ...others] = trainers;
-    if (!lead) return null;
+    if (trainers.length === 0) return null;
     const role = (t: TrainerFeed) => (t.specialties ?? [])[0] ?? '';
-    const tags = (t: TrainerFeed) => (t.specialties ?? []).slice(1).join(' · ');
+    const tags = (t: TrainerFeed) => (t.specialties ?? []).slice(1);
     const tone = section.tone;
+    // No photo is invented: a trainer without one gets her initial on the soft frame, and when none has a photo
+    // the frames go and the initials sit in small circles instead.
+    const anyPhoto = trainers.some((t) => !!t.photo_url);
+    const initial = (t: TrainerFeed) => t.name.replace(/^(الكوتش|كوتش|المدربة|Coach)\s+/u, '').trim().charAt(0);
     return (
         <SectionShell section={section} joined={joined}>
-            {/* Phones: heading, the lead trainer, then the others. Wide screens: the lead trainer beside the rest (v2). */}
-            <div className="grid items-start gap-x-20 gap-y-10 lg:grid-cols-2">
-                <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} subtitle={str(d.subtitle)} tone={tone} className="lg:col-start-2 lg:row-start-1" />
-                <div className="flex min-w-0 flex-col gap-5 lg:col-start-1 lg:row-span-2 lg:row-start-1">
-                    {lead.photo_url && <PhotoFrame src={lead.photo_url} alt={lead.name} className="aspect-[4/5] w-full" />}
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                        <h3 className="m-0 text-[28px] font-bold break-words">{lead.name}</h3>
-                        {role(lead) && <span className="text-[15px] text-[var(--site-accent)]">{role(lead)}</span>}
-                    </div>
-                    {tags(lead) && <span className={cn('text-[15px]', metaText(tone))}>{tags(lead)}</span>}
-                    {lead.bio && <p className={cn('m-0 text-base leading-8 whitespace-pre-line', bodyText(tone))}>{lead.bio}</p>}
+            <div className="flex flex-col gap-10 lg:gap-12">
+                <div className="grid gap-6 lg:grid-cols-2 lg:items-end lg:gap-20">
+                    <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} tone={tone} />
+                    {str(d.subtitle) && <p className={cn('m-0 max-w-[460px] text-[17px] leading-8 whitespace-pre-line', bodyText(tone))}>{str(d.subtitle)}</p>}
                 </div>
-                {others.length > 0 && (
-                    <div className="flex min-w-0 flex-col lg:col-start-2 lg:row-start-2">
-                            {others.map((t) => (
-                                <div key={t.id} className={cn('flex items-center gap-5 border-t py-5 sm:gap-6', hairline(tone))}>
-                                    {t.photo_url && <PhotoFrame src={t.photo_url} alt={t.name} className="h-[128px] w-[104px] flex-none" />}
-                                    <div className="flex min-w-0 flex-col gap-0.5">
-                                        <h3 className="m-0 text-[21px] font-bold break-words">{t.name}</h3>
-                                        {role(t) && <span className="text-[15px] text-[var(--site-accent)]">{role(t)}</span>}
-                                        {(tags(t) || t.bio) && <span className={cn('line-clamp-2 text-sm', metaText(tone))}>{tags(t) || t.bio}</span>}
-                                    </div>
+                {/* The design's row of trainer cards: the whole photo, the name, the role in gold, then her specialties as pills. */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-9 sm:gap-x-5 lg:grid-cols-4">
+                    {trainers.map((t) => (
+                        <article key={t.id} className="flex min-w-0 flex-col gap-3">
+                            {t.photo_url ? (
+                                <PhotoFrame src={t.photo_url} alt={t.name} className="aspect-[4/5] w-full" />
+                            ) : (
+                                <span aria-hidden className={cn('grid place-items-center font-bold text-[var(--site-gold)]', anyPhoto ? 'aspect-[4/5] w-full rounded-[18px] text-[56px]' : 'size-16 rounded-full text-2xl', isDark(tone) ? 'bg-white/5' : anyPhoto ? 'bg-[#F1ECE3]' : 'bg-[#1A1612]')}>{initial(t)}</span>
+                            )}
+                            <div className="flex flex-col gap-0.5 px-0.5">
+                                <h3 className="m-0 text-[19px] font-bold break-words sm:text-[21px]">{t.name}</h3>
+                                {role(t) && <span className="text-[15px] text-[var(--site-accent)]">{role(t)}</span>}
+                            </div>
+                            {tags(t).length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                    {tags(t).map((tag) => <span key={tag} className={cn('rounded-full border px-2.5 py-0.5 text-xs', isDark(tone) ? 'border-white/20 text-[#CFC7B8]' : 'border-[rgba(26,22,18,0.14)] text-[#5E5648]')}>{tag}</span>)}
                                 </div>
-                            ))}
-                    </div>
-                )}
+                            )}
+                            {!tags(t).length && t.bio && <p className={cn('m-0 line-clamp-3 text-sm leading-6', metaText(tone))}>{t.bio}</p>}
+                        </article>
+                    ))}
+                </div>
             </div>
         </SectionShell>
     );
 }
 
-/** The plans grid of v2: one bordered block with hairlines between the plans; the featured plan is dark. */
+/** The plans as the design's cards: white with a faint ring; the featured one dark with a gold badge and a gold button. */
 export function PlansGrid({ plans, currency, featuredLabel, buttonLabel }: { plans: PlanFeed[]; currency: string; featuredLabel: string; buttonLabel: string }) {
     const t = useT();
     return (
-        <div className={cn('grid overflow-hidden rounded-[20px] border border-[rgba(22,19,15,0.15)]', plans.length > 1 && 'md:grid-cols-2', plans.length > 2 && 'lg:grid-cols-3', plans.length === 1 && 'max-w-md')}>
+        <div className={cn('grid items-stretch gap-5', plans.length > 1 && 'md:grid-cols-2', plans.length > 2 && 'lg:grid-cols-3', plans.length === 1 && 'max-w-md')}>
             {plans.map((p) => {
                 const featured = p.is_featured;
                 return (
-                    <article key={p.id} className={cn('flex min-w-0 flex-col gap-5 px-6 pt-8 pb-9 ring-1 ring-[rgba(22,19,15,0.10)] sm:px-8 sm:pt-9 sm:pb-10', featured ? 'bg-[var(--site-ink)] text-white shadow-[inset_0_3px_0_var(--site-accent)]' : 'bg-white text-[var(--site-ink)]')}>
-                        <div className="flex items-baseline justify-between gap-3">
+                    <article key={p.id} className={cn('flex min-w-0 flex-col gap-5 rounded-[24px] px-6 pt-8 pb-7 sm:px-8', featured ? 'bg-[#1A1612] text-white shadow-[0_24px_50px_rgba(26,22,18,0.18)]' : 'bg-white text-[var(--site-ink)] ring-1 ring-[rgba(26,22,18,0.08)]')}>
+                        <div className="flex items-center justify-between gap-3">
                             <h3 className="m-0 text-[22px] font-bold break-words">{p.name}</h3>
-                            {featured && featuredLabel && <span className="text-[13px] font-semibold whitespace-nowrap text-[#E2C27A]">{featuredLabel}</span>}
+                            {featured && featuredLabel && <span className="rounded-full bg-[var(--site-gold)] px-3 py-1 text-xs font-semibold whitespace-nowrap text-[var(--site-ink)]">{featuredLabel}</span>}
                         </div>
-                        {p.description && <p className={cn('m-0 min-h-[3rem] text-[15px] leading-7 whitespace-pre-line', featured ? 'text-[#CFC7B8]' : 'text-[#4A443A]')}>{p.description}</p>}
-                        <div className="flex flex-col gap-0.5">
+                        {p.description && <p className={cn('m-0 min-h-[3rem] text-[15px] leading-7 whitespace-pre-line', featured ? 'text-[#CFC7B8]' : 'text-[#5E5648]')}>{p.description}</p>}
+                        <div className={cn('flex flex-col gap-0.5 border-b pb-5', featured ? 'border-white/10' : 'border-[rgba(26,22,18,0.08)]')}>
                             <div className="flex flex-wrap items-baseline gap-2">
-                                <span dir="ltr" className="text-[clamp(40px,4.5vw,52px)] leading-[1.1] font-bold [unicode-bidi:isolate]">{priceText(p.price)}</span>
-                                <span className={cn('text-[15px]', featured ? 'text-[#CFC7B8]' : 'text-[#6B6356]')}>{currencyLabel(currency)}{p.duration_label ? ` / ${p.duration_label}` : ''}</span>
+                                <span dir="ltr" className="text-[clamp(44px,4.8vw,56px)] leading-[1.1] font-bold [unicode-bidi:isolate]">{priceText(p.price)}</span>
+                                <span className={cn('text-[15px]', featured ? 'text-[#CFC7B8]' : 'text-[#6E6555]')}>{currencyLabel(currency)}{p.duration_label ? ` / ${p.duration_label}` : ''}</span>
                             </div>
-                            {p.signup_fee && Number(p.signup_fee) > 0 && <span className={cn('text-[13px]', featured ? 'text-[#9A9284]' : 'text-[#6B6356]')}>{t('رسوم تسجيل لمرة واحدة:')} <span dir="ltr" className="[unicode-bidi:isolate]">{priceText(p.signup_fee)}</span> {currencyLabel(currency)}</span>}
+                            {p.signup_fee && Number(p.signup_fee) > 0 && <span className={cn('text-[13px]', featured ? 'text-[#9A9284]' : 'text-[#7A7060]')}>{t('رسوم تسجيل لمرة واحدة:')} <span dir="ltr" className="[unicode-bidi:isolate]">{priceText(p.signup_fee)}</span> {currencyLabel(currency)}</span>}
                         </div>
-                        <ul className="m-0 flex flex-1 list-none flex-col p-0">
+                        <ul className="m-0 flex flex-1 list-none flex-col gap-2.5 p-0">
                             {(p.features ?? []).filter(Boolean).map((f, i) => (
-                                <li key={i} className={cn('border-t py-2.5 text-[15px]', featured ? 'border-white/10' : 'border-[rgba(22,19,15,0.08)]')}>{f}</li>
+                                <li key={i} className="flex gap-2.5 text-[15px] font-medium"><Diamond />{f}</li>
                             ))}
                         </ul>
-                        <a href={p.join_url} className={cn('inline-flex h-[52px] items-center justify-center rounded-xl border text-[15px] font-semibold transition-colors', featured ? 'border-white bg-white text-[var(--site-ink)] hover:border-[#E9DFC8] hover:bg-[#E9DFC8]' : 'border-[var(--site-ink)] bg-white text-[var(--site-ink)] hover:bg-[var(--site-ink)] hover:text-white')}>
+                        <a href={p.join_url} className={cn('mt-2 inline-flex h-[52px] items-center justify-center rounded-full border text-[15px] font-semibold transition-colors', featured ? 'border-[var(--site-gold)] bg-[var(--site-gold)] text-[var(--site-ink)] hover:border-[#DDB85C] hover:bg-[#DDB85C]' : 'border-[rgba(26,22,18,0.2)] bg-white text-[var(--site-ink)] hover:border-[var(--site-ink)] hover:bg-[var(--site-ink)] hover:text-white')}>
                             {buttonLabel || t('اختاري الباقة')}
                         </a>
                     </article>
@@ -226,8 +233,9 @@ export function Plans({ section, joined }: SectionProps) {
     return (
         <SectionShell section={section} joined={joined}>
             <div className="flex flex-col gap-10 lg:gap-12">
-                <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} subtitle={str(d.subtitle)} tone={section.tone} aside={more && <MoreLink href={more.href} label={more.label} tone={section.tone} />} />
+                <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} subtitle={str(d.subtitle)} tone={section.tone} align="center" />
                 <PlansGrid plans={plans} currency={str(section.feed?.currency) || 'OMR'} featuredLabel={str(d.featured_label)} buttonLabel={str(d.button_label)} />
+                {more && <div className="flex justify-center"><MoreLink href={more.href} label={more.label} tone={section.tone} /></div>}
             </div>
         </SectionShell>
     );
@@ -316,8 +324,8 @@ export function Join({ section, site, joined }: SectionProps) {
                     {steps.length > 0 && (
                         <ol className="m-0 mt-4 flex list-none flex-col p-0">
                             {steps.map((s, i) => (
-                                <li key={s.id ?? i} className={cn('flex items-baseline gap-4 border-t py-3.5', hairline(tone))}>
-                                    <span className="w-5 text-sm text-[var(--site-accent)]">{twoDigits(i + 1)}</span>
+                                <li key={s.id ?? i} className={cn('flex items-center gap-4 border-t py-3.5', hairline(tone))}>
+                                    <span className={cn('grid size-8 shrink-0 place-items-center rounded-full text-sm font-semibold', i === 0 ? 'bg-[var(--site-gold)] text-[var(--site-ink)]' : cn('border', isDark(tone) ? 'border-white/25 text-[#CFC7B8]' : 'border-[rgba(26,22,18,0.2)] text-[#5E5648]'))}>{i + 1}</span>
                                     <span className="text-base font-semibold">{str(s.text)}</span>
                                 </li>
                             ))}
@@ -325,7 +333,7 @@ export function Join({ section, site, joined }: SectionProps) {
                     )}
                 </div>
                 {site.signup_enabled && joinUrl && (
-                    <div className={cn('flex min-w-0 flex-col gap-5 rounded-xl border p-6 sm:p-10', isDark(tone) ? 'border-white/20' : 'border-[rgba(22,19,15,0.18)]')}>
+                    <div className={cn('flex min-w-0 flex-col gap-5 rounded-[28px] p-6 sm:p-9', isDark(tone) ? 'bg-white/5 ring-1 ring-white/10' : 'bg-[#F8F5EF] ring-1 ring-[rgba(26,22,18,0.08)]')}>
                         {plans.length > 0 && (
                             <>
                                 <h3 className="m-0 text-[22px] font-bold">{t('اختاري باقتكِ')}</h3>
@@ -337,10 +345,10 @@ export function Join({ section, site, joined }: SectionProps) {
                                             role="radio"
                                             aria-checked={chosen === p.id}
                                             onClick={() => setChosen(p.id)}
-                                            className={cn('flex cursor-pointer items-center gap-3.5 rounded-xl border bg-white p-4 text-start text-[var(--site-ink)] sm:p-[18px]', chosen === p.id ? 'border-[var(--site-ink)]' : 'border-[rgba(22,19,15,0.15)] hover:border-[rgba(22,19,15,0.35)]')}
+                                            className={cn('flex cursor-pointer items-center gap-3.5 rounded-2xl border bg-white p-4 text-start text-[var(--site-ink)] sm:p-[18px]', chosen === p.id ? 'border-[var(--site-gold)] ring-1 ring-[var(--site-gold)]' : 'border-[rgba(22,19,15,0.12)] hover:border-[rgba(22,19,15,0.3)]')}
                                         >
                                             <span className="flex size-[18px] flex-none items-center justify-center rounded-full border border-[var(--site-ink)]">
-                                                <span className={cn('size-2 rounded-full', chosen === p.id ? 'bg-[var(--site-ink)]' : 'bg-transparent')} />
+                                                <span className={cn('size-2 rounded-full', chosen === p.id ? 'bg-[var(--site-gold)]' : 'bg-transparent')} />
                                             </span>
                                             <span className="min-w-0 flex-1 text-base font-semibold break-words">{p.name}</span>
                                             <span className="text-[15px] whitespace-nowrap text-[#4A443A]"><span dir="ltr" className="[unicode-bidi:isolate]">{priceText(p.price)}</span> {currencyLabel(currency)}</span>
@@ -349,7 +357,7 @@ export function Join({ section, site, joined }: SectionProps) {
                                 </div>
                             </>
                         )}
-                        <a href={target} className="inline-flex h-[52px] items-center justify-center rounded-xl bg-[var(--site-ink)] px-8 text-[15px] font-semibold text-white transition-colors hover:bg-[var(--site-accent)] sm:self-start">
+                        <a href={target} className="inline-flex h-[52px] items-center justify-center rounded-full bg-[var(--site-gold)] px-9 text-[15px] font-semibold text-[var(--site-ink)] transition-colors hover:bg-[#DDB85C] sm:self-start">
                             {str(d.button_label) || t('ابدئي التسجيل')}
                         </a>
                         <p className={cn('m-0 text-[13px]', metaText(tone))}>{t('تكملين بياناتكِ في صفحة التسجيل.')}</p>
@@ -387,7 +395,7 @@ export function Contact({ section, site, chrome, joined }: SectionProps) {
     if (hours.length > 0) info.push({ k: t('أوقات العمل'), v: hours.map((h) => `${h.days}: ${h.hours}`).join('\n') });
     if (social.length > 0) info.push({ k: t('تابعينا'), v: <span className="flex flex-wrap gap-x-4 gap-y-1">{social.map(([key, href]) => <a key={key} href={href} target="_blank" rel="noopener noreferrer" className="border-b border-current hover:text-[var(--site-accent)]">{SOCIAL[key] ? t(SOCIAL[key]) : key}</a>)}</span> });
 
-    const input = cn('h-[52px] w-full min-w-0 rounded-xl border bg-white px-3.5 text-base text-[var(--site-ink)] outline-none placeholder:text-[#9A9284] focus:border-[var(--site-ink)]', 'border-[rgba(22,19,15,0.2)]');
+    const input = cn('h-[52px] w-full min-w-0 rounded-2xl border bg-white px-3.5 text-base text-[var(--site-ink)] outline-none placeholder:text-[#9A9284] focus:border-[var(--site-ink)]', 'border-[rgba(22,19,15,0.2)]');
     const showForm = bool(d.show_form, true) && !!sendUrl;
 
     return (
@@ -396,22 +404,34 @@ export function Contact({ section, site, chrome, joined }: SectionProps) {
                 <div className="flex min-w-0 flex-col gap-9">
                     <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} tone={tone} />
                     {info.length > 0 && (
-                        <dl className="m-0 grid gap-x-10 gap-y-7 sm:grid-cols-2">
+                        <dl className="m-0 grid gap-x-8 gap-y-6 sm:grid-cols-2">
                             {info.map((it) => (
-                                <div key={it.k} className="flex min-w-0 flex-col gap-1">
-                                    <dt className={cn('text-sm', metaText(tone))}>{it.k}</dt>
+                                <div key={it.k} className={cn('flex min-w-0 flex-col gap-1 border-t pt-4', hairline(tone))}>
+                                    <dt className={cn('text-sm font-semibold', isDark(tone) ? 'text-[#E2C27A]' : 'text-[var(--site-accent)]')}>{it.k}</dt>
                                     <dd className="m-0 text-base whitespace-pre-line break-words">{it.v}</dd>
                                 </div>
                             ))}
                         </dl>
                     )}
                     {bool(d.show_map, true) && site.map_url && (
-                        <a href={site.map_url} target="_blank" rel="noopener noreferrer" className={cn('inline-flex h-[52px] items-center justify-center self-start rounded-xl border px-7 text-[15px] font-semibold transition-colors', isDark(tone) ? 'border-white hover:bg-white hover:text-[var(--site-ink)]' : 'border-[var(--site-ink)] hover:bg-[var(--site-ink)] hover:text-white')}>
+                        <a href={site.map_url} target="_blank" rel="noopener noreferrer" className={cn('inline-flex h-[52px] items-center justify-center self-start rounded-full border px-7 text-[15px] font-semibold transition-colors', isDark(tone) ? 'border-white/35 hover:bg-white/10' : 'border-[rgba(26,22,18,0.2)] hover:border-[var(--site-ink)]')}>
                             {t('الموقع على الخريطة')}
                         </a>
                     )}
                 </div>
-                {showForm && (
+                {(showForm || site.whatsapp_number) && (
+                    <div className={cn(siteCard(tone), 'flex min-w-0 flex-col gap-6 self-start p-6 sm:p-9')}>
+                        {site.whatsapp_number && (
+                            <div className="flex flex-col gap-3">
+                                <h3 className="m-0 text-[22px] font-bold">{t('تواصلي معنا مباشرة')}</h3>
+                                <a href={whatsappUrl(site.whatsapp_number)} target="_blank" rel="noopener noreferrer" className="inline-flex h-[52px] items-center justify-center gap-2 rounded-full bg-[#25D366] px-7 text-[15px] font-semibold text-white transition-colors hover:bg-[#1FB959]">
+                                    {t('تواصلي عبر واتساب')}
+                                </a>
+                                <span dir="ltr" className={cn('text-center text-sm [unicode-bidi:isolate]', metaText(tone))}>{fmtPhone(site.whatsapp_number)}</span>
+                            </div>
+                        )}
+                        {showForm && site.whatsapp_number && <div className={cn('border-t', hairline(tone))} />}
+                        {showForm && (
                     <div className="flex min-w-0 flex-col gap-4">
                         {sent ? (
                             <div className="flex flex-col gap-2 py-6">
@@ -440,11 +460,13 @@ export function Contact({ section, site, chrome, joined }: SectionProps) {
                                 </label>
                                 {/* Honeypot: people never see it; bots fill it and the server refuses the message. */}
                                 <input type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden className="hidden" value={form.data.website} onChange={(e) => form.setData('website', e.target.value)} />
-                                <button type="submit" disabled={form.processing || preview} className="inline-flex h-[52px] cursor-pointer items-center justify-center self-start rounded-xl bg-[var(--site-ink)] px-8 text-[15px] font-semibold text-white transition-colors hover:bg-[var(--site-accent)] disabled:cursor-not-allowed disabled:opacity-60">
+                                <button type="submit" disabled={form.processing || preview} className="inline-flex h-[52px] cursor-pointer items-center justify-center self-start rounded-full bg-[var(--site-ink)] px-9 text-[15px] font-semibold text-white transition-colors hover:bg-[var(--site-gold)] hover:text-[var(--site-ink)] disabled:cursor-not-allowed disabled:opacity-60">
                                     {form.processing ? t('جارٍ الإرسال…') : t('إرسال')}
                                 </button>
                                 {preview && <p className={cn('m-0 text-[13px]', metaText(tone))}>{t('الإرسال معطّل في المعاينة.')}</p>}
                             </form>
+                        )}
+                    </div>
                         )}
                     </div>
                 )}
