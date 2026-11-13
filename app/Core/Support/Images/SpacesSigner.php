@@ -5,7 +5,7 @@ namespace App\Core\Support\Images;
 /**
  * Short-lived signed addresses for one object in a DigitalOcean Spaces bucket (S3's Signature Version 4, query
  * string form), so a browser can put a file there and the server can read or remove it, without an SDK and without
- * the secret ever leaving the server. Checked against AWS's published example in DirectUploadTest.
+ * the secret ever leaving the server. Checked against AWS's published example in SpacesOriginalsTest.
  */
 final class SpacesSigner
 {
@@ -21,14 +21,17 @@ final class SpacesSigner
     /**
      * @param  array<string, string>  $headers  headers the request must carry exactly (e.g. content-type)
      * @param  array<string, string>  $query  more query parameters, signed too (e.g. response-content-disposition)
-     * @param  string  $payload  the body's SHA-256 in hex when the store must check it (x-amz-content-sha256)
+     * @param  string  $payload  the body's SHA-256 in hex when sent as x-amz-content-sha256 (a store may or may not
+     *                           check it on a signed address; Content-MD5 and the ETag are what the app relies on)
      */
     public function presign(string $method, string $objectKey, int $ttl, array $headers = [], ?int $now = null, array $query = [], string $payload = 'UNSIGNED-PAYLOAD'): string
     {
         $now ??= time();
         $date = gmdate('Ymd', $now);
         $time = gmdate('Ymd\THis\Z', $now);
-        $host = $this->bucket.'.'.(parse_url($this->endpoint, PHP_URL_HOST) ?: $this->endpoint);
+        // The endpoint's port stays in the address and in the signed host (a test server on this computer has one).
+        $port = parse_url($this->endpoint, PHP_URL_PORT);
+        $host = $this->bucket.'.'.(parse_url($this->endpoint, PHP_URL_HOST) ?: $this->endpoint).($port ? ':'.$port : '');
         $scheme = parse_url($this->endpoint, PHP_URL_SCHEME) ?: 'https';
         $path = '/'.implode('/', array_map(rawurlencode(...), explode('/', ltrim($objectKey, '/'))));
         $scope = $date.'/'.$this->region.'/'.$this->service.'/aws4_request';

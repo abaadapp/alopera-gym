@@ -18,23 +18,31 @@ use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
 
 /**
- * Originals kept in a Spaces bucket (MEDIA_ORIGINALS=spaces, off by default). The bucket is simulated here the way
- * Spaces behaves for these requests — it refuses a body whose SHA-256 is not the signed one — and every request the
- * app makes is recorded: the original is checked from its size, its recorded hash and its first 256 KB, copied inside
- * the bucket and never fetched whole; a failure at any step keeps nothing new and loses nothing old.
+ * Originals kept in a Spaces bucket (MEDIA_ORIGINALS=spaces, off by default). The bucket is simulated the way a Ceph
+ * gateway (what Spaces runs) may behave on a signed address, the weaker case: it does NOT check the signed
+ * x-amz-content-sha256, it does refuse a body that does not match Content-MD5, and its ETag is the MD5 it computed from
+ * what it stored; it may also keep SHA-256 checksums ($checksums). Every request the app makes is recorded: the original
+ * is checked from what the bucket says of it and its first 256 KB, copied inside the bucket and never fetched whole; a
+ * failure at any step, a lost connection included, keeps nothing new and loses nothing old.
  */
 class SpacesOriginalsTest extends TestCase
 {
     use BuildsClubs, RefreshDatabase;
 
-    /** @var array<string, array{body: string, sha256: string}> */
+    /** @var array<string, array{body: string, sha256: string, checksum: ?string}> */
     private array $bucket = [];
 
     /** @var list<array{method: string, key: string, range: ?string}> */
     private array $requests = [];
 
-    /** Names a request kind that the simulated bucket answers with a failure (e.g. 'PUT-copy'). */
+    /** Names a request kind that the simulated bucket fails (e.g. 'PUT-copy'); with '!' the connection is lost instead. */
     private ?string $failing = null;
+
+    /** Whether the bucket checks Content-MD5 (a bucket that checks nothing is still caught by its ETag). */
+    private bool $checksMd5 = true;
+
+    /** Whether the bucket keeps and checks SHA-256 checksums (x-amz-checksum-sha256) and reports them on HEAD. */
+    private bool $checksums = false;
 
     protected function setUp(): void
     {
@@ -58,15 +66,16 @@ class SpacesOriginalsTest extends TestCase
         $copy = $r->header('x-amz-copy-source')[0] ?? null;
         $kind = $r->method().($copy ? '-copy' : '');
         $this->requests[] = ['method' => $kind, 'key' => $key, 'range' => $r->header('Range')[0] ?? null];
+        if ($this->failing === $kind.'!') {
+            return (Http::failedConnection())($r);
+        }
         if ($this->failing === $kind) {
             return Http::response('', 503);
         }
 
         return match ($r->method()) {
             'PUT' => $copy ? $this->copyObject(ltrim(substr($copy, strlen('/alopera-originals')), '/'), $key) : $this->putObject($r, $key),
-            'HEAD' => isset($this->bucket[$key])
-                ? Http::response('', 200, ['Content-Length' => (string) strlen($this->bucket[$key]['body']), 'x-amz-meta-sha256' => $this->bucket[$key]['sha256']])
-                : Http::response('', 404),
+            'HEAD' => $this->headObject($r, $key),
             'GET' => $this->getObject($r, $key),
             'DELETE' => tap(Http::response('', 204), function () use ($key) {
                 unset($this->bucket[$key]);
@@ -77,12 +86,31 @@ class SpacesOriginalsTest extends TestCase
     private function putObject(ClientRequest $r, string $key)
     {
         $body = $r->body();
-        if (hash('sha256', $body) !== ($r->header('x-amz-content-sha256')[0] ?? '')) {
-            return Http::response('<Code>XAmzContentSHA256Mismatch</Code>', 400);
+        $md5 = $r->header('Content-MD5')[0] ?? null;
+        if ($this->checksMd5 && $md5 !== null && $md5 !== base64_encode(md5($body, true))) {
+            return Http::response('<Code>BadDigest</Code>', 400);
         }
-        $this->bucket[$key] = ['body' => $body, 'sha256' => $r->header('x-amz-meta-sha256')[0] ?? ''];
+        $checksum = $r->header('x-amz-checksum-sha256')[0] ?? null;
+        if ($this->checksums && $checksum !== null && $checksum !== base64_encode(hash('sha256', $body, true))) {
+            return Http::response('<Code>BadDigest</Code>', 400);
+        }
+        $this->bucket[$key] = ['body' => $body, 'sha256' => $r->header('x-amz-meta-sha256')[0] ?? '', 'checksum' => $this->checksums ? hash('sha256', $body) : null];
 
         return Http::response('', 200);
+    }
+
+    private function headObject(ClientRequest $r, string $key)
+    {
+        if (! isset($this->bucket[$key])) {
+            return Http::response('', 404);
+        }
+        $object = $this->bucket[$key];
+        $headers = ['Content-Length' => (string) strlen($object['body']), 'ETag' => '"'.md5($object['body']).'"', 'x-amz-meta-sha256' => $object['sha256']];
+        if ($object['checksum'] !== null && ($r->header('x-amz-checksum-mode')[0] ?? '') === 'ENABLED') {
+            $headers['x-amz-checksum-sha256'] = base64_encode((string) hex2bin($object['checksum']));
+        }
+
+        return Http::response('', 200, $headers);
     }
 
     private function copyObject(string $from, string $to)
@@ -108,11 +136,16 @@ class SpacesOriginalsTest extends TestCase
         return Http::response($this->bucket[$key]['body'], 200);
     }
 
+    /** @return array{name: string, type: string, size: int, sha256: string, md5: string} */
+    private function describe(string $bytes, string $name = 'a.jpg', string $type = 'image/jpeg'): array
+    {
+        return ['name' => $name, 'type' => $type, 'size' => strlen($bytes), 'sha256' => hash('sha256', $bytes), 'md5' => md5($bytes)];
+    }
+
     /** What the browser does: ask for a ticket, then put the file to the signed address with the signed headers. */
     private function browserPuts(string $route, string $bytes, string $name, string $type): string
     {
-        $ticket = $this->postJson(route($route), ['name' => $name, 'type' => $type, 'size' => strlen($bytes), 'sha256' => hash('sha256', $bytes)])
-            ->assertOk()->json();
+        $ticket = $this->postJson(route($route), $this->describe($bytes, $name, $type))->assertOk()->json();
         Http::withHeaders($ticket['headers'])->withBody($bytes, $type)->put($ticket['url'])->throw();
 
         return $ticket['ticket'];
@@ -142,7 +175,7 @@ class SpacesOriginalsTest extends TestCase
         Http::fake();
 
         $this->assertFalse(SpacesOriginals::enabled());
-        $this->actingAs($this->owner($club))->postJson(route('club.members.uploads'), ['name' => 'a.jpg', 'size' => 10, 'sha256' => str_repeat('a', 64)])->assertNotFound();
+        $this->actingAs($this->owner($club))->postJson(route('club.members.uploads'), $this->describe('x'))->assertNotFound();
         $this->post(route('club.members.store'), ['full_name' => 'Noor', 'phone' => '96891112233', 'photo' => UploadedFile::fake()->image('p.jpg', 300, 200)])->assertSessionHasNoErrors();
 
         Http::assertNothingSent();
@@ -160,26 +193,86 @@ class SpacesOriginalsTest extends TestCase
         $this->assertFalse(SpacesOriginals::enabled());
     }
 
-    public function test_the_signed_upload_carries_the_files_hash_so_the_bucket_refuses_other_bytes(): void
+    public function test_the_signed_upload_carries_the_files_hashes_so_the_bucket_refuses_other_bytes(): void
     {
         $this->enable();
         $club = $this->club();
         $bytes = $this->jpeg(400, 300);
 
         $ticket = $this->actingAs($this->owner($club))
-            ->postJson(route('club.members.uploads'), ['name' => 'IMG_0001.JPG', 'type' => 'image/jpeg', 'size' => strlen($bytes), 'sha256' => hash('sha256', $bytes)])
+            ->postJson(route('club.members.uploads'), $this->describe($bytes, 'IMG_0001.JPG'))
             ->assertOk()->json();
 
         $this->assertMatchesRegularExpression('#^https://alopera-originals\.fra1\.digitaloceanspaces\.com/incoming/'.$club->id.'/[0-9a-f-]{36}\.jpg\?#', $ticket['url']);
-        $this->assertStringContainsString('X-Amz-SignedHeaders=content-type%3Bhost%3Bx-amz-content-sha256%3Bx-amz-meta-sha256', $ticket['url']);
+        $this->assertStringContainsString('X-Amz-SignedHeaders=content-md5%3Bcontent-type%3Bhost%3Bx-amz-checksum-sha256%3Bx-amz-content-sha256%3Bx-amz-meta-sha256', $ticket['url']);
+        $this->assertSame(base64_encode(md5($bytes, true)), $ticket['headers']['Content-MD5']);
+        $this->assertSame(base64_encode(hash('sha256', $bytes, true)), $ticket['headers']['x-amz-checksum-sha256']);
         $this->assertSame(hash('sha256', $bytes), $ticket['headers']['x-amz-content-sha256']);
         $this->assertStringNotContainsString('example-secret', $ticket['url'].$ticket['ticket']);
         $this->assertFalse(Http::withHeaders($ticket['headers'])->withBody($bytes.'x', 'image/jpeg')->put($ticket['url'])->successful(), 'other bytes are refused');
         $this->assertTrue(Http::withHeaders($ticket['headers'])->withBody($bytes, 'image/jpeg')->put($ticket['url'])->successful());
 
-        $this->postJson(route('club.members.uploads'), ['name' => 'run.php', 'size' => 10, 'sha256' => str_repeat('a', 64)])->assertStatus(422);
-        $this->postJson(route('club.members.uploads'), ['name' => 'a.jpg', 'size' => 99_999_999, 'sha256' => str_repeat('a', 64)])->assertStatus(422);
-        $this->actingAs($this->staff($club, 'trainer'))->postJson(route('club.members.uploads'), ['name' => 'a.jpg', 'size' => 10, 'sha256' => str_repeat('a', 64)])->assertForbidden();
+        $this->postJson(route('club.members.uploads'), ['name' => 'run.php'] + $this->describe('x'))->assertStatus(422);
+        $this->postJson(route('club.members.uploads'), ['size' => 99_999_999] + $this->describe('x'))->assertStatus(422);
+        $this->postJson(route('club.members.uploads'), ['md5' => 'not-a-hash'] + $this->describe('x'))->assertStatus(422);
+        $this->actingAs($this->staff($club, 'trainer'))->postJson(route('club.members.uploads'), $this->describe('x'))->assertForbidden();
+    }
+
+    public function test_the_app_compares_what_the_bucket_computed_from_the_stored_bytes_not_the_browsers_word(): void
+    {
+        $this->enable();
+        $this->checksMd5 = false; // the worst bucket: it checks no signed hash at all
+        $club = $this->club();
+        $this->actingAs($this->owner($club));
+        $claimed = $this->jpeg(300, 200);
+        $sent = $this->jpeg(310, 200);
+        $form = fn (string $ticket) => ['full_name' => 'Noor', 'phone' => '96891112233', 'photo_direct' => $ticket, 'photo_preview' => UploadedFile::fake()->image('v.jpg', 300, 200)];
+
+        // The ticket names one file, other bytes are put: the bucket's own MD5 of what it stored gives them away.
+        $ticket = $this->postJson(route('club.members.uploads'), $this->describe($claimed))->assertOk()->json();
+        Http::withHeaders($ticket['headers'])->withBody($sent, 'image/jpeg')->put($ticket['url'])->throw();
+        $this->post(route('club.members.store'), $form($ticket['ticket']))->assertSessionHasErrors('photo');
+        $this->assertSame(0, $this->asTenant($club, fn () => Member::count()));
+        $this->assertSame([], array_values(array_filter(array_keys($this->bucket), fn ($k) => str_starts_with($k, 'tenants/'))), 'nothing kept');
+
+        // A bucket that keeps SHA-256 checksums: a SHA-256 that is not the stored bytes' is refused too.
+        $this->checksMd5 = true;
+        $this->checksums = true;
+        $ticket = $this->postJson(route('club.members.uploads'), ['sha256' => hash('sha256', 'something else')] + $this->describe($claimed))->assertOk()->json();
+        $this->assertFalse(Http::withHeaders($ticket['headers'])->withBody($claimed, 'image/jpeg')->put($ticket['url'])->successful(), 'the bucket refuses it');
+
+        // And the true file goes through, its checksum reported and matched.
+        $this->post(route('club.members.store'), $form($this->browserPuts('club.members.uploads', $claimed, 'a.jpg', 'image/jpeg')))->assertSessionHasNoErrors();
+        $original = ImageStore::parse($this->asTenant($club, fn () => Member::firstOrFail()->photo_path))['original'];
+        $this->assertSame(hash('sha256', $claimed), $this->bucket[$original]['checksum']);
+    }
+
+    public function test_a_lost_connection_to_the_bucket_keeps_everything_says_so_and_the_same_ticket_works_after(): void
+    {
+        $this->enable();
+        $club = $this->club();
+        $this->actingAs($this->owner($club));
+        $form = fn (string $t) => ['full_name' => 'Noor', 'phone' => '96891112233', 'photo_direct' => $t, 'photo_preview' => UploadedFile::fake()->image('v.jpg', 400, 300)];
+        $this->post(route('club.members.store'), $form($this->browserPuts('club.members.uploads', $this->jpeg(400, 300), 'a.jpg', 'image/jpeg')))->assertSessionHasNoErrors();
+        $member = $this->asTenant($club, fn () => Member::firstOrFail());
+        $old = $member->photo_path;
+
+        foreach (['HEAD!', 'GET!', 'PUT-copy!'] as $lost) {
+            $ticket = $this->browserPuts('club.members.uploads', $this->jpeg(400, 300), 'b.jpg', 'image/jpeg');
+            $this->failing = $lost;
+            $this->put(route('club.members.update', $member), $form($ticket))->assertSessionHasErrors('photo');
+            $this->failing = null;
+
+            $this->assertSame(SpacesOriginals::UNREACHABLE, session('errors')->first('photo'), "lost at $lost");
+            $this->assertSame($old, $this->asTenant($club, fn () => $member->fresh()->photo_path));
+            Storage::disk('public')->assertExists($old);
+            $this->assertArrayHasKey(ImageStore::parse($old)['original'], $this->bucket);
+
+            // Back online: the same ticket, still in the form, saves it.
+            $this->put(route('club.members.update', $member), $form($ticket))->assertSessionHasNoErrors();
+            $old = $this->asTenant($club, fn () => $member->fresh()->photo_path);
+        }
+        $this->assertCount(1, array_filter(array_keys($this->bucket), fn ($k) => str_starts_with($k, 'tenants/')), 'one original: the current one');
     }
 
     public function test_a_direct_upload_is_kept_without_the_app_reading_it_whole(): void
@@ -254,7 +347,7 @@ class SpacesOriginalsTest extends TestCase
         $club = $this->club();
         $this->actingAs($this->owner($club));
         $bytes = $this->jpeg(300, 200);
-        $ticket = $this->postJson(route('club.members.uploads'), ['name' => 'a.jpg', 'type' => 'image/jpeg', 'size' => strlen($bytes), 'sha256' => hash('sha256', $bytes)])->json('ticket');
+        $ticket = $this->postJson(route('club.members.uploads'), $this->describe($bytes))->json('ticket');
 
         $this->post(route('club.members.store'), ['full_name' => 'Noor', 'phone' => '96891112233', 'photo_direct' => $ticket, 'photo_preview' => UploadedFile::fake()->image('v.jpg', 300, 200)])
             ->assertSessionHasErrors('photo');

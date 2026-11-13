@@ -1,4 +1,5 @@
 import { xsrf } from '@/lib/http';
+import { md5Hex } from '@/lib/md5';
 
 /**
  * Before an image is sent, the browser may make a light "display source" for it (sent beside the original as
@@ -101,10 +102,19 @@ export function localPreview(file: File, source: File | null): string {
     return URL.createObjectURL(source ?? file);
 }
 
-/** The file's SHA-256 in hex: the bucket refuses an upload whose bytes do not match it. */
+/** The file's SHA-256 in hex. */
 export async function sha256Hex(file: File): Promise<string> {
-    const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    return (await fingerprints(file)).sha256;
+}
+
+/**
+ * The file's SHA-256 and MD5 in hex, from one read. The signed address carries both, so the bucket refuses other bytes;
+ * the server then compares the MD5 the bucket computed itself from what it stored (its ETag).
+ */
+export async function fingerprints(file: File): Promise<{ sha256: string; md5: string }> {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+    return { sha256: [...digest].map((b) => b.toString(16).padStart(2, '0')).join(''), md5: md5Hex(bytes) };
 }
 
 /**
@@ -116,7 +126,7 @@ export async function uploadOriginal(file: File, ticketUrl: string): Promise<str
         method: 'POST',
         credentials: 'same-origin',
         headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-XSRF-TOKEN': xsrf() },
-        body: JSON.stringify({ name: file.name, type: file.type, size: file.size, sha256: await sha256Hex(file) }),
+        body: JSON.stringify({ name: file.name, type: file.type, size: file.size, ...(await fingerprints(file)) }),
     });
     if (!response.ok) throw new Error('ticket');
     const ticket = (await response.json()) as { url: string; headers: Record<string, string>; ticket: string };

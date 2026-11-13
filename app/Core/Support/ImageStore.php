@@ -212,10 +212,11 @@ final class ImageStore
         $ticket = null;
         try {
             if ($upload->ticket !== null) {
-                // Put in the bucket by the browser: only its size, its recorded hash and its first 256 KB are read.
+                // Put in the bucket by the browser: only what the bucket says of it and its first 256 KB are read.
+                // The MD5 compared is the one the bucket computed from the bytes it stored, not the browser's word.
                 $ticket = SpacesOriginals::open($upload->ticket, $folder, $upload->field);
                 $object = SpacesOriginals::head($ticket['k']);
-                if (! $object || $object['size'] !== (int) $ticket['n'] || $object['sha256'] !== $ticket['s']) {
+                if (! SpacesOriginals::matches($object, (int) $ticket['n'], $ticket['s'], $ticket['m'])) {
                     throw new ImageRejected('لم يكتمل رفع الصورة. ارفعها مرة أخرى.');
                 }
                 $head = (string) tempnam(sys_get_temp_dir(), 'head-');
@@ -249,7 +250,7 @@ final class ImageStore
     }
 
     /**
-     * @param  array{k: string, s: string, n: int, f: string, o: string}|null  $ticket
+     * @param  array{k: string, s: string, m: string, n: int, f: string, o: string}|null  $ticket
      * @return array{path: string, width: int, height: int, mime: string, size: int}
      *
      * @throws ImageRejected
@@ -264,11 +265,10 @@ final class ImageStore
         try {
             $original = 'tenants/'.$tenantId.'/originals/'.$folder.'/'.$name;
             if ($remote) {
-                $sha256 = $ticket['s'] ?? hash_file('sha256', (string) $source);
-                $ok = $ticket ? SpacesOriginals::copy($ticket['k'], $original) : SpacesOriginals::put($original, (string) $source, $sha256, $facts->mime);
+                [$sha256, $md5] = $ticket ? [$ticket['s'], $ticket['m']] : SpacesOriginals::fileHashes((string) $source);
                 $written[] = ['spaces', $original];
-                $kept = $ok ? SpacesOriginals::head($original) : null;
-                if (! $kept || $kept['size'] !== $facts->bytes || $kept['sha256'] !== $sha256) {
+                $ok = $ticket ? SpacesOriginals::copy($ticket['k'], $original) : SpacesOriginals::put($original, (string) $source, $sha256, $md5, $facts->mime);
+                if (! $ok || ! SpacesOriginals::matches(SpacesOriginals::head($original), $facts->bytes, $sha256, $md5)) {
                     throw new ImageRejected('تعذر حفظ الصورة الأصلية كما هي، فلم يُحفظ شيء. حاول مرة أخرى.');
                 }
             } else {

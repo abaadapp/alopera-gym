@@ -22,8 +22,9 @@ class ImageTicketController extends Controller
             'type' => ['nullable', 'string', 'max:100'],
             'size' => ['required', 'integer', 'min:1', 'max:'.config('gym.max_image_kb') * 1024],
             'sha256' => ['required', 'string', 'regex:/^[0-9a-f]{64}$/'],
+            'md5' => ['required', 'string', 'regex:/^[0-9a-f]{32}$/'],
         ]);
 
-        return response()->json(SpacesOriginals::ticket($folder, $data['name'], (string) ($data['type'] ?? ''), (int) $data['size'], $data['sha256']));
+        return response()->json(SpacesOriginals::ticket($folder, $data['name'], (string) ($data['type'] ?? ''), (int) $data['size'], $data['sha256'], $data['md5']));
     }
 }
