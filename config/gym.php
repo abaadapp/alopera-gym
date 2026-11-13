@@ -19,5 +19,7 @@ return [
 
     // Upload limits (kilobytes)
     'max_document_kb' => 10240,
-    'max_image_kb' => 4096,
+    // One image, as uploaded. Raising it needs the server to accept as much first: PHP upload_max_filesize and
+    // post_max_size, and nginx client_max_body_size (deploy/nginx, 20m today) — see docs/MEDIA.md.
+    'max_image_kb' => (int) env('GYM_MAX_IMAGE_KB', 4096),
 ];

@@ -8,6 +8,10 @@
  * Nothing here is switched on by default beyond the local disks; Spaces, the CDN and direct upload stay off until set.
  */
 return [
+    // Whether the original is kept beside the display copy. Each original kept locally is also in every daily club
+    // archive (14 are kept): see docs/MEDIA.md before deciding. Off: only the display copy and the thumbnail are kept.
+    'keep_originals' => (bool) env('MEDIA_KEEP_ORIGINALS', true),
+
     // Where originals are kept. 'local' is storage/app/private, inside the club's folder that club archives collect.
     'originals_disk' => env('MEDIA_ORIGINALS_DISK', 'local'),
 
@@ -15,8 +19,14 @@ return [
     'cdn_url' => env('MEDIA_CDN_URL'),
 
     // Hard limits checked from the file's header, before any image library opens it.
+    // A 48MP phone photo is 8064×6048 (48.8 million pixels): MEDIA_MAX_PIXELS=50000000 lets it in. The server still
+    // decodes only what its memory allows; anything larger is shown from the browser's display source.
     'max_side' => 20_000,
-    'max_pixels' => 40_000_000,
+    'max_pixels' => (int) env('MEDIA_MAX_PIXELS', 40_000_000),
+
+    // The most one request may carry (nginx client_max_body_size, 20m today): the website library sends images in
+    // batches under it, and the product form says so before sending.
+    'max_request_kb' => (int) env('MEDIA_MAX_REQUEST_KB', 20_480),
 
     // The thumbnail's longest side, in pixels.
     'thumb_side' => 360,

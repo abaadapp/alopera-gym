@@ -4,12 +4,12 @@ import { Check, Download, History, ImagePlus, Plus, Puzzle, Scale, Star, Trash2,
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, EnglishFields, Field, Input, PageHeader, Select, Switch, Tabs, Textarea, BackLink } from '@/Components/ui';
 import { AdjustModal, MovementsModal } from '@/Components/Products/Stock';
-import { useCan, useCurrency } from '@/hooks/useShared';
+import { useCan, useCurrency, useShared } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
 import type { Option } from '@/types';
 import type { ProductRow } from './Index';
-import { IMAGE_ACCEPT, pickImage } from '@/lib/image-prep';
+import { IMAGE_ACCEPT, pickImage, sizeProblem } from '@/lib/image-prep';
 
 interface Addon {
     id: number;
@@ -99,9 +99,17 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
         }
     };
 
+    const { media } = useShared();
     const addPhotos = (files: FileList | null) => {
         if (!files) return;
         const added = Array.from(files).slice(0, Math.max(0, maxPhotos - existing.length - form.data.photos.length));
+        // Said here, before sending: the server refuses a request larger than it accepts without reading any of it.
+        const problem = sizeProblem(added, media, form.data.photos.reduce((sum, f) => sum + f.size, 0));
+        if (problem) {
+            form.setError('photos', problem);
+            return;
+        }
+        form.clearErrors('photos');
         form.setData((d) => ({ ...d, photos: [...d.photos, ...added], photos_preview: [...d.photos_preview, ...added.map(() => null)] }));
         // The browser's display source for a HEIC or a very large photo, added when ready, beside its own file.
         added.forEach((file) => pickImage(file, (f, source) => source && form.setData((d) => {

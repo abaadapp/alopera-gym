@@ -17,13 +17,14 @@ final class ImageRule implements ValidationRule
     /** @return list<mixed> */
     public static function rules(bool $required = false): array
     {
-        return [$required ? 'required' : 'nullable', 'file', 'max:'.config('gym.max_image_kb'), new self];
+        // This rule first: its message says why (too large for the server, not an image…), before the generic ones.
+        return [$required ? 'required' : 'nullable', new self, 'file', 'max:'.config('gym.max_image_kb')];
     }
 
     /** @return list<mixed> */
     public static function previewRules(): array
     {
-        return ['nullable', 'file', 'max:'.config('media.preview_max_kb'), new self(preview: true)];
+        return ['nullable', new self(preview: true), 'file', 'max:'.config('media.preview_max_kb')];
     }
 
     public function validate(string $attribute, mixed $value, Closure $fail): void

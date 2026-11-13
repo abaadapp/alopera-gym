@@ -1,4 +1,4 @@
-import { displaySource } from '@/lib/image-prep';
+import { batches, displaySource } from '@/lib/image-prep';
 import { xsrf } from '@/lib/http';
 import type { MediaItem } from '@/types/site';
 
@@ -45,19 +45,27 @@ async function putDirect(file: File): Promise<string> {
     return ticket.key;
 }
 
-export async function uploadMedia(files: File[], direct = false): Promise<MediaItem[]> {
-    const form = new FormData();
-    // Each original as it is (or its key in the bucket), and beside it, at the same index, the browser's display
-    // source for a HEIC or a very large photo.
+/**
+ * Sends the images in as many requests as needed, each under what the server accepts at once (`maxRequestKb`): each
+ * original as it is (or only its key, after a direct upload), and beside it, at the same index, the browser's display
+ * source for a HEIC or a very large photo.
+ */
+export async function uploadMedia(files: File[], direct = false, maxRequestKb = 20_480): Promise<MediaItem[]> {
     const sources = await Promise.all(files.map((f) => displaySource(f).catch(() => null)));
-    for (const [i, f] of files.entries()) {
-        if (direct) form.append(`images_direct[${i}]`, await putDirect(f));
-        else form.append(`images[${i}]`, f);
-        const source = sources[i];
-        if (source) form.append(`images_preview[${i}]`, source);
+    const items = files.map((file, i) => ({ file, source: sources[i] }));
+    const weight = (item: { file: File; source: File | null }) => (direct ? 0 : item.file.size) + (item.source?.size ?? 0) + 4096;
+    const added: MediaItem[] = [];
+    for (const group of batches(items, weight, maxRequestKb * 1024 * 0.95, 12)) {
+        const form = new FormData();
+        for (const [i, { file, source }] of group.entries()) {
+            if (direct) form.append(`images_direct[${i}]`, await putDirect(file));
+            else form.append(`images[${i}]`, file);
+            if (source) form.append(`images_preview[${i}]`, source);
+        }
+        const response = await fetch(route('club.website.media.store'), { method: 'POST', credentials: 'same-origin', headers: headers(), body: form });
+        added.push(...(await read<{ media: MediaItem[] }>(response)).media);
     }
-    const response = await fetch(route('club.website.media.store'), { method: 'POST', credentials: 'same-origin', headers: headers(), body: form });
-    return (await read<{ media: MediaItem[] }>(response)).media;
+    return added;
 }
 
 export async function updateMedia(id: number, data: { alt: string; title: string }): Promise<MediaItem> {

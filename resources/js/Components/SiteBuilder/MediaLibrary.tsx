@@ -31,7 +31,7 @@ export default function MediaLibrary({ onSelect, selectedId }: { onSelect?: (ite
         setBusy(true);
         setError(null);
         try {
-            const added = await uploadMedia(files, limits.direct === true);
+            const added = await uploadMedia(files, limits.direct === true, limits.max_request_kb);
             setMedia((current) => [...added, ...current.filter((m) => !added.some((a) => a.id === m.id))]);
             if (onSelect && added.length === 1) onSelect(added[0]);
         } catch (e) {

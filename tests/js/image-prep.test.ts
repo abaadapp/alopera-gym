@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { acceptedTypes, checkFiles } from '@/Components/SiteBuilder/media-api';
-import { fitWithin, IMAGE_ACCEPT, isHeif, needsDisplaySource, PREVIEW_MAX_SIDE } from '@/lib/image-prep';
+import { batches, fitWithin, IMAGE_ACCEPT, isHeif, needsDisplaySource, PREVIEW_MAX_SIDE, sizeProblem } from '@/lib/image-prep';
 
 const file = (name: string, type: string, size = 10) => new File([new Uint8Array(size)], name, { type });
 
@@ -44,5 +44,28 @@ describe('the website library checks a file before sending it', () => {
     it('refuses what is not an image, by its type', () => {
         expect(checkFiles([file('notes.pdf', 'application/pdf')], limits)).toContain('notes.pdf');
         expect(checkFiles([file('script', '')], limits)).toContain('script');
+    });
+});
+
+describe('sizes are checked before sending', () => {
+    const limits = { max_image_kb: 4096, max_request_kb: 20_480 };
+    const sized = (name: string, mb: number) => file(name, 'image/jpeg', Math.round(mb * 1024 * 1024));
+
+    it('names a photo over the limit for one image', () => {
+        expect(sizeProblem([sized('ok.jpg', 3), sized('big.jpg', 5)], limits)).toContain('big.jpg');
+        expect(sizeProblem([sized('ok.jpg', 3)], limits)).toBeNull();
+        expect(sizeProblem([sized('big.jpg', 5)], undefined)).toBeNull();
+    });
+
+    it('says when the photos together are more than one save takes, counting those already chosen', () => {
+        expect(sizeProblem([sized('a.jpg', 4), sized('b.jpg', 4)], limits, 15 * 1024 * 1024)).toContain('احفظ بعضها');
+        expect(sizeProblem([sized('a.jpg', 4)], limits, 10 * 1024 * 1024)).toBeNull();
+    });
+
+    it('splits uploads into requests under the size and count limits, in order', () => {
+        const groups = batches([5, 5, 5, 12, 1, 1], (n) => n, 12, 3);
+        expect(groups).toEqual([[5, 5], [5], [12], [1, 1]]);
+        expect(batches(Array.from({ length: 14 }, () => 1), (n) => n, 100, 12).map((g) => g.length)).toEqual([12, 2]);
+        expect(batches([30], (n) => n, 12, 3)).toEqual([[30]]);
     });
 });

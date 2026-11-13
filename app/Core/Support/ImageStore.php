@@ -128,10 +128,17 @@ final class ImageStore
         return self::url($parts['thumb'] ?? $path);
     }
 
-    /** Whether the image was stored with its original kept (older uploads were not). */
+    /** Whether the image was stored with its original kept (older uploads were not, nor any while it is off). */
     public static function hasOriginal(?string $path): bool
     {
-        return $path !== null && self::parse($path) !== null;
+        $parts = $path !== null ? self::parse($path) : null;
+
+        return $parts !== null && Storage::disk(self::originalsDisk())->exists($parts['original']);
+    }
+
+    public static function keepsOriginals(): bool
+    {
+        return (bool) config('media.keep_originals', true);
     }
 
     /**
@@ -142,9 +149,10 @@ final class ImageStore
     {
         $tenantId = app(TenantContext::class)->require()->id;
         abort_unless($path && str_starts_with($path, 'tenants/'.$tenantId.'/'), 404);
+        // The original when it was kept; otherwise the stored display copy is the best there is.
         $parts = self::parse($path);
-        $disk = $parts ? self::originalsDisk() : 'public';
-        $file = $parts['original'] ?? $path;
+        [$disk, $file] = $parts && Storage::disk(self::originalsDisk())->exists($parts['original'])
+            ? [self::originalsDisk(), $parts['original']] : ['public', $path];
         abort_unless(Storage::disk($disk)->exists($file), 404);
         $ext = pathinfo($file, PATHINFO_EXTENSION);
         $mime = collect(ImageInspector::TYPES)->firstWhere(1, $ext)[0] ?? 'application/octet-stream';
@@ -217,9 +225,11 @@ final class ImageStore
         $written = [];
 
         try {
-            $original = 'tenants/'.$tenantId.'/originals/'.$folder.'/'.$name;
-            self::putVerified(self::originalsDisk(), $original, $source);
-            $written[] = [self::originalsDisk(), $original];
+            if (self::keepsOriginals()) {
+                $original = 'tenants/'.$tenantId.'/originals/'.$folder.'/'.$name;
+                self::putVerified(self::originalsDisk(), $original, $source);
+                $written[] = [self::originalsDisk(), $original];
+            }
 
             $image = self::displaySource($upload, $facts, $source);
             $moving = $facts->type === 'gif' && $facts->animated && $facts->bytes <= (int) config('media.animated_max_kb') * 1024;

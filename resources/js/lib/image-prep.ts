@@ -86,3 +86,38 @@ export function pickImage(file: File | null, apply: (file: File | null, source: 
     apply(file, null);
     if (file) void displaySource(file).then((source) => source && apply(file, source));
 }
+
+export interface UploadLimits {
+    max_image_kb: number;
+    max_request_kb: number;
+}
+
+/** The reason a picked image cannot be sent as it is, or null: too large on its own, or too much with the others. */
+export function sizeProblem(files: File[], limits: UploadLimits | undefined, alreadyQueued = 0): string | null {
+    if (!limits) return null;
+    const mb = (kb: number) => (Math.round((kb / 1024) * 10) / 10).toString();
+    const big = files.find((f) => f.size > limits.max_image_kb * 1024);
+    if (big) return `«${big.name}» أكبر من الحد المسموح للصورة (${mb(limits.max_image_kb)} ميجابايت).`;
+    const total = files.reduce((sum, f) => sum + f.size, alreadyQueued);
+    if (total > limits.max_request_kb * 1024) return `مجموع الصور أكبر مما يقبله الخادم في حفظ واحد (${mb(limits.max_request_kb)} ميجابايت). احفظ بعضها ثم أضف الباقي.`;
+    return null;
+}
+
+/** Splits files into groups that each stay under `maxBytes` and `maxCount` (one request each). */
+export function batches<T>(items: T[], size: (item: T) => number, maxBytes: number, maxCount: number): T[][] {
+    const groups: T[][] = [];
+    let current: T[] = [];
+    let bytes = 0;
+    for (const item of items) {
+        const s = size(item);
+        if (current.length && (bytes + s > maxBytes || current.length >= maxCount)) {
+            groups.push(current);
+            current = [];
+            bytes = 0;
+        }
+        current.push(item);
+        bytes += s;
+    }
+    if (current.length) groups.push(current);
+    return groups;
+}
