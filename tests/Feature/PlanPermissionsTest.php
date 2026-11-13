@@ -287,6 +287,73 @@ class PlanPermissionsTest extends TestCase
         $this->assertSame(['plans.manage'], Grants::merge($owner, [], ['plans.manage']));
     }
 
+    // 13. A club set up before: its manager role was stored with plans.manage. It stays until the owner takes it away,
+    // the manager cannot give it to anyone (themselves included), and the owner taking it away holds from the next request.
+    public function test_a_manager_who_held_the_plans_before_keeps_them_until_the_owner_takes_them_away(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $manager = $this->staff($club, 'manager');
+        $reception = $this->staff($club, 'reception');
+        $plan = $this->planFromPanel($club, $owner, true, true);
+        $role = $this->asTenant($club, fn () => Role::where('key', 'manager')->sole());
+        $this->asTenant($club, fn () => $role->update(['permissions' => [...$role->permissions, 'plans.manage']]));
+        $roleBefore = $role->fresh()->permissions;
+        $ownerBefore = $owner->fresh()->permissions();
+
+        // Nothing rewrites what is stored: the manager still edits plans.
+        $this->editInPanel($manager->fresh(), $plan, ['allows_gym' => false]);
+        $this->assertSame('classes', $this->asTenant($club, fn () => $plan->fresh()->type));
+
+        // Holding it, the manager gives it to nobody: not to a role, not to their own list or role, not to a colleague.
+        $account = fn (User $u) => ['name' => $u->name, 'email' => $u->email, 'role_id' => $u->role_id, 'is_active' => true];
+        $this->actingAs($manager->fresh())->put(route('club.roles.update', $role), ['name' => $role->name, 'permissions' => $roleBefore])->assertForbidden();
+        $this->actingAs($manager->fresh())->put(route('club.users.update', $manager), $account($manager) + ['custom' => true, 'permissions' => $roleBefore])->assertForbidden();
+        $this->actingAs($manager->fresh())->put(route('club.users.update', $manager), ['role_id' => $this->asTenant($club, fn () => Role::where('key', 'owner')->value('id'))] + $account($manager))
+            ->assertSessionHasErrors('role_id');
+        $this->actingAs($manager->fresh())->put(route('club.users.update', $reception), $account($reception) + ['custom' => true, 'permissions' => [...$reception->permissions(), 'plans.manage']])
+            ->assertSessionHasNoErrors();
+        $this->assertFalse($reception->fresh()->hasPermission('plans.manage'));
+        $this->actingAs($reception->fresh())->get(route('club.plans.index'))->assertForbidden();
+
+        // The owner takes it off the manager role in the roles screen: only that permission goes, the owner keeps everything.
+        $this->actingAs($owner)->put(route('club.roles.update', $role), ['name' => $role->name, 'permissions' => array_values(array_diff($roleBefore, ['plans.manage']))])
+            ->assertSessionHasNoErrors();
+        $this->assertEqualsCanonicalizing(array_values(array_diff($roleBefore, ['plans.manage'])), $role->fresh()->permissions);
+        $this->assertSame($ownerBefore, $owner->fresh()->permissions());
+
+        // The manager's next request (the account read again, as every request does) is refused, and nothing changes.
+        $form = ['name' => $plan->name, 'allows_gym' => true, 'allows_classes' => true, 'duration_value' => 1, 'duration_unit' => 'month', 'price' => 20];
+        $this->actingAs($manager->fresh())->get(route('club.plans.index'))->assertForbidden();
+        $this->actingAs($manager->fresh())->put(route('club.plans.update', $plan), $form)->assertForbidden();
+        $this->actingAs($manager->fresh())->post(route('club.plans.store'), $form)->assertForbidden();
+        $this->assertSame('classes', $this->asTenant($club, fn () => $plan->fresh()->type));
+        $this->assertSame(1, $this->asTenant($club, fn () => MembershipPlan::count()));
+
+        // The owner still edits plans, and can give it back the same way.
+        $this->editInPanel($owner->fresh(), $plan, ['allows_gym' => true]);
+        $this->actingAs($owner)->put(route('club.roles.update', $role), ['name' => $role->name, 'permissions' => $roleBefore])->assertSessionHasNoErrors();
+        $this->actingAs($manager->fresh())->get(route('club.plans.index'))->assertOk();
+    }
+
+    // 13. A person's own list (it replaces the role's): the owner takes plans.manage off it, and it holds from the next request.
+    public function test_the_owner_takes_the_plans_off_a_persons_own_list(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $manager = $this->staff($club, 'manager');
+        $mine = [...$manager->permissions(), 'plans.manage'];
+        $manager->forceFill(['custom_permissions' => $mine])->save();
+        $this->actingAs($manager->fresh())->get(route('club.plans.index'))->assertOk();
+
+        $this->actingAs($owner)->put(route('club.users.update', $manager), ['name' => $manager->name, 'email' => $manager->email, 'role_id' => $manager->role_id,
+            'is_active' => true, 'custom' => true, 'permissions' => array_values(array_diff($mine, ['plans.manage']))])->assertSessionHasNoErrors();
+
+        $this->assertNotContains('plans.manage', $manager->fresh()->custom_permissions);
+        $this->actingAs($manager->fresh())->get(route('club.plans.index'))->assertForbidden();
+        $this->assertTrue($owner->fresh()->hasPermission('plans.manage'));
+    }
+
     // 14. A plan belongs to its club: not edited, sold or used in another one.
     public function test_a_plan_of_another_club_is_neither_edited_nor_sold_here(): void
     {
