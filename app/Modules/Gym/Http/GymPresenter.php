@@ -55,6 +55,9 @@ final class GymPresenter
             'freezes_count' => $m->freezes_count,
             'freeze_allowed' => (bool) ($m->plan_snapshot['freeze_allowed'] ?? false),
             'max_freeze_days' => (int) ($m->plan_snapshot['max_freeze_days'] ?? 0),
+            // What this period gives, as it was sold (a period sold before the rule keeps both).
+            'opens_door_any_day' => $m->opensDoorAnyDay(),
+            'books_classes' => $m->booksClasses(),
             'invoice_id' => $m->invoice_id,
             'cancel_reason' => $m->cancel_reason,
             'activated_at' => $m->activated_at?->format('Y-m-d H:i'),
@@ -69,6 +72,9 @@ final class GymPresenter
             'freeze_allowed', 'max_freeze_days', 'max_freezes', 'features', 'features_en', 'color', 'is_public', 'is_featured', 'is_active', 'sort') + [
                 'duration_label' => $p->durationLabel(),
                 'type_label' => MembershipPlan::TYPES[$p->type] ?? $p->type,
+                // What a sale of it gives now (the panel's switches, the website's and portal's lists).
+                'allows_gym' => $p->allowsGym(),
+                'allows_classes' => $p->allowsClasses(),
                 'program_ids' => $p->relationLoaded('programs') ? $p->programs->pluck('id')->all() : [],
             ];
     }

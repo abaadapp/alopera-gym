@@ -10,19 +10,28 @@ use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Models\Program;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/** Membership plans: types, prices, durations, freeze rules, linked programs. */
+/**
+ * Membership plans: what each gives (the door, the classes), prices, durations, freeze rules, linked programs. Only
+ * plans.manage (the owner, the manager, or a role the owner grants it to) reaches these routes.
+ */
 class PlanController extends Controller
 {
     public function index(): Response
     {
         return Inertia::render('Gym/Plans/Index', [
             'plans' => MembershipPlan::with('programs:id')->withCount(['programs'])->orderBy('sort')->orderBy('id')->get()
-                ->map(fn ($p) => GymPresenter::plan($p) + ['active_count' => Membership::where('membership_plan_id', $p->id)->where('status', Membership::ACTIVE)->count()]),
+                ->map(fn ($p) => GymPresenter::plan($p) + [
+                    'active_count' => Membership::where('membership_plan_id', $p->id)->where('status', Membership::ACTIVE)->count(),
+                    // Sold and not over (paid, waiting to start, frozen or awaiting payment): they keep the terms they
+                    // were sold with whatever the owner changes now, which the form says before saving.
+                    'live_count' => Membership::where('membership_plan_id', $p->id)
+                        ->whereIn('status', [Membership::ACTIVE, Membership::SCHEDULED, Membership::FROZEN, Membership::PENDING])->count(),
+                ]),
             'programs' => Program::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'types' => MembershipPlan::TYPES,
         ]);
     }
 
@@ -58,7 +67,10 @@ class PlanController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
-            'type' => ['required', 'in:'.implode(',', array_keys(MembershipPlan::TYPES))],
+            // «صلاحيات الباقة»: chosen by the owner on every save, never guessed from the name or the price. The type
+            // is worked out from them here; one sent with the form is not read.
+            'allows_gym' => ['required', 'boolean'],
+            'allows_classes' => ['required', 'boolean'],
             'description' => ['nullable', 'string', 'max:2000'],
             // The English website's words (#68); without them the English site shows the Arabic.
             'name_en' => ['nullable', 'string', 'max:120'],
@@ -83,6 +95,17 @@ class PlanController extends Controller
             'program_ids' => ['array'],
             'program_ids.*' => [TenantRule::exists('gym_programs')],
         ]);
+        $type = MembershipPlan::typeFor((bool) $data['allows_gym'], (bool) $data['allows_classes']);
+        if ($type === null) {
+            throw ValidationException::withMessages(['access' => 'اختر صلاحية واحدة على الأقل: دخول النادي أو حجز الحصص.']);
+        }
+        $data['type'] = $type;
+        // Without classes, a sessions count and a programs list would mean nothing: none is kept.
+        if (! MembershipPlan::ACCESS[$type]['classes']) {
+            $data['sessions_limit'] = null;
+            $data['program_ids'] = [];
+        }
+        unset($data['allows_gym'], $data['allows_classes']);
         $data['features'] ??= [];
         $data['signup_fee'] ??= 0;
         $data['max_freeze_days'] ??= 0;

@@ -1,0 +1,349 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Core\Support\BusinessRuleException;
+use App\Models\Tenant;
+use App\Models\User;
+use App\Modules\Finance\Models\Invoice;
+use App\Modules\Finance\Services\PaymentService;
+use App\Modules\Gym\Access\AccessControlService;
+use App\Modules\Gym\Access\AccessDecision;
+use App\Modules\Gym\Models\Booking;
+use App\Modules\Gym\Models\ClassSession;
+use App\Modules\Gym\Models\Member;
+use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\MembershipPlan;
+use App\Modules\Gym\Services\BookingService;
+use App\Modules\Gym\Services\MembershipService;
+use Carbon\CarbonImmutable;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia;
+use Tests\Concerns\BuildsClubs;
+use Tests\TestCase;
+
+/**
+ * «صلاحيات الباقة»: the owner sets, on each plan, whether it opens the door and whether it books classes. The two
+ * switches are stored as the plan's type (gym, classes, combo), which every sale freezes into plan_snapshot (#70), so
+ * the door and the bookings follow what was sold, not what the plan says today. Every plan here is made through the
+ * panel, as the owner makes it.
+ */
+class PlanPermissionsTest extends TestCase
+{
+    use BuildsClubs, RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Morning, so this evening's class has not started whenever the tests run.
+        $this->travelTo(now()->setTime(9, 0));
+    }
+
+    /** @param array<string, mixed> $extra */
+    private function planFromPanel(Tenant $club, User $by, bool $gym, bool $classes, array $extra = []): MembershipPlan
+    {
+        $name = $extra['name'] ?? 'Plan '.Str::random(5);
+        $this->actingAs($by)->post(route('club.plans.store'), $extra + [
+            'name' => $name, 'allows_gym' => $gym, 'allows_classes' => $classes,
+            'duration_value' => 1, 'duration_unit' => 'month', 'price' => 20, 'is_active' => true, 'is_public' => true,
+        ])->assertSessionHasNoErrors();
+
+        return $this->asTenant($club, fn () => MembershipPlan::where('name', $name)->firstOrFail());
+    }
+
+    /** @param array<string, mixed> $changes */
+    private function editInPanel(User $by, MembershipPlan $plan, array $changes): void
+    {
+        $this->actingAs($by)->put(route('club.plans.update', $plan), $changes + [
+            'name' => $plan->name, 'allows_gym' => $plan->allowsGym(), 'allows_classes' => $plan->allowsClasses(),
+            'duration_value' => $plan->duration_value, 'duration_unit' => $plan->duration_unit, 'price' => $plan->price,
+            'sessions_limit' => $plan->sessions_limit, 'is_active' => true, 'is_public' => true,
+        ])->assertSessionHasNoErrors();
+    }
+
+    private function door(Tenant $club, Member $member): AccessDecision
+    {
+        return $this->asTenant($club, fn () => app(AccessControlService::class)->evaluate($member->fresh()));
+    }
+
+    private function book(Tenant $club, Member $member, ClassSession $session, string $source = 'portal'): Booking
+    {
+        return $this->asTenant($club, fn () => app(BookingService::class)->book($member->fresh(), $session, $source));
+    }
+
+    private function refused(Tenant $club, Member $member, ClassSession $session, string $source = 'portal'): string
+    {
+        try {
+            $this->book($club, $member, $session, $source);
+        } catch (BusinessRuleException $e) {
+            return $e->rule;
+        }
+        $this->fail("a $source booking went through");
+    }
+
+    private function tonight(Tenant $club, array $attributes = []): ClassSession
+    {
+        return $this->classSession($club, null, $attributes + ['starts_at' => today()->setTime(18, 0)]);
+    }
+
+    // 1–3. The three plans the owner can make, and what is stored.
+    public function test_the_owner_makes_a_door_only_a_classes_only_and_a_full_plan(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $yoga = $this->program($club, ['name' => 'Yoga']);
+
+        $door = $this->planFromPanel($club, $owner, true, false, ['sessions_limit' => 8, 'program_ids' => [$yoga->id]]);
+        $classes = $this->planFromPanel($club, $owner, false, true, ['sessions_limit' => 8, 'program_ids' => [$yoga->id]]);
+        $both = $this->planFromPanel($club, $owner, true, true);
+
+        $this->assertSame(['gym', true, false], [$door->type, $door->allowsGym(), $door->allowsClasses()]);
+        $this->assertNull($door->sessions_limit, 'a plan without classes keeps no sessions count');
+        $this->assertSame([], $this->asTenant($club, fn () => $door->programs()->pluck('gym_programs.id')->all()), 'nor a programs list');
+        $this->assertSame(['classes', false, true, 8], [$classes->type, $classes->allowsGym(), $classes->allowsClasses(), $classes->sessions_limit]);
+        $this->assertSame([$yoga->id], $this->asTenant($club, fn () => $classes->programs()->pluck('gym_programs.id')->all()));
+        $this->assertSame(['combo', true, true], [$both->type, $both->allowsGym(), $both->allowsClasses()]);
+
+        // The panel shows each plan's switches, and how many sold periods are still running on it.
+        $this->actingAs($owner)->get(route('club.plans.index'))->assertOk()->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('plans.0.allows_gym', true)->where('plans.0.allows_classes', false)->where('plans.0.live_count', 0)
+            ->where('plans.1.allows_gym', false)->where('plans.1.allows_classes', true)
+            ->where('plans.2.allows_gym', true)->where('plans.2.allows_classes', true)
+            ->missing('types'));
+    }
+
+    // 4. Neither, or not chosen at all: refused, and nothing is made.
+    public function test_a_plan_with_no_permission_or_without_choosing_is_refused(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $base = ['name' => 'Empty', 'duration_value' => 1, 'duration_unit' => 'month', 'price' => 10];
+
+        $this->actingAs($owner)->post(route('club.plans.store'), $base + ['allows_gym' => false, 'allows_classes' => false])
+            ->assertSessionHasErrors(['access' => 'اختر صلاحية واحدة على الأقل: دخول النادي أو حجز الحصص.']);
+        $this->actingAs($owner)->post(route('club.plans.store'), $base)->assertSessionHasErrors(['allows_gym', 'allows_classes']);
+        // The old field alone chooses nothing.
+        $this->actingAs($owner)->post(route('club.plans.store'), $base + ['type' => 'combo'])->assertSessionHasErrors(['allows_gym', 'allows_classes']);
+
+        $plan = $this->planFromPanel($club, $owner, true, true);
+        $this->actingAs($owner)->put(route('club.plans.update', $plan), $base + ['allows_gym' => false, 'allows_classes' => false])
+            ->assertSessionHasErrors('access');
+
+        $this->assertSame(1, $this->asTenant($club, fn () => MembershipPlan::count()));
+        $this->assertSame('combo', $this->asTenant($club, fn () => $plan->fresh()->type), 'a refused edit changes nothing');
+    }
+
+    // 5–6. Door only: the door any day, no class from the portal, the website or the desk.
+    public function test_a_door_only_plan_opens_the_door_and_books_no_class_anywhere(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $member = $this->member($club, ['password' => 'secret123']);
+        $this->activeMembership($club, $member, $this->planFromPanel($club, $owner, true, false));
+        $session = $this->tonight($club);
+
+        $this->assertTrue($this->door($club, $member)->allowed);
+        foreach (['portal', 'website', 'reception'] as $source) {
+            $this->assertSame('membership.gym_only', $this->refused($club, $member, $session, $source));
+        }
+        $this->actingAs($member, 'member')->post(route('portal.classes.book', ['club' => $club->slug, 'session' => $session->id]))
+            ->assertSessionHasErrors(['booking' => 'باقة العضو لدخول النادي فقط، ولا تشمل الحصص.']);
+        $this->actingAs($owner)->post(route('club.bookings.store', $session), ['member_id' => $member->id])->assertSessionHasErrors('booking');
+        $this->assertSame(0, $this->asTenant($club, fn () => Booking::count()));
+
+        // Her portal says so before she tries.
+        $this->actingAs($member, 'member')->get(route('portal.classes', ['club' => $club->slug]))->assertOk()
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('membership.books_classes', false)->where('membership.opens_door_any_day', true));
+    }
+
+    // 7–9. Classes only books; its door opens on the day of a class booked here, not on another day.
+    public function test_classes_only_and_full_plans_book_and_classes_only_enters_on_a_booked_day_only(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $classesOnly = $this->member($club);
+        $full = $this->member($club);
+        $this->activeMembership($club, $classesOnly, $this->planFromPanel($club, $owner, false, true));
+        $this->activeMembership($club, $full, $this->planFromPanel($club, $owner, true, true));
+
+        $this->assertSame('classes_without_booking', $this->door($club, $classesOnly)->reason, 'no class booked today');
+        $this->assertTrue($this->door($club, $full)->allowed, 'a full plan, any day');
+
+        $this->book($club, $classesOnly, $this->classSession($club, null, ['starts_at' => today()->addDay()->setTime(18, 0)]));
+        $this->assertFalse($this->door($club, $classesOnly)->allowed, "tomorrow's class does not open today's door");
+        $booking = $this->book($club, $classesOnly, $this->tonight($club));
+        $this->assertSame(Booking::BOOKED, $booking->status);
+        $this->assertTrue($this->door($club, $classesOnly)->allowed, "tonight's class opens today's door");
+        $this->assertSame(Booking::BOOKED, $this->book($club, $full, $this->tonight($club))->status);
+
+        $this->asTenant($club, fn () => app(BookingService::class)->cancel($booking, false));
+        $this->assertFalse($this->door($club, $classesOnly)->allowed, 'a cancelled booking opens nothing');
+    }
+
+    // 10. Expired or frozen: the door stays shut, whatever the plan allows.
+    public function test_an_expired_or_frozen_period_opens_nothing(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $plan = $this->planFromPanel($club, $owner, true, true, ['freeze_allowed' => true, 'max_freeze_days' => 30, 'max_freezes' => 1]);
+        $frozen = $this->member($club);
+        $expired = $this->member($club);
+        $f = $this->activeMembership($club, $frozen, $plan);
+        $e = $this->activeMembership($club, $expired, $plan);
+        $this->asTenant($club, fn () => app(MembershipService::class)->freeze($f->fresh(), null, 'سفر'));
+
+        $this->assertSame('membership_frozen', $this->door($club, $frozen)->reason);
+        $this->assertSame('membership.frozen', $this->refused($club, $frozen, $this->tonight($club)));
+        $this->travelTo($e->ends_on->addDay()->setTime(9, 0));
+        $this->assertFalse($this->door($club, $expired)->allowed);
+        $this->assertSame('membership.none', $this->refused($club, $expired, $this->tonight($club)));
+    }
+
+    // 11, 12, 16. An edit changes new sales and renewals only: what was sold, its dates, credit, bookings and money stay.
+    public function test_an_edit_leaves_sold_periods_as_sold_and_applies_to_new_sales_and_renewals(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $plan = $this->planFromPanel($club, $owner, true, true, ['sessions_limit' => 10]);
+        $old = $this->member($club);
+        $sold = $this->activeMembership($club, $old, $plan);
+        $this->book($club, $old, $this->tonight($club));
+        $before = $this->asTenant($club, fn () => [
+            'period' => Membership::find($sold->id)->only('status', 'starts_on', 'ends_on', 'plan_snapshot', 'sessions_total', 'sessions_used', 'total'),
+            'invoices' => Invoice::orderBy('id')->get(['id', 'total', 'paid_total', 'status'])->toArray(),
+            'bookings' => Booking::orderBy('id')->get(['id', 'status', 'membership_id', 'consumed_session'])->toArray(),
+        ]);
+
+        // The owner turns the classes off: the plan is door only from now on.
+        $this->editInPanel($owner, $plan, ['allows_classes' => false]);
+        $this->assertSame('gym', $this->asTenant($club, fn () => $plan->fresh()->type));
+
+        // What was sold: unchanged, and still books and opens the door.
+        $this->assertEquals($before, $this->asTenant($club, fn () => [
+            'period' => Membership::find($sold->id)->only('status', 'starts_on', 'ends_on', 'plan_snapshot', 'sessions_total', 'sessions_used', 'total'),
+            'invoices' => Invoice::orderBy('id')->get(['id', 'total', 'paid_total', 'status'])->toArray(),
+            'bookings' => Booking::orderBy('id')->get(['id', 'status', 'membership_id', 'consumed_session'])->toArray(),
+        ]));
+        $this->assertSame(Booking::BOOKED, $this->book($club, $old, $this->tonight($club, ['starts_at' => today()->setTime(19, 0)]))->status);
+        $this->assertTrue($this->door($club, $old)->allowed);
+
+        // A new sale: door only.
+        $new = $this->member($club);
+        $this->activeMembership($club, $new, $plan->fresh());
+        $this->assertSame('membership.gym_only', $this->refused($club, $new, $this->tonight($club)));
+
+        // Her renewal is sold with the plan as it is now: door only from its first day.
+        $renewal = $this->asTenant($club, function () use ($old) {
+            $renewal = app(MembershipService::class)->renew($old->fresh());
+            app(PaymentService::class)->record($renewal->invoice()->firstOrFail(), $renewal->total, 'cash');
+
+            return $renewal->fresh();
+        });
+        $this->assertSame('gym', $renewal->plan_snapshot['type']);
+        $this->assertFalse($renewal->booksClasses());
+        $this->assertTrue($renewal->opensDoorAnyDay());
+    }
+
+    // 13. Only the owner or a manager edits plans, and nothing sent with the form adds a permission.
+    public function test_permissions_are_set_on_the_server_by_who_may_manage_plans(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $reception = $this->staff($club, 'reception');
+        $manager = $this->staff($club, 'manager');
+        $plan = $this->planFromPanel($club, $owner, true, false);
+        $form = ['name' => 'X', 'duration_value' => 1, 'duration_unit' => 'month', 'price' => 5, 'allows_gym' => true, 'allows_classes' => true];
+
+        $this->actingAs($reception)->get(route('club.plans.index'))->assertForbidden();
+        $this->actingAs($reception)->post(route('club.plans.store'), $form)->assertForbidden();
+        $this->actingAs($reception)->put(route('club.plans.update', $plan), $form)->assertForbidden();
+        $this->assertSame('gym', $this->asTenant($club, fn () => $plan->fresh()->type));
+
+        // A type sent alongside is not read: the switches decide.
+        $this->actingAs($owner)->put(route('club.plans.update', $plan), ['type' => 'combo', 'allows_classes' => false, 'name' => $plan->name] + $form)
+            ->assertSessionHasNoErrors();
+        $this->assertSame('gym', $this->asTenant($club, fn () => $plan->fresh()->type));
+
+        $this->planFromPanel($club, $manager, false, true);
+        $this->assertSame(['gym', 'classes'], $this->asTenant($club, fn () => MembershipPlan::orderBy('id')->pluck('type')->all()));
+    }
+
+    // 14. A plan belongs to its club: not edited, sold or used in another one.
+    public function test_a_plan_of_another_club_is_neither_edited_nor_sold_here(): void
+    {
+        [$here, $there] = [$this->club(), $this->club('Other')];
+        $owner = $this->owner($here);
+        $theirs = $this->planFromPanel($there, $this->owner($there), true, true);
+        $member = $this->member($here);
+
+        $this->actingAs($owner)->put(route('club.plans.update', $theirs), ['name' => 'X', 'allows_gym' => true, 'allows_classes' => false, 'duration_value' => 1, 'duration_unit' => 'month', 'price' => 1])
+            ->assertNotFound();
+        $this->actingAs($owner)->post(route('club.memberships.store', $member), ['membership_plan_id' => $theirs->id, 'mode' => 'new'])
+            ->assertSessionHasErrors('membership_plan_id');
+        $this->assertSame('combo', $this->asTenant($there, fn () => $theirs->fresh()->type));
+        $this->assertSame(0, $this->asTenant($here, fn () => Membership::count()));
+    }
+
+    // An upgrade to a plan without classes does not carry the old period's class bookings.
+    public function test_an_upgrade_to_a_plan_without_classes_releases_the_future_bookings(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $member = $this->member($club);
+        $current = $this->activeMembership($club, $member, $this->planFromPanel($club, $owner, true, true, ['sessions_limit' => 10]));
+        $booking = $this->book($club, $member, $this->classSession($club, null, ['starts_at' => today()->addDays(3)->setTime(18, 0)]));
+        $doorOnly = $this->planFromPanel($club, $owner, true, false, ['price' => 60]);
+
+        $this->asTenant($club, function () use ($current, $doorOnly) {
+            $upgrade = app(MembershipService::class)->upgrade($current->fresh(), $doorOnly);
+            app(PaymentService::class)->record($upgrade->invoice()->firstOrFail(), $upgrade->total, 'cash');
+        });
+
+        $this->asTenant($club, function () use ($booking, $current) {
+            $this->assertSame(Booking::CANCELLED, $booking->fresh()->status, 'a door-only plan keeps no class booking');
+            $this->assertSame(0, $current->fresh()->sessions_used, 'the session went back to the old period');
+        });
+    }
+
+    // The day of a class is the club's day, in the club's timezone.
+    public function test_a_classes_only_door_reads_the_day_in_the_clubs_timezone(): void
+    {
+        $club = $this->club();
+        $club->forceFill(['timezone' => 'UTC'])->save(); // the app is in Asia/Muscat, four hours ahead
+        $owner = $this->owner($club);
+        $plan = $this->planFromPanel($club, $owner, false, true);
+        [$evening, $early] = [$this->member($club), $this->member($club)];
+        $this->activeMembership($club, $evening, $plan);
+        $this->activeMembership($club, $early, $plan);
+        $day = CarbonImmutable::today()->addDays(5);
+        // 20:00 Muscat is 16:00 UTC: the club's same day. 05:00 Muscat the next morning is 01:00 UTC: the club's next day.
+        $this->book($club, $evening, $this->classSession($club, null, ['starts_at' => $day->setTime(20, 0)]));
+        $this->book($club, $early, $this->classSession($club, null, ['starts_at' => $day->addDay()->setTime(5, 0)]));
+
+        // 02:00 Muscat on the next day is still 22:00 of $day in the club.
+        $this->travelTo(CarbonImmutable::parse($day->addDay()->toDateString().' 02:00', 'Asia/Muscat'));
+        $this->assertTrue($this->door($club, $evening)->allowed, "the club's day still has her class");
+        $this->assertSame('classes_without_booking', $this->door($club, $early)->reason, "her class is on the club's next day");
+    }
+
+    // 17. The website and the portal say what a plan gives before it is bought, in Arabic and in English.
+    public function test_the_website_shows_each_plans_permissions_in_both_languages(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $this->planFromPanel($club, $owner, true, false, ['name' => 'Door', 'sort' => 1]);
+        $this->planFromPanel($club, $owner, false, true, ['name' => 'Classes', 'sort' => 2, 'sessions_limit' => 8]);
+        // A program left linked to the door-only plan from before (the panel now clears it on save) is not listed.
+        $yoga = $this->program($club);
+        $this->asTenant($club, fn () => MembershipPlan::where('name', 'Door')->sole()->programs()->attach($yoga));
+
+        $this->get('/c/'.$club->slug.'/plans')->assertInertia(fn (AssertableInertia $p) => $p->where('plans.0.programs', [])->etc());
+
+        foreach (['/c/'.$club->slug.'/plans', '/c/'.$club->slug.'/en/plans', '/c/'.$club->slug.'/join'] as $url) {
+            $this->get($url)->assertOk()->assertInertia(fn (AssertableInertia $p) => $p
+                ->where('plans.0.allows_gym', true)->where('plans.0.allows_classes', false)
+                ->where('plans.1.allows_gym', false)->where('plans.1.allows_classes', true)->where('plans.1.sessions_limit', 8));
+        }
+    }
+}

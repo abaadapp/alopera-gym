@@ -9,7 +9,8 @@ import { ArrowLeft } from 'lucide-react';
 import { CATEGORIES, LEVELS } from '@/Pages/Site/Programs';
 import { cn } from '@/lib/cn';
 import { currencyLabel, date as fmtDate, phone as fmtPhone, whatsappUrl } from '@/lib/format';
-import { useT } from '@/lib/i18n';
+import { useLocale, useT } from '@/lib/i18n';
+import { planAccess, say } from '@/lib/plan-access';
 import type { PlanFeed, PostFeed, ProductFeed, ProgramFeed, SessionFeed, TrainerFeed } from '@/types/site';
 import { Diamond, PhotoFrame, SectionHeading, SectionShell, bodyText, hairline, isDark, metaText, priceText, siteCard, twoDigits } from '../ui';
 import { bool, link, str, type SectionProps } from './types';
@@ -193,6 +194,7 @@ export function Trainers({ section, joined }: SectionProps) {
 /** The plans as the design's cards: white with a faint ring; the featured one dark with a gold badge and a gold button. */
 export function PlansGrid({ plans, currency, featuredLabel, buttonLabel }: { plans: PlanFeed[]; currency: string; featuredLabel: string; buttonLabel: string }) {
     const t = useT();
+    const english = useLocale() === 'en';
     return (
         <div className={cn('grid items-stretch gap-5', plans.length > 1 && 'md:grid-cols-2', plans.length > 2 && 'lg:grid-cols-3', plans.length === 1 && 'max-w-md')}>
             {plans.map((p) => {
@@ -212,6 +214,12 @@ export function PlansGrid({ plans, currency, featuredLabel, buttonLabel }: { pla
                             {p.signup_fee && Number(p.signup_fee) > 0 && <span className={cn('text-[13px]', featured ? 'text-[#9A9284]' : 'text-[#7A7060]')}>{t('رسوم تسجيل لمرة واحدة:')} <span dir="ltr" className="[unicode-bidi:isolate]">{priceText(p.signup_fee)}</span> {currencyLabel(currency)}</span>}
                         </div>
                         <ul className="m-0 flex flex-1 list-none flex-col gap-2.5 p-0">
+                            {planAccess(p).included.map((x, i) => (
+                                <li key={`access-${i}`} className="flex gap-2.5 text-[15px] font-medium"><Diamond />{say(x, t, english)}</li>
+                            ))}
+                            {planAccess(p).notes.map((x, i) => (
+                                <li key={`note-${i}`} className={cn('flex gap-2.5 text-[14px]', featured ? 'text-[#9A9284]' : 'text-[#7A7060]')}>{say(x, t, english)}</li>
+                            ))}
                             {(p.features ?? []).filter(Boolean).map((f, i) => (
                                 <li key={i} className="flex gap-2.5 text-[15px] font-medium"><Diamond />{f}</li>
                             ))}

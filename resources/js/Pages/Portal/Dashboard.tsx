@@ -14,6 +14,9 @@ import type { SessionData } from '../Site/Schedule';
 
 export interface MembershipData {
     id: number;
+    /** What this period gives, as it was sold (GymPresenter::membership). */
+    opens_door_any_day?: boolean;
+    books_classes?: boolean;
     plan: string;
     plan_id: number;
     kind: string;

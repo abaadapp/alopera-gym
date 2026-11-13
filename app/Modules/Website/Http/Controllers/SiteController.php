@@ -56,7 +56,9 @@ class SiteController extends Controller
         $plans = MembershipPlan::public()->with('programs:id,name,name_en')->orderBy('sort')->get();
 
         return $this->sitePage('plans', 'Site/Plans', [
-            'plans' => $plans->map(fn ($p) => GymPresenter::sitePlan($p) + ['programs' => $p->programs->map(fn ($g) => SiteLanguage::pick($g->name, $g->name_en))->values()]),
+            // A plan without classes lists no programs, even one linked before its classes were taken off.
+            'plans' => $plans->map(fn ($p) => GymPresenter::sitePlan($p) + ['programs' => $p->allowsClasses()
+                ? $p->programs->map(fn ($g) => SiteLanguage::pick($g->name, $g->name_en))->values() : []]),
             'ptPackages' => PtPackage::where('is_active', true)->where('is_public', true)->orderBy('price')->get(['id', 'name', 'name_en', 'description', 'description_en', 'sessions_count', 'session_minutes', 'price', 'validity_days'])
                 ->map(fn (PtPackage $p) => ['name' => SiteLanguage::pick($p->name, $p->name_en), 'description' => SiteLanguage::pick($p->description, $p->description_en)] + $p->only('id', 'sessions_count', 'session_minutes', 'price', 'validity_days')),
         ], [

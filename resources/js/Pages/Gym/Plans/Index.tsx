@@ -1,6 +1,6 @@
 import { useForm } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
-import { Check, Layers, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, Layers, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardFooter, Checkbox, ConfirmAction, EmptyState, EnglishFields, Field, Input, linesOf, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
@@ -33,10 +33,15 @@ interface Plan {
     is_active: boolean;
     sort: number;
     program_ids: number[];
+    /** «صلاحيات الباقة»: what a sale of it gives now. */
+    allows_gym: boolean;
+    allows_classes: boolean;
     active_count: number;
+    /** Sold and not over: they keep what they were sold whatever is changed now. */
+    live_count: number;
 }
 
-export default function PlansIndex({ plans, programs, types }: { plans: Plan[]; programs: Option[]; types: Record<string, string> }) {
+export default function PlansIndex({ plans, programs }: { plans: Plan[]; programs: Option[] }) {
     const currency = useCurrency();
     const [editing, setEditing] = useState<Plan | null>(null);
     const [creating, setCreating] = useState(false);
@@ -69,8 +74,10 @@ export default function PlansIndex({ plans, programs, types }: { plans: Plan[]; 
                             <p className="mt-3 text-[22px] font-bold leading-8 tracking-tight text-[#111]"><span className="num">{money(p.price, currency)}</span></p>
                             <p className="text-sm text-muted">{p.duration_label}{Number(p.signup_fee) > 0 && <> · رسوم تسجيل <span className="num">{money(p.signup_fee, currency)}</span></>}</p>
                             <div className="mt-3 flex flex-wrap gap-1.5">
-                                <Badge tone="brand">{p.type_label}</Badge>
-                                <Badge tone="gray">{p.sessions_limit ? `${p.sessions_limit} حصة` : 'حصص غير محدودة'}</Badge>
+                                {p.allows_gym && <Badge tone="brand">دخول النادي</Badge>}
+                                {p.allows_classes && <Badge tone="brand">حجز الحصص</Badge>}
+                                {p.allows_classes && !p.allows_gym && <Badge tone="amber">الدخول يوم الحصة فقط</Badge>}
+                                {p.allows_classes && <Badge tone="gray">{p.sessions_limit ? `${p.sessions_limit} حصة` : 'حصص غير محدودة'}</Badge>}
                                 {p.freeze_allowed ? <Badge tone="violet">تجميد {p.max_freeze_days > 0 ? `حتى ${dayCount(p.max_freeze_days)}` : 'مفتوح'}</Badge> : <Badge tone="gray">بدون تجميد</Badge>}
                                 {!p.is_public && <Badge tone="amber">غير ظاهرة بالموقع</Badge>}
                                 {!p.is_active && <Badge tone="red">موقوفة</Badge>}
@@ -81,7 +88,7 @@ export default function PlansIndex({ plans, programs, types }: { plans: Plan[]; 
                                 </ul>
                             )}
                             <CardFooter className="text-xs text-muted">
-                                <span><span className="num">{p.active_count}</span> عضوية نشطة · {p.program_ids.length > 0 ? `${p.program_ids.length} برنامج مشمول` : 'كل البرامج'}</span>
+                                <span><span className="num">{p.active_count}</span> عضوية نشطة{p.allows_classes && <> · {p.program_ids.length > 0 ? `${p.program_ids.length} برنامج مشمول` : 'كل البرامج'}</>}</span>
                             </CardFooter>
                         </Card>
                     ))}
@@ -93,17 +100,18 @@ export default function PlansIndex({ plans, programs, types }: { plans: Plan[]; 
                 open={creating || editing !== null}
                 plan={editing}
                 programs={programs}
-                types={types}
                 onClose={() => { setCreating(false); setEditing(null); }}
             />
         </ClubLayout>
     );
 }
 
-function PlanModal({ open, plan, programs, types, onClose }: { open: boolean; plan: Plan | null; programs: Option[]; types: Record<string, string>; onClose: () => void }) {
+function PlanModal({ open, plan, programs, onClose }: { open: boolean; plan: Plan | null; programs: Option[]; onClose: () => void }) {
     const form = useForm({
         name: plan?.name ?? '',
-        type: plan?.type ?? 'gym',
+        // A new plan starts with neither: the owner chooses what it gives, nothing is assumed.
+        allows_gym: plan?.allows_gym ?? false,
+        allows_classes: plan?.allows_classes ?? false,
         description: plan?.description ?? '',
         name_en: plan?.name_en ?? '',
         description_en: plan?.description_en ?? '',
@@ -157,11 +165,14 @@ function PlanModal({ open, plan, programs, types, onClose }: { open: boolean; pl
                     <Field label="اسم الباقة" error={err.name} required>
                         <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder="شهري — دخول كامل" />
                     </Field>
-                    <Field label="نوع العضوية" error={err.type}>
-                        <Select value={form.data.type} onChange={(e) => form.setData('type', e.target.value)}>
-                            {Object.entries(types).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                        </Select>
-                    </Field>
+                    <PlanAccessFields
+                        gym={form.data.allows_gym}
+                        classes={form.data.allows_classes}
+                        onGym={(v) => form.setData('allows_gym', v)}
+                        onClasses={(v) => form.setData('allows_classes', v)}
+                        error={err.access ?? err.allows_gym ?? err.allows_classes}
+                        changedFor={plan && plan.live_count > 0 && (plan.allows_gym !== form.data.allows_gym || plan.allows_classes !== form.data.allows_classes) ? plan.live_count : 0}
+                    />
                     <div className="grid grid-cols-2 gap-3">
                         <Field label="المدة" error={err.duration_value} required>
                             <Input type="number" min={1} value={form.data.duration_value} onChange={(e) => form.setData('duration_value', e.target.value)} />
@@ -180,9 +191,11 @@ function PlanModal({ open, plan, programs, types, onClose }: { open: boolean; pl
                             <Input type="number" step="0.001" min={0} value={form.data.signup_fee} onChange={(e) => form.setData('signup_fee', e.target.value)} />
                         </Field>
                     </div>
-                    <Field label="عدد الحصص الجماعية" error={err.sessions_limit} hint="اتركه فارغًا لحصص غير محدودة خلال المدة">
-                        <Input type="number" min={1} value={form.data.sessions_limit} onChange={(e) => form.setData('sessions_limit', e.target.value)} />
-                    </Field>
+                    {form.data.allows_classes && (
+                        <Field label="عدد الحصص الجماعية" error={err.sessions_limit} hint="اتركه فارغًا لحصص غير محدودة خلال المدة">
+                            <Input type="number" min={1} value={form.data.sessions_limit} onChange={(e) => form.setData('sessions_limit', e.target.value)} />
+                        </Field>
+                    )}
                     <Field label="الوصف" error={err.description}>
                         <Textarea rows={3} value={form.data.description} onChange={(e) => form.setData('description', e.target.value)} />
                     </Field>
@@ -223,21 +236,23 @@ function PlanModal({ open, plan, programs, types, onClose }: { open: boolean; pl
                         )}
                     </div>
 
-                    <Field label="البرامج المشمولة" hint="بدون اختيار = كل البرامج متاحة للحجز">
-                        <div className="flex flex-wrap gap-2">
-                            {programs.map((p) => (
-                                <button
-                                    key={p.id}
-                                    type="button"
-                                    onClick={() => toggleProgram(p.id)}
-                                    className={`rounded-full border px-3 py-1 text-xs ${form.data.program_ids.includes(p.id) ? 'border-brand bg-brand text-white' : 'border-line hover:bg-brand-50'}`}
-                                >
-                                    {p.name}
-                                </button>
-                            ))}
-                            {programs.length === 0 && <span className="text-xs text-muted">لا توجد برامج بعد.</span>}
-                        </div>
-                    </Field>
+                    {form.data.allows_classes && (
+                        <Field label="البرامج المشمولة" hint="بدون اختيار = كل البرامج متاحة للحجز">
+                            <div className="flex flex-wrap gap-2">
+                                {programs.map((p) => (
+                                    <button
+                                        key={p.id}
+                                        type="button"
+                                        onClick={() => toggleProgram(p.id)}
+                                        className={`rounded-full border px-3 py-1 text-xs ${form.data.program_ids.includes(p.id) ? 'border-brand bg-brand text-white' : 'border-line hover:bg-brand-50'}`}
+                                    >
+                                        {p.name}
+                                    </button>
+                                ))}
+                                {programs.length === 0 && <span className="text-xs text-muted">لا توجد برامج بعد.</span>}
+                            </div>
+                        </Field>
+                    )}
 
                     <Field label="مزايا تظهر في الموقع" error={err.features}>
                         <div className="flex gap-2">
@@ -271,5 +286,50 @@ function PlanModal({ open, plan, programs, types, onClose }: { open: boolean; pl
                 </div>
             </form>
         </Modal>
+    );
+}
+
+const ACCESS_SUMMARY: Record<string, string> = {
+    'gym': 'دخول النادي فقط: يدخل المشترك أي يوم خلال مدة اشتراكه، ولا يحجز الحصص.',
+    'classes': 'حجز الحصص فقط: يحجز المشترك الحصص، ويدخل النادي يوم حصته المحجوزة فقط.',
+    'gym+classes': 'دخول النادي وحجز الحصص: يدخل أي يوم، ويحجز الحصص حسب رصيد الباقة.',
+};
+
+/**
+ * «صلاحيات الباقة»: what a sale of the plan gives, chosen by the owner (the server works the plan's type out of them
+ * and refuses a plan with neither). A change applies to sales and renewals from now on; periods already sold keep
+ * what they were sold with.
+ */
+function PlanAccessFields({ gym, classes, onGym, onClasses, error, changedFor }: {
+    gym: boolean;
+    classes: boolean;
+    onGym: (v: boolean) => void;
+    onClasses: (v: boolean) => void;
+    error?: string;
+    changedFor: number;
+}) {
+    const key = [gym && 'gym', classes && 'classes'].filter(Boolean).join('+');
+    const none = 'اختر صلاحية واحدة على الأقل: دخول النادي أو حجز الحصص.';
+
+    return (
+        <div className="rounded-2xl border border-line p-4">
+            <p className="text-sm font-semibold text-ink">صلاحيات الباقة <span className="text-red-600">*</span></p>
+            <p className="mt-0.5 text-[12px] text-muted">اختر ما تسمح به الباقة. لا يُستنتج من اسمها أو سعرها.</p>
+            <div className="mt-2 divide-y divide-line">
+                <Toggle checked={gym} onChange={onGym} label="دخول النادي" hint="تفتح البوابة للمشترك في أي يوم خلال مدة اشتراكه." />
+                <Toggle checked={classes} onChange={onClasses} label="حجز الحصص" hint="يحجز المشترك الحصص حسب رصيد الباقة والبرامج المشمولة وسعة الحصة." />
+            </div>
+            <p className={`mt-3 rounded-xl px-3 py-2 text-[13px] ${key ? 'bg-brand-50 text-brand-900' : 'bg-red-50 text-red-700'}`}>
+                {key ? <><span className="font-semibold">الملخص:</span> {ACCESS_SUMMARY[key]}</> : none}
+            </p>
+            {/* The server's refusal of a plan with neither is the line above: said once. */}
+            {error && error !== none && <p className="mt-2 text-[13px] text-red-600">{error}</p>}
+            {changedFor > 0 && (
+                <p className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    <span>لهذه الباقة <span className="num font-semibold">{changedFor}</span> اشتراك قائم. تغيير الصلاحيات يسري على المبيعات والتجديدات الجديدة فقط، ويحتفظ كل اشتراك قائم بصلاحياته حتى نهاية فترته.</span>
+                </p>
+            )}
+        </div>
     );
 }

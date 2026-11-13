@@ -7,7 +7,8 @@ import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { currencyLabel, money } from '@/lib/format';
 import { useCarryOver } from '@/lib/carry-over';
-import { useT } from '@/lib/i18n';
+import { useLocale, useT } from '@/lib/i18n';
+import { planAccess, say } from '@/lib/plan-access';
 import type { PlanData } from './Plans';
 
 interface Props {
@@ -31,6 +32,19 @@ const PHONE = /^[+0-9٠-٩\s-]{8,20}$/u;
 
 const input = 'h-[52px] w-full min-w-0 rounded-2xl border border-[rgba(22,19,15,0.18)] bg-white px-4 text-base text-[var(--site-ink)] outline-none placeholder:text-[#9A9284] focus:border-[var(--site-gold)] focus:ring-2 focus:ring-[var(--site-gold)]/25 aria-[invalid=true]:border-[#A33A22]';
 
+/** What the plan gives (the owner's «صلاحيات الباقة»), said before paying: what it includes, then what it does not. */
+function PlanAccessLine({ plan, t, english }: { plan: PlanData; t: ReturnType<typeof useT>; english: boolean }) {
+    const access = planAccess(plan);
+    if (access.included.length === 0) return null;
+
+    return (
+        <span className="mt-0.5 flex flex-col gap-0.5 text-sm">
+            <span className="font-medium text-[#3D362C]">{access.included.map((x) => say(x, t, english)).join(' · ')}</span>
+            {access.notes.map((x, i) => <span key={i} className="text-[13px] text-[#7A7060]">{say(x, t, english)}</span>)}
+        </span>
+    );
+}
+
 function FieldRow({ label, error, hint, required, children, className }: { label: string; error?: string; hint?: string; required?: boolean; children: ReactNode; className?: string }) {
     return (
         <label className={cn('flex min-w-0 flex-col gap-1.5', className)}>
@@ -49,6 +63,7 @@ function FieldRow({ label, error, hint, required, children, className }: { label
 export default function Join({ site, seo, plans, selected, onlinePayments, payAtReception }: Props) {
     const currency = useCurrency();
     const t = useT();
+    const english = useLocale() === 'en';
     const preselected = selected && plans.some((p) => p.id === selected) ? selected : null;
     const form = useForm({
         membership_plan_id: (preselected ?? plans.find((p) => p.is_featured)?.id ?? plans[0]?.id ?? null) as number | null,
@@ -206,6 +221,7 @@ export default function Join({ site, seo, plans, selected, onlinePayments, payAt
                                                         <span className="text-lg font-bold">{p.name}</span>
                                                         {p.is_featured && <span className="rounded-full bg-[var(--site-gold)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--site-ink)]">{t('الأكثر طلبًا')}</span>}
                                                     </span>
+                                                    <PlanAccessLine plan={p} t={t} english={english} />
                                                     {p.description && <span className="text-sm text-[#5E5648]">{p.description}</span>}
                                                 </span>
                                                 <span className="flex shrink-0 flex-col items-end">

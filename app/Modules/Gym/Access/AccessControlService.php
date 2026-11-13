@@ -33,7 +33,8 @@ final class AccessControlService
 
     public function evaluate(?Member $member, ?CarbonImmutable $today = null): AccessDecision
     {
-        $today ??= CarbonImmutable::today();
+        // The club's date (its timezone), as a date of the app: the periods' dates and the day of a class are the club's.
+        $today ??= CarbonImmutable::parse(CarbonImmutable::now($this->zone())->toDateString());
 
         if (! $member) {
             return AccessDecision::deny('unknown_credential');
@@ -90,14 +91,25 @@ final class AccessControlService
     /**
      * A booking still standing for a class of this club that day: booked, or attended already (she may step out and
      * back in). A cancelled booking, a cancelled class, another day's class and another club's booking do not count.
+     * The day runs from the club's midnight to the next, in the club's timezone; class times are kept in the app's.
      */
     private function hasClassOn(Member $member, CarbonImmutable $day): bool
     {
+        $start = CarbonImmutable::parse($day->toDateString(), $this->zone());
+        $from = $start->setTimezone(config('app.timezone'));
+        $to = $start->addDay()->setTimezone(config('app.timezone'));
+
         return Booking::where('member_id', $member->id)
             ->whereIn('status', [Booking::BOOKED, Booking::ATTENDED])
             ->whereHas('session', fn ($q) => $q->where('status', '!=', ClassSession::CANCELLED)
-                ->where('starts_at', '>=', $day->startOfDay())->where('starts_at', '<', $day->addDay()->startOfDay()))
+                ->where('starts_at', '>=', $from)->where('starts_at', '<', $to))
             ->exists();
+    }
+
+    /** The club's timezone (Tenant::$timezone), or the app's when none is set. */
+    private function zone(): string
+    {
+        return $this->tenants->get()?->timezone ?: (string) config('app.timezone');
     }
 
     private function hasOverdueDues(Member $member): bool

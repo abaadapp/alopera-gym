@@ -1,11 +1,12 @@
 import { Link, usePage } from '@inertiajs/react';
-import { Check, Clock, Crown, Dumbbell, Snowflake, Sparkles, UserRound } from 'lucide-react';
+import { Check, Clock, Crown, Dumbbell, Info, Snowflake, Sparkles, UserRound } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
 import { phrase } from '@/Components/Site/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { currencyLabel, money, number } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n';
+import { planAccess, say } from '@/lib/plan-access';
 import type { PageKey, PageText, SiteChrome } from '@/types/site';
 
 export interface PlanData {
@@ -20,6 +21,9 @@ export interface PlanData {
     price: string;
     signup_fee: string;
     sessions_limit: number | null;
+    /** What a sale of it gives now (the owner's «صلاحيات الباقة»). */
+    allows_gym: boolean;
+    allows_classes: boolean;
     freeze_allowed: boolean;
     max_freeze_days: number;
     features: string[] | null;
@@ -55,10 +59,10 @@ export function PlanCard({
     const featured = plan.is_featured;
     const t = useT();
     const en = useLocale() === 'en';
+    // What the owner set the plan to give: the door, the classes, or both. Nothing it does not give is ticked.
+    const access = planAccess(plan);
     const perks: string[] = [
-        plan.sessions_limit
-            ? en && plan.sessions_limit === 1 ? '1 class during the membership' : t(':count حصة خلال مدة الاشتراك', { count: plan.sessions_limit })
-            : plan.type === 'gym' ? t('دخول غير محدود للنادي') : t('حصص غير محدودة'),
+        ...access.included.map((p) => say(p, t, en)),
         ...(plan.freeze_allowed
             ? [plan.max_freeze_days > 0
                 ? en && plan.max_freeze_days === 1 ? 'Can be frozen for up to 1 day' : t('إمكانية التجميد حتى :count يومًا', { count: plan.max_freeze_days })
@@ -99,6 +103,14 @@ export function PlanCard({
                             <Check className="size-3" />
                         </span>
                         {perk}
+                    </li>
+                ))}
+                {access.notes.map((note, i) => (
+                    <li key={`note-${i}`} className="flex items-start gap-2.5 text-sm text-muted">
+                        <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-line/60 text-muted">
+                            <Info className="size-3" />
+                        </span>
+                        {say(note, t, en)}
                     </li>
                 ))}
             </ul>
