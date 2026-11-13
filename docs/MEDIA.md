@@ -40,10 +40,26 @@ Each upload (member, trainer, program, product, post, website library, logo) is 
 - **Where it runs:** in the user's browser, on the file they picked, inside the WebAssembly sandbox.
   - A malicious HEIC can at worst crash or stall that tab.
   - The original is never changed by it; only the display source comes from it.
-- **Licence:** LGPL-3.0, no fee.
-  - It is shipped unmodified, as a separate file, with its licence (`node_modules/libheif-js/LICENSE`).
-  - Source: https://github.com/catdad-experiments/libheif-js.
+- **Licence:** LGPL-3.0, no fee. See the obligations below.
 - **Patents:** HEVC (the codec inside HEIC) is patent-encumbered; that is a legal question, not a technical one.
+
+### LGPL-3.0 obligations, and how each is met
+
+Sending the library's file to a user's browser is conveying it, so LGPL-3.0 §4 (with GPL-3.0 §6) applies:
+
+| Obligation | How it is met |
+|---|---|
+| Prominent notice that the library is used and is under the LGPL (§4a) | `public/licenses/libheif-js/NOTICE.txt` (served at `/licenses/libheif-js/NOTICE.txt`), and a notice line at the top of the library's own file (`vite.config.js` adds it at build). **A visible link in the panel is the owner's decision** (see below). |
+| Give the GPL-3.0 and LGPL-3.0 texts (§4b) | `public/licenses/libheif-js/LICENSE.txt`: the upstream LICENSE, byte for byte (its SHA-256 equals the libheif-emscripten v1.23.5 release asset). |
+| Copyright notices (§4c) | In NOTICE.txt: libheif-js (Kiril Vatev), libheif (Struktur AG, Dirk Farin), libde265 (Struktur AG, Dirk Farin). |
+| Let the user use a changed library (§4d) | The library is a separate, unmodified file loaded at run time through its interface; the application's source is public, so it can be rebuilt with another libheif-js. Nothing in the app's terms forbids changing or reverse engineering it. |
+| Corresponding Source (GPL-3.0 §6d) | NOTICE.txt gives the exact source archives (libheif 1.23.5 with its SHA-256, libde265 1.0.15), the WebAssembly build (libheif-emscripten v1.23.5) and libheif-js 1.23.5. When the source is on someone else's server, we stay responsible for it remaining available: **keeping our own copy is the owner's decision** (below). |
+| Installation Information (§4e) | Not applicable: it is for consumer devices, not a website. |
+
+Owner decisions before merging:
+- **A visible link.** For example «تراخيص البرامج المفتوحة» in the login page footer or in the club settings, pointing to `/licenses/libheif-js/NOTICE.txt`. It is not added, because the screens copy the reference design.
+- **Our own copy of the source.** The archives are about 4.5 MB (libheif 2.3 MB, libde265 0.85 MB, the WebAssembly build 1.4 MB). They could be served beside the notice, or kept in this public repository, instead of relying only on GitHub.
+- **HEVC patents.** A legal question, not a technical one.
 - **Audit:** `npm audit` reported 0 vulnerabilities at install. Review before each upgrade; do not take `heic2any` (its last release is from 2023, with an old libheif).
 
 ## Upload limits and 25 MB photos
@@ -64,62 +80,126 @@ The defaults are today's, so production is unchanged until they are raised there
   - A 24 MB JPEG with its 2400px display source: about 230 ms and 29 MB of extra memory, almost all of it from decoding the 2400px source.
   - The 24 MB original itself is streamed and hashed, never held in memory.
 
-## Originals in Spaces (built, off: `MEDIA_ORIGINALS=spaces` with `SPACES_*`)
+## Originals in Spaces (built, off: `MEDIA_ORIGINALS=spaces` with `MEDIA_SPACES_*`)
+
+The settings are `MEDIA_SPACES_KEY`, `_SECRET`, `_REGION`, `_BUCKET` and `_ENDPOINT`.
+- They are deliberately not the `SPACES_*` that `scripts/backup-database.sh` reads, so the originals never land in the database copies' bucket. That script is unchanged.
+- The endpoint is the region's own (`https://fra1.digitaloceanspaces.com`), never the CDN one: Spaces takes signed uploads through its CDN only up to 8100 KiB.
 
 1. **Ticket:** the page asks its place's own route for a ticket: `members/uploads` under `members.manage`, `products/uploads` under `products.manage`, and so on.
-   - The ticket is encrypted and names the club, the user, the place, the key and its expiry (1 hour).
+   - The ticket is encrypted. It names the club, the user, the place, the key, the file's SHA-256 and MD5, and its expiry (1 hour).
    - The signed PUT address lasts 10 minutes.
-2. **Upload:** the browser puts the original to `incoming/{club}/{uuid}.{ext}`.
-   - The address signs `x-amz-content-sha256` with the file's SHA-256, so the bucket refuses any other bytes.
-   - It also stores the hash as `x-amz-meta-sha256`.
-3. **Checking, without reading the whole file:** the app reads HEAD (size and recorded hash, which must equal the ticket's) and a 256 KB Range (type and dimensions).
-4. **Keeping:** the app copies the object inside the bucket to `tenants/{club}/originals/{folder}/v2r-{ulid}.{ext}`, checks the copy by HEAD, makes the display copy and thumbnail from the browser's display source, saves the record, then removes the incoming object.
+2. **Upload:** the browser puts the original to `incoming/{club}/{uuid}.{ext}`. The address signs:
+   - `Content-MD5`: the bucket refuses a body with another MD5.
+   - `x-amz-checksum-sha256`: a bucket that keeps checksums refuses another SHA-256.
+   - `x-amz-content-sha256`.
+   - `x-amz-meta-sha256`: the hash kept beside the object.
+3. **Checking, without reading the whole file.** The app reads HEAD and a 256 KB Range (type and dimensions). It compares, against the ticket:
+   - the size;
+   - the recorded SHA-256;
+   - **the ETag, which is the MD5 the bucket computed itself from the bytes it stored**;
+   - the bucket's own SHA-256 checksum, when it reports one.
+4. **Keeping:**
+   - The app copies the object inside the bucket to `tenants/{club}/originals/{folder}/v2r-{ulid}.{ext}` and checks the copy the same way.
+   - It makes the display copy and thumbnail from the browser's display source.
+   - It saves the record, then removes the incoming object.
 5. **Download:** after the permission check, a 302 to a 60-second signed GET (attachment, no-store). No bytes pass through the app.
 6. **Failures:**
-   - Any failed step removes the new objects and files. The record and the old image stay.
-   - The incoming object is kept for another try with the same ticket, and the lifecycle rule removes it after a day.
+   - Any failed step removes the new objects and files; the record and the old image stay.
+   - A lost connection, a timeout or a bad answer from the bucket shows «تعذر الاتصال بمخزن الصور…» on the field.
+   - The incoming object is kept, so the same ticket works once the bucket is back. The lifecycle rule removes it after a day.
    - A failed delete of an old original leaves an unused object, never a missing one.
-7. **Uploads through the app** (old browsers, or saving before the upload finished): streamed to the bucket with the same hash check.
+7. **Uploads through the app** (old browsers, a failed direct upload, or saving before it finished): streamed to the bucket. The app computes both hashes itself.
+
+### Whose word is the hash?
+
+**Before (86988a3), the browser's.** The ticket and the recorded hash both came from the browser, and the app only compared them with each other. The real check of the bytes was left to the bucket honouring `x-amz-content-sha256`. A Ceph gateway, which Spaces runs, may not check that header on a signed address.
+
+**Now:**
+- The bucket checks `Content-MD5` on every put.
+- Spaces documents its ETag as "MD5 hash of the object", so **the app compares a fingerprint the bucket computed from what it stored**. A bucket that checked nothing would still be caught. The simulated bucket in `SpacesOriginalsTest` is that worst case.
+- Where the bucket also checks SHA-256 (`media:spaces-check` says whether it does), both are the bucket's.
+- What remains:
+  - The hashes prove that what was stored is what the browser read from the file.
+  - Someone with the upload permission can still upload any image they choose, as with any upload.
+  - If the bucket checks only MD5, the recorded SHA-256 is the browser's. The daily copy (`media:originals-copy`) computes it from the bytes and refuses to spread a mismatch.
 
 ### Before switching it on
 
 - **Bucket:** a private Space in the droplet's region, with:
-  - CORS: `PUT` from the panel's address, headers `Content-Type`, `x-amz-content-sha256`, `x-amz-meta-sha256`;
+  - CORS: `PUT` from the panel's address, with headers `Content-Type`, `Content-MD5`, `x-amz-checksum-sha256`, `x-amz-content-sha256` and `x-amz-meta-sha256`;
   - lifecycle: delete `incoming/` after 1 day;
-  - versioning on, with noncurrent versions expiring after e.g. 30 days;
+  - versioning on (API only), with noncurrent versions expiring after 30 days;
   - a key limited to that bucket.
-- **Test on that real Space first:**
-  - the hash check on PUT;
-  - HEAD returning `x-amz-meta-sha256`;
-  - Range GET;
-  - CopyObject keeping the metadata;
-  - the signed download.
-
-  These are standard S3, but Spaces does not document them all.
+- **`php artisan media:spaces-check` passes on it.** It writes three 16 KB objects under `selftest/` and removes them. It shows:
+  - whether the bucket refuses bytes not matching their MD5 and their SHA-256;
+  - the ETag;
+  - Range;
+  - copy;
+  - signed download;
+  - CORS;
+  - versioning and lifecycle.
+- **The live tests pass on a test Space** (below).
 - **Approve the restore plan below.**
 - `php artisan media:limits` passes.
+
+## Tests against real buckets
+
+`tests/Feature/SpacesLiveTest.php` (group `spaces-live`) is left out of the normal run and CI. It runs only when asked, with `SPACES_LIVE_TEST=1` and two buckets whose names contain `test`:
+
+```
+SPACES_LIVE_TEST=1 MEDIA_SPACES_KEY=… MEDIA_SPACES_SECRET=… MEDIA_SPACES_REGION=fra1 MEDIA_SPACES_BUCKET=alopera-originals-test \
+MEDIA_SPACES_ENDPOINT=https://fra1.digitaloceanspaces.com MEDIA_COPY_KEY=… MEDIA_COPY_SECRET=… MEDIA_COPY_REGION=ams3 \
+MEDIA_COPY_BUCKET=alopera-originals-copy-test MEDIA_COPY_ENDPOINT=https://ams3.digitaloceanspaces.com \
+DB_DATABASE=<name>_testing php artisan test --group=spaces-live
+```
+
+It covers:
+- the self-test on both buckets;
+- JPG, HEIC and a 25 MB photo byte for byte, with the requests the app sends (never a whole GET);
+- permissions and two clubs;
+- replacement, with the old original kept by versioning;
+- a lost connection, with the same ticket working after;
+- older local images after the switch;
+- the copy, a loss and the restore, plus a damaged original that is not spread and is repaired from the copy.
+
+**Run so far:** against two local MinIO servers, each with a key limited to its bucket (the copy's key cannot delete). That is a real S3 implementation that checks the signatures and hashes itself, but **not Spaces**. The same run on a test Space is still to do.
 
 ## Restore plan for originals in Spaces (for approval)
 
 Versioning alone is **not** a backup.
 - It keeps old and deleted versions inside the same bucket, account and region.
 - A deleted bucket, a closed or compromised account, a wrong lifecycle rule or a regional loss takes the versions with it.
-- Club archives (`backup:tenants`) read only the droplet's disks, so they do not hold these originals. They hold the records, the display copies and the thumbnails, so the screens, prints and PDFs come back from a club archive alone.
+- Club archives (`backup:tenants`) read only the droplet's disks, so they do not hold these originals. They do hold the records, the display copies and the thumbnails, so the screens, prints and PDFs come back from a club archive alone.
 
-Proposed layers (none built or switched on):
+Layers (the tools are built and tested; nothing is scheduled or switched on):
 
-1. **Versioning in the bucket** (API only), with noncurrent versions kept 30 days.
-   - Covers a wrongly deleted or overwritten original. Restore: copy the previous version back to its key.
-2. **An independent copy:**
-   - A second Space in another region, under a separate key, filled by a daily one-way copy that never deletes. Spaces cannot copy across regions itself, so the copy runs from the droplet (e.g. rclone).
-   - Or a different provider (e.g. Backblaze B2, about $6/TB a month).
-   - Covers losing the first bucket or account.
-   - Restore: copy back to the same keys; records need nothing, because keys are deterministic.
-3. **A monthly restore drill:**
-   - Pick 20 random `v2r-` originals.
-   - Fetch each from the independent copy and compare its SHA-256 with `x-amz-meta-sha256`.
-   - Log the result.
-4. **After a club archive restore:** the restored records point at `tenants/{id}/originals/...` keys. Each one missing in the bucket is fetched from layer 1 or 2, and a list of any still missing is reported. No record is changed.
+1. **Versioning in the bucket,** with noncurrent versions kept 30 days.
+   - Covers a wrongly deleted or overwritten original.
+   - Restore: the previous version by its version id (tested: the removed original came back byte for byte).
+2. **An independent copy** (`MEDIA_COPY_*`): another bucket under a key of its own that **cannot delete**.
+   - Filled by `php artisan media:originals-copy --from=main --to=copy`, once a day after approval. The command:
+     - streams each original;
+     - checks its bytes against the recorded SHA-256 and the source's MD5;
+     - puts it with both hashes signed, then checks it there;
+     - never deletes;
+     - never spreads a damaged original.
+   - Where:
+     - **another provider** (e.g. Backblaze B2) is independent of the DigitalOcean account;
+     - **another Spaces region** is not: it shares the account and the subscription.
+   - Restore: `php artisan media:originals-copy --from=copy --to=main` (with `--repair` to replace a damaged one). Records need nothing, because the keys are the same.
+3. **A monthly drill:** `php artisan media:originals-check --bucket=copy --deep=20` fetches 20 random originals from the copy and compares their bytes with both hashes.
+4. **After a club archive restore:** the display copies come back with the archive, and each names its original's key.
+   - `php artisan media:originals-check` lists the originals missing from the bucket.
+   - `media:originals-copy --from=copy --to=main` brings them back. No record is changed.
+
+Tested (`OriginalsCopyTest` simulated; `SpacesLiveTest` on real S3 servers):
+- copy, then check every byte;
+- the copy's key refusing a delete;
+- all originals deleted from the main bucket, the check naming them, and the restore bringing them back byte for byte;
+- records unchanged;
+- the HEIC downloading as before;
+- bit rot in the main bucket found by the drill, not spread to the copy, and repaired from it.
 
 ## Disk and cost
 
@@ -129,9 +209,11 @@ Proposed layers (none built or switched on):
   - Each original is also in all 14 daily club archives, so expect about 45 GB per 1,000 images and 450 GB per 10,000.
   - The nightly archive job also reads and zips all of it.
 - **In Spaces:**
-  - $5/month includes 250 GiB stored and 1 TiB out; extra is $0.02/GiB stored and $0.01/GiB out. The built-in CDN is included.
+  - $5/month per account, for all its buckets together: 250 GiB stored and 1 TiB out. Extra is $0.02/GiB stored and $0.01/GiB out. The built-in CDN is included.
   - 10,000 originals (about 30 GB) fit in the base plan.
   - Versions add only what is replaced or deleted within 30 days.
-  - An independent second Space is another $5/month.
+  - A second bucket in another region adds no subscription, only its storage beyond the 250 GiB, but it shares the account.
   - Droplet-to-Spaces traffic counts against the droplet's transfer allowance.
+  - Spaces-to-droplet traffic in the same region is free.
+- **Independent copy at another provider:** Backblaze B2 lists about $6 per TB a month, so about $0.20 a month for 30 GB. Check the price when choosing.
 - **CDN for the public copies:** `MEDIA_CDN_URL`, optional.
