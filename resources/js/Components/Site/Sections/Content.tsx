@@ -7,7 +7,7 @@ import { cn } from '@/lib/cn';
 import { useT } from '@/lib/i18n';
 import { galleryCellSpan, imageOrientation, sideImageSpan } from '@/lib/smart-image';
 import SmartImage from '../SmartImage';
-import { SectionHeading, SectionShell, SiteButton, bodyText, hairline, isDark, metaText, twoDigits } from '../ui';
+import { SectionHeading, SectionShell, SiteButton, bodyText, hairline, isDark, metaText, siteCard, twoDigits } from '../ui';
 import { img, link, list, str, type SectionProps } from './types';
 
 export function Intro({ section, joined }: SectionProps) {
@@ -131,19 +131,19 @@ export function Services({ section, joined }: SectionProps) {
                         })}
                     </div>
                 ) : (
-                    <div className="grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid gap-x-5 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
                         {items.map((it, i) => {
                             const picture = img(it.image);
                             return (
-                                <figure key={it.id ?? i} className={cn('m-0 flex min-w-0 flex-col gap-4', !picture && cn('border-t pt-6', hairline(section.tone)))}>
+                                <figure key={it.id ?? i} className={cn('m-0 flex min-w-0 flex-col gap-4', !picture && cn(siteCard(section.tone), 'p-6 sm:p-7'))}>
                                     {picture && (
-                                        <div className={cn('overflow-hidden rounded-2xl', isDark(section.tone) ? 'bg-white/5' : 'bg-[#F1EDE6]')}>
+                                        <div className={cn('overflow-hidden rounded-[18px]', isDark(section.tone) ? 'bg-white/5' : 'bg-[#F1ECE3]')}>
                                             <SmartImage image={picture} maxHeightClass="max-h-[360px]" sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw" />
                                         </div>
                                     )}
                                     <figcaption className="flex flex-col gap-1.5">
-                                        {!picture && <span className="text-sm text-[var(--site-accent)]">{twoDigits(i + 1)}</span>}
-                                        <span className="text-lg font-semibold break-words">{str(it.title)}</span>
+                                        {!picture && <span dir="ltr" className="mb-2 grid size-9 place-items-center self-start rounded-full bg-[#F8F5EF] text-sm font-semibold text-[var(--site-accent)]">{twoDigits(i + 1)}</span>}
+                                        <span className="text-xl font-bold break-words">{str(it.title)}</span>
                                         {str(it.text) && <span className={cn('text-[15px] leading-7 whitespace-pre-line', metaText(section.tone))}>{str(it.text)}</span>}
                                     </figcaption>
                                 </figure>
@@ -192,33 +192,29 @@ interface Quote { id?: string; quote?: string; name?: string; meta?: string }
 export function Testimonials({ section, joined }: SectionProps) {
     const d = section.data;
     const items = list<Quote>(d.items).filter((q) => str(q.quote));
-    const [first, ...rest] = items;
-    const by = (q: Quote) => (str(q.name) || str(q.meta)) && (
-        <figcaption className="text-base">
-            {str(q.name) && <span className="font-semibold">{str(q.name)}</span>}
-            {str(q.meta) && <span className={metaText(section.tone)}>{str(q.name) ? ' · ' : ''}{str(q.meta)}</span>}
-        </figcaption>
-    );
+    const tone = section.tone;
     return (
         <SectionShell section={section} joined={joined}>
-            <div className="flex flex-col gap-12 lg:gap-14">
-                <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} tone={section.tone} />
-                {first && (
-                    <figure className="m-0 flex max-w-[1000px] flex-col gap-6">
-                        <blockquote className="m-0 text-[clamp(24px,3.2vw,42px)] leading-[1.5] font-medium text-pretty whitespace-pre-line">{str(first.quote)}</blockquote>
-                        {by(first)}
-                    </figure>
-                )}
-                {rest.length > 0 && (
-                    <div className="grid gap-x-20 gap-y-10 md:grid-cols-2">
-                        {rest.map((q, i) => (
-                            <figure key={q.id ?? i} className={cn('m-0 flex flex-col gap-3.5 border-t pt-6', hairline(section.tone))}>
-                                <blockquote className="m-0 text-lg leading-[1.8] text-pretty whitespace-pre-line">{str(q.quote)}</blockquote>
-                                {by(q)}
-                            </figure>
-                        ))}
-                    </div>
-                )}
+            <div className="flex flex-col gap-10 lg:gap-12">
+                <SectionHeading eyebrow={str(d.eyebrow)} title={str(d.title)} tone={tone} />
+                {/* The design's quote cards: a gold mark, the words, then the member's initial in a dark circle. */}
+                <div className={cn('grid gap-5', items.length > 1 && 'md:grid-cols-2', items.length > 2 && 'lg:grid-cols-3')}>
+                    {items.map((q, i) => (
+                        <figure key={q.id ?? i} className={cn(siteCard(tone), 'm-0 flex min-w-0 flex-col gap-6 p-7 sm:p-8')}>
+                            <span aria-hidden className="text-[44px] leading-none font-bold text-[var(--site-gold)]">”</span>
+                            <blockquote className="m-0 flex-1 text-lg leading-[1.8] text-pretty whitespace-pre-line">{str(q.quote)}</blockquote>
+                            {(str(q.name) || str(q.meta)) && (
+                                <figcaption className="flex items-center gap-3">
+                                    <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-full bg-[#1A1612] text-[15px] font-bold text-[var(--site-gold)]">{(str(q.name) || '·').trim().charAt(0)}</span>
+                                    <span className="flex min-w-0 flex-col">
+                                        {str(q.name) && <span className="font-semibold break-words">{str(q.name)}</span>}
+                                        {str(q.meta) && <span className={cn('text-sm', metaText(tone))}>{str(q.meta)}</span>}
+                                    </span>
+                                </figcaption>
+                            )}
+                        </figure>
+                    ))}
+                </div>
             </div>
         </SectionShell>
     );
