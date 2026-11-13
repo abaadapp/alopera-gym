@@ -3,7 +3,8 @@ import { Link, useForm } from '@inertiajs/react';
 import { Building2, CalendarClock, Globe, Landmark, Palette, Printer, Receipt } from 'lucide-react';
 import { PageActions, SettingsScreen, SettingsSection } from '@/Components/Settings';
 import { Field, FileInput, Input, Select, Textarea, Toggle } from '@/Components/ui';
-import { IMAGE_ACCEPT, pickImage } from '@/lib/image-prep';
+import { IMAGE_ACCEPT, pickImage, withTickets } from '@/lib/image-prep';
+import { useShared } from '@/hooks/useShared';
 
 interface Club {
     name: string;
@@ -60,11 +61,13 @@ type SettingsForm = {
     currency: string;
     logo: File | null;
     logo_preview: File | null;
+    logo_direct: string | null;
     remove_logo: boolean;
     rules: Rules;
 };
 
 export default function GeneralSettings({ club, rules, governorates, currencies }: { club: Club; rules: Rules & Record<string, unknown>; governorates: string[]; currencies: Record<string, string> }) {
+    const { media } = useShared();
     const form = useForm<SettingsForm>({
         name: club.name,
         legal_name: club.legal_name ?? '',
@@ -79,6 +82,7 @@ export default function GeneralSettings({ club, rules, governorates, currencies 
         currency: club.currency,
         logo: null,
         logo_preview: null,
+        logo_direct: null,
         remove_logo: false,
         rules: {
             booking_window_days: Number(rules.booking_window_days),
@@ -110,10 +114,10 @@ export default function GeneralSettings({ club, rules, governorates, currencies 
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        const options = { preserveScroll: true, onSuccess: () => form.setData((d) => ({ ...d, logo: null, logo_preview: null, remove_logo: false })) };
+        const options = { preserveScroll: true, onSuccess: () => form.setData((d) => ({ ...d, logo: null, logo_preview: null, logo_direct: null, remove_logo: false })) };
         if (form.data.logo) {
             // A file needs a multipart POST; Laravel reads the intended PUT from _method.
-            form.transform((d) => ({ ...d, _method: 'put' }));
+            form.transform((d) => ({ ...withTickets(d, ['logo']), _method: 'put' }));
             form.post(route('club.settings.update'), { ...options, forceFormData: true });
         } else {
             form.transform((d) => d);
@@ -170,7 +174,7 @@ export default function GeneralSettings({ club, rules, governorates, currencies 
                             </div>
                             <div className="min-w-0 flex-1 space-y-2">
                                 <Field label="شعار النادي" error={errors.logo} hint={club.logo_custom && !form.data.remove_logo ? 'شعار مرفوع. يظهر مرة واحدة في رأس كل ورقة.' : 'الشعار الرسمي المعتمد. ارفع صورة PNG شفافة لاستبداله، حتى 4 ميغابايت.'}>
-                                    <FileInput accept={IMAGE_ACCEPT} file={form.data.logo} onChange={(f) => pickImage(f, (file, source) => form.setData((d) => (source && d.logo !== file ? d : { ...d, logo: file, logo_preview: source, remove_logo: false })))} placeholder="اختيار صورة الشعار" />
+                                    <FileInput accept={IMAGE_ACCEPT} file={form.data.logo} onChange={(f) => pickImage(f, (file, source, ticket) => form.setData((d) => (source && d.logo !== file ? d : { ...d, logo: file, logo_preview: source, logo_direct: ticket, remove_logo: false })), media?.direct ? route('club.settings.logo-upload') : null)} placeholder="اختيار صورة الشعار" />
                                 </Field>
                                 {club.logo_custom && !form.data.logo && (
                                     <button type="button" className="text-[13px] font-medium text-[#111] underline-offset-2 hover:underline" onClick={() => form.setData('remove_logo', !form.data.remove_logo)}>

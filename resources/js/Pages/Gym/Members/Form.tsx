@@ -4,8 +4,8 @@ import { Camera, Check, HeartPulse, MessageCircle, StickyNote, Tags, UserRound }
 import ClubLayout from '@/Layouts/ClubLayout';
 import { BackLink, Button, Card, Field, FormSection, Input, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import type { Option } from '@/types';
-import { useBranchDefault } from '@/hooks/useShared';
-import { IMAGE_ACCEPT, localPreview, pickImage } from '@/lib/image-prep';
+import { useBranchDefault, useShared } from '@/hooks/useShared';
+import { IMAGE_ACCEPT, localPreview, pickImage, withTickets } from '@/lib/image-prep';
 
 interface MemberData {
     id: number;
@@ -70,12 +70,15 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
         branch_id: member ? (member.branch_id ? String(member.branch_id) : '') : branchDefault,
         photo: null as File | null,
         photo_preview: null as File | null,
+        photo_direct: null as string | null,
         _method: editing ? 'put' : 'post',
     });
 
+    const { media } = useShared();
     const submit = (e: FormEvent) => {
         e.preventDefault();
         const url = editing ? route('club.members.update', member.id) : route('club.members.store');
+        form.transform((d) => withTickets(d, ['photo']));
         form.post(url, {
             forceFormData: true,
             // Keep the position only when the form comes back with errors (not on the redirect to the profile).
@@ -138,10 +141,10 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
                                     capture="user"
                                     className="input h-auto py-2 file:me-3 file:rounded-lg file:border-0 file:bg-[#111] file:px-4 file:py-2 file:text-white"
                                     onChange={(e) =>
-                                        pickImage(e.target.files?.[0] ?? null, (file, source) => {
-                                            form.setData((d) => (source && d.photo !== file ? d : { ...d, photo: file, photo_preview: source }));
+                                        pickImage(e.target.files?.[0] ?? null, (file, source, ticket) => {
+                                            form.setData((d) => (source && d.photo !== file ? d : { ...d, photo: file, photo_preview: source, photo_direct: ticket }));
                                             if (file) setPreview(localPreview(file, source));
-                                        })
+                                        }, media?.direct ? route('club.members.uploads') : null)
                                     }
                                 />
                             </Field>

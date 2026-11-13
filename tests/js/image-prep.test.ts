@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { acceptedTypes, checkFiles } from '@/Components/SiteBuilder/media-api';
-import { batches, fitWithin, IMAGE_ACCEPT, isHeif, needsDisplaySource, PREVIEW_MAX_SIDE, sizeProblem } from '@/lib/image-prep';
+import { batches, displaySource, fitWithin, IMAGE_ACCEPT, isHeif, needsDisplaySource, PREVIEW_MAX_SIDE, sizeProblem, withTickets } from '@/lib/image-prep';
 
 const file = (name: string, type: string, size = 10) => new File([new Uint8Array(size)], name, { type });
 
@@ -67,5 +67,22 @@ describe('sizes are checked before sending', () => {
         expect(groups).toEqual([[5, 5], [5], [12], [1, 1]]);
         expect(batches(Array.from({ length: 14 }, () => 1), (n) => n, 100, 12).map((g) => g.length)).toEqual([12, 2]);
         expect(batches([30], (n) => n, 12, 3)).toEqual([[30]]);
+    });
+});
+
+describe('originals sent straight to the bucket', () => {
+    it('the form drops a file once its ticket is set, and keeps it otherwise', () => {
+        const photo = file('a.jpg', 'image/jpeg');
+        expect(withTickets({ photo, photo_direct: 'T1', name: 'x' }, ['photo'])).toEqual({ photo: null, photo_direct: 'T1', name: 'x' });
+        expect(withTickets({ photo, photo_direct: null }, ['photo'])).toEqual({ photo, photo_direct: null });
+        const [a, b] = [file('a.jpg', 'image/jpeg'), file('b.jpg', 'image/jpeg')];
+        expect(withTickets({ photos: [a, b], photos_direct: [null, 'T2'] }, ['photos'])).toEqual({ photos: [a, null], photos_direct: [null, 'T2'] });
+    });
+
+    it('a display source is wanted for every image, and a GIF is its own so a moving one stays moving', async () => {
+        expect(needsDisplaySource(file('small.jpg', 'image/jpeg'), 300, 200, true)).toBe(true);
+        expect(needsDisplaySource(file('small.jpg', 'image/jpeg'), 300, 200)).toBe(false);
+        const gif = file('moving.gif', 'image/gif');
+        await expect(displaySource(gif, true)).resolves.toBe(gif);
     });
 });

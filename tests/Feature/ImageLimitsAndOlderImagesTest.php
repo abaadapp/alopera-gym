@@ -10,6 +10,7 @@ use App\Core\Papers\PaperSize;
 use App\Core\Papers\PaperTypes;
 use App\Core\Support\Images\ImageInspector;
 use App\Core\Support\Images\ImageRejected;
+use App\Core\Support\Images\ImageUpload;
 use App\Core\Support\ImageStore;
 use App\Models\Tenant;
 use App\Modules\Gym\Models\Member;
@@ -198,5 +199,43 @@ class ImageLimitsAndOlderImagesTest extends TestCase
 
             return new Paper($club, 'invoice', Papers::builder('invoice')::sample($club, $tpl), $tpl, PaperIssuer::resolve($club), PaperSize::A4, 'sample');
         });
+    }
+
+    public function test_a_25_mb_photo_is_kept_byte_for_byte_without_being_held_in_memory(): void
+    {
+        config(['gym.max_image_kb' => 25_600]);
+        $club = $this->club();
+        $image = imagecreatetruecolor(800, 600);
+        ob_start();
+        imagejpeg($image, null, 90);
+        $jpeg = (string) ob_get_clean();
+        $path = (string) tempnam(sys_get_temp_dir(), 'big');
+        $out = fopen($path, 'wb');
+        fwrite($out, $jpeg);
+        for ($left = 25 * 1_048_576 - strlen($jpeg) - 4096; $left > 0; $left -= 1_048_576) {
+            fwrite($out, str_repeat("\0", min(1_048_576, $left)));
+        }
+        fclose($out);
+        $expected = hash_file('sha256', $path);
+        $upload = new ImageUpload(new UploadedFile($path, 'IMG_25MB.jpg', 'image/jpeg', null, true), UploadedFile::fake()->image('view.jpg', 800, 600));
+
+        gc_collect_cycles();
+        memory_reset_peak_usage();
+        $before = memory_get_usage();
+        $stored = $this->asTenant($club, fn () => ImageStore::store($upload, 'members', 600));
+        $peak = memory_get_peak_usage() - $before;
+
+        $this->assertGreaterThan(25 * 1_048_576 - 8192, filesize($path));
+        $this->assertSame($expected, ImageStore::sha256('local', ImageStore::parse($stored)['original']));
+        $this->assertLessThan(12 * 1_048_576, $peak, 'a 25 MB original is streamed, never held whole in PHP memory');
+    }
+
+    public function test_the_limits_check_says_whether_php_and_nginx_take_the_configured_size(): void
+    {
+        config(['gym.max_image_kb' => 1, 'media.max_request_kb' => 1]);
+        $this->artisan('media:limits')->assertSuccessful();
+
+        config(['gym.max_image_kb' => 25_600, 'media.max_request_kb' => 30_720]);
+        $this->artisan('media:limits')->assertFailed();
     }
 }

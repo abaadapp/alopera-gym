@@ -4,7 +4,8 @@ import { ImagePlus, Newspaper, Pencil, Plus, Tag, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, EnglishFields, Field, Input, Modal, PageHeader, Select, Tabs, Textarea, Toggle } from '@/Components/ui';
 import { date } from '@/lib/format';
-import { IMAGE_ACCEPT, pickImage } from '@/lib/image-prep';
+import { IMAGE_ACCEPT, pickImage, withTickets } from '@/lib/image-prep';
+import { useShared } from '@/hooks/useShared';
 
 interface Post {
     id: number;
@@ -37,6 +38,7 @@ type PostForm = {
     is_published: boolean;
     image: File | null;
     image_preview: File | null;
+    image_direct: string | null;
 };
 
 export default function Posts({ posts }: { posts: Post[] }) {
@@ -98,6 +100,7 @@ export default function Posts({ posts }: { posts: Post[] }) {
 }
 
 function PostModal({ post, onClose }: { post: Post | null; onClose: () => void }) {
+    const { media } = useShared();
     const form = useForm<PostForm>({
         type: post?.type ?? 'offer',
         title: post?.title ?? '',
@@ -111,12 +114,14 @@ function PostModal({ post, onClose }: { post: Post | null; onClose: () => void }
         is_published: post?.is_published ?? true,
         image: null,
         image_preview: null,
+        image_direct: null,
     });
     const preview = useMemo(() => (form.data.image ? URL.createObjectURL(form.data.image_preview ?? form.data.image) : post?.image_url ?? null), [form.data.image, form.data.image_preview, post?.image_url]);
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
         const url = post ? route('club.website.posts.update', post.id) : route('club.website.posts.store');
+        form.transform((d) => withTickets(d, ['image']));
         form.post(url, { preserveScroll: true, onSuccess: onClose });
     };
 
@@ -177,7 +182,7 @@ function PostModal({ post, onClose }: { post: Post | null; onClose: () => void }
                         <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-brand-50">
                             <ImagePlus className="size-3.5" /> اختيار صورة
                             <input type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={(e) =>
-                                pickImage(e.target.files?.[0] ?? null, (file, source) => form.setData((d) => (source && d.image !== file ? d : { ...d, image: file, image_preview: source })))
+                                pickImage(e.target.files?.[0] ?? null, (file, source, ticket) => form.setData((d) => (source && d.image !== file ? d : { ...d, image: file, image_preview: source, image_direct: ticket })), media?.direct ? route('club.website.posts.uploads') : null)
                             } />
                         </label>
                         {post?.image_download_url && !form.data.image && <a href={post.image_download_url} className="text-xs text-muted underline-offset-2 hover:text-ink hover:underline">تنزيل الصورة الأصلية</a>}

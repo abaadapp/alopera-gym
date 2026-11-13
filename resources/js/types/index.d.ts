@@ -49,7 +49,7 @@ export interface SharedProps {
     /** Optional modules switched on for this installation (config gym.modules). */
     modules: { sales: boolean; inventory: boolean };
     /** Upload limits in KB: one image, and one request (what the server accepts at once). */
-    media?: { max_image_kb: number; max_request_kb: number };
+    media?: { max_image_kb: number; max_request_kb: number; direct?: boolean };
     member: { id: number; name: string; member_no: string } | null;
     /** The club panel's bell; null outside the club panel. */
     notifications: { unread: number; items: StaffNotification[] } | null;

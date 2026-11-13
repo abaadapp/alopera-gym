@@ -5,7 +5,8 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, EnglishFields, Field, Input, linesOf, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { WEEKDAYS, phone as fmtPhone } from '@/lib/format';
 import type { Option } from '@/types';
-import { IMAGE_ACCEPT, localPreview, pickImage } from '@/lib/image-prep';
+import { IMAGE_ACCEPT, localPreview, pickImage, withTickets } from '@/lib/image-prep';
+import { useShared } from '@/hooks/useShared';
 
 type Slot = { weekday: number; starts_at: string; ends_at: string };
 
@@ -48,6 +49,7 @@ type TrainerForm = {
     user_id: number | string | null;
     photo: File | null;
     photo_preview: File | null;
+    photo_direct: string | null;
 };
 
 const blank: TrainerForm = {
@@ -67,12 +69,14 @@ const blank: TrainerForm = {
     user_id: null,
     photo: null,
     photo_preview: null,
+    photo_direct: null,
 };
 
 /** Saturday first, as the club week reads. */
 const WEEK_ORDER = [6, 0, 1, 2, 3, 4, 5];
 
 export default function TrainersIndex({ trainers, users, branches }: { trainers: Trainer[]; users: (Option & { email: string })[]; branches: Option[] }) {
+    const { media } = useShared();
     const [editing, setEditing] = useState<Trainer | null>(null);
     const [open, setOpen] = useState(false);
     const [preview, setPreview] = useState<string | null>(null);
@@ -113,6 +117,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
             user_id: t.user_id,
             photo: null,
             photo_preview: null,
+            photo_direct: null,
         });
         setSpecialtiesEn((t.specialties_en ?? []).join('\n'));
         setPreview(t.photo_url);
@@ -131,10 +136,10 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
         // A multipart form drops an empty list: no English specialties go as an empty value, so clearing them sticks.
         const english = (data: TrainerForm) => ({ ...data, specialties_en: data.specialties_en.length ? data.specialties_en : null });
         if (editing) {
-            form.transform((data) => ({ ...english(data), _method: 'put' }));
+            form.transform((data) => ({ ...withTickets(english(data), ['photo']), _method: 'put' }));
             form.post(route('club.trainers.update', editing.id), options);
         } else {
-            form.transform(english);
+            form.transform((data) => withTickets(english(data), ['photo']));
             form.post(route('club.trainers.store'), options);
         }
     };
@@ -299,10 +304,10 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                             {preview ? <img src={preview} alt="" className="size-16 rounded-xl object-cover" /> : <span className="grid size-16 place-items-center rounded-xl bg-brand-50 text-brand"><ImagePlus className="size-6" /></span>}
                             <span className="text-sm text-muted">اختر صورة</span>
                             <input type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={(e) =>
-                                pickImage(e.target.files?.[0] ?? null, (file, source) => {
-                                    form.setData((d) => (source && d.photo !== file ? d : { ...d, photo: file, photo_preview: source }));
+                                pickImage(e.target.files?.[0] ?? null, (file, source, ticket) => {
+                                    form.setData((d) => (source && d.photo !== file ? d : { ...d, photo: file, photo_preview: source, photo_direct: ticket }));
                                     setPreview(file ? localPreview(file, source) : editing?.photo_url ?? null);
-                                })
+                                }, media?.direct ? route('club.trainers.uploads') : null)
                             } />
                         </label>
                         {editing?.photo_download_url && !form.data.photo && <a href={editing.photo_download_url} className="mt-2 inline-block text-[13px] text-muted underline-offset-2 hover:text-ink hover:underline">تنزيل الصورة الأصلية</a>}

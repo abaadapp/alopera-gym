@@ -376,7 +376,8 @@ class ProductController extends Controller
             'opening_stock' => ['nullable', 'numeric', 'min:0', 'max:1000000'],
             'opening_cost' => ['nullable', 'numeric', 'min:0', 'max:99999'],
             'photos' => ['nullable', 'array', 'max:'.self::PHOTOS],
-            'photos.*' => ImageRule::rules(required: true),
+            // A photo put straight into the bucket is sent as its ticket (photos_direct), its file slot left empty.
+            'photos.*' => ImageRule::rules(),
             'photos_preview' => ['nullable', 'array'],
             'photos_preview.*' => ImageRule::previewRules(),
             'photos_direct' => ['nullable', 'array', 'max:'.self::PHOTOS],

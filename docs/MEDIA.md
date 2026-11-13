@@ -4,126 +4,134 @@ Code: `App\Core\Support\ImageStore`, `App\Core\Support\Images\*`, `config/media.
 
 ## What is stored
 
-Each upload (member, trainer, program, product, post, website library, logo) is kept three ways, in the club's folder:
+Each upload (member, trainer, program, product, post, website library, logo) is kept three ways:
 
-| Piece | Disk | Path | Used by |
+| Piece | Where | Name | Used by |
 |---|---|---|---|
-| Original, byte for byte (SHA-256 checked after writing) | `local` (private, `storage/app/private`) | `tenants/{id}/originals/{folder}/v2-{ulid}.{ext}` | download only (`…/photo`, `…/original` routes, by permission) |
-| Display copy: WebP (PNG for a logo), scaled to fit, upright, transparency kept; a moving GIF as it is | `public` | `tenants/{id}/{folder}/v2-{ulid}.{ext}.webp` | screens, website, prints, PDF (the record's path) |
-| Thumbnail, 360px | `public` | `tenants/{id}/{folder}/v2-{ulid}.{ext}.thumb.webp` | lists, avatars, the till, the door check |
+| Original, byte for byte | `local` private disk (default), or the Spaces bucket (`MEDIA_ORIGINALS=spaces`) | `tenants/{id}/originals/{folder}/v2-{ulid}.{ext}` (local) or `v2r-…` (Spaces) | download only, by permission |
+| Display copy (WebP; PNG for a logo; a moving GIF as it is) | `public` | `tenants/{id}/{folder}/v2…{ext}.webp` | screens, website, prints, PDF (the record's path) |
+| Thumbnail, 360px | `public` | `…{ext}.thumb.webp` | lists, avatars, the till, the door check |
 
-- The record keeps the display path, as before. Images stored before this have none of the new names: they have no original or thumbnail and are shown as they are.
-- Originals stay private because a camera photo may carry its location (EXIF GPS).
-- Club archives (`backup:tenants`) already collect `tenants/{id}/` from both disks, so originals are in them. The backup code was not changed.
+- The record keeps the display path, as before.
+- Images stored before this have none of the new names: they have no original or thumbnail, and are shown and printed as they are.
+- Originals are never public, because a camera photo may carry its location.
+- Every write is checked: a local original by SHA-256 after writing, a Spaces original by the bucket itself (below). Display copies and thumbnails are checked by their size.
+- A failure removes what was written and shows the reason on the field. The old files go only after the new record is saved.
 
-## Formats and limits
+## Formats
 
-- The type is read from the file's bytes: JPEG, PNG, GIF, WebP, AVIF, HEIC and HEIF.
-- A renamed script, an HTML page, an archive or a video is refused before any decoder opens it.
-- Limits:
-  - size: `gym.max_image_kb`;
-  - each side up to 20,000 px;
-  - 40 megapixels in all;
-  - the server decodes only what GD reads and has memory for (about 5 bytes a pixel).
-- HEIC/HEIF, and photos longer than 2400 px, get a light *display source* made by the browser (`<field>_preview`):
-  - The server checks that it is a plain JPEG, PNG or WebP of the same shape (either way up), and works from it.
-  - Safari on iPhone and Mac decodes HEIC itself.
-  - Where the browser cannot decode HEIC (Chrome on Windows and Android), the server cannot either, and it asks for a JPG.
-  - Adding a HEIC decoder to the browser would need a new dependency, such as heic2any, which bundles LGPL-3.0 libheif. That needs the owner's approval first.
-- A failure removes every piece already written and shows the reason on the field. Replacing an image removes the old files only after the record is saved.
+- The type is read from the bytes: JPEG, PNG, GIF, WebP, AVIF, HEIC and HEIF. Disguised files and pixel bombs are refused from the header.
+- The browser makes a light *display source* (at most 2400px):
+  - for HEIC/HEIF;
+  - for photos over 2400px;
+  - for every image when originals go to Spaces.
+- The server decodes only that display source, and the original only when it has it and memory allows.
+- **HEIC in every browser:**
+  - Safari decodes it itself.
+  - Chrome, Edge, Firefox and Android use `libheif-js` (below), loaded only when such a file is picked.
+  - If decoding still fails, the server explains instead of saving half.
 
-## Optional: CDN, Spaces, direct upload (all off by default)
+### Review of `libheif-js` 1.23.5 (adopted, pinned exactly)
 
-Nothing below is switched on until the settings are added to the server's `.env`.
+- **Contents:** libheif 1.23.5 with the libde265 1.0.15 HEVC decoder, compiled to WebAssembly by emscripten.
+  - We use `libheif-wasm/libheif-bundle.mjs`, one ES module with the wasm embedded: 2.0 MB, 723 KB gzip.
+  - Vite puts it in its own chunk, so the main bundle is unchanged.
+- **No network:** no URL, no `fetch` of its own in the bundle, no `eval` or `new Function`. It needs no CSP change; the site sends no CSP today.
+- **Where it runs:** in the user's browser, on the file they picked, inside the WebAssembly sandbox.
+  - A malicious HEIC can at worst crash or stall that tab.
+  - The original is never changed by it; only the display source comes from it.
+- **Licence:** LGPL-3.0, no fee.
+  - It is shipped unmodified, as a separate file, with its licence (`node_modules/libheif-js/LICENSE`).
+  - Source: https://github.com/catdad-experiments/libheif-js.
+- **Patents:** HEVC (the codec inside HEIC) is patent-encumbered; that is a legal question, not a technical one.
+- **Audit:** `npm audit` reported 0 vulnerabilities at install. Review before each upgrade; do not take `heic2any` (its last release is from 2023, with an old libheif).
 
-- **CDN for the public copies:** `MEDIA_CDN_URL=https://cdn.example.com`.
-  - Any pull CDN whose origin is the app's address works; it fetches `/storage/…`.
-  - The display and thumbnail names never change once written, so they can be cached for a long time.
-  - The nginx rule `/storage/` currently says `expires 30d`; `1y, immutable` would also be safe for `v2-*` files.
-- **Direct upload** (the website library): the browser puts the original straight into a Spaces bucket through a signed address (10 minutes); the server fetches it once, stores it as above, and removes it from the bucket.
-  - `MEDIA_DIRECT_UPLOAD=true`
-  - `SPACES_KEY`
-  - `SPACES_SECRET`
-  - `SPACES_REGION` (e.g. `fra1`)
-  - `SPACES_BUCKET`
-  - `SPACES_ENDPOINT=https://fra1.digitaloceanspaces.com`
-  - The bucket needs a CORS rule allowing `PUT` from the panel's address, with header `Content-Type`.
-  - It also needs a lifecycle rule deleting `incoming/` after 1 day.
-  - Signing is done in code (`SpacesSigner`, checked against AWS's published example), so no SDK is needed for this.
-- **Originals on Spaces** (`MEDIA_ORIGINALS_DISK`): needs a Laravel `s3` disk, which needs `league/flysystem-aws-s3-v3`. That package is not installed; adding it is a separate decision.
-  - Originals on Spaces would not be in club archives, which read the local disks.
+## Upload limits and 25 MB photos
 
-## Upload limits (settings; production unchanged until they are raised there)
+The defaults are today's, so production is unchanged until they are raised there.
 
-| Setting | Default | For 25 MB phone photos |
+| Setting | Default | For 25 MB photos |
 |---|---|---|
-| `GYM_MAX_IMAGE_KB` (one image) | 4096 | 25600 |
-| `MEDIA_MAX_PIXELS` (header only; a 48MP photo is 48.8M) | 40000000 | 50000000 |
-| `MEDIA_MAX_REQUEST_KB` (one request; the library batches under it, the product form warns) | 20480 | e.g. 30720 |
-| PHP `upload_max_filesize` / `post_max_size` (server php.ini, FPM) | server's own | ≥ 25M / ≥ 30M |
-| nginx `client_max_body_size` (`deploy/nginx`, today `20m`) | 20m | ≥ 30m |
+| `GYM_MAX_IMAGE_KB` | 4096 | 25600 |
+| `MEDIA_MAX_PIXELS` (a 48MP photo is 48.8M) | 40000000 | 50000000 |
+| `MEDIA_MAX_REQUEST_KB` (the library batches under it, the product form warns) | 20480 | 30720 |
+| PHP-FPM `upload_max_filesize` / `post_max_size` | server's own | ≥ 25M / ≥ 30M |
+| nginx `client_max_body_size` (`deploy/nginx`) | 20m | ≥ 30m |
 
-- Every image header is read without decoding it, and every copy is made as a stream, so a 25 MB file costs 25 MB of disk, not 25 MB of PHP memory.
-- The server decodes only what fits its memory (about 5 bytes a pixel); anything bigger is shown from the browser's display source (at most 2400px).
-- A file over PHP's limit is refused by PHP before the app sees it. Its message (`validation.uploaded`) now says it may be too large.
-- A request over `post_max_size` comes back with a plain message instead of an error page.
+- **Checking:** `php artisan media:limits` checks these (read-only) and fails while one is short. Check PHP-FPM too: `php-fpm8.4 -i | grep -E "upload_max|post_max"`.
+- **With originals in Spaces,** the original never reaches nginx or PHP; only the display source (≤ 4 MB) does, so the PHP and nginx limits matter only without Spaces.
+- **Measured locally:**
+  - A 24 MB JPEG with its 2400px display source: about 230 ms and 29 MB of extra memory, almost all of it from decoding the 2400px source.
+  - The 24 MB original itself is streamed and hashed, never held in memory.
 
-## Disk: what to expect
+## Originals in Spaces (built, off: `MEDIA_ORIGINALS=spaces` with `SPACES_*`)
 
-These figures were measured on a 12MP photo (display copy and thumbnail, made from the browser's 2400px source):
+1. **Ticket:** the page asks its place's own route for a ticket: `members/uploads` under `members.manage`, `products/uploads` under `products.manage`, and so on.
+   - The ticket is encrypted and names the club, the user, the place, the key and its expiry (1 hour).
+   - The signed PUT address lasts 10 minutes.
+2. **Upload:** the browser puts the original to `incoming/{club}/{uuid}.{ext}`.
+   - The address signs `x-amz-content-sha256` with the file's SHA-256, so the bucket refuses any other bytes.
+   - It also stores the hash as `x-amz-meta-sha256`.
+3. **Checking, without reading the whole file:** the app reads HEAD (size and recorded hash, which must equal the ticket's) and a 256 KB Range (type and dimensions).
+4. **Keeping:** the app copies the object inside the bucket to `tenants/{club}/originals/{folder}/v2r-{ulid}.{ext}`, checks the copy by HEAD, makes the display copy and thumbnail from the browser's display source, saves the record, then removes the incoming object.
+5. **Download:** after the permission check, a 302 to a 60-second signed GET (attachment, no-store). No bytes pass through the app.
+6. **Failures:**
+   - Any failed step removes the new objects and files. The record and the old image stay.
+   - The incoming object is kept for another try with the same ticket, and the lifecycle rule removes it after a day.
+   - A failed delete of an old original leaves an unused object, never a missing one.
+7. **Uploads through the app** (old browsers, or saving before the upload finished): streamed to the bucket with the same hash check.
 
-| Place | Display | Thumbnail |
-|---|---|---|
-| members (600px) | 14–22 KB | 1–6 KB |
-| trainers (800px) | 19–63 KB | 2–6 KB |
-| products (1000px) | 24–111 KB | 2–6 KB |
-| programs, posts (1600px) | 42–396 KB | 2–6 KB |
-| website library (2400px) | 81–1347 KB | 2–6 KB |
+### Before switching it on
 
-- Originals are what they were: about 1.5–2.5 MB for a 12MP HEIC, and 3–6 MB for a 12MP JPEG (assumed, not measured on the club's photos).
-- At an average of 3 MB, originals add about 3 GB per 1,000 images and 30 GB per 10,000; display copies and thumbnails add 20–120 MB per 1,000.
-- **Club archives:**
-  - `backup:tenants` keeps 14 daily zip archives of `tenants/{id}/` from both disks, on the droplet.
-  - Images do not compress, so each original kept locally takes about 15 times its size: the file plus 14 archives.
-  - Typical totals: about 45 GB per 1,000 images and about 450 GB per 10,000.
-  - The nightly job also reads and zips all of it.
-  - Turn originals off (`MEDIA_KEEP_ORIGINALS=false`) or keep them outside the droplet (below) before photos accumulate. Changing the archives themselves is a separate decision.
+- **Bucket:** a private Space in the droplet's region, with:
+  - CORS: `PUT` from the panel's address, headers `Content-Type`, `x-amz-content-sha256`, `x-amz-meta-sha256`;
+  - lifecycle: delete `incoming/` after 1 day;
+  - versioning on, with noncurrent versions expiring after e.g. 30 days;
+  - a key limited to that bucket.
+- **Test on that real Space first:**
+  - the hash check on PUT;
+  - HEAD returning `x-amz-meta-sha256`;
+  - Range GET;
+  - CopyObject keeping the metadata;
+  - the signed download.
 
-## HEIC in browsers that cannot read it (decision pending)
+  These are standard S3, but Spaces does not document them all.
+- **Approve the restore plan below.**
+- `php artisan media:limits` passes.
 
-Safari on iPhone and Mac decodes HEIC itself. Chrome (Windows, Android, and Mac too) does not, so there the server refuses with a message. The options:
+## Restore plan for originals in Spaces (for approval)
 
-1. **A decoder in the browser**, loaded only when needed (WebAssembly, about 1.5–3 MB downloaded once):
-   - Candidates: `libheif-js` 1.23.5, or `heic-to` 1.6.7.
-   - Licence: both are LGPL-3.0. Ship the file unchanged and separate, with its licence and a link to its source.
-   - Cost: none.
-   - Server: no change.
-   - Note: HEVC (the codec inside HEIC) is patent-encumbered; that is a legal question, not a technical one.
-   - `heic2any` is not recommended: its last release is from 2023, with an old libheif.
-2. **A decoder on the server** (libheif/ImageMagick packages on the droplet):
-   - It needs a production package install.
-   - It costs the host CPU and memory: tens of MB and up to a second per photo.
-3. **A paid image service**: a monthly fee, and member photos leave the club's servers.
+Versioning alone is **not** a backup.
+- It keeps old and deleted versions inside the same bucket, account and region.
+- A deleted bucket, a closed or compromised account, a wrong lifecycle rule or a regional loss takes the versions with it.
+- Club archives (`backup:tenants`) read only the droplet's disks, so they do not hold these originals. They hold the records, the display copies and the thumbnails, so the screens, prints and PDFs come back from a club archive alone.
 
-## Proposal (not built): originals in Spaces without passing through the droplet
+Proposed layers (none built or switched on):
 
-1. The browser asks for a signed PUT for `incoming/{club}/{uuid}.{ext}`.
-   - The signature covers `Content-Type` and `Content-MD5`, so a corrupted upload is refused; this must be tested on a real Space.
-   - The browser also hashes the file (SHA-256) and the signature stores it as `x-amz-meta-sha256`.
-2. The browser sends the light display source to the app as today, which makes the display copy and the thumbnail.
-3. The app checks the object without fetching it whole:
-   - HEAD for the size and ETag (MD5 for a single-part PUT);
-   - a Range GET of the first 256 KB for the type and dimensions.
-   - It then copies it server-side (CopyObject, same region) to `originals/{club}/{folder}/v2-{ulid}.{ext}`, and records the image.
-4. Download: the permission-checked route answers with a 302 to a 60-second signed GET, so no bytes pass through the app.
-5. Deletion and replacement: the old original is deleted only after the record is saved, as now. Uploads never used are removed by a lifecycle rule on `incoming/`.
-6. Restore: these originals are not in club archives. Recovery rests on the Space itself:
-   - versioning, which Spaces supports through the API only;
-   - plus a lifecycle rule on old versions, e.g. 30 days.
-   - A restored database finds its originals under the same keys.
-7. Cost:
-   - The Spaces subscription is $5/month for 250 GiB and 1 TiB out; extra is $0.02/GiB stored and $0.01/GiB out.
-   - The built-in CDN is included.
-   - 10,000 originals at 3 MB is about 30 GB, inside the base plan.
-   - Old versions add only what is replaced.
-8. Work: about 1–1.5 days, plus tests on a real Space (CORS, Content-MD5, ETag, Range).
+1. **Versioning in the bucket** (API only), with noncurrent versions kept 30 days.
+   - Covers a wrongly deleted or overwritten original. Restore: copy the previous version back to its key.
+2. **An independent copy:**
+   - A second Space in another region, under a separate key, filled by a daily one-way copy that never deletes. Spaces cannot copy across regions itself, so the copy runs from the droplet (e.g. rclone).
+   - Or a different provider (e.g. Backblaze B2, about $6/TB a month).
+   - Covers losing the first bucket or account.
+   - Restore: copy back to the same keys; records need nothing, because keys are deterministic.
+3. **A monthly restore drill:**
+   - Pick 20 random `v2r-` originals.
+   - Fetch each from the independent copy and compare its SHA-256 with `x-amz-meta-sha256`.
+   - Log the result.
+4. **After a club archive restore:** the restored records point at `tenants/{id}/originals/...` keys. Each one missing in the bucket is fetched from layer 1 or 2, and a list of any still missing is reported. No record is changed.
+
+## Disk and cost
+
+- Display copies and thumbnails: 20–120 MB per 1,000 images (measured per place).
+- Originals: about 3 GB per 1,000 images at an average of 3 MB (assumed; HEIC around 1.5–2.5 MB, JPEG 3–6 MB).
+- **On the droplet** (`MEDIA_ORIGINALS=local`):
+  - Each original is also in all 14 daily club archives, so expect about 45 GB per 1,000 images and 450 GB per 10,000.
+  - The nightly archive job also reads and zips all of it.
+- **In Spaces:**
+  - $5/month includes 250 GiB stored and 1 TiB out; extra is $0.02/GiB stored and $0.01/GiB out. The built-in CDN is included.
+  - 10,000 originals (about 30 GB) fit in the base plan.
+  - Versions add only what is replaced or deleted within 30 days.
+  - An independent second Space is another $5/month.
+  - Droplet-to-Spaces traffic counts against the droplet's transfer allowance.
+- **CDN for the public copies:** `MEDIA_CDN_URL`, optional.

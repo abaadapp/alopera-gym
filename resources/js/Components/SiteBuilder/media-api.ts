@@ -1,4 +1,4 @@
-import { batches, displaySource } from '@/lib/image-prep';
+import { batches, displaySource, uploadOriginal } from '@/lib/image-prep';
 import { xsrf } from '@/lib/http';
 import type { MediaItem } from '@/types/site';
 
@@ -28,37 +28,20 @@ async function read<T>(response: Response): Promise<T> {
 }
 
 /**
- * Puts one original straight into the club's Spaces bucket through a short-lived signed address (when the server
- * offers direct upload) and gives back its key: the large file then never passes through the server on its way in.
- */
-async function putDirect(file: File): Promise<string> {
-    const ticket = await read<{ url: string; key: string; headers: Record<string, string> }>(
-        await fetch(route('club.website.media.direct'), {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { ...headers(), 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: file.name, type: file.type, size: file.size }),
-        }),
-    );
-    const put = await fetch(ticket.url, { method: 'PUT', headers: ticket.headers, body: file });
-    if (!put.ok) throw new MediaError(`تعذر رفع «${file.name}». تحقق من الاتصال ثم حاول مرة أخرى.`);
-    return ticket.key;
-}
-
-/**
  * Sends the images in as many requests as needed, each under what the server accepts at once (`maxRequestKb`): each
  * original as it is (or only its key, after a direct upload), and beside it, at the same index, the browser's display
  * source for a HEIC or a very large photo.
  */
 export async function uploadMedia(files: File[], direct = false, maxRequestKb = 20_480): Promise<MediaItem[]> {
-    const sources = await Promise.all(files.map((f) => displaySource(f).catch(() => null)));
+    const sources = await Promise.all(files.map((f) => displaySource(f, direct).catch(() => null)));
     const items = files.map((file, i) => ({ file, source: sources[i] }));
-    const weight = (item: { file: File; source: File | null }) => (direct ? 0 : item.file.size) + (item.source?.size ?? 0) + 4096;
+    const weight = (item: { file: File; source: File | null }) => (direct && item.source ? 0 : item.file.size) + (item.source?.size ?? 0) + 4096;
     const added: MediaItem[] = [];
     for (const group of batches(items, weight, maxRequestKb * 1024 * 0.95, 12)) {
         const form = new FormData();
         for (const [i, { file, source }] of group.entries()) {
-            if (direct) form.append(`images_direct[${i}]`, await putDirect(file));
+            // With originals in the bucket each goes there straight from the browser; the app gets its ticket.
+            if (direct && source) form.append(`images_direct[${i}]`, await uploadOriginal(file, route('club.website.media.uploads')));
             else form.append(`images[${i}]`, file);
             if (source) form.append(`images_preview[${i}]`, source);
         }

@@ -4,7 +4,8 @@ import { Clock, Dumbbell, Eye, EyeOff, ImagePlus, Pencil, Plus, Trash2, Users } 
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, EnglishFields, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { number } from '@/lib/format';
-import { IMAGE_ACCEPT, localPreview, pickImage } from '@/lib/image-prep';
+import { IMAGE_ACCEPT, localPreview, pickImage, withTickets } from '@/lib/image-prep';
+import { useShared } from '@/hooks/useShared';
 
 type Program = {
     id: number;
@@ -44,6 +45,7 @@ type FormData = {
     sort: number | string;
     image: File | null;
     image_preview: File | null;
+    image_direct: string | null;
 };
 
 const empty: FormData = {
@@ -61,9 +63,11 @@ const empty: FormData = {
     sort: 0,
     image: null,
     image_preview: null,
+    image_direct: null,
 };
 
 export default function ProgramsIndex({ programs }: { programs: Program[] }) {
+    const { media } = useShared();
     const [editing, setEditing] = useState<Program | null>(null);
     const [open, setOpen] = useState(false);
     const [preview, setPreview] = useState<string | null>(null);
@@ -95,6 +99,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
             sort: p.sort,
             image: null,
             image_preview: null,
+            image_direct: null,
         });
         setPreview(p.image_url);
         setOpen(true);
@@ -104,10 +109,10 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
         e.preventDefault();
         const options = { forceFormData: true, preserveScroll: true, onSuccess: () => setOpen(false) };
         if (editing) {
-            form.transform((data) => ({ ...data, _method: 'put' }));
+            form.transform((data) => ({ ...withTickets(data, ['image']), _method: 'put' }));
             form.post(route('club.programs.update', editing.id), options);
         } else {
-            form.transform((data) => data);
+            form.transform((data) => withTickets(data, ['image']));
             form.post(route('club.programs.store'), options);
         }
     };
@@ -252,10 +257,10 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                                 accept={IMAGE_ACCEPT}
                                 className="hidden"
                                 onChange={(e) =>
-                                    pickImage(e.target.files?.[0] ?? null, (file, source) => {
-                                        form.setData((d) => (source && d.image !== file ? d : { ...d, image: file, image_preview: source }));
+                                    pickImage(e.target.files?.[0] ?? null, (file, source, ticket) => {
+                                        form.setData((d) => (source && d.image !== file ? d : { ...d, image: file, image_preview: source, image_direct: ticket }));
                                         setPreview(file ? localPreview(file, source) : editing?.image_url ?? null);
-                                    })
+                                    }, media?.direct ? route('club.programs.uploads') : null)
                                 }
                             />
                         </label>

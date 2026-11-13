@@ -9,7 +9,7 @@ import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
 import type { Option } from '@/types';
 import type { ProductRow } from './Index';
-import { IMAGE_ACCEPT, pickImage, sizeProblem } from '@/lib/image-prep';
+import { IMAGE_ACCEPT, pickImage, sizeProblem, withTickets } from '@/lib/image-prep';
 
 interface Addon {
     id: number;
@@ -64,6 +64,7 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
         opening_cost: '',
         photos: [] as File[],
         photos_preview: [] as (File | null)[],
+        photos_direct: [] as (string | null)[],
         addon_ids: addons.filter((a) => a.linked).map((a) => a.id),
         link_addons: true,
     });
@@ -92,9 +93,10 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
         e.preventDefault();
         const options = { forceFormData: true, preserveScroll: true };
         if (product) {
-            form.transform((d) => ({ ...d, opening_stock: '', opening_cost: '', _method: 'put' }));
+            form.transform((d) => ({ ...withTickets(d, ['photos']), opening_stock: '', opening_cost: '', _method: 'put' }));
             form.post(route('club.products.update', product.id), options);
         } else {
+            form.transform((d) => withTickets(d, ['photos']));
             form.post(route('club.products.store'), options);
         }
     };
@@ -110,12 +112,12 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
             return;
         }
         form.clearErrors('photos');
-        form.setData((d) => ({ ...d, photos: [...d.photos, ...added], photos_preview: [...d.photos_preview, ...added.map(() => null)] }));
+        form.setData((d) => ({ ...d, photos: [...d.photos, ...added], photos_preview: [...d.photos_preview, ...added.map(() => null)], photos_direct: [...d.photos_direct, ...added.map(() => null)] }));
         // The browser's display source for a HEIC or a very large photo, added when ready, beside its own file.
-        added.forEach((file) => pickImage(file, (f, source) => source && form.setData((d) => {
+        added.forEach((file) => pickImage(file, (f, source, ticket) => source && form.setData((d) => {
             const at = d.photos.indexOf(f as File);
-            return at < 0 ? d : { ...d, photos_preview: d.photos_preview.map((s, i) => (i === at ? source : s)) };
-        })));
+            return at < 0 ? d : { ...d, photos_preview: d.photos_preview.map((s, i) => (i === at ? source : s)), photos_direct: d.photos_direct.map((t, i) => (i === at ? ticket : t)) };
+        }), media?.direct ? route('club.products.uploads') : null));
     };
     const photoAction = (index: number, action: 'main' | 'remove') => product && router.post(route('club.products.photo', { product: product.id, index }), { action }, { preserveScroll: true, preserveState: true });
     const toggleAddon = (id: number) => form.setData('addon_ids', form.data.addon_ids.includes(id) ? form.data.addon_ids.filter((x) => x !== id) : [...form.data.addon_ids, id]);
@@ -275,7 +277,7 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
                                     <div key={url} className="relative aspect-square overflow-hidden rounded-[12px] border border-dashed border-[#d1d5db]">
                                         <img src={url} alt="" loading="lazy" decoding="async" className="size-full object-cover" />
                                         <span className="absolute top-2 start-2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] text-[#4b4b4b]">{existing.length === 0 && i === 0 ? 'الرئيسية — ' : ''}تُرفع عند الحفظ</span>
-                                        <button type="button" onClick={() => form.setData((d) => ({ ...d, photos: d.photos.filter((_, j) => j !== i), photos_preview: d.photos_preview.filter((_, j) => j !== i) }))} className="absolute top-2 end-2 grid size-7 place-items-center rounded-full bg-white/90 text-ink hover:bg-white" aria-label="إزالة الصورة"><X className="size-4" /></button>
+                                        <button type="button" onClick={() => form.setData((d) => ({ ...d, photos: d.photos.filter((_, j) => j !== i), photos_preview: d.photos_preview.filter((_, j) => j !== i), photos_direct: d.photos_direct.filter((_, j) => j !== i) }))} className="absolute top-2 end-2 grid size-7 place-items-center rounded-full bg-white/90 text-ink hover:bg-white" aria-label="إزالة الصورة"><X className="size-4" /></button>
                                     </div>
                                 ))}
                                 {room > 0 && (
