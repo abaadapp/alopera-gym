@@ -10,6 +10,7 @@ use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Models\Program;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -39,8 +40,11 @@ class PlanController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
-        $plan = MembershipPlan::create(collect($data)->except('program_ids')->all());
-        $plan->programs()->sync($data['program_ids'] ?? []);
+        // The plan and the programs it opens together or not at all: never a plan sold without its programs.
+        DB::transaction(function () use ($data) {
+            $plan = MembershipPlan::create(collect($data)->except('program_ids')->all());
+            $plan->programs()->sync($data['program_ids'] ?? []);
+        });
 
         return back()->with('success', 'تمت إضافة الباقة.');
     }
@@ -48,17 +52,24 @@ class PlanController extends Controller
     public function update(Request $request, MembershipPlan $plan): RedirectResponse
     {
         $data = $this->validated($request);
-        // Existing memberships keep the terms they were sold with (plan_snapshot).
-        $plan->update(collect($data)->except('program_ids')->all());
-        $plan->programs()->sync($data['program_ids'] ?? []);
+        // Existing memberships keep the terms they were sold with (plan_snapshot). The terms and the programs are saved
+        // together or not at all (never the new price with old or missing programs), one save at a time: the row is
+        // held until this one commits, so two saves at once each land whole, the later on top.
+        DB::transaction(function () use ($plan, $data) {
+            $plan = MembershipPlan::whereKey($plan->id)->lockForUpdate()->firstOrFail();
+            $plan->update(collect($data)->except('program_ids')->all());
+            $plan->programs()->sync($data['program_ids'] ?? []);
+        });
 
         return back()->with('success', 'تم حفظ الباقة. العضويات الحالية تحتفظ بشروطها الأصلية.');
     }
 
     public function destroy(MembershipPlan $plan): RedirectResponse
     {
-        $plan->update(['is_active' => false]);
-        $plan->delete();
+        DB::transaction(function () use ($plan) {
+            $plan->update(['is_active' => false]);
+            $plan->delete();
+        });
 
         return back()->with('success', 'تم حذف الباقة من البيع. العضويات السابقة لم تتأثر.');
     }

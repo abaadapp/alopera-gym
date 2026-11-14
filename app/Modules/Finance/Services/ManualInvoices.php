@@ -4,6 +4,7 @@ namespace App\Modules\Finance\Services;
 
 use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
+use App\Core\Support\Files\SafeFiles;
 use App\Core\Support\Money;
 use App\Core\Tenancy\BranchContext;
 use App\Modules\Finance\Models\Invoice;
@@ -139,7 +140,7 @@ final class ManualInvoices
                     $this->payments->record($invoice, $amount, $method, [
                         'reference' => $payment['reference'] ?? null,
                         'paid_at' => filled($payment['paid_at'] ?? null) ? $payment['paid_at'] : now(),
-                        'proof_path' => $proof instanceof UploadedFile ? $this->store($proof, 'tenants/'.$invoice->tenant_id.'/payment-proofs') : null,
+                        'proof_path' => $proof instanceof UploadedFile ? $this->store($proof, 'tenants/'.$invoice->tenant_id.'/payment-proofs', 'payment_proof') : null,
                         'notes' => 'عند إصدار الفاتورة',
                     ]);
                 }
@@ -289,7 +290,7 @@ final class ManualInvoices
         }
         foreach ($files as $file) {
             $invoice->attachments()->create([
-                'path' => $this->store($file, 'tenants/'.$invoice->tenant_id.'/invoices'),
+                'path' => $this->store($file, 'tenants/'.$invoice->tenant_id.'/invoices', 'attachments'),
                 'name' => Str::limit($file->getClientOriginalName(), 190, ''),
                 'mime' => $file->getMimeType(),
                 'size' => (int) $file->getSize(),
@@ -301,9 +302,10 @@ final class ManualInvoices
     /** Files written while saving: removed again if the save fails, so nothing is left without its invoice. */
     private array $stored = [];
 
-    private function store(UploadedFile $file, string $folder): string
+    /** Kept whole or not at all (SafeFiles): a refused or cut copy fails the save, with the error on $field. */
+    private function store(UploadedFile $file, string $folder, string $field): string
     {
-        return $this->stored[] = $file->storeAs($folder, Str::random(40).'.'.$file->guessExtension(), 'local');
+        return $this->stored[] = SafeFiles::putUpload($file, $folder, $field, name: Str::random(40).'.'.$file->guessExtension());
     }
 
     /**
@@ -334,7 +336,7 @@ final class ManualInvoices
         $gone = InvoiceAttachment::where('invoice_id', $invoice->id)->whereIn('id', $ids)->get();
         foreach ($gone as $file) {
             $file->delete();
-            DB::afterCommit(fn () => Storage::disk('local')->delete($file->path));
+            SafeFiles::deleteAfterCommit($file->path);
         }
     }
 }

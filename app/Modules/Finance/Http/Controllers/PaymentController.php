@@ -3,6 +3,7 @@
 namespace App\Modules\Finance\Http\Controllers;
 
 use App\Core\Papers\Papers;
+use App\Core\Support\Files\SafeFiles;
 use App\Core\Support\Money;
 use App\Core\Support\Period;
 use App\Core\Support\SubmittedOnce;
@@ -65,10 +66,11 @@ class PaymentController extends Controller
             'client_key' => SubmittedOnce::RULE,
         ], ['reference.required_if' => 'أدخل رقم العملية من جهاز الشبكة.']);
 
-        // One form, one payment: sent twice (a double click, a retry), the second gets the first payment back.
+        // One form, one payment: sent twice (a double click, a retry), the second gets the first payment back. The proof is
+        // written in the payment's own transaction (SubmittedOnce): kept whole or no payment, and gone again if the payment fails.
         [$pending, $receipt] = SubmittedOnce::run($data['client_key'] ?? null, 'invoice-payment:'.$invoice->id, function () use ($request, $tenants, $invoice, $data) {
             $proof = $request->hasFile('proof')
-                ? $request->file('proof')->store('tenants/'.$tenants->require()->id.'/payment-proofs', 'local')
+                ? SafeFiles::putUpload($request->file('proof'), 'tenants/'.$tenants->require()->id.'/payment-proofs', 'proof')
                 : null;
             $payment = $this->payments->record($invoice, $data['amount'], $data['method'], [
                 'reference' => $data['reference'] ?? null,

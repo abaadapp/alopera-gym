@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Http\Controllers;
 
+use App\Core\Support\Files\SafeFiles;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
@@ -18,6 +19,7 @@ use App\Modules\Inventory\Services\PurchaseService;
 use App\Modules\Inventory\Services\SupplierBillService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -90,16 +92,20 @@ class SupplierBillController extends Controller
             'attachment' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:'.config('gym.max_document_kb', 10240)],
             'approve' => ['boolean'],
         ], ['due_date.after_or_equal' => 'تاريخ الاستحقاق بعد تاريخ الإصدار.']);
-        if ($file = $request->file('attachment')) {
-            $data['attachment_path'] = $file->storeAs('tenants/'.$request->user()->tenant_id.'/supplier-bills', Str::random(32).'.'.$file->guessExtension(), 'local');
-            $data['attachment_name'] = Str::limit($file->getClientOriginalName(), 200, '');
-        }
         // The order comes in the body: held to the user's branch here. A bill without one is the user's branch's.
         if (! empty($data['purchase_order_id'])) {
             abort_unless(app(BranchContext::class)->allows($request->user(), PurchaseOrder::findOrFail($data['purchase_order_id'])->branch_id), 404);
         }
         $data['branch_id'] = app(BranchContext::class)->id($request->user());
-        $bill = $this->bills->create(Supplier::findOrFail($data['supplier_id']), $data);
+        // The attachment is written in the bill's transaction: kept whole or no bill, and gone again if the bill fails.
+        $bill = DB::transaction(function () use ($request, $data) {
+            if ($file = $request->file('attachment')) {
+                $data['attachment_path'] = SafeFiles::putUpload($file, 'tenants/'.$request->user()->tenant_id.'/supplier-bills', 'attachment', name: Str::random(32).'.'.$file->guessExtension());
+                $data['attachment_name'] = Str::limit($file->getClientOriginalName(), 200, '');
+            }
+
+            return $this->bills->create(Supplier::findOrFail($data['supplier_id']), $data);
+        });
         if ($request->boolean('approve') && $request->user()->can('purchases.approve')) {
             $this->bills->approve($bill);
         }
