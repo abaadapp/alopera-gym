@@ -27,7 +27,7 @@ export default function WebsiteBranding({ club, siteUrl }: Props) {
                 <Card>
                     <CardHeader title="الشعار" subtitle="يُغيَّر من إعدادات النادي، ويظهر في الموقع ولوحة التحكم والفواتير" actions={<Link href={route('club.settings.edit')} className="text-[13px] font-medium text-[#111] hover:underline">تغيير الشعار</Link>} />
                     <div className="flex h-32 items-center justify-center rounded-2xl border border-line bg-canvas p-3">
-                        <img src={club.logo_url} alt="شعار Alopera Gym" className="h-full w-auto object-contain" />
+                        <img src={club.logo_url} alt="شعار Alopera Gym" className="h-full w-auto max-w-full object-contain" />
                     </div>
                 </Card>
                 <Card>

@@ -171,7 +171,7 @@ export default function GeneralSettings({ club, rules, governorates, currencies 
                     <SettingsSection icon={Palette} title="الشعار والهوية" description="الشعار على لوحة التحكم والدخول والموقع والفواتير والإيصالات وملفات PDF">
                         <div className="flex flex-wrap items-start gap-5">
                             <div className="flex h-24 w-32 shrink-0 items-center justify-center rounded-[14px] border border-[#e8e8e8] bg-[#fafafa] p-2">
-                                <img src={logoShown} alt="شعار النادي" className="h-full w-auto object-contain" />
+                                <img src={logoShown} alt="شعار النادي" className="h-full w-auto max-w-full object-contain" />
                             </div>
                             <div className="min-w-0 flex-1 space-y-2">
                                 <Field label="شعار النادي" error={errors.logo} hint={club.logo_custom && !form.data.remove_logo ? 'شعار مرفوع. يظهر مرة واحدة في رأس كل ورقة.' : 'الشعار الرسمي المعتمد. ارفع صورة PNG شفافة لاستبداله، حتى 4 ميغابايت.'}>

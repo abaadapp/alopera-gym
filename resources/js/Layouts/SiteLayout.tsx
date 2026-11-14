@@ -120,7 +120,7 @@ export default function SiteLayout({ site, children, seoTitle }: { site: SiteInf
                 <header className="sticky top-0 z-50 border-b border-[rgba(22,19,15,0.1)] bg-white/95 backdrop-blur-[10px]">
                     <div className="mx-auto flex min-h-16 max-w-[1360px] items-center gap-4 px-5 py-2.5 sm:px-10 xl:gap-8">
                         <a href={homeUrl} className="flex shrink-0" aria-label={tenant?.name ?? t('الرئيسية')}>
-                            <img src={site.logo_url} alt={tenant?.name ?? ''} className="block h-11 w-auto object-contain" />
+                            <img src={site.logo_url} alt={tenant?.name ?? ''} className="block h-11 w-auto max-w-full object-contain" />
                         </a>
                         <nav className="hidden min-w-0 flex-1 flex-wrap justify-center gap-x-[22px] xl:flex" aria-label={t('القائمة الرئيسية')}>
                             {links.map((l, i) => (
@@ -172,7 +172,7 @@ export default function SiteLayout({ site, children, seoTitle }: { site: SiteInf
                 <footer className="border-t border-[rgba(26,22,18,0.08)] bg-[var(--site-surface)] text-[#5E5648]">
                     <div className="mx-auto grid max-w-[1360px] gap-10 px-5 py-14 sm:px-10 md:grid-cols-2 lg:grid-cols-12 lg:gap-12">
                         <div className="flex min-w-0 flex-col gap-4 lg:col-span-4">
-                            <img src={site.logo_url} alt={tenant?.name ?? ''} className="block h-[60px] w-auto self-start object-contain" />
+                            <img src={site.logo_url} alt={tenant?.name ?? ''} className="block h-[60px] w-auto max-w-full self-start object-contain" />
                             {chrome?.footer.line && <p className="m-0 max-w-[360px] text-sm leading-7 whitespace-pre-line">{chrome.footer.line}</p>}
                         </div>
                         {footerLinks.length > 0 && (
