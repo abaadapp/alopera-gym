@@ -20,7 +20,7 @@ class PaymobWebhookController extends Controller
         return match ($outcome) {
             'rejected_signature' => response()->json(['ok' => false], 401),
             'unknown_intent' => response()->json(['ok' => false], 404),
-            'error' => response()->json(['ok' => false], 500), // not recorded (rolled back, the callback kept): not delivered
+            'error' => response()->json(['ok' => false], 500), // not in the books (rolled back, or the database cannot say): not delivered
             default => response()->json(['ok' => true, 'outcome' => $outcome]),
         };
     }

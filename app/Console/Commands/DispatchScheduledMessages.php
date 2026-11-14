@@ -5,10 +5,10 @@ namespace App\Console\Commands;
 use App\Core\Notifications\StaffNotifier;
 use App\Core\Support\BusinessRuleException;
 use App\Models\Tenant;
-use App\Modules\Messaging\Jobs\SendWhatsAppMessage;
 use App\Modules\Messaging\Models\Campaign;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Services\CampaignService;
+use App\Modules\Messaging\Services\WhatsAppService;
 
 class DispatchScheduledMessages extends ForEachTenant
 {
@@ -21,8 +21,10 @@ class DispatchScheduledMessages extends ForEachTenant
         $messages = 0;
         Message::where('status', Message::SCHEDULED)->where('scheduled_at', '<=', now())->each(function (Message $m) use (&$messages) {
             $m->forceFill(['status' => Message::QUEUED])->save();
-            SendWhatsAppMessage::dispatch($m->id, $m->tenant_id);
-            $messages++;
+            // Refused by the queue, it is scheduled again for now and handed over on the next run.
+            if (WhatsAppService::dispatchOrRetry($m->id, $m->tenant_id)) {
+                $messages++;
+            }
         });
 
         $campaigns = 0;

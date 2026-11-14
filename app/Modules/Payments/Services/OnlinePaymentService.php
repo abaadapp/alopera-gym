@@ -10,6 +10,7 @@ use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Models\TenantIntegration;
 use App\Modules\Finance\Models\Invoice;
+use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Payments\Events\OnlinePaymentFailed;
@@ -199,9 +200,13 @@ final class OnlinePaymentService
                 return $this->log($intent->tenant_id, $transactionId, $reference, true, 'amount_mismatch', $payload, $ip);
             }
 
-            // Paymob has taken this money. If a step of recording it fails, everything written here is rolled back
-            // (no payment, no stock, no order change), but the signed callback is kept to reconcile from, and Paymob
-            // is answered with an error, never a success or a redirect: sent again, it is recorded then.
+            // Paymob has taken this money. The answer follows what the books hold, not where an error came from:
+            // - rolled back (a step of recording it failed): nothing is written (no payment, no stock, no order change),
+            //   the signed callback is kept while the database can take it, and the answer is an error (500), never a
+            //   success or a redirect;
+            // - committed, then work queued for after the commit failed: the payment stands and is answered as recorded;
+            //   the error is reported, never turned into «not recorded»;
+            // - not known (the database gone): not acknowledged, so a resend finds out; recording is idempotent.
             try {
                 $outcome = DB::transaction(function () use ($intent, $transactionId) {
                     $intent = PaymentIntent::whereKey($intent->id)->lockForUpdate()->firstOrFail();
@@ -223,11 +228,37 @@ final class OnlinePaymentService
                 });
             } catch (Throwable $e) {
                 report($e);
-                $outcome = 'error';
+                $outcome = $this->recorded($transactionId) ? 'recorded_with_error' : 'error';
             }
 
-            return $this->log($intent->tenant_id, $transactionId, $reference, true, $outcome, $payload, $ip);
+            if ($outcome === 'error') {
+                return $this->log($intent->tenant_id, $transactionId, $reference, true, $outcome, $payload, $ip);
+            }
+
+            // The payment is in the books: a callback log line that cannot be written does not make it an error.
+            try {
+                return $this->log($intent->tenant_id, $transactionId, $reference, true, $outcome, $payload, $ip);
+            } catch (Throwable $e) {
+                report($e);
+
+                return $outcome;
+            }
         });
+    }
+
+    /** Is this Paymob transaction in the books? False when it is not, or when the database cannot say. */
+    private function recorded(string $transactionId): bool
+    {
+        if ($transactionId === '') {
+            return false;
+        }
+        try {
+            return Payment::where('gateway', 'paymob')->where('gateway_transaction_id', $transactionId)->exists();
+        } catch (Throwable $e) {
+            report($e);
+
+            return false;
+        }
     }
 
     /** @param array<string, mixed> $payload */
