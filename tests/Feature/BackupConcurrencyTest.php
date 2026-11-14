@@ -215,7 +215,10 @@ class BackupConcurrencyTest extends TestCase
     {
         [$club, $archive, $a, $b] = $this->archivedThenChanged();
         $this->killedDuring(fn () => $this->service()->restore($club, $archive), new CrashingRestoreFiles(['move' => [-1, 'after']]));
-        $this->killedDuring(fn () => $this->service()->recover($club), new CrashingRestoreFiles(['move' => [2, 'after']]));
+        // Recovery killed once every file is back, before its clean-up: among them her ID, unchanged since the archive,
+        // whose bytes are the archive's. The next recovery must know it was hers before, not the restore's.
+        $this->killedDuring(fn () => $this->service()->recover($club), new CrashingRestoreFiles(['move' => [3, 'after']]));
+        $this->assertNotEmpty($this->staging(), 'killed before its clean-up');
 
         $this->service()->recover($club);
         $this->assertSame($b, $this->state($club));
