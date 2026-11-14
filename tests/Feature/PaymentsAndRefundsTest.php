@@ -109,7 +109,8 @@ class PaymentsAndRefundsTest extends TestCase
         $this->assertSame(['30.000', '50.000'], [$this->balance($club, 'customer_credits'), $this->balance($club, 'receivable')]);
 
         // Applied to another invoice of theirs (once, with the same key), not to someone else's.
-        $apply = fn (Invoice $to, string $amount, ?string $key = null) => $this->actingAs($owner)->post(route('club.payments.allocate', $online), ['invoice_id' => $to->id, 'amount' => $amount, 'client_key' => $key ?? (string) Str::uuid()]);
+        // Online money is applied or paid back only with a reason (kept in the audit trail).
+        $apply = fn (Invoice $to, string $amount, ?string $key = null) => $this->actingAs($owner)->post(route('club.payments.allocate', $online), ['invoice_id' => $to->id, 'amount' => $amount, 'reason' => 'رصيد العميل', 'client_key' => $key ?? (string) Str::uuid()]);
         $apply($stranger, '10')->assertSessionHasErrors('invoice_id');
         $key = (string) Str::uuid();
         $apply($second, '10', $key)->assertSessionHasNoErrors();
@@ -118,7 +119,7 @@ class PaymentsAndRefundsTest extends TestCase
         $this->assertSame('20.000', $this->balance($club, 'customer_credits'));
 
         // Paid back through Paymob: waits for confirmation, holding the amount; then made, once.
-        $refund = fn (string $amount, string $method = 'paymob') => $this->actingAs($owner)->post(route('club.payments.refund-credit', $online), ['amount' => $amount, 'method' => $method, 'client_key' => (string) Str::uuid()]);
+        $refund = fn (string $amount, string $method = 'paymob') => $this->actingAs($owner)->post(route('club.payments.refund-credit', $online), ['amount' => $amount, 'method' => $method, 'reason' => 'طلب العميل', 'client_key' => (string) Str::uuid()]);
         $refund('25')->assertSessionHasErrors('amount');
         $refund('20')->assertSessionHasNoErrors();
         $refund('1', 'cash')->assertSessionHasErrors('amount');

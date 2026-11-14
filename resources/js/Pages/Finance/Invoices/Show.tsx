@@ -704,7 +704,7 @@ function CreditRefundModal({ note, invoice, onClose, currency, gateway }: { note
 function CreditApplyModal({ payment, targets, onClose, currency }: { payment: PaymentRow; targets: Props['creditTargets']; onClose: () => void; currency: string }) {
     const key = useRef(clientKey());
     const first = targets[0];
-    const form = useForm({ invoice_id: first ? String(first.id) : '', amount: first ? Math.min(Number(payment.credit_left), Number(first.balance)).toFixed(3) : '' });
+    const form = useForm({ invoice_id: first ? String(first.id) : '', amount: first ? Math.min(Number(payment.credit_left), Number(first.balance)).toFixed(3) : '', reason: '' });
     const target = targets.find((t) => String(t.id) === form.data.invoice_id);
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -716,7 +716,7 @@ function CreditApplyModal({ payment, targets, onClose, currency }: { payment: Pa
         <Modal open onClose={onClose} title="تخصيص الرصيد لفاتورة" size="compact"
             footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button type="submit" form="credit-apply" loading={form.processing}>تخصيص</Button></>}>
             <form id="credit-apply" onSubmit={submit} className="space-y-4">
-                <p className="text-sm text-muted">الرصيد المتاح: <span className="num font-medium text-ink">{money(payment.credit_left, currency)}</span>. تُسدَّد به فاتورة أخرى للعميل نفسه كأي دفعة، وتُفعَّل عضويتها إن اكتمل سدادها.</p>
+                <p className="text-sm text-muted">الرصيد المتاح: <span className="num font-medium text-ink">{money(payment.credit_left, currency)}</span>. تُسدَّد به فاتورة للعميل نفسه كأي دفعة، وتُفعَّل عضويتها إن اكتمل سدادها.</p>
                 <Field label="الفاتورة" error={form.errors.invoice_id} required>
                     <Select value={form.data.invoice_id} onChange={(e) => {
                         const t = targets.find((x) => String(x.id) === e.target.value);
@@ -728,6 +728,7 @@ function CreditApplyModal({ payment, targets, onClose, currency }: { payment: Pa
                 <Field label="المبلغ" error={form.errors.amount} required>
                     <Input type="number" step="0.001" min="0.001" max={target ? Math.min(Number(payment.credit_left), Number(target.balance)) : undefined} dir="ltr" value={form.data.amount} onChange={(e) => form.setData('amount', e.target.value)} required />
                 </Field>
+                {payment.gateway && <ReasonField value={form.data.reason} error={form.errors.reason} onChange={(v) => form.setData('reason', v)} />}
             </form>
         </Modal>
     );
@@ -736,7 +737,7 @@ function CreditApplyModal({ payment, targets, onClose, currency }: { payment: Pa
 /** Pay a customer's credit back: at the desk at once, by bank transfer or Paymob once confirmed made. */
 function CreditPayBackModal({ payment, onClose, currency }: { payment: PaymentRow; onClose: () => void; currency: string }) {
     const key = useRef(clientKey());
-    const form = useForm({ amount: payment.credit_left ?? '', method: payment.gateway ? 'paymob' : 'cash', reference: '' });
+    const form = useForm({ amount: payment.credit_left ?? '', method: payment.gateway ? 'paymob' : 'cash', reference: '', reason: '' });
     const submit = (e: FormEvent) => {
         e.preventDefault();
         form.transform((x) => ({ ...x, client_key: key.current }));
@@ -760,7 +761,17 @@ function CreditPayBackModal({ payment, onClose, currency }: { payment: PaymentRo
                 <Field label={form.data.method === 'card' ? 'رقم العملية من جهاز الشبكة' : 'مرجع (اختياري)'} error={form.errors.reference} required={form.data.method === 'card'}>
                     <Input dir="ltr" value={form.data.reference} onChange={(e) => form.setData('reference', e.target.value)} required={form.data.method === 'card'} />
                 </Field>
+                {payment.gateway && <ReasonField value={form.data.reason} error={form.errors.reason} onChange={(v) => form.setData('reason', v)} />}
             </form>
         </Modal>
+    );
+}
+
+/** Confirmed online money is applied or paid back only with a reason, kept in the audit trail with who and when. */
+function ReasonField({ value, error, onChange }: { value: string; error?: string; onChange: (value: string) => void }) {
+    return (
+        <Field label="السبب (يُسجَّل في سجل التدقيق)" error={error} required>
+            <Input value={value} maxLength={500} onChange={(e) => onChange(e.target.value)} required />
+        </Field>
     );
 }

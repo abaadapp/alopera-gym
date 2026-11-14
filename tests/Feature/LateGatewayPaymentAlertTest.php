@@ -79,7 +79,7 @@ class LateGatewayPaymentAlertTest extends TestCase
         $bar = $this->shop($club);
         $owner = $this->owner($club);
         $finance = $this->staff($club, 'finance');
-        $reception = $this->staff($club, 'reception'); // hands orders over, but does not pay money back
+        $reception = $this->staff($club, 'reception'); // may apply it (payments.record), not pay it back
         $elsewhere = $this->staff($club, 'finance', ['branch_id' => $this->asTenant($club, fn () => Branch::create(['name' => 'فرع الخوض'])->id)]);
 
         [$sale, $intent] = $this->onlineOrder($club, $bar);
@@ -93,8 +93,8 @@ class LateGatewayPaymentAlertTest extends TestCase
 
         $payment = $this->asTenant($club, fn () => Payment::sole());
         $this->assertSame($intent->amount, $payment->credit_amount);
-        $this->assertEqualsCanonicalizing([$owner->id => 1, $finance->id => 1], $this->creditAlerts($club));
-        $this->assertArrayNotHasKey($reception->id, $this->creditAlerts($club));
+        // Held for review: told once to whoever may apply it (payments.record) or pay it back (payments.refund).
+        $this->assertEqualsCanonicalizing([$owner->id => 1, $finance->id => 1, $reception->id => 1], $this->creditAlerts($club));
         $this->assertArrayNotHasKey($elsewhere->id, $this->creditAlerts($club), 'a user tied to another branch');
 
         $alert = StaffNotification::withoutGlobalScopes()->where('user_id', $finance->id)->sole();
@@ -105,7 +105,7 @@ class LateGatewayPaymentAlertTest extends TestCase
         $this->actingAs($finance)->get($alert->url)->assertOk();
 
         // Paid back (a transfer waiting to be made counts): the alert is done for everyone.
-        $this->actingAs($finance)->post(route('club.payments.refund-credit', $payment), ['amount' => $payment->credit_amount, 'method' => 'bank_transfer'])
+        $this->actingAs($finance)->post(route('club.payments.refund-credit', $payment), ['amount' => $payment->credit_amount, 'method' => 'bank_transfer', 'reason' => 'أُلغي الطلب قبل التأكيد'])
             ->assertSessionHasNoErrors();
         $this->assertSame(0, StaffNotification::withoutGlobalScopes()->where('key', 'payment-credit:'.$payment->id)->whereNull('read_at')->count());
     }

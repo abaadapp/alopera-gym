@@ -128,20 +128,17 @@ class OrderPaymentConcurrencyTest extends TestCase
             $this->assertStringNotContainsString('deadlock', (string) $result['error'], json_encode($results));
             $this->assertTrue($result['ok'], json_encode($results));
         }
-        $this->assertSame('processed', $results[1]['value']);
+        // The window was over: whichever went first, the money is recorded and held for review, never applied.
+        $this->assertSame('held_for_review', $results[1]['value']);
 
         $this->asTenant($club, function () use ($sale) {
             $sale = $sale->fresh();
             $payment = Payment::where('gateway', 'paymob')->sole();
-            // Whichever went first, the money is never lost: either the order is paid, or it was released and the
-            // payment is the customer's credit.
-            if ($sale->status === Sale::PENDING) {
-                $this->assertNotNull($sale->paid_at);
-                $this->assertSame(Invoice::PAID, Invoice::find($sale->invoice_id)->status);
-            } else {
-                $this->assertSame(Sale::CANCELLED, $sale->status);
-                $this->assertSame('1.500', $payment->credit_amount);
-            }
+            // The money is never lost, and the order is never paid after its hold: it is released, and the payment is
+            // the customer's credit, for staff to apply or pay back.
+            $this->assertSame(Sale::CANCELLED, $sale->status);
+            $this->assertNull($sale->paid_at);
+            $this->assertSame('1.500', $payment->credit_amount);
             $this->assertSame(1, PaymentIntent::where('status', PaymentIntent::PAID)->count());
             $this->assertSame(JournalLine::sum('debit'), JournalLine::sum('credit'), 'the books balance');
         });

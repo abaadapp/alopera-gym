@@ -54,6 +54,7 @@ class IntegrationController extends Controller
         'transaction_elsewhere' => 'العملية مسجّلة لدفعة أخرى — لم يُسجَّل',
         'test_payment' => 'دفعة اختبار على نظام الإنتاج — لم تُسجَّل ولم يتغير شيء',
         'environment_unverified' => 'نية دفع من قبل تمييز الاختبار من الحقيقي — لم تُسجَّل، تُراجع من لوحة Paymob',
+        'held_for_review' => 'دفعة مؤكدة سُجّلت ومحجوزة للمراجعة — لم تُطبَّق على الفاتورة ولم يُفعَّل شيء',
     ];
 
     /**

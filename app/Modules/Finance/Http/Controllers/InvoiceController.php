@@ -463,10 +463,13 @@ class InvoiceController extends Controller
             // Where a payment lands when chosen (empty: the method's account in the finance settings).
             'moneyAccounts' => Account::money()->postable()->orderBy('code')->get(['id', 'name', 'kind']),
             // Open invoices of the same customer this invoice's credit can be applied to.
-            'creditTargets' => $credits->isNotEmpty() && $invoice->billable_id !== null
-                ? Invoice::where(['billable_type' => $invoice->billable_type, 'billable_id' => $invoice->billable_id])->whereIn('status', Invoice::OPEN_STATUSES)->whereKeyNot($invoice->id)
-                    ->orderBy('id')->get()->map(fn (Invoice $i) => ['id' => $i->id, 'number' => $i->number, 'balance' => $i->balance()])->values()
-                : [],
+            // Confirmed gateway money on this invoice while it is open goes to this invoice only (PaymentService::allocate).
+            'creditTargets' => $invoice->isOpen() && $credits->contains(fn (Payment $p) => $p->gateway === 'paymob')
+                ? [['id' => $invoice->id, 'number' => $invoice->number, 'balance' => $invoice->balance()]]
+                : ($credits->isNotEmpty() && $invoice->billable_id !== null
+                    ? Invoice::where(['billable_type' => $invoice->billable_type, 'billable_id' => $invoice->billable_id])->whereIn('status', Invoice::OPEN_STATUSES)->whereKeyNot($invoice->id)
+                        ->orderBy('id')->get()->map(fn (Invoice $i) => ['id' => $i->id, 'number' => $i->number, 'balance' => $i->balance()])->values()
+                    : []),
             'isSale' => Sale::where('invoice_id', $invoice->id)->exists(),
             'whatsappEnabled' => app(WhatsAppService::class)->enabled(),
             // The invoice as it prints: the same paper as the print page, the PDF and the customer's link.
