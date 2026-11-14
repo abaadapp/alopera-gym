@@ -119,7 +119,7 @@ class ImageStoreTest extends TestCase
             Storage::disk('public')->assertExists($parts['thumb']);
             $thumb = getimagesizefromstring(Storage::disk('public')->get($parts['thumb']));
             $this->assertSame([360, 180], [$thumb[0], $thumb[1]], "$type thumbnail fits 360 and is not cropped");
-            $this->assertStringEndsWith('.thumb.webp', ImageStore::thumbUrl($stored['path']));
+            $this->assertStringEndsWith('-thumb.webp', ImageStore::thumbUrl($stored['path']));
         }
     }
 
@@ -140,7 +140,7 @@ class ImageStoreTest extends TestCase
 
         $stored = $this->measured($this->upload('moving.gif', $bytes));
 
-        $this->assertStringEndsWith('.gif.gif', $stored['path']);
+        $this->assertStringEndsWith('-gif.gif', $stored['path']);
         $this->assertSame($bytes, Storage::disk('public')->get($stored['path']), 'shown as uploaded, every frame');
         Storage::disk('public')->assertExists(ImageStore::parse($stored['path'])['thumb']);
     }
@@ -151,7 +151,7 @@ class ImageStoreTest extends TestCase
 
         $stored = $this->measured($this->upload('moving.gif', $this->animatedGif(120, 80)));
 
-        $this->assertStringEndsWith('.gif.webp', $stored['path']);
+        $this->assertStringEndsWith('-gif.webp', $stored['path']);
     }
 
     public function test_a_heic_from_an_iphone_is_kept_as_it_is_and_shown_from_the_browsers_display_source(): void
@@ -167,7 +167,7 @@ class ImageStoreTest extends TestCase
         $parts = ImageStore::parse($stored['path']);
         $this->assertStringEndsWith('.heic', $parts['original']);
         $this->assertSame(hash('sha256', $heic), ImageStore::sha256('local', $parts['original']));
-        $this->assertStringEndsWith('.heic.webp', $stored['path']);
+        $this->assertStringEndsWith('-heic.webp', $stored['path']);
         $this->assertSame([96, 64], [$stored['width'], $stored['height']]);
     }
 

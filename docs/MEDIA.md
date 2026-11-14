@@ -4,15 +4,19 @@ Code: `App\Core\Support\ImageStore`, `App\Core\Support\Images\*`, `config/media.
 
 ## What is stored
 
-Each upload (member, trainer, program, product, post, website library, logo) is kept three ways:
+By default (`MEDIA_STORAGE=originals`) each upload (member, trainer, program, product, post, website library, logo) is
+kept three ways. With `MEDIA_STORAGE=optimized-only` only the light copy and its thumbnail are kept
+([below](#optimized-only-storage-built-off-media_storageoptimized-only)).
 
 | Piece | Where | Name | Used by |
 |---|---|---|---|
 | Original, byte for byte | `local` private disk (default), or the Spaces bucket (`MEDIA_ORIGINALS=spaces`) | `tenants/{id}/originals/{folder}/v2-{ulid}.{ext}` (local) or `v2r-…` (Spaces) | download only, by permission |
-| Display copy (WebP; PNG for a logo; a moving GIF as it is) | `public` | `tenants/{id}/{folder}/v2…{ext}.webp` | screens, website, prints, PDF (the record's path) |
-| Thumbnail, 360px | `public` | `…{ext}.thumb.webp` | lists, avatars, the till, the door check |
+| Display copy (WebP; PNG for a logo; a moving GIF as it is) | `public` | `tenants/{id}/{folder}/v2…-{ext}.webp` | screens, website, prints, PDF (the record's path) |
+| Thumbnail, 360px | `public` | `…-{ext}-thumb.webp` | lists, avatars, the till, the door check |
 
 - The record keeps the display path, as before.
+- Public names carry one dot only (`v2-{ulid}-jpg.webp`): a club archive's restore puts back on the public disk only
+  `name.ext` images, and sets anything else aside (`TenantBackupService::isPublicImage`). Tested by a restore round trip.
 - Images stored before this have none of the new names: they have no original or thumbnail, and are shown and printed as they are.
 - Originals are never public, because a camera photo may carry its location.
 - Every write is checked: a local original by SHA-256 after writing, a Spaces original by the bucket itself (below). Display copies and thumbnails are checked by their size.
@@ -219,6 +223,105 @@ Tested (`OriginalsCopyTest` simulated; `SpacesLiveTest` on real S3 servers):
 - records unchanged;
 - the HEIC downloading as before;
 - bit rot in the main bucket found by the drill, not spread to the copy, and repaired from it.
+
+## Optimized-only storage (built, off: `MEDIA_STORAGE=optimized-only`)
+
+Keeps only a light copy of each new upload and its thumbnail: no original, anywhere. Off until the owner approves it.
+Images kept before (with or without originals) stay where they are, under their own names, and keep working.
+
+**In the browser** (`lightCopy` in `resources/js/lib/image-prep.ts`), before anything is sent:
+
+- The picture is read from its bytes (HEIC/HEIF through Safari or libheif), turned upright by its EXIF orientation, and
+  its colours turned to sRGB as the browser shows them (a Display P3 photo keeps its look).
+- It is scaled so its longest side fits its use (`media.sides`), proportions kept, never cropped, never enlarged.
+- It is written as WebP at `MEDIA_QUALITY` (82). Where the browser cannot write WebP (older Safari) it writes JPEG, or
+  PNG when the picture is see-through.
+- A logo, and any picture with few colours (letters, a QR, a barcode, a drawing), is written lossless (lossless WebP,
+  or PNG, whichever is smaller), so its edges stay sharp.
+- Camera data (EXIF with the location, XMP, IPTC, comments) is left behind: the canvas writes none.
+- A GIF is sent as it is (a moving one keeps moving; the server makes a still one light).
+- A picked file that is already light (JPEG/PNG/WebP, no larger than its use, no camera data, smaller than the copy)
+  is sent as it is.
+- A form waits for a copy still being made before it sends (`imagesReady`), so saving at once never sends the
+  heavy file. A picked file only has to fit `MEDIA_PICK_MAX_KB` (40 MB); what is sent still has to fit
+  `GYM_MAX_IMAGE_KB` (4 MB).
+
+**On the server** (`ImageStore::keepLight`):
+
+- The file is checked from its bytes as before (type, size, pixels).
+- A still JPEG/PNG/WebP with no camera data, nothing after its end (a "motion photo" video, anything appended), no
+  larger than its use and at most 4 bits a pixel is kept **as it came**: not compressed a second time
+  (`ImageInspector::carriesPrivateData`). A logo is kept this way only as a PNG, which prints read.
+- Anything else (an older browser sent the picked file itself) is made light here as before, and loses its camera data.
+- The thumbnail is made from it. Names: `tenants/{id}/{folder}/v2o-{ulid}-{ext}.{webp|jpg|png|gif}` and `…-{ext}-thumb.webp`.
+- `hasOriginal()` is false, a download gives the light copy, and the link says «تنزيل الصورة», never «الأصلية».
+- Spaces is never used in this mode.
+
+**Sizes by use** (`media.sides`, `MEDIA_SIDE_*`, both modes): members 800, products 1200, trainers 1600, programs 1600,
+posts 1920, website library 1920; thumbnails 360 (`MEDIA_THUMB_QUALITY` 75); the logo 1600, lossless.
+
+### Measured (2026-11-14, this Mac, Chrome 157, one real photo from macOS with sensor-like grain added)
+
+These are numbers from a development machine and one smooth landscape photo. Photos with more detail (faces, gym
+equipment, text) give larger light copies, roughly 30–80 KB at 800px and 100–300 KB at 1920px. Nothing here was
+measured on the production server.
+
+| Picked file | Sent | Kept | Browser time | PSNR vs the original scaled down |
+|---|---|---|---|---|
+| JPEG 4032×3024, 2.8 MB | WebP 12 KB | 800×600 + thumb 3.6 KB | 0.1–0.5 s | 40.8 dB |
+| JPEG 6000×4500, 10.7 MB | WebP 12 KB | 800×600 | 0.24 s | 40.5 dB |
+| JPEG 8000×6000, 24.7 MB | WebP 11 KB | 800×600 | 0.36–0.39 s | 40.3 dB |
+| HEIC 3024×4032 (portrait), 1.4 MB | WebP 13 KB | 600×800 | 0.42–0.48 s | 40.8 dB |
+| JPEG portrait / square, 1.7 / 1.2 MB | WebP 11 / 14 KB | 600×800 / 800×800 | 0.08 s | 41.4 / 41.6 dB |
+| JPEG with a Display P3 profile, 1.7 MB | WebP 12 KB | 800×600, colours in sRGB | 0.09–0.23 s | 40.7 dB, mean shift under 1/255 |
+| JPEG on its side (EXIF 6) with GPS and camera, 1.7 MB | WebP 12 KB | 800×600 upright, no EXIF | 0.08 s | 40.8 dB |
+| PNG cut-out 1800×1800, see-through, 3.1 MB | WebP 42 KB | 1200×1200, transparency kept (alpha diff 0.01) | 0.25 s | 42.6 dB |
+| QR and barcode PNG 1000×1000, 6.3 KB | lossless WebP 1.5 KB | 1000×1000, every pixel identical | 0.1 s | lossless |
+| Moving GIF, 3 frames, 127 KB | the GIF itself | the GIF itself, 3 frames | – | as it is |
+| Logo PNG with letters, 28 KB | the PNG itself (already light) | the PNG itself, byte for byte | – | as it is |
+
+- The same photo at each use's size (server-made, same quality): 800px 12 KB, 1200px 19 KB, 1600px 27 KB, 1920px 35 KB.
+- Chrome's own processes grew by up to 270 MB while making a copy (the 10 and 25 MB photos the most).
+- **Server, one upload** (separate PHP process, fake disks):
+
+| Case | PHP memory | CPU |
+|---|---|---|
+| optimized-only, a light copy (the normal case) | 4 MB | 11 ms |
+| originals (default), 2.8 MB photo with the browser's 2400px display source | 26 MB | 71 ms |
+| originals, 24.7 MB photo with its display source | 26 MB | 179 ms |
+| originals or fallback, 12 MP photo decoded by the server (no display source) | 62 MB | 104–124 ms |
+| originals, 48 MP photo decoded by the server, `memory_limit=-1` | 202 MB | 545 ms |
+| originals, 48 MP photo, `memory_limit=128M` | refused with a clear message (needs the browser's display source) | – |
+
+- Lists load thumbnails (3.4–8 KB each): the member list with 25 photos loaded 170 KB of images in all.
+
+### Disk and the nightly club archives
+
+Each club archive (`TenantBackupService`, 14 kept, nightly) holds every file of the club, so each image counts about
+15 times (17 during the nightly run). Planning figures: originals 3 MB + display and thumbnail; optimized-only 65 KB a
+picture on average across uses (measured 16 KB for an 800px member photo; 39 KB for a 1920px one).
+
+| Images | Originals (3 pieces): live / with archives | Optimized-only: live / with archives | Archive job memory, originals / optimized-only |
+|---|---|---|---|
+| 100 | 0.31 GB / 4.6 GB | 6.5 MB / 0.1 GB | 0.31 GB / 7 MB |
+| 500 | 1.5 GB / 23 GB | 33 MB / 0.5 GB | 1.5 GB / 33 MB |
+| 1,000 | 3.1 GB / 46 GB | 65 MB / 1 GB | 3.1 GB / 65 MB |
+| 5,000 | 15 GB / 230 GB | 0.33 GB / 4.9 GB | 15 GB / 0.33 GB |
+
+- The archive job reads every file into memory at once (`addFromString`). With originals that passes the droplet's
+  free memory (about 500 MB) at about 150 images. With optimized-only it stays under it up to several thousand images.
+  The real fix is to stream the files into the archive (`addFile`), which needs the owner's approval: the backup system
+  is not changed here.
+
+### Where a picture is cropped on purpose
+
+Never cropped: products (lists, form, the till, the shop and its product page), logos (sidebar, website, prints, settings),
+posts and offers, the website's program and trainer cards, the website library, upload previews. Shown whole on their
+own background (`object-contain`).
+
+Cropped on purpose, and only on screen (the stored file is whole): people's small avatars, round or rounded, where a
+face fills the circle: the member list, the member profile's 96px avatar, the member picker, the reception check, the
+member portal, and the trainer tiles of the panel. The full picture is a download away.
 
 ## Disk and cost
 

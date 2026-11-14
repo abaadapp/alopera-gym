@@ -124,7 +124,7 @@ class ImageFlowsTest extends TestCase
 
         $this->actingAs($owner)->post(route('club.settings.update'), $form(['logo' => UploadedFile::fake()->image('logo.png', 800, 200)]))->assertSessionHasNoErrors();
         $first = $club->fresh()->setting('logo_file');
-        $this->assertStringEndsWith('.png.png', $first);
+        $this->assertStringEndsWith('-png.png', $first);
         Storage::disk('local')->assertExists(ImageStore::parse($first)['original']);
         $this->assertSame(IMAGETYPE_PNG, getimagesize(OfficialLogo::forPaper(PaperSize::A4, true, $club->fresh()))[2], 'the PDF engine reads a PNG');
 
@@ -152,7 +152,7 @@ class ImageFlowsTest extends TestCase
         ])->assertSessionHasNoErrors();
 
         $media = $this->asTenant($club, fn () => SiteMedia::firstOrFail());
-        $this->assertStringEndsWith('.heic.webp', $media->path);
+        $this->assertStringEndsWith('-heic.webp', $media->path);
         $this->assertSame([96, 64], [$media->width, $media->height]);
         $this->assertSame(hash_file('sha256', base_path('tests/Fixtures/images/gradient-96x64.heic')), ImageStore::sha256('local', ImageStore::parse($media->path)['original']));
     }
@@ -199,7 +199,7 @@ class ImageFlowsTest extends TestCase
         $this->get(route('club.products.edit', $product))->assertOk()
             ->assertInertia(fn (AssertableInertia $p) => $p->where('product.photo_downloads.0', route('club.products.photo.original', [$product, 0])));
         $this->get(route('club.products.index'))->assertOk()
-            ->assertInertia(fn (AssertableInertia $p) => $p->where('products.data.0.image_url', fn ($url) => str_ends_with((string) $url, '.thumb.webp')));
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('products.data.0.image_url', fn ($url) => str_ends_with((string) $url, '-thumb.webp')));
         $this->get(route('club.products.photo.original', [$product, 0]))->assertOk();
         $this->get(route('club.products.photo.original', [$product, 3]))->assertNotFound();
     }

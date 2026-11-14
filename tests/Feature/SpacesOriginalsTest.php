@@ -449,7 +449,7 @@ class SpacesOriginalsTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $media = $this->asTenant($club, fn () => SiteMedia::firstOrFail());
-        $this->assertStringEndsWith('.gif.gif', $media->path);
+        $this->assertStringEndsWith('-gif.gif', $media->path);
         $this->assertSame($gif, Storage::disk('public')->get($media->path));
         $this->assertSame([], $this->fullReads());
     }

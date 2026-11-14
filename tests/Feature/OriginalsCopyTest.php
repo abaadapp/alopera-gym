@@ -61,7 +61,7 @@ class OriginalsCopyTest extends TestCase
     /** An image kept with its original in the bucket: its display copy on this server, its original in the main bucket. */
     private function kept(int $club, string $bytes): string
     {
-        $display = 'tenants/'.$club.'/members/v2r-'.strtolower((string) Str::ulid()).'.jpg.webp';
+        $display = 'tenants/'.$club.'/members/v2r-'.strtolower((string) Str::ulid()).'-jpg.webp';
         Storage::disk('public')->put($display, 'webp');
         $key = ImageStore::parse($display)['original'];
         $this->buckets['originals'][$key] = ['body' => $bytes, 'sha256' => hash('sha256', $bytes)];

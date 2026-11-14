@@ -22,14 +22,15 @@ use Symfony\Component\HttpFoundation\Response;
  *  - the original, byte for byte (checked with SHA-256 after writing), on the private originals disk
  *    (tenants/{id}/originals/{folder}/v2-{ulid}.{ext}); it is never served publicly and is only downloaded;
  *  - the display copy the screens, the website, the PDFs and the prints show, made once at upload and never again:
- *    WebP (PNG for a logo), scaled to fit, upright, transparency kept (tenants/{id}/{folder}/v2-{ulid}.{ext}.webp);
- *  - a thumbnail beside it for lists and cards (…/v2-{ulid}.{ext}.thumb.webp).
+ *    WebP (PNG for a logo), scaled to fit, upright, transparency kept (tenants/{id}/{folder}/v2-{ulid}-{ext}.webp);
+ *  - a thumbnail beside it for lists and cards (…/v2-{ulid}-{ext}-thumb.webp).
+ * Public names carry one dot only: a club archive's restore puts back on the public disk only `name.ext` images.
  * The record keeps the display copy's path, as before, so every reader and every older image keeps working; images
  * stored before this (any other name) have no original or thumbnail and are shown as they are.
  *
  * With media.storage 'optimized-only' a new upload keeps no original: the browser sends the light copy it made
  * (image-prep.ts), which is kept as it came when it is already light and clean (no camera data), or made light here;
- * its thumbnail sits beside it as above (tenants/{id}/{folder}/v2o-{ulid}.{ext}.{webp|jpg|png|gif}).
+ * its thumbnail sits beside it as above (tenants/{id}/{folder}/v2o-{ulid}-{ext}.{webp|jpg|png|gif}).
  *
  * An upload counts only when all of it was written and checked: otherwise every piece written is removed and an
  * ImageRejected (a message for the user) is thrown, so no record ever points at a missing file.
@@ -41,7 +42,7 @@ final class ImageStore
 
     // v2- : original on the local private disk; v2r- : original in the Spaces bucket (SpacesOriginals);
     // v2o- : no original (optimized-only), the display copy is all there is.
-    private const NAME = '#^(?<dir>tenants/(?<tenant>[^/]+)/(?<folder>.+))/(?<id>v2(?<kind>[ro]?)-[0-9a-z]{26})\.(?<ext>jpg|png|gif|webp|avif|heic|heif)\.(?<view>webp|png|gif|jpg)$#D';
+    private const NAME = '#^(?<dir>tenants/(?<tenant>[^/]+)/(?<folder>.+))/(?<id>v2(?<kind>[ro]?)-[0-9a-z]{26})-(?<ext>jpg|png|gif|webp|avif|heic|heif)\.(?<view>webp|png|gif|jpg)$#D';
 
     /**
      * Stores an image for a record and returns its display path: its longest side fits $maxSide, or the size
@@ -243,7 +244,7 @@ final class ImageStore
 
         return [
             'original' => $m['kind'] === 'o' ? null : 'tenants/'.$m['tenant'].'/originals/'.$m['folder'].'/'.$m['id'].'.'.$m['ext'],
-            'thumb' => $m['dir'].'/'.$m['id'].'.'.$m['ext'].'.thumb.webp',
+            'thumb' => $m['dir'].'/'.$m['id'].'-'.$m['ext'].'-thumb.webp',
             'ext' => $m['ext'],
             'remote' => $m['kind'] === 'r',
         ];
@@ -317,7 +318,9 @@ final class ImageStore
     {
         $source = $ticket ? null : (string) $upload->original?->getRealPath();
         $tenantId = app(TenantContext::class)->require()->id;
-        $name = ($remote ? 'v2r-' : 'v2-').Str::lower((string) Str::ulid()).'.'.$facts->ext;
+        $id = ($remote ? 'v2r-' : 'v2-').Str::lower((string) Str::ulid());
+        $name = $id.'.'.$facts->ext;
+        $base = 'tenants/'.$tenantId.'/'.$folder.'/'.$id.'-'.$facts->ext;
         $written = [];
 
         try {
@@ -339,19 +342,19 @@ final class ImageStore
             // itself, or the browser's copy of it when that is the very same file (same SHA-256 as the ticket).
             $gif = $source ?? ($ticket && $upload->preview && hash_file('sha256', (string) $upload->preview->getRealPath()) === $ticket['s'] ? (string) $upload->preview->getRealPath() : null);
             if ($facts->type === 'gif' && $facts->animated && $gif && $facts->bytes <= (int) config('media.animated_max_kb') * 1024) {
-                $display = 'tenants/'.$tenantId.'/'.$folder.'/'.$name.'.gif';
+                $display = $base.'.gif';
                 self::putVerified('public', $display, $gif);
                 [$width, $height, $mime, $size] = [$facts->width, $facts->height, 'image/gif', $facts->bytes];
             } else {
                 [$image, $width, $height] = self::fit($image, $maxWidth, $maxHeight);
                 $bytes = self::encode($image, $view, $quality);
-                $display = 'tenants/'.$tenantId.'/'.$folder.'/'.$name.'.'.$view;
+                $display = $base.'.'.$view;
                 self::put('public', $display, $bytes);
                 [$mime, $size] = [$view === 'png' ? 'image/png' : 'image/webp', strlen($bytes)];
             }
             $written[] = ['public', $display];
 
-            $thumbPath = self::thumbnail($image, 'tenants/'.$tenantId.'/'.$folder.'/'.$name);
+            $thumbPath = self::thumbnail($image, $base);
             $written[] = ['public', $thumbPath];
         } catch (\Throwable $e) {
             foreach ($written as [$disk, $path]) {
@@ -387,7 +390,7 @@ final class ImageStore
         } catch (ImageRejected $e) {
             throw $e->on($upload->field);
         }
-        $base = 'tenants/'.app(TenantContext::class)->require()->id.'/'.$folder.'/v2o-'.Str::lower((string) Str::ulid()).'.'.$facts->ext;
+        $base = 'tenants/'.app(TenantContext::class)->require()->id.'/'.$folder.'/v2o-'.Str::lower((string) Str::ulid()).'-'.$facts->ext;
         $written = [];
 
         try {
@@ -447,7 +450,7 @@ final class ImageStore
     {
         $side = (int) config('media.thumb_side', 360);
         [$thumb] = self::fit($image, $side, $side);
-        $path = $base.'.thumb.webp';
+        $path = $base.'-thumb.webp';
         self::put('public', $path, self::encode($thumb, 'webp', (int) config('media.thumb_quality', 75)));
 
         return $path;

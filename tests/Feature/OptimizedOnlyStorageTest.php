@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Core\Backup\TenantBackupService;
 use App\Core\Support\Images\ImageInspector;
 use App\Core\Support\Images\ImageRejected;
 use App\Core\Support\Images\SpacesOriginals;
@@ -116,7 +117,7 @@ class OptimizedOnlyStorageTest extends TestCase
         $bytes = $this->encoded($this->gd(800, 600), 'webp');
         $path = $this->store($this->upload('member.webp', $bytes));
 
-        $this->assertMatchesRegularExpression('#^tenants/'.$this->club->id.'/members/v2o-[0-9a-z]{26}\.webp\.webp$#', $path);
+        $this->assertMatchesRegularExpression('#^tenants/'.$this->club->id.'/members/v2o-[0-9a-z]{26}-webp\.webp$#', $path);
         $this->assertSame($bytes, Storage::disk('public')->get($path), 'not compressed a second time');
         $this->assertTrue(Storage::disk('public')->exists(ImageStore::parse($path)['thumb']));
         $this->assertSame([360, 270], $this->pixels(ImageStore::parse($path)['thumb']));
@@ -133,7 +134,7 @@ class OptimizedOnlyStorageTest extends TestCase
 
         $path = $this->store($upload);
 
-        $this->assertStringEndsWith('.jpg.webp', $path);
+        $this->assertStringEndsWith('-jpg.webp', $path);
         $this->assertSame([640, 480], $this->pixels($path), 'same shape, never enlarged');
         $this->assertFalse(ImageInspector::carriesPrivateData(Storage::disk('public')->path($path), 'webp'), 'no EXIF in the public copy');
         $this->assertSame([], Storage::disk('local')->allFiles());
@@ -160,7 +161,7 @@ class OptimizedOnlyStorageTest extends TestCase
 
         $path = $this->store($this->upload('noise.png', $png));
 
-        $this->assertStringEndsWith('.png.webp', $path);
+        $this->assertStringEndsWith('-png.webp', $path);
         $this->assertLessThan(strlen($png), Storage::disk('public')->size($path));
     }
 
@@ -168,19 +169,19 @@ class OptimizedOnlyStorageTest extends TestCase
     {
         $gif = $this->animatedGif(120, 80);
         $path = $this->store($this->upload('move.gif', $gif), 'posts');
-        $this->assertStringEndsWith('.gif.gif', $path);
+        $this->assertStringEndsWith('-gif.gif', $path);
         $this->assertSame($gif, Storage::disk('public')->get($path));
         $this->assertTrue(Storage::disk('public')->exists(ImageStore::parse($path)['thumb']));
 
         $png = $this->encoded($this->gd(400, 200, transparent: true), 'png');
         $logo = $this->asTenant($this->club, fn () => ImageStore::storeLogo($this->upload('logo.png', $png), 'brand', 1600));
-        $this->assertStringEndsWith('.png.png', $logo);
+        $this->assertStringEndsWith('-png.png', $logo);
         $this->assertSame($png, Storage::disk('public')->get($logo), 'a clean PNG logo is kept as it came, lossless');
         $shown = imagecreatefromstring((string) Storage::disk('public')->get($logo));
         $this->assertSame(127, (imagecolorat($shown, 10, 10) >> 24) & 0x7F, 'still see-through');
 
         $jpegLogo = $this->asTenant($this->club, fn () => ImageStore::storeLogo($this->upload('logo.jpg', $this->encoded($this->gd(400, 200), 'jpeg')), 'brand', 1600));
-        $this->assertStringEndsWith('.jpg.png', $jpegLogo, 'a logo is shown from a PNG the prints read');
+        $this->assertStringEndsWith('-jpg.png', $jpegLogo, 'a logo is shown from a PNG the prints read');
         $this->assertSame([], Storage::disk('local')->allFiles());
     }
 
@@ -294,6 +295,45 @@ class OptimizedOnlyStorageTest extends TestCase
         $this->assertSame($second, Storage::disk('public')->get($member->photo_path));
         $this->assertFalse(Storage::disk('public')->exists($old), 'the old copy goes once the new one is saved');
         $this->assertFalse(Storage::disk('public')->exists(ImageStore::parse($old)['thumb']));
+        $this->assertSame([], Storage::disk('local')->allFiles());
+    }
+
+    public function test_a_club_archive_restore_puts_every_new_image_back_in_place(): void
+    {
+        // One image kept with its original (the default) and one optimized-only, then the club's archive.
+        config(['media.storage' => 'originals']);
+        $withOriginal = $this->store($this->upload('kept.jpg', $this->encoded($this->gd(300, 200), 'jpeg', 92)));
+        config(['media.storage' => 'optimized-only']);
+        $light = $this->store($this->upload('light.webp', $this->encoded($this->gd(300, 200), 'webp')), 'products');
+        $pieces = [
+            ['public', $withOriginal], ['public', ImageStore::parse($withOriginal)['thumb']], ['local', ImageStore::parse($withOriginal)['original']],
+            ['public', $light], ['public', ImageStore::parse($light)['thumb']],
+        ];
+        $bytes = array_map(fn ($p) => Storage::disk($p[0])->get($p[1]), $pieces);
+
+        $service = app(TenantBackupService::class);
+        $name = $this->asTenant($this->club, fn () => $service->create($this->club));
+        $archive = Storage::disk((string) config('gym.backup_disk', 'local'))->path($service->directory($this->club).'/'.$name);
+        Storage::disk('public')->deleteDirectory('tenants');
+        Storage::disk('local')->deleteDirectory('tenants');
+
+        $this->asTenant($this->club, fn () => $service->restore($this->club, $archive));
+
+        foreach ($pieces as $i => [$disk, $path]) {
+            $this->assertSame($bytes[$i], Storage::disk($disk)->get($path), "{$path} is back on the {$disk} disk, byte for byte");
+        }
+        $this->assertSame([], Storage::disk('local')->allFiles('tenants/'.$this->club->id.'/'.TenantBackupService::ISOLATED), 'nothing set aside');
+    }
+
+    public function test_the_website_library_keeps_light_copies_measured_and_whole(): void
+    {
+        $owner = $this->owner($this->club);
+        $wide = $this->encoded($this->gd(1920, 1080), 'webp');
+        $media = $this->actingAs($owner)->postJson(route('club.website.media.store'), ['images' => [$this->upload('hero.webp', $wide), $this->upload('big.jpg', $this->encoded($this->gd(3000, 1000), 'jpeg'))]])
+            ->assertOk()->json('media');
+
+        $this->assertSame([1920, 1080, false], [$media[0]['width'], $media[0]['height'], $media[0]['has_original']]);
+        $this->assertSame([1920, 640], [$media[1]['width'], $media[1]['height']], 'longest side 1920, nothing cropped');
         $this->assertSame([], Storage::disk('local')->allFiles());
     }
 }
