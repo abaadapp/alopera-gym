@@ -26,7 +26,7 @@ final class GymPresenter
             'phone_display' => Phone::display($m->phone),
             'email' => $m->email,
             'status' => $m->status,
-            'photo_url' => $m->photoUrl(),
+            'photo_url' => $m->photoThumbUrl(),
             'joined_on' => $m->joined_on?->toDateString(),
             'last_check_in_at' => $m->last_check_in_at?->format('Y-m-d H:i'),
             'membership' => $current ? self::membership($current) : null,

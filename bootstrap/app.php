@@ -1,6 +1,7 @@
 <?php
 
 use App\Core\Support\BusinessRuleException;
+use App\Core\Support\Images\ImageRejected;
 use App\Core\Support\SiteLanguage;
 use App\Core\Tenancy\CrossTenantWriteException;
 use App\Core\Tenancy\MissingTenantException;
@@ -25,6 +26,7 @@ use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
@@ -103,6 +105,27 @@ return Application::configure(basePath: dirname(__DIR__))
 
             // On the English website and portal, in English where the site has the words (lang/en.json).
             throw ValidationException::withMessages([$e->field => SiteLanguage::word($e->getMessage())]);
+        });
+
+        // More than PHP accepts in one request (post_max_size): nothing of it reached the app, so say so plainly.
+        $exceptions->render(function (PostTooLargeException $e, Request $request) {
+            $message = 'حجم ما أُرسل أكبر مما يقبله الخادم في طلب واحد. أرسل صورًا أقل أو أصغر في كل مرة.';
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json(['message' => $message], 413);
+            }
+
+            return back()->with('error', $message);
+        });
+
+        // An image that was refused or could not be stored: the reason, on the field it came from; nothing was saved.
+        // It is an answer to the user, not an error of the app, so it is not logged (a failure behind it is, on its own).
+        $exceptions->dontReport(ImageRejected::class);
+        $exceptions->render(function (ImageRejected $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json(['message' => $e->getMessage(), 'errors' => [$e->field ?? 'image' => [$e->getMessage()]]], 422);
+            }
+
+            throw ValidationException::withMessages([$e->field ?? 'image' => $e->getMessage()]);
         });
 
         $exceptions->render(function (MissingTenantException|CrossTenantWriteException $e, Request $request) {

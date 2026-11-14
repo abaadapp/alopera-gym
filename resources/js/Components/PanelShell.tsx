@@ -81,6 +81,10 @@ export default function PanelShell({ identity, groups, topbar, children, fullBle
                         </ul>
                     ))}
                 </ScrollIntoActive>
+                {/* The panel loads libheif-js (LGPL-3.0) to show iPhone photos: its notice, licence and source, on every page of the panel. */}
+                <a href="/licenses/index.html" target="_blank" rel="noopener" className="shrink-0 border-t border-[#e8e8e8] px-5 py-2.5 text-[11px] text-muted underline-offset-2 hover:text-ink hover:underline">
+                    تراخيص البرامج مفتوحة المصدر
+                </a>
             </aside>
 
             <div className="lg:ms-64">

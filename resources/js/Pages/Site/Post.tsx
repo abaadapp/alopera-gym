@@ -25,7 +25,7 @@ export default function Post({ site, seo, post }: { site: SiteInfo; seo: { title
                     </p>
                 </header>
                 {post.image_url && (
-                    <img src={post.image_url} alt={post.title} width={960} height={600} className="mt-8 aspect-[16/10] w-full rounded-[2rem] object-cover" />
+                    <img src={post.image_url} alt={post.title} width={960} height={600} decoding="async" fetchPriority="high" className="mt-8 h-auto max-h-[80vh] w-full rounded-[2rem] bg-[#f7f7f8] object-contain" />
                 )}
                 {post.excerpt && <p className="mt-8 text-lg leading-9 text-ink/85">{post.excerpt}</p>}
                 {post.body && <div className="mt-6 leading-9 whitespace-pre-line text-ink/80">{post.body}</div>}

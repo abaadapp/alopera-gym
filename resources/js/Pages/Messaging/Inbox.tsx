@@ -544,7 +544,7 @@ function FileBlock({ a }: { a: FileItem }) {
     if (a.kind === 'image' || a.kind === 'sticker') {
         return (
             <a href={a.url} target="_blank" rel="noreferrer" className="mb-1 block overflow-hidden rounded-lg">
-                <img src={a.url} alt={a.filename ?? 'صورة'} className="max-h-72 w-auto max-w-full object-contain" loading="lazy" />
+                <img src={a.url} alt={a.filename ?? 'صورة'} className="max-h-72 w-auto max-w-full object-contain" loading="lazy" decoding="async" />
             </a>
         );
     }

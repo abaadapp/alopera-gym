@@ -60,7 +60,7 @@ class PortalController extends Controller
         $next = Membership::where('member_id', $member->id)->whereIn('status', [Membership::SCHEDULED, Membership::PENDING])->orderBy('starts_on')->first();
 
         return $this->page('Portal/Dashboard', [
-            'profile' => $member->only('full_name', 'member_no', 'phone', 'email') + ['qr_token' => $member->status === Member::ACTIVE ? $member->qr_token : null, 'photo_url' => $member->photoUrl()],
+            'profile' => $member->only('full_name', 'member_no', 'phone', 'email') + ['qr_token' => $member->status === Member::ACTIVE ? $member->qr_token : null, 'photo_url' => $member->photoThumbUrl()],
             'current' => $current ? $this->membership($current) : null,
             'next' => $next ? $this->membership($next) : null,
             'upcoming' => Booking::with(['session.program:id,name,name_en,color', 'session.trainer:id,name,name_en'])->where('member_id', $member->id)

@@ -4,6 +4,8 @@ namespace App\Modules\Gym\Http\Controllers;
 
 use App\Core\Audit\AuditLogger;
 use App\Core\Export\TableExporter;
+use App\Core\Support\Images\ImageRule;
+use App\Core\Support\Images\ImageUpload;
 use App\Core\Support\ImageStore;
 use App\Core\Support\Money;
 use App\Core\Tenancy\BranchContext;
@@ -30,6 +32,7 @@ use App\Modules\Payments\Services\OnlinePaymentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -88,12 +91,24 @@ class MemberController extends Controller
     {
         $data = $this->validated($request);
         $data['branch_id'] = app(BranchContext::class)->assign($data['branch_id'] ?? null);
-        $photo = $request->file('photo');
-        unset($data['photo']);
+        $photo = ImageUpload::from($request, 'photo');
+        unset($data['photo'], $data['photo_preview'], $data['photo_direct']);
 
-        $member = $this->members->create($data);
-        if ($photo) {
-            $member->forceFill(['photo_path' => ImageStore::store($photo, 'members', 600)])->save();
+        // The photo is stored first: a refused photo registers nothing, and a failed registration leaves no file.
+        $path = $photo ? ImageStore::store($photo, 'members') : null;
+        try {
+            $member = DB::transaction(function () use ($data, $path) {
+                $member = $this->members->create($data);
+                if ($path) {
+                    $member->forceFill(['photo_path' => $path])->save();
+                }
+
+                return $member;
+            });
+        } catch (Throwable $e) {
+            ImageStore::delete($path);
+
+            throw $e;
         }
 
         return redirect()->route('club.members.show', $member)->with('success', 'تم تسجيل العضو '.$member->member_no.'.');
@@ -124,6 +139,8 @@ class MemberController extends Controller
             ) + [
                 'date_of_birth' => $member->date_of_birth?->toDateString(),
                 'health_notes' => $member->health_notes,
+                'photo_download_url' => $member->photo_path ? route('club.members.photo', $member) : null,
+                'photo_has_original' => ImageStore::hasOriginal($member->photo_path),
                 'branch' => $member->branch?->name,
                 'has_portal_access' => $member->password !== null,
                 'qr_token' => $user->can('members.manage') ? $member->qr_token : null,
@@ -165,10 +182,18 @@ class MemberController extends Controller
                 'emergency_contact_name', 'emergency_contact_phone', 'goals', 'source', 'status', 'notes', 'whatsapp_opt_in', 'marketing_opt_in', 'branch_id') + [
                     'date_of_birth' => $member->date_of_birth?->toDateString(),
                     'health_notes' => $member->health_notes,
-                    'photo_url' => $member->photoUrl(),
+                    'photo_url' => $member->photoThumbUrl(), // a 96px box: the thumbnail is plenty
+                    'photo_download_url' => $member->photo_path ? route('club.members.photo', $member) : null,
+                    'photo_has_original' => ImageStore::hasOriginal($member->photo_path),
                 ],
             'branches' => app(BranchContext::class)->choices(),
         ]);
+    }
+
+    /** The photo as it was uploaded, for download. */
+    public function photo(Member $member): \Symfony\Component\HttpFoundation\Response
+    {
+        return ImageStore::download($member->photo_path, $member->full_name);
     }
 
     public function update(Request $request, Member $member): RedirectResponse
@@ -176,10 +201,10 @@ class MemberController extends Controller
         $data = $this->validated($request, $member);
         // The old photo goes only once the edit is saved: a refused edit (a phone already taken) keeps it.
         $old = $member->photo_path;
-        if ($request->hasFile('photo')) {
-            $member->photo_path = ImageStore::store($request->file('photo'), 'members', 600);
+        if ($photo = ImageUpload::from($request, 'photo')) {
+            $member->photo_path = ImageStore::store($photo, 'members');
         }
-        unset($data['photo']);
+        unset($data['photo'], $data['photo_preview'], $data['photo_direct']);
         try {
             $this->members->update($member, $data);
         } catch (Throwable $e) {
@@ -275,7 +300,9 @@ class MemberController extends Controller
             'whatsapp_opt_in' => ['boolean'],
             'marketing_opt_in' => ['boolean'],
             'branch_id' => ['nullable', ...app(BranchContext::class)->rule($member?->branch_id)],
-            'photo' => ['nullable', 'image', 'max:'.config('gym.max_image_kb')],
+            'photo' => ImageRule::rules(),
+            'photo_preview' => ImageRule::previewRules(),
+            'photo_direct' => ImageRule::ticketRules(),
         ]);
     }
 }

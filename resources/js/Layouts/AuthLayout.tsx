@@ -58,7 +58,12 @@ export default function AuthLayout({ title, subtitle, children }: { title: strin
                         </div>
                     </main>
                     <footer className="relative z-10 shrink-0 px-5 pb-6 text-center sm:px-8">
-                        <p className="text-[12px] text-[#9ca3af]">© {year} Alopera Gym — جميع الحقوق محفوظة</p>
+                        <p className="text-[12px] text-[#9ca3af]">
+                            © {year} Alopera Gym — جميع الحقوق محفوظة ·{' '}
+                            <a href="/licenses/index.html" className="underline-offset-2 hover:underline">
+                                تراخيص البرامج مفتوحة المصدر
+                            </a>
+                        </p>
                     </footer>
                 </div>
                 <Showcase />

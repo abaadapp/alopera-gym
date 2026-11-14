@@ -1,0 +1,41 @@
+برنامج مفتوح المصدر مستخدم في لوحة النادي — Open-source software used in the club panel
+=====================================================================================
+
+يستخدم المتصفح هذه المكتبة لعرض صور الآيفون (HEIC/HEIF) في المتصفحات التي لا تقرؤها بنفسها. تعمل داخل
+متصفح المستخدم فقط، على الصورة التي اختارها، ولا تغيّر الصورة الأصلية. وهي مرخّصة برخصة
+GNU LGPL الإصدار 3؛ نصها ونص GNU GPL الإصدار 3 في LICENSE.txt بجانب هذا الملف.
+
+The browser uses this library to show iPhone photos (HEIC/HEIF) in browsers that cannot read them. It runs only in the
+user's browser, on the file they picked, and never changes the original. It is covered by the GNU Lesser General Public
+License version 3; that licence and the GNU General Public License version 3 it builds on are in LICENSE.txt beside
+this file.
+
+What is used (unmodified)
+-------------------------
+- libheif-js 1.23.5 — the file libheif-wasm/libheif-bundle.mjs, shipped as its own file
+  (build/assets/libheif-bundle-*.js) and loaded only when a HEIC/HEIF photo is picked.
+  Copyright (c) Kiril Vatev. LGPL-3.0.
+- It contains libheif 1.23.5 — Copyright (c) 2017-2020 Struktur AG, Copyright (c) 2017-2026 Dirk Farin. LGPL-3.0.
+- and libde265 1.0.15 (the HEVC decoder) — Copyright (c) 2013-2014 Struktur AG, Copyright (c) 2013-2023 Dirk Farin.
+  LGPL-3.0.
+- compiled to WebAssembly with Emscripten (its runtime: MIT / University of Illinois NCSA licence).
+
+Source code (Corresponding Source)
+----------------------------------
+A copy of each archive below is kept on this server, in source/ beside this file (checksums: source/SHA256SUMS.txt);
+the page /licenses/index.html lists them. Upstream:
+- libheif 1.23.5: https://github.com/strukturag/libheif/releases/download/v1.23.5/libheif-1.23.5.tar.gz
+  (sha256 fd9036064c4432f0550d15072ddf34956a248279ee9aeaff0fba3fa0f77d8f1a)
+- libde265 1.0.15: https://github.com/strukturag/libde265/releases/download/v1.0.15/libde265-1.0.15.tar.gz
+- the WebAssembly build of both (scripts and output): https://github.com/catdad-experiments/libheif-emscripten/tree/v1.23.5
+  and https://github.com/catdad-experiments/libheif-emscripten/releases/tag/v1.23.5
+- libheif-js 1.23.5 (the JavaScript wrapper and bundle): https://github.com/catdad-experiments/libheif-js/tree/1.23.5
+  and https://registry.npmjs.org/libheif-js/-/libheif-js-1.23.5.tgz
+- this application, which loads it: https://github.com/abaadapp/alopera-gym (resources/js/lib/image-prep.ts)
+
+Replacing it
+------------
+The library is a separate file that the application loads at run time through its documented interface
+(HeifDecoder().decode → image.display). An interface-compatible build of libheif-js can be put in its place: build this
+application with it (npm install, npm run build), or serve another build at the same address. Nothing in this
+application's terms forbids changing the library or reverse engineering it to debug such a change.

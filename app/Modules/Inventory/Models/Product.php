@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Models;
 
 use App\Core\Audit\Auditable;
+use App\Core\Support\ImageStore;
 use App\Core\Tenancy\BelongsToTenant;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\Storage;
 
 class Product extends Model
 {
@@ -75,12 +75,24 @@ class Product extends Model
 
     public function imageUrl(): ?string
     {
-        return $this->image_path ? Storage::disk('public')->url($this->image_path) : null;
+        return ImageStore::url($this->image_path);
+    }
+
+    /** The light copy of the main photo, for lists, the till and cards. */
+    public function thumbUrl(): ?string
+    {
+        return ImageStore::thumbUrl($this->image_path);
     }
 
     /** Every photo, the main one first. */
     public function imageUrls(): array
     {
-        return array_map(fn (string $path) => Storage::disk('public')->url($path), array_values(array_filter([$this->image_path, ...($this->images ?? [])])));
+        return array_map(fn (string $path) => (string) ImageStore::url($path), $this->imagePaths());
+    }
+
+    /** @return list<string> every photo's stored path, the main one first */
+    public function imagePaths(): array
+    {
+        return array_values(array_filter([$this->image_path, ...($this->images ?? [])]));
     }
 }

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Core\Audit\AuditLogger;
 use App\Core\Auth\DemoAccounts;
+use App\Core\Support\ImageStore;
 use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
@@ -43,6 +44,7 @@ class Preflight extends Command
         $this->check((bool) config('session.encrypt'), 'Session data is encrypted', hint: 'SESSION_ENCRYPT=true');
         $this->check(config('queue.default') !== 'sync', 'Queue runs in the background', 'QUEUE_CONNECTION='.config('queue.default'));
         $this->check(! in_array(config('mail.default'), ['log', 'array'], true), 'Mail is delivered', 'MAIL_MAILER='.config('mail.default').' (password resets)', warn: true);
+        $this->check(ImageStore::optimizedOnly(), 'New images keep only their light copy', 'MEDIA_STORAGE='.config('media.storage'), warn: true, hint: 'an original on this disk counts 15 times with the nightly club archives (docs/MEDIA.md)');
         $this->check($this->logLevel() !== 'debug', 'Log level is not debug', 'LOG_LEVEL='.$this->logLevel(), warn: true);
         $this->check(config('services.whatsapp.driver') !== 'log', 'WhatsApp sends for real', warn: true, hint: 'WHATSAPP_DRIVER=meta once Meta is set up');
         $this->check(is_link(public_path('storage')) || is_dir(public_path('storage')), 'Public storage is linked', hint: 'php artisan storage:link');

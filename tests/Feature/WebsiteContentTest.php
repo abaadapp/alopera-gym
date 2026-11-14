@@ -389,8 +389,8 @@ class WebsiteContentTest extends TestCase
         $this->assertSame(['landscape', 1600, 900], [$wide['orientation'], $wide['width'], $wide['height']]);
         $this->assertSame(['portrait', 800, 1200], [$tall['orientation'], $tall['width'], $tall['height']]);
         $this->assertSame('square', $square['orientation']);
-        // Scaled down to fit, proportions unchanged.
-        $this->assertSame([2400, 1200], [$huge['width'], $huge['height']]);
+        // Scaled down to fit the website's longest side (media.sides.site, 1920), proportions unchanged.
+        $this->assertSame([1920, 960], [$huge['width'], $huge['height']]);
 
         [$doc, $v] = $this->editor($club);
         $doc['sections'][0]['data']['image'] = ['id' => $tall['id'], 'fit' => 'auto'];
@@ -420,7 +420,8 @@ class WebsiteContentTest extends TestCase
         imagepng($img, $png);
         $logo = $this->actingAs($owner)->postJson(route('club.website.media.store'), ['images' => [new UploadedFile($png, 'logo.png', 'image/png', null, true)]])->assertOk()->json('media.0');
 
-        $stored = imagecreatefromwebp(Storage::disk('public')->path(SiteMedia::withoutGlobalScopes()->find($logo['id'])->path));
+        // WebP when made light here, the PNG itself when it came light and clean (optimized-only): see-through either way.
+        $stored = imagecreatefromstring((string) Storage::disk('public')->get(SiteMedia::withoutGlobalScopes()->find($logo['id'])->path));
         $this->assertSame(127, (imagecolorat($stored, 5, 5) >> 24) & 0x7F, 'the transparent corner stays transparent');
 
         $before = Storage::disk('public')->allFiles();

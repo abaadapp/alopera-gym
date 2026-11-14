@@ -4,6 +4,8 @@ import { ImagePlus, Newspaper, Pencil, Plus, Tag, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, EnglishFields, Field, Input, Modal, PageHeader, Select, Tabs, Textarea, Toggle } from '@/Components/ui';
 import { date } from '@/lib/format';
+import { IMAGE_ACCEPT, imagesReady, optimizeSpec, pickImage, withTickets } from '@/lib/image-prep';
+import { useShared } from '@/hooks/useShared';
 
 interface Post {
     id: number;
@@ -17,6 +19,8 @@ interface Post {
     body_en?: string | null;
     is_published: boolean;
     image_url: string | null;
+    image_download_url?: string | null;
+    image_has_original?: boolean;
     starts_on: string | null;
     ends_on: string | null;
     published_at: string | null;
@@ -34,6 +38,8 @@ type PostForm = {
     ends_on: string;
     is_published: boolean;
     image: File | null;
+    image_preview: File | null;
+    image_direct: string | null;
 };
 
 export default function Posts({ posts }: { posts: Post[] }) {
@@ -69,7 +75,7 @@ export default function Posts({ posts }: { posts: Post[] }) {
                     {list.map((p) => (
                         <Card key={p.id} padded={false} fill className="overflow-hidden">
                             <div className="aspect-[16/9] bg-brand-50">
-                                {p.image_url ? <img src={p.image_url} alt="" className="h-full w-full object-cover" loading="lazy" /> : <div className="grid h-full place-items-center text-brand-300"><Newspaper className="size-8" /></div>}
+                                {p.image_url ? <img src={p.image_url} alt="" className="h-full w-full object-contain" loading="lazy" decoding="async" /> : <div className="grid h-full place-items-center text-brand-300"><Newspaper className="size-8" /></div>}
                             </div>
                             <div className="flex flex-1 flex-col p-5">
                                 <div className="mb-2 flex flex-wrap items-center gap-1.5">
@@ -95,6 +101,7 @@ export default function Posts({ posts }: { posts: Post[] }) {
 }
 
 function PostModal({ post, onClose }: { post: Post | null; onClose: () => void }) {
+    const { media } = useShared();
     const form = useForm<PostForm>({
         type: post?.type ?? 'offer',
         title: post?.title ?? '',
@@ -107,12 +114,16 @@ function PostModal({ post, onClose }: { post: Post | null; onClose: () => void }
         ends_on: post?.ends_on ?? '',
         is_published: post?.is_published ?? true,
         image: null,
+        image_preview: null,
+        image_direct: null,
     });
-    const preview = useMemo(() => (form.data.image ? URL.createObjectURL(form.data.image) : post?.image_url ?? null), [form.data.image, post?.image_url]);
+    const preview = useMemo(() => (form.data.image ? URL.createObjectURL(form.data.image_preview ?? form.data.image) : post?.image_url ?? null), [form.data.image, form.data.image_preview, post?.image_url]);
 
-    const submit = (e: FormEvent) => {
+    const submit = async (e: FormEvent) => {
         e.preventDefault();
+        await imagesReady(); // a light copy still being made is sent, not the heavy file
         const url = post ? route('club.website.posts.update', post.id) : route('club.website.posts.store');
+        form.transform((d) => withTickets(d, ['image']));
         form.post(url, { preserveScroll: true, onSuccess: onClose });
     };
 
@@ -165,15 +176,18 @@ function PostModal({ post, onClose }: { post: Post | null; onClose: () => void }
                         <Input type="date" value={form.data.ends_on} onChange={(e) => form.setData('ends_on', e.target.value)} />
                     </Field>
                 </div>
-                <Field label="الصورة" error={form.errors.image}>
+                <Field label="الصورة" error={form.errors.image ?? form.errors.image_preview}>
                     <div className="flex items-center gap-3">
                         <div className="grid h-20 w-32 place-items-center overflow-hidden rounded-xl border border-dashed border-line bg-canvas">
-                            {preview ? <img src={preview} alt="" className="h-full w-full object-cover" /> : <ImagePlus className="size-5 text-muted" />}
+                            {preview ? <img src={preview} alt="" className="h-full w-full object-contain" /> : <ImagePlus className="size-5 text-muted" />}
                         </div>
                         <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-brand-50">
                             <ImagePlus className="size-3.5" /> اختيار صورة
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => form.setData('image', e.target.files?.[0] ?? null)} />
+                            <input type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={(e) =>
+                                pickImage(e.target.files?.[0] ?? null, (file, source, ticket) => form.setData((d) => (source && d.image !== file ? d : { ...d, image: file, image_preview: source, image_direct: ticket })), media?.direct ? route('club.website.posts.uploads') : null, optimizeSpec(media?.optimize, 'posts'))
+                            } />
                         </label>
+                        {post?.image_download_url && !form.data.image && <a href={post.image_download_url} className="text-xs text-muted underline-offset-2 hover:text-ink hover:underline">{post.image_has_original ? 'تنزيل الصورة الأصلية' : 'تنزيل الصورة'}</a>}
                     </div>
                 </Field>
                 <Toggle checked={form.data.is_published} onChange={(v) => form.setData('is_published', v)} label="منشور في الموقع" />

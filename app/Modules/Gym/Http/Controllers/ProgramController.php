@@ -2,6 +2,8 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Support\Images\ImageRule;
+use App\Core\Support\Images\ImageUpload;
 use App\Core\Support\ImageStore;
 use App\Http\Controllers\Controller;
 use App\Modules\Gym\Models\Program;
@@ -18,7 +20,7 @@ class ProgramController extends Controller
         return Inertia::render('Gym/Programs/Index', [
             'programs' => Program::withCount('schedules')->orderBy('sort')->orderBy('name')->get()->map(fn (Program $p) => $p->only(
                 'id', 'name', 'name_en', 'slug', 'category', 'level', 'description', 'description_en', 'color', 'duration_minutes', 'default_capacity', 'is_public', 'is_active', 'sort', 'schedules_count'
-            ) + ['image_url' => $p->imageUrl()]),
+            ) + ['image_url' => $p->imageUrl(), 'image_download_url' => $p->image_path ? route('club.programs.image', $p) : null, 'image_has_original' => ImageStore::hasOriginal($p->image_path)]),
         ]);
     }
 
@@ -26,24 +28,41 @@ class ProgramController extends Controller
     {
         $data = $this->validated($request);
         $data['slug'] = $this->slug($data['name']);
-        $program = new Program(collect($data)->except('image')->all());
-        if ($request->hasFile('image')) {
-            $program->image_path = ImageStore::store($request->file('image'), 'programs');
+        $program = new Program(collect($data)->except(['image', 'image_preview', 'image_direct'])->all());
+        $image = ImageUpload::from($request, 'image');
+        if (! $image) {
+            $program->save();
+        } else {
+            ImageStore::commit(null, ImageStore::store($image, 'programs'), function (string $path) use ($program) {
+                $program->image_path = $path;
+                $program->save();
+            });
         }
-        $program->save();
 
         return back()->with('success', 'تمت إضافة البرنامج.');
+    }
+
+    /** The image as it was uploaded, for download. */
+    public function image(Program $program): \Symfony\Component\HttpFoundation\Response
+    {
+        return ImageStore::download($program->image_path, $program->name);
     }
 
     public function update(Request $request, Program $program): RedirectResponse
     {
         $data = $this->validated($request, $program);
-        $program->fill(collect($data)->except('image')->all());
-        if ($request->hasFile('image')) {
-            ImageStore::delete($program->image_path);
-            $program->image_path = ImageStore::store($request->file('image'), 'programs');
+        $program->fill(collect($data)->except(['image', 'image_preview', 'image_direct'])->all());
+        $image = ImageUpload::from($request, 'image');
+        if (! $image) {
+            $program->save();
+        } else {
+            // The new image is stored and saved first; the old files go only after that worked. A refused image
+            // shows its reason on the field and saves nothing.
+            ImageStore::replace($program->image_path, $image, 'programs', null, function (string $path) use ($program) {
+                $program->image_path = $path;
+                $program->save();
+            });
         }
-        $program->save();
 
         return back()->with('success', 'تم حفظ البرنامج.');
     }
@@ -87,7 +106,9 @@ class ProgramController extends Controller
             'is_public' => ['boolean'],
             'is_active' => ['boolean'],
             'sort' => ['nullable', 'integer'],
-            'image' => ['nullable', 'image', 'max:'.config('gym.max_image_kb')],
+            'image' => ImageRule::rules(),
+            'image_preview' => ImageRule::previewRules(),
+            'image_direct' => ImageRule::ticketRules(),
         ]);
     }
 }

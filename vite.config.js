@@ -12,6 +12,20 @@ export default defineConfig({
         }),
         react(),
         tailwindcss(),
+        // libheif-js (LGPL-3.0) is shipped as its own file; the notice and the way to its licence and source go with it.
+        {
+            name: 'libheif-notice',
+            generateBundle(_options, bundle) {
+                for (const file of Object.values(bundle)) {
+                    if (file.type === 'chunk' && file.fileName.includes('libheif-bundle')) {
+                        file.code =
+                            '/*! libheif-js 1.23.5 (libheif 1.23.5, libde265 1.0.15), unmodified. GNU LGPL-3.0. ' +
+                            'Licence, copyright and source: /licenses/index.html */\n' +
+                            file.code;
+                    }
+                }
+            },
+        },
     ],
     resolve: {
         alias: {

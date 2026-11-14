@@ -249,6 +249,7 @@ class ShopController extends Controller
             'price' => $p->price,
             'category' => SiteLanguage::pick($p->category?->name, $p->category?->name_en),
             'image_url' => $p->imageUrl(),
+            'thumb_url' => $p->thumbUrl(),
             'in_stock' => $available === null || $available >= 1,
             // Only the limit a customer needs, not the club's stock figure.
             'max' => $available === null ? 50 : (int) min(50, floor($available)),

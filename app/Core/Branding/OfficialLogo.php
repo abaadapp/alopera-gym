@@ -3,10 +3,11 @@
 namespace App\Core\Branding;
 
 use App\Core\Papers\PaperSize;
+use App\Core\Support\Images\ImageUpload;
+use App\Core\Support\ImageStore;
 use App\Models\Tenant;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 /**
  * The club's logo. public/brand holds the file the owner approved, byte for byte, and the sizes scaled from it; it is
@@ -39,7 +40,7 @@ final class OfficialLogo
     private const RATIO = 1448 / 1086;
 
     /** The longest side an uploaded logo is kept at: sharp on A4 at print resolution. */
-    private const UPLOAD_MAX = 1600;
+    public const UPLOAD_MAX = 1600;
 
     /** The club's own upload, when it has one and its file is there. */
     public static function uploaded(?Tenant $tenant): ?string
@@ -53,7 +54,7 @@ final class OfficialLogo
     {
         $file = self::uploaded($tenant);
 
-        return $file ? Storage::disk('public')->url($file) : asset(self::SCREEN);
+        return $file ? (string) ImageStore::url($file) : asset(self::SCREEN);
     }
 
     /**
@@ -95,42 +96,20 @@ final class OfficialLogo
     }
 
     /**
-     * Keeps an uploaded logo as PNG, transparency and all, at most UPLOAD_MAX across: the screens, the print page and
-     * the PDF engine all read it. Returns the stored path; the previous upload is removed.
+     * Keeps an uploaded logo: its original byte for byte, and a PNG copy (transparency and all, at most UPLOAD_MAX
+     * across, never cropped or stretched) that the screens, the print page and the PDF engine read. Returns the PNG's
+     * path; the previous upload stays until the caller has saved the new one (ImageStore::commit).
      */
-    public static function store(UploadedFile $file, Tenant $tenant): string
+    public static function store(UploadedFile|ImageUpload $file, Tenant $tenant): string
     {
-        $image = @imagecreatefromstring((string) file_get_contents($file->getRealPath()));
-        abort_if($image === false, 422, 'تعذّرت قراءة الصورة. ارفع الشعار بصيغة PNG أو JPG.');
-        imagepalettetotruecolor($image);
-        [$w, $h] = [imagesx($image), imagesy($image)];
-        if (max($w, $h) > self::UPLOAD_MAX) {
-            $k = self::UPLOAD_MAX / max($w, $h);
-            $scaled = imagecreatetruecolor((int) round($w * $k), (int) round($h * $k));
-            imagealphablending($scaled, false);
-            imagesavealpha($scaled, true);
-            imagecopyresampled($scaled, $image, 0, 0, 0, 0, imagesx($scaled), imagesy($scaled), $w, $h);
-            imagedestroy($image);
-            $image = $scaled;
-        }
-        imagesavealpha($image, true);
-        ob_start();
-        imagepng($image, null, 9);
-        $bytes = (string) ob_get_clean();
-        imagedestroy($image);
-
-        $path = 'tenants/'.$tenant->id.'/brand/logo-'.Str::random(16).'.png';
-        Storage::disk('public')->put($path, $bytes);
-        self::forget($tenant);
-
-        return $path;
+        return ImageStore::storeLogo($file, 'brand', self::UPLOAD_MAX);
     }
 
     /** Back to the approved logo: the upload's file goes, nothing else. */
     public static function forget(Tenant $tenant): void
     {
         if ($file = self::uploaded($tenant)) {
-            Storage::disk('public')->delete($file);
+            ImageStore::delete($file);
         }
     }
 }

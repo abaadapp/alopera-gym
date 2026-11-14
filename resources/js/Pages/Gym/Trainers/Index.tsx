@@ -5,6 +5,8 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, EnglishFields, Field, Input, linesOf, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { WEEKDAYS, phone as fmtPhone } from '@/lib/format';
 import type { Option } from '@/types';
+import { IMAGE_ACCEPT, imagesReady, keptHint, localPreview, optimizeSpec, pickImage, withTickets } from '@/lib/image-prep';
+import { useShared } from '@/hooks/useShared';
 
 type Slot = { weekday: number; starts_at: string; ends_at: string };
 
@@ -25,6 +27,8 @@ type Trainer = {
     user_id: number | null;
     branch_id: number | null;
     photo_url: string | null;
+    photo_download_url?: string | null;
+    photo_has_original?: boolean;
     user: { id: number; name: string; email: string } | null;
     availability: Slot[];
 };
@@ -45,6 +49,8 @@ type TrainerForm = {
     branch_id: number | string | null;
     user_id: number | string | null;
     photo: File | null;
+    photo_preview: File | null;
+    photo_direct: string | null;
 };
 
 const blank: TrainerForm = {
@@ -63,12 +69,15 @@ const blank: TrainerForm = {
     branch_id: null,
     user_id: null,
     photo: null,
+    photo_preview: null,
+    photo_direct: null,
 };
 
 /** Saturday first, as the club week reads. */
 const WEEK_ORDER = [6, 0, 1, 2, 3, 4, 5];
 
 export default function TrainersIndex({ trainers, users, branches }: { trainers: Trainer[]; users: (Option & { email: string })[]; branches: Option[] }) {
+    const { media } = useShared();
     const [editing, setEditing] = useState<Trainer | null>(null);
     const [open, setOpen] = useState(false);
     const [preview, setPreview] = useState<string | null>(null);
@@ -108,6 +117,8 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
             branch_id: t.branch_id,
             user_id: t.user_id,
             photo: null,
+            photo_preview: null,
+            photo_direct: null,
         });
         setSpecialtiesEn((t.specialties_en ?? []).join('\n'));
         setPreview(t.photo_url);
@@ -120,16 +131,17 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
         setTag('');
     };
 
-    const submit = (e: FormEvent) => {
+    const submit = async (e: FormEvent) => {
         e.preventDefault();
+        await imagesReady(); // a light copy still being made is sent, not the heavy file
         const options = { forceFormData: true, preserveScroll: true, onSuccess: () => setOpen(false) };
         // A multipart form drops an empty list: no English specialties go as an empty value, so clearing them sticks.
         const english = (data: TrainerForm) => ({ ...data, specialties_en: data.specialties_en.length ? data.specialties_en : null });
         if (editing) {
-            form.transform((data) => ({ ...english(data), _method: 'put' }));
+            form.transform((data) => ({ ...withTickets(english(data), ['photo']), _method: 'put' }));
             form.post(route('club.trainers.update', editing.id), options);
         } else {
-            form.transform(english);
+            form.transform((data) => withTickets(english(data), ['photo']));
             form.post(route('club.trainers.store'), options);
         }
     };
@@ -167,7 +179,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                         <Card key={t.id} fill className={t.is_active ? '' : 'opacity-60'}>
                             <div className="flex items-start gap-4">
                                 {t.photo_url ? (
-                                    <img src={t.photo_url} alt="" className="size-16 rounded-2xl object-cover" loading="lazy" />
+                                    <img src={t.photo_url} alt="" className="size-16 rounded-2xl object-cover" loading="lazy" decoding="async" />
                                 ) : (
                                     <span className="grid size-16 place-items-center rounded-2xl font-display text-xl text-white" style={{ background: t.color ?? 'var(--brand)' }}>{t.name[0]}</span>
                                 )}
@@ -289,16 +301,18 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                     <Field label="الترتيب" error={form.errors.sort}>
                         <Input type="number" value={form.data.sort} onChange={(e) => form.setData('sort', e.target.value)} />
                     </Field>
-                    <Field label="الصورة" error={form.errors.photo} className="sm:col-span-2">
+                    <Field label="الصورة" error={form.errors.photo ?? form.errors.photo_preview} className="sm:col-span-2" hint={keptHint(media?.optimize)}>
                         <label className="flex cursor-pointer items-center gap-4 rounded-xl border border-dashed border-line p-3 hover:border-brand-300">
-                            {preview ? <img src={preview} alt="" className="size-16 rounded-xl object-cover" /> : <span className="grid size-16 place-items-center rounded-xl bg-brand-50 text-brand"><ImagePlus className="size-6" /></span>}
+                            {preview ? <img src={preview} alt="" className="size-16 rounded-xl bg-white object-contain" /> : <span className="grid size-16 place-items-center rounded-xl bg-brand-50 text-brand"><ImagePlus className="size-6" /></span>}
                             <span className="text-sm text-muted">اختر صورة</span>
-                            <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-                                const file = e.target.files?.[0] ?? null;
-                                form.setData('photo', file);
-                                setPreview(file ? URL.createObjectURL(file) : editing?.photo_url ?? null);
-                            }} />
+                            <input type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={(e) =>
+                                pickImage(e.target.files?.[0] ?? null, (file, source, ticket) => {
+                                    form.setData((d) => (source && d.photo !== file ? d : { ...d, photo: file, photo_preview: source, photo_direct: ticket }));
+                                    setPreview(file ? localPreview(file, source) : editing?.photo_url ?? null);
+                                }, media?.direct ? route('club.trainers.uploads') : null, optimizeSpec(media?.optimize, 'trainers'))
+                            } />
                         </label>
+                        {editing?.photo_download_url && !form.data.photo && <a href={editing.photo_download_url} className="mt-2 inline-block text-[13px] text-muted underline-offset-2 hover:text-ink hover:underline">{editing.photo_has_original ? 'تنزيل الصورة الأصلية' : 'تنزيل الصورة'}</a>}
                     </Field>
                     <div className="space-y-2 sm:col-span-2">
                         <Toggle checked={form.data.is_public} onChange={(v) => form.setData('is_public', v)} label="يظهر في الموقع" />

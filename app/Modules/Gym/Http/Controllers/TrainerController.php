@@ -2,6 +2,8 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Support\Images\ImageRule;
+use App\Core\Support\Images\ImageUpload;
 use App\Core\Support\ImageStore;
 use App\Core\Support\Phone;
 use App\Core\Tenancy\BranchContext;
@@ -24,7 +26,9 @@ class TrainerController extends Controller
             'trainers' => BranchContext::scope(Trainer::with(['availabilities', 'user:id,name,email']))->orderBy('sort')->orderBy('name')->get()->map(fn (Trainer $t) => $t->only(
                 'id', 'name', 'name_en', 'phone', 'email', 'bio', 'bio_en', 'specialties', 'specialties_en', 'color', 'is_public', 'is_active', 'sort', 'user_id', 'branch_id'
             ) + [
-                'photo_url' => $t->photoUrl(),
+                'photo_url' => $t->photoThumbUrl(),
+                'photo_download_url' => $t->photo_path ? route('club.trainers.photo', $t) : null,
+                'photo_has_original' => ImageStore::hasOriginal($t->photo_path),
                 'user' => $t->user?->only('id', 'name', 'email'),
                 'availability' => $t->availabilities->map(fn ($a) => ['weekday' => $a->weekday, 'starts_at' => substr($a->starts_at, 0, 5), 'ends_at' => substr($a->ends_at, 0, 5)]),
             ]),
@@ -37,13 +41,24 @@ class TrainerController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
-        $trainer = new Trainer(collect($data)->except('photo')->all());
-        if ($request->hasFile('photo')) {
-            $trainer->photo_path = ImageStore::store($request->file('photo'), 'trainers', 800);
+        $trainer = new Trainer(collect($data)->except(['photo', 'photo_preview', 'photo_direct'])->all());
+        $photo = ImageUpload::from($request, 'photo');
+        if (! $photo) {
+            $trainer->save();
+        } else {
+            ImageStore::commit(null, ImageStore::store($photo, 'trainers'), function (string $path) use ($trainer) {
+                $trainer->photo_path = $path;
+                $trainer->save();
+            });
         }
-        $trainer->save();
 
         return back()->with('success', 'تمت إضافة المدرب.');
+    }
+
+    /** The photo as it was uploaded, for download. */
+    public function photo(Trainer $trainer): \Symfony\Component\HttpFoundation\Response
+    {
+        return ImageStore::download($trainer->photo_path, $trainer->name);
     }
 
     public function update(Request $request, Trainer $trainer): RedirectResponse
@@ -51,12 +66,17 @@ class TrainerController extends Controller
         $data = $this->validated($request, $trainer);
         // Multipart forms drop empty arrays: a missing key means "no specialties".
         $data['specialties'] = $data['specialties'] ?? [];
-        $trainer->fill(collect($data)->except('photo')->all());
-        if ($request->hasFile('photo')) {
-            ImageStore::delete($trainer->photo_path);
-            $trainer->photo_path = ImageStore::store($request->file('photo'), 'trainers', 800);
+        $trainer->fill(collect($data)->except(['photo', 'photo_preview', 'photo_direct'])->all());
+        $photo = ImageUpload::from($request, 'photo');
+        if (! $photo) {
+            $trainer->save();
+        } else {
+            // The new photo is stored and saved first; the old files go only after that worked.
+            ImageStore::replace($trainer->photo_path, $photo, 'trainers', null, function (string $path) use ($trainer) {
+                $trainer->photo_path = $path;
+                $trainer->save();
+            });
         }
-        $trainer->save();
 
         return back()->with('success', 'تم حفظ بيانات المدرب.');
     }
@@ -110,7 +130,9 @@ class TrainerController extends Controller
             'sort' => ['nullable', 'integer'],
             'branch_id' => ['nullable', ...app(BranchContext::class)->rule($trainer?->branch_id)],
             'user_id' => ['nullable', Rule::exists('users', 'id')->where('tenant_id', $tenantId), Rule::unique('gym_trainers', 'user_id')->ignore($trainer?->id)],
-            'photo' => ['nullable', 'image', 'max:'.config('gym.max_image_kb')],
+            'photo' => ImageRule::rules(),
+            'photo_preview' => ImageRule::previewRules(),
+            'photo_direct' => ImageRule::ticketRules(),
         ]);
 
         // Same format as members (968XXXXXXXX), so the number dials and links to WhatsApp correctly.

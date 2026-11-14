@@ -252,6 +252,12 @@ export interface MediaItem {
     mime: string | null;
     /** Where the image is used, in words («المسودة: معرض صور»، «المنشور: الواجهة الرئيسية»). Empty = free to delete. */
     used_in: string[];
+    /** The light copy for the grid (an older image: the image itself). */
+    thumb_url?: string;
+    /** The original was kept as uploaded (images added before were not). */
+    has_original?: boolean;
+    /** Download of the original (the panel only). */
+    download_url?: string;
 }
 
 export interface RevisionItem {
@@ -289,7 +295,7 @@ export interface BuilderProps {
     targets: { value: string; label: string }[];
     siteUrl: string;
     previewUrl: string;
-    limits: { max_image_kb: number; types: string[] };
+    limits: { max_image_kb: number; types: string[]; direct?: boolean; max_request_kb?: number; optimize?: import('@/lib/image-prep').OptimizePlan | null };
     unread: number;
     /** The site's own English for its standard phrases (default headings, buttons): Arabic => English. */
     englishDefaults: Record<string, string>;

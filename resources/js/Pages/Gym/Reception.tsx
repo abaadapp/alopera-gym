@@ -155,7 +155,7 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                     {(decision || scanError) && (
                         <div className={`card flex items-center gap-4 border-2 p-5 ${decision?.allowed ? 'border-emerald-300 bg-emerald-50' : 'border-red-300 bg-red-50'}`} role="status" aria-live="polite">
                             {decision?.allowed ? <CheckCircle2 className="size-12 shrink-0 text-emerald-600" /> : <XCircle className="size-12 shrink-0 text-red-600" />}
-                            {decision?.member?.photo_url && <img src={decision.member.photo_url} alt="" className="size-14 rounded-xl object-cover" />}
+                            {decision?.member?.photo_url && <img src={decision.member.photo_url} alt="" loading="lazy" decoding="async" className="size-14 rounded-xl object-cover" />}
                             <div className="min-w-0 flex-1">
                                 <p className={`text-lg font-semibold ${decision?.allowed ? 'text-emerald-800' : 'text-red-800'}`}>
                                     {decision ? (decision.allowed ? (decision.reason === 'duplicate_scan' ? 'دخول مسموح (مسجّل قبل قليل — لم يُحتسب مرة أخرى)' : 'دخول مسموح') : `مرفوض: ${decision.message}`) : scanError}
@@ -181,7 +181,7 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                     {selected ? (
                         <Card>
                             <div className="flex flex-wrap items-center gap-4">
-                                {selected.photo_url ? <img src={selected.photo_url} alt="" className="size-16 rounded-2xl object-cover" /> : <span className="grid size-16 place-items-center rounded-2xl bg-brand-50 text-brand"><UserRound className="size-7" /></span>}
+                                {selected.photo_url ? <img src={selected.photo_url} alt="" loading="lazy" decoding="async" className="size-16 rounded-2xl object-cover" /> : <span className="grid size-16 place-items-center rounded-2xl bg-brand-50 text-brand"><UserRound className="size-7" /></span>}
                                 <div className="min-w-0 flex-1">
                                     <p className="text-lg font-semibold">{selected.full_name}</p>
                                     <p className="text-sm text-muted"><span className="num">{selected.member_no}</span> · <span className="num">{selected.phone_display}</span></p>

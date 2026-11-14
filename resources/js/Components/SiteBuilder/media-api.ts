@@ -1,3 +1,4 @@
+import { batches, displaySource, lightCopy, type OptimizePlan, optimizeSpec, uploadOriginal } from '@/lib/image-prep';
 import { xsrf } from '@/lib/http';
 import type { MediaItem } from '@/types/site';
 
@@ -26,11 +27,34 @@ async function read<T>(response: Response): Promise<T> {
     return body as T;
 }
 
-export async function uploadMedia(files: File[]): Promise<MediaItem[]> {
-    const form = new FormData();
-    files.forEach((f) => form.append('images[]', f));
-    const response = await fetch(route('club.website.media.store'), { method: 'POST', credentials: 'same-origin', headers: headers(), body: form });
-    return (await read<{ media: MediaItem[] }>(response)).media;
+/**
+ * Sends the images in as many requests as needed, each under what the server accepts at once (`maxRequestKb`): each
+ * original as it is (or only its key, after a direct upload), and beside it, at the same index, the browser's display
+ * source for a HEIC or a very large photo.
+ */
+export async function uploadMedia(files: File[], direct = false, maxRequestKb = 20_480, optimize: OptimizePlan | null = null): Promise<MediaItem[]> {
+    const spec = optimizeSpec(optimize, 'site');
+    if (spec) {
+        // optimized-only: each light copy is sent in place of its file (or the file itself when already light).
+        files = await Promise.all(files.map((f) => lightCopy(f, spec).then((copy) => copy ?? f).catch(() => f)));
+        direct = false;
+    }
+    const sources = spec ? files.map(() => null) : await Promise.all(files.map((f) => displaySource(f, direct).catch(() => null)));
+    const items = files.map((file, i) => ({ file, source: sources[i] }));
+    const weight = (item: { file: File; source: File | null }) => (direct && item.source ? 0 : item.file.size) + (item.source?.size ?? 0) + 4096;
+    const added: MediaItem[] = [];
+    for (const group of batches(items, weight, maxRequestKb * 1024 * 0.95, 12)) {
+        const form = new FormData();
+        for (const [i, { file, source }] of group.entries()) {
+            // With originals in the bucket each goes there straight from the browser; the app gets its ticket.
+            if (direct && source) form.append(`images_direct[${i}]`, await uploadOriginal(file, route('club.website.media.uploads')));
+            else form.append(`images[${i}]`, file);
+            if (source) form.append(`images_preview[${i}]`, source);
+        }
+        const response = await fetch(route('club.website.media.store'), { method: 'POST', credentials: 'same-origin', headers: headers(), body: form });
+        added.push(...(await read<{ media: MediaItem[] }>(response)).media);
+    }
+    return added;
 }
 
 export async function updateMedia(id: number, data: { alt: string; title: string }): Promise<MediaItem> {
@@ -50,19 +74,23 @@ export async function deleteMedia(id: number): Promise<void> {
 
 /** The image types the server accepts (it may name them by extension or by type), as file types for the browser. */
 export function acceptedTypes(types: string[]): string[] {
-    const byExt: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+    const byExt: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', heic: 'image/heic', heif: 'image/heif' };
     const out = types.map((t) => (t.includes('/') ? t.toLowerCase() : byExt[t.toLowerCase().replace(/^\./, '')])).filter((t): t is string => !!t);
     return out.length ? [...new Set(out)] : ['image/jpeg', 'image/png', 'image/webp'];
 }
 
 /** Files the server would refuse, refused here first with the reason: wrong kind, too large, too many. */
-export function checkFiles(files: File[], limits: { max_image_kb: number; types: string[] }): string | null {
+export function checkFiles(files: File[], limits: { max_image_kb: number; types: string[]; optimize?: OptimizePlan | null }): string | null {
     if (files.length === 0) return null;
     if (files.length > 12) return 'ارفع ١٢ صورة على الأكثر في المرة الواحدة.';
     const allowed = acceptedTypes(limits.types);
-    const wrong = files.find((f) => !allowed.includes(f.type));
-    if (wrong) return `«${wrong.name}» ليست صورة مقبولة. الصيغ المقبولة: JPG وPNG وWebP.`;
-    const big = files.find((f) => f.size > limits.max_image_kb * 1024);
-    if (big) return `«${big.name}» أكبر من الحد المسموح (${Math.round(limits.max_image_kb / 1024)} م.ب).`;
+    // Some browsers give no type for a HEIC file: its name then decides here, and the server checks its bytes.
+    const kind = (f: File) => f.type || acceptedTypes([f.name.split('.').pop() ?? ''])[0];
+    const wrong = files.find((f) => !allowed.includes(f.type) && !(f.type === '' && allowed.includes(kind(f)) && /\.(heic|heif|avif)$/i.test(f.name)));
+    if (wrong) return `«${wrong.name}» ليست صورة مقبولة. الصيغ المقبولة: JPG وPNG وWebP وHEIC وHEIF وAVIF وGIF.`;
+    // With light copies the picked file only has to fit what the browser may open; the copy is what is sent.
+    const most = limits.optimize ? limits.optimize.pick_max_kb : limits.max_image_kb;
+    const big = files.find((f) => f.size > most * 1024);
+    if (big) return `«${big.name}» أكبر من الحد المسموح (${Math.round(most / 1024)} م.ب).`;
     return null;
 }

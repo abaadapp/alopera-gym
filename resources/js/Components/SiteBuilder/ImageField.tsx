@@ -40,7 +40,7 @@ export default function ImageField({ field, value, onChange, error }: { field: F
                 <div className="overflow-hidden rounded-2xl border border-line bg-white">
                     {item ? (
                         <div className="grid max-h-64 place-items-center bg-[repeating-conic-gradient(#f3f3f1_0_25%,#fbfbfa_0_50%)] bg-[length:16px_16px] p-2">
-                            <img src={item.url} alt={item.alt ?? ''} className="max-h-60 max-w-full object-contain" />
+                            <img src={item.url} alt={item.alt ?? ''} loading="lazy" decoding="async" className="max-h-60 max-w-full object-contain" />
                         </div>
                     ) : (
                         <div className="flex items-center gap-2 bg-amber-50 px-3 py-4 text-sm text-amber-800">

@@ -6,6 +6,7 @@ use App\Http\Controllers\Club\BackupController;
 use App\Http\Controllers\Club\BranchController;
 use App\Http\Controllers\Club\BranchSwitchController;
 use App\Http\Controllers\Club\DashboardController;
+use App\Http\Controllers\Club\ImageTicketController;
 use App\Http\Controllers\Club\NotificationController;
 use App\Http\Controllers\Club\PaperController;
 use App\Http\Controllers\Club\PaperTemplateController;
@@ -50,6 +51,8 @@ Route::prefix('settings')->group(function () {
     Route::middleware('can:settings.manage')->group(function () {
         Route::get('/club', [SettingsController::class, 'edit'])->name('settings.edit');
         Route::put('/club', [SettingsController::class, 'update'])->name('settings.update');
+        Route::get('/club/logo', [SettingsController::class, 'logo'])->name('settings.logo');
+        Route::post('/club/logo-upload', ImageTicketController::class)->defaults('folder', 'brand')->name('settings.logo-upload');
         Route::get('/notifications', [SettingsController::class, 'notifications'])->name('settings.notifications');
         Route::put('/notifications', [SettingsController::class, 'updateNotifications'])->name('settings.notifications.update');
     });

@@ -67,6 +67,8 @@ interface MemberDetail {
     email: string | null;
     status: string;
     photo_url: string | null;
+    photo_download_url?: string | null;
+    photo_has_original?: boolean;
     joined_on: string | null;
     last_check_in_at: string | null;
     membership: MembershipItem | null;
@@ -247,9 +249,14 @@ export default function MemberShow(props: Props) {
                 <div className="min-w-0 space-y-6">
                     <Card padded={false} className="p-6 text-center">
                         {member.photo_url ? (
-                            <img src={member.photo_url} alt="" className="mx-auto size-24 rounded-full object-cover ring-4 ring-[#f5f3ff]" />
+                            <img src={member.photo_url} alt="" loading="lazy" decoding="async" className="mx-auto size-24 rounded-full object-cover ring-4 ring-[#f5f3ff]" />
                         ) : (
                             <span className="mx-auto grid size-24 place-items-center rounded-full bg-[#f5f3ff] text-[28px] font-bold text-[#6d28d9]">{member.full_name.trim()[0]}</span>
+                        )}
+                        {member.photo_download_url && (
+                            <a href={member.photo_download_url} className="mt-2 inline-block text-[12px] text-[#6b7280] underline-offset-2 hover:text-[#111] hover:underline">
+                                {member.photo_has_original ? 'تنزيل الصورة الأصلية' : 'تنزيل الصورة'}
+                            </a>
                         )}
                         <p className="mt-4 text-[17px] font-bold text-[#111]">{member.full_name}</p>
                         <p className="mt-1 font-mono text-[12px] text-[#9ca3af]">{member.member_no}</p>

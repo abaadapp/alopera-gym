@@ -60,7 +60,7 @@ class PosController extends Controller
             // Prices are shown here; the sale is priced again on the server from the database.
             'products' => $products->map(fn (Product $p) => $p->only('id', 'name', 'price', 'track_stock', 'barcode', 'sku') + [
                 'stock_quantity' => $quantities[$p->id] ?? '0.000',
-                'category' => $p->category?->name, 'image_url' => $p->imageUrl(), 'addons' => $offered[$p->id],
+                'category' => $p->category?->name, 'image_url' => $p->thumbUrl(), 'addons' => $offered[$p->id],
             ]),
             'categories' => $products->pluck('category')->filter()->unique('id')->sortBy([['sort_order', 'asc'], ['name', 'asc']])->pluck('name')->values(),
             // Memberships and training packages are sold here too, through the same services as at reception.

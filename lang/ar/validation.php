@@ -149,7 +149,7 @@ return [
     'string' => 'يجب أن يكون :attribute نصًا.',
     'timezone' => 'يجب أن يكون :attribute منطقة زمنية صحيحة.',
     'unique' => ':attribute مستخدم مسبقًا.',
-    'uploaded' => 'تعذّر رفع :attribute.',
+    'uploaded' => 'تعذّر رفع :attribute: قد يكون حجمه أكبر مما يقبله الخادم، أو انقطع الرفع.',
     'uppercase' => 'يجب أن يكون :attribute بحروف كبيرة.',
     'url' => 'يجب أن يكون :attribute رابطًا صحيحًا.',
     'ulid' => 'يجب أن يكون :attribute معرّف ULID صحيحًا.',
