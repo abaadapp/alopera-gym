@@ -37,6 +37,31 @@ final class PaymobClient
         return true;
     }
 
+    /**
+     * A live account, as the club set it and as its keys show: live mode, a secret key that says live, and no key that
+     * says test. Paymob's keys carry their environment (…_sk_live_…, …_sk_test_…, …_pk_test_…); a key that does not
+     * say live is not taken for one.
+     */
+    public static function live(?TenantIntegration $integration): bool
+    {
+        if (! $integration || $integration->mode !== 'live') {
+            return false;
+        }
+        $secret = (string) $integration->credential('secret_key');
+
+        return str_contains($secret, '_live_') && ! str_contains($secret, '_test_')
+            && ! str_contains((string) $integration->credential('public_key'), '_test_');
+    }
+
+    /**
+     * Can this integration take money here? On the production server only a live one: a test checkout's money is not
+     * real and must never pay a real invoice. Elsewhere (a developer's copy, the tests) a test one too.
+     */
+    public static function takesPayments(?TenantIntegration $integration): bool
+    {
+        return self::ready($integration) && (self::live($integration) || ! app()->isProduction());
+    }
+
     /** @return list<int> */
     public static function integrationIds(TenantIntegration $integration): array
     {
@@ -170,6 +195,9 @@ final class PaymobClient
         }
         if (str_contains($key, '_live_') && $integration->mode === 'test') {
             return 'المفتاح السري مفتاح حقيقي بينما الوضع «اختبار».';
+        }
+        if (app()->isProduction() && ! self::live($integration)) {
+            return 'وضع الاختبار (أو مفاتيح لا تثبت أنها حقيقية) لا يفتح صفحات دفع ولا يسجّل دفعات على نظام الإنتاج.';
         }
 
         return null;

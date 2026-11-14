@@ -6,6 +6,7 @@ use App\Core\Audit\AuditLogger;
 use App\Core\Notifications\StaffAlerts;
 use App\Core\Notifications\StaffNotifier;
 use App\Core\Support\BusinessRuleException;
+use App\Core\Support\Files\SafeFiles;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Models\User;
@@ -17,7 +18,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * The business's documents: files on the private disk, renewals that archive the replaced version, and expiry
@@ -78,7 +78,7 @@ final class DocumentService
                 $old = $document->file_path;
                 $this->attach($document, $file);
                 if ($old && $old !== $document->file_path && ! $this->pathInArchive($document, $old)) {
-                    DB::afterCommit(fn () => Storage::disk('local')->delete($old));
+                    SafeFiles::deleteAfterCommit($old);
                 }
             }
             $document->save();
@@ -225,11 +225,11 @@ final class DocumentService
         $stale->update(['acknowledged_at' => now(), 'acknowledged_by' => Auth::guard('web')->id()]);
     }
 
+    /** Called inside the save's transaction: the copy is kept whole or the save fails, and goes again if the save rolls back. */
     private function attach(BusinessDocument $document, UploadedFile $file): void
     {
-        $path = $file->store('tenants/'.$this->tenants->require()->id.'/documents/'.$document->id, 'local');
         $document->forceFill([
-            'file_path' => $path,
+            'file_path' => SafeFiles::putUpload($file, 'tenants/'.$this->tenants->require()->id.'/documents/'.$document->id),
             'file_name' => mb_substr($file->getClientOriginalName(), 0, 200),
             'file_mime' => $file->getMimeType(),
             'file_size' => $file->getSize(),
