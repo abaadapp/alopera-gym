@@ -45,6 +45,7 @@ class IntegrationController extends Controller
         'processed' => 'سُجّلت الدفعة', 'duplicate' => 'مكرر — لم يُسجَّل مرة أخرى', 'failed_payment' => 'دفع مرفوض من البنك',
         'amount_mismatch' => 'المبلغ لا يطابق — لم يُسجَّل', 'rejected_signature' => 'توقيع غير صحيح — رُفض', 'unknown_intent' => 'عملية غير معروفة',
         'ignored_refund' => 'رد أو إلغاء من Paymob — لم يُسجَّل دفعة', 'order_mismatch' => 'رقم الطلب لا يطابق — لم يُسجَّل',
+        'error' => 'تعذّر التسجيل — لم تُسجَّل الدفعة بعد، وتُسجَّل عند إعادة إرسالها',
     ];
 
     public function __construct(private readonly IntegrationHub $hub, private readonly TenantContext $tenants) {}

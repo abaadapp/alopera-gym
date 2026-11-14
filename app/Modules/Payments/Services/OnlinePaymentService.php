@@ -21,6 +21,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Online payment of club invoices through Paymob.
@@ -198,24 +199,32 @@ final class OnlinePaymentService
                 return $this->log($intent->tenant_id, $transactionId, $reference, true, 'amount_mismatch', $payload, $ip);
             }
 
-            $outcome = DB::transaction(function () use ($intent, $transactionId) {
-                $intent = PaymentIntent::whereKey($intent->id)->lockForUpdate()->firstOrFail();
+            // Paymob has taken this money. If a step of recording it fails, everything written here is rolled back
+            // (no payment, no stock, no order change), but the signed callback is kept to reconcile from, and Paymob
+            // is answered with an error, never a success or a redirect: sent again, it is recorded then.
+            try {
+                $outcome = DB::transaction(function () use ($intent, $transactionId) {
+                    $intent = PaymentIntent::whereKey($intent->id)->lockForUpdate()->firstOrFail();
 
-                $result = $this->audit->as('gateway', null, 'paymob', fn () => $this->payments->recordGatewayPayment(
-                    $intent->invoice()->firstOrFail(), $intent->amount, 'paymob', $transactionId, $intent->reference
-                ));
+                    $result = $this->audit->as('gateway', null, 'paymob', fn () => $this->payments->recordGatewayPayment(
+                        $intent->invoice()->firstOrFail(), $intent->amount, 'paymob', $transactionId, $intent->reference
+                    ));
 
-                if ($intent->status !== PaymentIntent::PAID) {
-                    $intent->forceFill([
-                        'status' => PaymentIntent::PAID,
-                        'payment_id' => $result['payment']->id,
-                        'provider_transaction_id' => $transactionId,
-                        'paid_at' => now(),
-                    ])->save();
-                }
+                    if ($intent->status !== PaymentIntent::PAID) {
+                        $intent->forceFill([
+                            'status' => PaymentIntent::PAID,
+                            'payment_id' => $result['payment']->id,
+                            'provider_transaction_id' => $transactionId,
+                            'paid_at' => now(),
+                        ])->save();
+                    }
 
-                return $result['created'] ? 'processed' : 'duplicate';
-            });
+                    return $result['created'] ? 'processed' : 'duplicate';
+                });
+            } catch (Throwable $e) {
+                report($e);
+                $outcome = 'error';
+            }
 
             return $this->log($intent->tenant_id, $transactionId, $reference, true, $outcome, $payload, $ip);
         });
