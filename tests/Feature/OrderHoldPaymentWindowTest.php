@@ -179,13 +179,13 @@ class OrderHoldPaymentWindowTest extends TestCase
         $this->holdEnded($club, $sale, $this->pastGrace());
         $this->asTenant($club, fn () => $this->assertSame('1.000', $bar->fresh()->stock_quantity));
 
-        $this->paymob($intent, 900004)->assertOk()->assertJson(['outcome' => 'processed']);
+        $this->paymob($intent, 900004)->assertOk()->assertJson(['outcome' => 'held_for_review']);
 
         $state = $this->state($club, $sale, $bar, $intent);
         $this->assertSame(['stock' => '1.000', 'order' => Sale::CANCELLED, 'paid_at' => false, 'reserved' => false, 'invoice' => Invoice::VOID,
             'payments' => 1, 'credit' => $intent->amount, 'intent' => PaymentIntent::PAID, 'books' => true], $state,
             'the order stays released, the bar stays on the shelf, and the money is the customer\'s credit, not lost');
-        $this->asTenant($club, fn () => $this->assertSame(1, PaymentWebhookEvent::where('transaction_id', '900004')->where('outcome', 'processed')->count()));
+        $this->asTenant($club, fn () => $this->assertSame(1, PaymentWebhookEvent::where('transaction_id', '900004')->where('outcome', 'held_for_review')->count()));
     }
 
     // 5

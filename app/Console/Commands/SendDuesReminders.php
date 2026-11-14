@@ -42,7 +42,8 @@ class SendDuesReminders extends ForEachTenant
 
         foreach ($stages as $stage => $dates) {
             foreach ($dates as $due) {
-                Invoice::open()->where('billable_type', 'member')->whereDate('due_date', $due)->with('billable')->each(function (Invoice $invoice) use ($notifier, $stage, $due, $today, $max, &$queued) {
+                // Not an invoice whose online payment is confirmed and held for the club's review: the customer paid.
+                Invoice::open()->where('billable_type', 'member')->whereDate('due_date', $due)->whereDoesntHave('payments', fn ($q) => $q->gatewayCreditLeft())->with('billable')->each(function (Invoice $invoice) use ($notifier, $stage, $due, $today, $max, &$queued) {
                     if (self::sentFor($invoice) >= $max) {
                         return;
                     }

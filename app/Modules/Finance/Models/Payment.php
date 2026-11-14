@@ -42,6 +42,17 @@ class Payment extends Model implements BranchOwned
 
     public const REFUND_METHODS_CONFIRMED = ['bank_transfer', 'paymob'];
 
+    /** Why confirmed gateway money was held for review rather than applied (PaymentService::recordGatewayPayment). */
+    public const HOLD_REASONS = [
+        'invoice_closed' => 'الفاتورة لم تعد مفتوحة',
+        'checkout_expired' => 'وصل التأكيد بعد انتهاء مهلة صفحة الدفع',
+        'order_closed' => 'طلب المتجر أُلغي أو انتهى حجزه',
+        'membership_not_pending' => 'الاشتراك لم يعد بانتظار الدفع',
+        'membership_ended' => 'انتهت مدة الاشتراك',
+        'membership_overlap' => 'للعضو اشتراك آخر يغطي الفترة نفسها',
+        'pt_not_pending' => 'باقة التدريب لم تعد بانتظار الدفع',
+    ];
+
     /** The kinds of money account a method may land in when one is chosen. */
     public const METHOD_ACCOUNT_KINDS = ['cash' => ['cash'], 'bank_transfer' => ['bank'], 'card' => ['card', 'bank'], 'paymob' => ['gateway'], 'other' => ['cash', 'bank']];
 
@@ -113,6 +124,16 @@ class Payment extends Model implements BranchOwned
     public function appliedAmount(): string
     {
         return Money::sub($this->amount, $this->credit_amount);
+    }
+
+    /**
+     * Confirmed gateway money still the customer's on its own invoice — held for review, or more than the invoice took:
+     * not applied, not yet paid back. While its invoice is open, that invoice is not asked for (or paid) again.
+     */
+    public function scopeGatewayCreditLeft(Builder $query): Builder
+    {
+        return $query->where($query->qualifyColumn('gateway'), 'paymob')->where($query->qualifyColumn('kind'), self::KIND_PAYMENT)
+            ->where($query->qualifyColumn('status'), self::COMPLETED)->whereColumn($query->qualifyColumn('credit_amount'), '>', $query->qualifyColumn('credit_used'));
     }
 
     public function scopeCompleted(Builder $query): Builder

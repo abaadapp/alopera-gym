@@ -94,14 +94,24 @@ final class StaffAlerts
      * confirmation came, an invoice voided or paid at the desk meanwhile — is the customer's credit. Someone who may
      * pay it back is told, once per payment (a repeated callback records no new payment).
      */
-    public function gatewayCredit(Payment $payment): void
+    public function gatewayCredit(Payment $payment, ?string $holdReason = null): void
     {
         $payment->loadMissing('invoice:id,number,customer_name');
         $order = Sale::where('invoice_id', $payment->invoice_id)->where('source', Sale::WEBSITE)->where('status', Sale::CANCELLED)->value('number');
-        $this->notifier->notify('payments.refund', 'payment-credit:'.$payment->id, 'payment',
-            ($order ? 'دفعة إلكترونية وصلت بعد إلغاء الطلب '.$order : 'دفعة إلكترونية لم تُطبَّق على الفاتورة '.$payment->invoice?->number)
+        // Held for review: whoever may apply it (payments.record) or pay it back (payments.refund) is told — each acts by
+        // their own permission.
+        $this->notifier->notify($holdReason !== null ? ['payments.record', 'payments.refund'] : 'payments.refund', 'payment-credit:'.$payment->id, 'payment',
+            ($holdReason !== null
+                ? 'دفعة إلكترونية مؤكدة محجوزة للمراجعة'.($order ? ' (الطلب '.$order.' أُلغي)' : '').' على الفاتورة '.$payment->invoice?->number
+                    .' — '.(Payment::HOLD_REASONS[$holdReason] ?? $holdReason)
+                : ($order ? 'دفعة إلكترونية وصلت بعد إلغاء الطلب '.$order : 'دفعة إلكترونية لم تُطبَّق على الفاتورة '.$payment->invoice?->number))
                 .': '.Money::normalize($payment->credit_amount).' '.$payment->currency.' رصيد دائن للعميل'
-                .($payment->invoice?->customer_name ? ' — '.$payment->invoice->customer_name : '').'. خصّصه لفاتورة أو رُدّه.',
+                .($payment->invoice?->customer_name ? ' — '.$payment->invoice->customer_name : '')
+                .match (true) {
+                    $holdReason === null => '. خصّصه لفاتورة أو رُدّه.',
+                    $holdReason === 'invoice_closed' => '. لم يُفعَّل شيء: خصّصه لفاتورة أخرى للعميل أو رُدّه، مع سبب.',
+                    default => '. لم يُفعَّل شيء: خصّصه لفاتورته أو رُدّه، مع سبب.',
+                },
             route('club.invoices.show', $payment->invoice_id),
             fn (User $u) => $this->branches->allows($u, $payment->owningBranchId()));
     }
