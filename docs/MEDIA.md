@@ -4,9 +4,9 @@ Code: `App\Core\Support\ImageStore`, `App\Core\Support\Images\*`, `config/media.
 
 ## What is stored
 
-By default (`MEDIA_STORAGE=originals`) each upload (member, trainer, program, product, post, website library, logo) is
-kept three ways. With `MEDIA_STORAGE=optimized-only` only the light copy and its thumbnail are kept
-([below](#optimized-only-storage-built-off-media_storageoptimized-only)).
+With `MEDIA_STORAGE=originals` each upload (member, trainer, program, product, post, website library, logo) is kept
+three ways. The default, `MEDIA_STORAGE=optimized-only`, keeps only the light copy and its thumbnail
+([below](#optimized-only-storage-the-default-media_storageoptimized-only)).
 
 | Piece | Where | Name | Used by |
 |---|---|---|---|
@@ -53,14 +53,14 @@ Sending the library's file to a user's browser is conveying it, so LGPL-3.0 §4 
 
 | Obligation | How it is met |
 |---|---|
-| Prominent notice that the library is used and is under the LGPL (§4a) | The page `/licenses/index.html` (`public/licenses/index.html`), linked from the sign-in page's footer («تراخيص البرامج مفتوحة المصدر», beside «جميع الحقوق محفوظة», same style), `NOTICE.txt` beside the licence, and a notice line at the top of the library's own file (`vite.config.js` adds it at build). |
+| Prominent notice that the library is used and is under the LGPL (§4a) | The page `/licenses/index.html` (`public/licenses/index.html`), linked as «تراخيص البرامج مفتوحة المصدر» at the foot of the club panel's sidebar on every page (where the library is loaded: the image fields) and from the password-reset pages' footer (`AuthLayout`); the plain sign-in page of #162 has its own layout and is left as it is. `NOTICE.txt` beside the licence, and a notice line at the top of the library's own file (`vite.config.js` adds it at build). |
 | Give the GPL-3.0 and LGPL-3.0 texts (§4b) | `public/licenses/libheif-js/LICENSE.txt`: the upstream LICENSE, byte for byte (its SHA-256 equals the libheif-emscripten v1.23.5 release asset). |
 | Copyright notices (§4c) | In NOTICE.txt: libheif-js (Kiril Vatev), libheif (Struktur AG, Dirk Farin), libde265 (Struktur AG, Dirk Farin). |
 | Let the user use a changed library (§4d) | The library is a separate, unmodified file loaded at run time through its interface; the application's source is public, so it can be rebuilt with another libheif-js. Nothing in the app's terms forbids changing or reverse engineering it. |
 | Corresponding Source (GPL-3.0 §6d) | A copy is kept on our own server, in `public/licenses/libheif-js/source/`, with `SHA256SUMS.txt`, and listed on the page with its upstream links. The archives are libheif 1.23.5 (its SHA-256 equals the published one), libde265 1.0.15, the WebAssembly build steps (libheif-emscripten v1.23.5) and libheif-js 1.23.5. Together they are 3.1 MB. |
 | Installation Information (§4e) | Not applicable: it is for consumer devices, not a website. |
 
-`OpenSourceNoticesTest` keeps all of this in step with the installed version: the licence text byte for byte, every archive against its checksum and on the page, the version named, and the sign-in page's link. Upgrading the library without its notice and source fails there.
+`OpenSourceNoticesTest` keeps all of this in step with the installed version: the licence text byte for byte, every archive against its checksum and on the page, the version named, and the panel's and `AuthLayout`'s links. Upgrading the library without its notice and source fails there.
 
 Still open, and not technical: **HEVC patents** are a legal question.
 - **Audit:** `npm audit` reported 0 vulnerabilities at install. Review before each upgrade; do not take `heic2any` (its last release is from 2023, with an old libheif).
@@ -224,9 +224,10 @@ Tested (`OriginalsCopyTest` simulated; `SpacesLiveTest` on real S3 servers):
 - the HEIC downloading as before;
 - bit rot in the main bucket found by the drill, not spread to the copy, and repaired from it.
 
-## Optimized-only storage (built, off: `MEDIA_STORAGE=optimized-only`)
+## Optimized-only storage (the default: `MEDIA_STORAGE=optimized-only`)
 
-Keeps only a light copy of each new upload and its thumbnail: no original, anywhere. Off until the owner approves it.
+Keeps only a light copy of each new upload and its thumbnail: no original, anywhere. The default since the owner
+approved it with the release of PR #158 (2026-11-14); `MEDIA_STORAGE=originals` is the way back (below).
 Images kept before (with or without originals) stay where they are, under their own names, and keep working.
 
 **In the browser** (`lightCopy` in `resources/js/lib/image-prep.ts`), before anything is sent:
@@ -294,6 +295,35 @@ measured on the production server.
 | originals, 48 MP photo, `memory_limit=128M` | refused with a clear message (needs the browser's display source) | – |
 
 - Lists load thumbnails (3.4–8 KB each): the member list with 25 photos loaded 170 KB of images in all.
+
+### Release, checks and the way back
+
+**Switching it on.** Nothing on the server: `optimized-only` is the default, so the deploy that brings this code starts
+it, with no moment in originals mode. Do not add `MEDIA_STORAGE` to `shared/.env` (it would only matter as the way
+back). Nothing is migrated; images kept before stay as they are and keep showing.
+
+**Checks after the deploy** (no server access needed):
+1. The deploy log's `platform:preflight` table shows `New images keep only their light copy … MEDIA_STORAGE=optimized-only`
+   (a WARN there means originals mode runs).
+2. In the panel, add a photo to a test member: the profile's link says «تنزيل الصورة», not «تنزيل الصورة الأصلية».
+3. The panel's sidebar ends with «تراخيص البرامج مفتوحة المصدر», and `/licenses/index.html` opens.
+
+**The way back**, from the lightest. Images kept in the new mode are never deleted by any of these, and stay shown:
+1. *A browser cannot make light copies, or originals are wanted again:* put `MEDIA_STORAGE=originals` in
+   `shared/.env` and run `php artisan config:cache` as deploy (or deploy again). New uploads keep originals again;
+   light copies keep showing, downloading and deleting as before (tested).
+2. *The code itself misbehaves:* `scripts/rollback-code.sh <commit before the deploy>` (docs/DEPLOY.md). There are no
+   migrations to stand in the way. The older code shows each image from the path its record holds, so the light copies
+   still show; it does not know thumbnails, so it shows the display copy in lists, and deleting an image there leaves its
+   few-KB thumbnail behind (harmless). Then revert the merge on main, or the next deploy brings it back.
+3. Never: delete files, roll back migrations, or restore an archive to "undo" the release. The nightly archives hold
+   the light copies too, under single-dot names a restore puts back (tested both ways).
+
+**Still open (not changed here):** the nightly club archive reads every file of the club into memory at once
+(`TenantBackupService::create`, `addFromString`). With light copies (about 65 KB a picture) that is about 65 MB per
+1,000 pictures, under the droplet's free memory (about 500 MB) up to several thousand pictures; with originals it
+passes it at about 150. If it does, the archive of that night is lost with no alert (its output goes nowhere).
+The fix is to stream the files into the zip (`addFile`), which changes the backup system: the owner's decision.
 
 ### Disk and the nightly club archives
 
