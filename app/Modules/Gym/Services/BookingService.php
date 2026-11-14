@@ -262,7 +262,7 @@ final class BookingService
 
     /**
      * An upgrade: the old membership's future bookings count on the new one where its plan, dates and sessions allow
-     * it; the others are released, as when a membership is cancelled.
+     * it; the others are released, as when a membership is cancelled. A new plan without classes keeps none of them.
      */
     public function carryFuture(Membership $from, Membership $to, string $reason): int
     {
@@ -280,7 +280,7 @@ final class BookingService
             }
             $target = Membership::whereKey($to->id)->lockForUpdate()->firstOrFail();
             $date = $session->starts_at->startOfDay();
-            if (! ($target->starts_on->lte($date) && $target->ends_on->gte($date) && $this->programAllowed($target, $session) && $target->hasSessionsLeft())) {
+            if (! ($target->starts_on->lte($date) && $target->ends_on->gte($date) && $target->booksClasses() && $this->programAllowed($target, $session) && $target->hasSessionsLeft())) {
                 $this->release($booking, $session, $reason);
                 BookingCancelled::dispatch($booking, $reason);
 

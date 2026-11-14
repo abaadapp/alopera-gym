@@ -311,6 +311,7 @@ final class SiteRenderer
             'id' => $p->id, 'name' => SiteLanguage::pick($p->name, $p->name_en), 'description' => SiteLanguage::pick($p->description, $p->description_en), 'price' => (string) $p->price,
             'signup_fee' => $p->signup_fee !== null ? (string) $p->signup_fee : null, 'duration_label' => $p->siteDurationLabel(),
             'type_label' => SiteLanguage::word(MembershipPlan::TYPES[$p->type] ?? $p->type), 'features' => SiteLanguage::pickList($p->features, $p->features_en), 'is_featured' => (bool) $p->is_featured,
+            'allows_gym' => $p->allowsGym(), 'allows_classes' => $p->allowsClasses(), 'sessions_limit' => $p->sessions_limit,
             'join_url' => route('site.join', ['plan' => $p->id]),
         ])->all();
     }

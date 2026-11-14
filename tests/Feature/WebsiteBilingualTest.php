@@ -249,7 +249,7 @@ class WebsiteBilingualTest extends TestCase
 
         $this->actingAs($owner)->put(route('club.plans.update', $plan), [
             'name' => 'شهري', 'name_en' => 'Monthly', 'description_en' => 'Gym and classes', 'features_en' => ['Lockers'],
-            'type' => 'combo', 'duration_value' => 1, 'duration_unit' => 'month', 'price' => 25, 'is_public' => true, 'is_active' => true,
+            'allows_gym' => true, 'allows_classes' => true, 'duration_value' => 1, 'duration_unit' => 'month', 'price' => 25, 'is_public' => true, 'is_active' => true,
         ])->assertSessionHasNoErrors();
         $this->assertSame('Monthly', $this->asTenant($club, fn () => MembershipPlan::find($plan->id)->name_en));
 

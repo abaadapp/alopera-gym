@@ -113,5 +113,6 @@
     "محجوز": "Booked",
     "حضر": "Attended",
     "غاب": "No-show",
-    "ملغى": "Cancelled"
+    "ملغى": "Cancelled",
+    "غير مشمولة": "Not included"
 }

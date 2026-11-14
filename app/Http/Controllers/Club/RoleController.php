@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Role;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -53,12 +54,17 @@ class RoleController extends Controller
             return back()->with('error', 'دور المالك لا يمكن تعديله.');
         }
         $data = $this->validated($request);
-        // Only the permissions this user holds change; any other permission on the role stays as it was.
-        $role->update([
-            'name' => $data['name'],
-            'description' => $data['description'] ?? null,
-            'permissions' => [...Grants::merge($request->user(), PermissionRegistry::sanitize($role->permissions ?? []), $data['permissions'] ?? []), ...PermissionRegistry::dormant($role->permissions ?? [])],
-        ]);
+        // Only the permissions this user holds change; any other permission on the role stays as it was. Read again under
+        // its lock: an edit at the same moment as the owner's (taking plans.manage off the role) works from what the
+        // owner saved, and never puts back what the owner took off.
+        DB::transaction(function () use ($request, $role, $data) {
+            $role = Role::whereKey($role->id)->lockForUpdate()->firstOrFail();
+            $role->update([
+                'name' => $data['name'],
+                'description' => $data['description'] ?? null,
+                'permissions' => [...Grants::merge($request->user(), PermissionRegistry::sanitize($role->permissions ?? []), $data['permissions'] ?? []), ...PermissionRegistry::dormant($role->permissions ?? [])],
+            ]);
+        });
 
         return back()->with('success', 'تم حفظ صلاحيات الدور.');
     }

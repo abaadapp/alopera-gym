@@ -52,7 +52,10 @@ export default function Classes({ site, seo, sessions, membership, cutoffHours, 
         <PortalLayout site={site} title={seo.title}>
             <div className="mb-6 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-line bg-white p-4 text-sm">
-                    {membership ? (
+                    {membership && membership.books_classes === false ? (
+                        // Bookings are refused on the server too (membership.gym_only); this says it before she tries.
+                        <p className="text-amber-700">{t('باقتك الحالية لا تشمل حجز الحصص.')}</p>
+                    ) : membership ? (
                         <p>
                             {rich(t('باقتك: :plan · الحصص المتبقية :left'), {
                                 plan: <span className="font-medium">{membership.plan}</span>,
@@ -90,6 +93,9 @@ export default function Classes({ site, seo, sessions, membership, cutoffHours, 
                                                 </button>
                                             )}
                                         </span>
+                                    ) : membership?.books_classes === false ? (
+                                        // No «Book» for a membership without classes (the server refuses it too, membership.gym_only).
+                                        <span className="rounded-full border border-line px-4 py-2 text-xs text-muted">{t('غير مشمولة')}</span>
                                     ) : s.is_full ? (
                                         <span className="rounded-full border border-line px-4 py-2 text-xs text-muted">{t('مكتملة')}</span>
                                     ) : (

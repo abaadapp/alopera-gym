@@ -140,6 +140,10 @@ export interface PlanFeed {
     type_label: string;
     features: string[] | null;
     is_featured: boolean;
+    /** What a sale of it gives (the owner's «صلاحيات الباقة»); absent in an old cached feed, which then says nothing. */
+    allows_gym?: boolean;
+    allows_classes?: boolean;
+    sessions_limit?: number | null;
     join_url: string;
 }
 

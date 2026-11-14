@@ -250,5 +250,9 @@
     "كلمتا المرور غير متطابقتين.": "The passwords don't match.",
     "لإنشاء حسابكِ في بوابة الأعضاء.": "To create your member portal account.",
     "يجب الموافقة على الشروط والأحكام.": "You must accept the terms and conditions.",
-    "يمكنكِ تغييرها قبل الدفع.": "You can change it before paying."
+    "يمكنكِ تغييرها قبل الدفع.": "You can change it before paying.",
+    "دخول النادي طوال مدة الاشتراك": "Club access for the whole membership",
+    "الدخول إلى النادي يوم الحصة المحجوزة فقط": "Club entry only on the day of a booked class",
+    "لا تشمل حجز الحصص": "Class bookings are not included",
+    "باقتك الحالية لا تشمل حجز الحصص.": "Your current membership does not include class bookings."
 }
