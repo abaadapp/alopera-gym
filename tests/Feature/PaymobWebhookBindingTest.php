@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Models\Tenant;
 use App\Models\TenantIntegration;
@@ -196,61 +197,76 @@ class PaymobWebhookBindingTest extends TestCase
 
     // ── the intent's Paymob order ─────────────────────────────────────────────────────────────────────────────────
 
-    public function test_an_intent_without_a_paymob_order_takes_the_order_of_its_first_payment_and_keeps_it(): void
+    public function test_a_checkout_paymob_opens_without_an_order_is_never_offered(): void
     {
         $club = $this->paymobClub();
-        [$membership, $intent] = $this->pending($club, null);
-        $this->assertNull($intent->provider_order_id, 'Paymob gave no order for this checkout');
+        $this->orderIds[] = null;
+        $member = $this->member($club);
+        $plan = $this->plan($club, ['price' => 25]);
+        $membership = $this->asTenant($club, fn () => app(MembershipService::class)->sell($member, $plan));
 
-        $this->assertSame('processed', $this->deliver($this->obj($intent, ['order' => ['id' => 7001]])));
-        $this->asTenant($club, fn () => $this->assertSame('7001', $intent->fresh()->provider_order_id, 'bound to the signed order'));
+        try {
+            $this->asTenant($club, fn () => app(OnlinePaymentService::class)->start($membership->invoice, 'portal'));
+            $this->fail('a checkout without a Paymob order was offered');
+        } catch (BusinessRuleException $e) {
+            $this->assertSame('paymob.no_order', $e->rule);
+        }
 
-        // Another order's signed payment naming this intent is no longer let on.
-        $this->assertSame('order_mismatch', $this->deliver($this->obj($intent, ['id' => 555002, 'order' => ['id' => 7002]])));
+        $intent = $this->asTenant($club, fn () => PaymentIntent::where('invoice_id', $membership->invoice_id)->sole());
+        $this->assertSame(PaymentIntent::FAILED, $intent->status);
+        $this->assertNull($intent->checkout_url, 'no payment page handed out');
+        $this->assertNull($intent->provider_order_id);
+
+        // Were it paid anyway, nothing signed names it: no callback is its money.
+        $this->assertSame('order_unverified', $this->deliver($this->obj($intent, ['order' => ['id' => 7001]])));
         $this->asTenant($club, function () use ($membership) {
-            $this->assertSame(1, Payment::where('gateway', 'paymob')->count(), 'money once, no credit from another order');
-            $this->assertSame(Membership::ACTIVE, $membership->fresh()->status);
+            $this->assertSame(0, Payment::where('gateway', 'paymob')->count());
+            $this->assertSame(Membership::PENDING, $membership->fresh()->status);
         });
     }
 
-    public function test_another_intents_signed_order_is_not_let_onto_an_intent_without_one(): void
+    public function test_an_intent_without_a_paymob_order_takes_no_callback_not_even_the_first(): void
+    {
+        $club = $this->paymobClub();
+        [$membership, $intent] = $this->pending($club, 4801);
+        // An intent left from before, or written by hand, with no Paymob order.
+        $this->asTenant($club, fn () => $intent->forceFill(['provider_order_id' => null])->save());
+
+        $this->assertSame('order_unverified', $this->deliver($this->obj($intent, ['order' => ['id' => 7001]])), 'the first signed order is not taken');
+        $this->assertSame('order_unverified', $this->deliver($this->obj($intent, ['id' => 555002, 'order' => ['id' => 7002]])));
+        $this->assertSame('order_unverified', $this->deliver($this->obj($intent)), 'nor a callback naming none');
+
+        $this->assertNothingRecorded($club, $membership, $intent);
+        $this->asTenant($club, fn () => $this->assertNull($intent->fresh()->provider_order_id, 'nothing bound'));
+    }
+
+    public function test_another_intents_signed_order_is_not_let_onto_an_intent(): void
     {
         $club = $this->paymobClub();
         [$paid, $a] = $this->pending($club, 4801);
-        [$other, $b] = $this->pending($club, null);
+        [$other, $b] = $this->pending($club, 4802);
         $aObj = $this->obj($a, ['id' => 555201]);
 
         // A's signed payment, its unsigned reference rewritten to name B.
         $this->assertSame('order_mismatch', $this->deliver(array_replace_recursive($aObj, ['order' => ['merchant_order_id' => $b->reference]])));
         $this->assertNothingRecorded($club, $other, $b);
-        $this->asTenant($club, fn () => $this->assertNull($b->fresh()->provider_order_id));
 
         $this->assertSame('processed', $this->deliver($aObj));
         $this->asTenant($club, fn () => $this->assertSame(Membership::ACTIVE, $paid->fresh()->status));
-    }
-
-    public function test_a_callback_naming_no_order_is_not_recorded_for_an_intent_without_one(): void
-    {
-        $club = $this->paymobClub();
-        [$membership, $intent] = $this->pending($club, null);
-
-        $this->assertSame('order_unverified', $this->deliver($this->obj($intent)));
-        $this->assertNothingRecorded($club, $membership, $intent);
     }
 
     public function test_a_transaction_in_the_books_for_another_payment_never_marks_an_intent_paid(): void
     {
         $club = $this->paymobClub();
         [, $a] = $this->pending($club, 4801);
-        [$other, $b] = $this->pending($club, null);
+        [$other, $b] = $this->pending($club, 4802);
 
         $this->assertSame('processed', $this->deliver($this->obj($a, ['id' => 555301])));
-        // The same transaction, signed for an order nobody holds, naming B.
-        $this->assertSame('transaction_elsewhere', $this->deliver($this->obj($b, ['id' => 555301, 'order' => ['id' => 7301]])));
+        // The same transaction, signed with B's order, naming B.
+        $this->assertSame('transaction_elsewhere', $this->deliver($this->obj($b, ['id' => 555301])));
 
         $this->assertNothingRecorded($club, $other, $b);
         $this->asTenant($club, function () use ($b) {
-            $this->assertNull($b->fresh()->provider_order_id, 'nothing bound');
             $this->assertNull($b->fresh()->payment_id);
             $this->assertSame(1, Payment::where('gateway', 'paymob')->count());
         });

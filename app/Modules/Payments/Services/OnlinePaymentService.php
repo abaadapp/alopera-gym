@@ -36,9 +36,6 @@ use Throwable;
  */
 final class OnlinePaymentService
 {
-    /** pg_advisory_xact_lock key space (with the Paymob order): an intent without an order takes one, one at a time. */
-    public const ORDER_LOCKS = 74205;
-
     public function __construct(
         private readonly TenantContext $tenants,
         private readonly PaymobClient $paymob,
@@ -114,6 +111,13 @@ final class OnlinePaymentService
             throw $e;
         }
 
+        // Paymob signs the order of every callback, never the reference: a checkout without an order could not be told
+        // apart from another order's payment, so it is never offered (the customer pays at the desk instead).
+        if ($checkout['order_id'] === null) {
+            $intent->forceFill(['status' => PaymentIntent::FAILED, 'failure_reason' => 'paymob.no_order'])->save();
+            throw new BusinessRuleException('paymob.no_order', 'تعذّر فتح صفحة الدفع الآن. يمكنك الدفع في الاستقبال.');
+        }
+
         $intent->forceFill(['checkout_url' => $checkout['url'], 'provider_order_id' => $checkout['order_id']])->save();
 
         return $intent;
@@ -170,17 +174,12 @@ final class OnlinePaymentService
                 return $this->log($intent->tenant_id, $transactionId, $reference, true, 'integration_mismatch', $payload, $ip);
             }
 
-            // The reference that found the intent is not signed; the order id is. A signed callback of another order
-            // (same amount) is not let onto this intent.
+            // The reference that found the intent is not signed; the order id is, and it is the only signed field that
+            // names this intent. A signed callback of another order (same amount) is not let onto it, and an intent
+            // Paymob gave no order has nothing signed to be told by: no callback is its money (asked again under the
+            // intent's lock before any is recorded).
             $signedOrder = (string) Arr::get($obj, 'order.id', '');
-            if ($intent->provider_order_id !== null && $signedOrder !== (string) $intent->provider_order_id) {
-                $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, ['reason' => 'order', 'order' => $signedOrder]));
-
-                return $this->log($intent->tenant_id, $transactionId, $reference, true, 'order_mismatch', $payload, $ip);
-            }
-            // Paymob gave no order for this checkout. The signed order must then be one no other intent holds; the
-            // payment binds it to this intent (below, under a lock), so every later callback must name it.
-            if ($intent->provider_order_id === null && ($why = $this->unboundOrder($intent, $signedOrder)) !== null) {
+            if (($why = self::orderProblem($intent, $signedOrder)) !== null) {
                 $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, ['reason' => $why, 'order' => $signedOrder]));
 
                 return $this->log($intent->tenant_id, $transactionId, $reference, true, $why, $payload, $ip);
@@ -243,15 +242,12 @@ final class OnlinePaymentService
                 $outcome = DB::transaction(function () use ($intent, $transactionId, $signedOrder) {
                     $intent = PaymentIntent::whereKey($intent->id)->lockForUpdate()->firstOrFail();
 
-                    // Taking an order: one intent at a time per order, and asked again now that it is ours to take.
-                    $binds = $intent->provider_order_id === null;
-                    if ($binds) {
-                        DB::select('select pg_advisory_xact_lock(?, hashtext(?))', [self::ORDER_LOCKS, $signedOrder]);
-                        if (($why = $this->unboundOrder($intent, $signedOrder)) !== null) {
-                            $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, ['reason' => $why, 'order' => $signedOrder]));
+                    // Read again under the lock, before any money: the order this intent holds now, not when the
+                    // callback came in.
+                    if (($why = self::orderProblem($intent, $signedOrder)) !== null) {
+                        $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, ['reason' => $why, 'order' => $signedOrder]));
 
-                            return $why;
-                        }
+                        return $why;
                     }
 
                     $result = $this->audit->as('gateway', null, 'paymob', fn () => $this->payments->recordGatewayPayment(
@@ -274,7 +270,7 @@ final class OnlinePaymentService
                             'payment_id' => $result['payment']->id,
                             'provider_transaction_id' => $transactionId,
                             'paid_at' => now(),
-                        ] + ($binds ? ['provider_order_id' => $signedOrder] : []))->save();
+                        ])->save();
                     }
 
                     return $result['created'] ? 'processed' : 'duplicate';
@@ -318,16 +314,16 @@ final class OnlinePaymentService
     }
 
     /**
-     * Why an intent Paymob gave no order cannot take this signed one: none is named, or another intent holds it.
-     * Null when it can.
+     * Why this signed order is not the intent's: the intent has no Paymob order to check it against, or holds another.
+     * Null when it is the intent's own.
      */
-    private function unboundOrder(PaymentIntent $intent, string $signedOrder): ?string
+    private static function orderProblem(PaymentIntent $intent, string $signedOrder): ?string
     {
-        if ($signedOrder === '') {
+        if ($intent->provider_order_id === null || (string) $intent->provider_order_id === '') {
             return 'order_unverified';
         }
 
-        return PaymentIntent::where('provider_order_id', $signedOrder)->whereKeyNot($intent->id)->exists() ? 'order_mismatch' : null;
+        return $signedOrder === (string) $intent->provider_order_id ? null : 'order_mismatch';
     }
 
     /**

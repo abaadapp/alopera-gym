@@ -49,7 +49,7 @@ class IntegrationController extends Controller
         'recorded_with_error' => 'سُجّلت الدفعة — وتعذّرت خطوة بعدها (في سجل الأخطاء)',
         'integration_mismatch' => 'عبر تكامل غير مضبوط لدى النادي — لم يُسجَّل',
         'authorized_only' => 'تفويض فقط ولم يُحصَّل المبلغ — لم يُسجَّل',
-        'order_unverified' => 'بلا رقم طلب يُتحقق به — لم يُسجَّل',
+        'order_unverified' => 'نية دفع بلا رقم طلب من Paymob يُتحقق به — لم يُسجَّل',
         'transaction_elsewhere' => 'العملية مسجّلة لدفعة أخرى — لم يُسجَّل',
     ];
 
