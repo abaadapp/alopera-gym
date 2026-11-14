@@ -318,13 +318,7 @@ class PaymobLatePaymentReviewTest extends TestCase
         $club = $this->paymobClub();
         $member = $this->member($club, ['whatsapp_opt_in' => true]);
         [$membership, $intent] = $this->pending($club, $member);
-        $other = $this->asTenant($club, function () use ($member) {
-            $i = app(InvoiceService::class)->issue($member, [['description' => 'خدمة', 'unit_price' => 10]], ['type' => 'other']);
-            $i->forceFill(['due_date' => today()->addDays(3)])->save();
-
-            return $i;
-        });
-        $this->asTenant($club, fn () => Invoice::whereKey($membership->invoice_id)->update(['due_date' => today()->addDays(3)]));
+        $other = $this->asTenant($club, fn () => app(InvoiceService::class)->issue($member, [['description' => 'خدمة', 'unit_price' => 10]], ['type' => 'other']));
         $this->asTenant($club, fn () => $club->forceFill(['settings' => array_merge($club->fresh()->settings ?? [], ['dues_reminders_enabled' => true, 'dues_reminder_before_days' => [3], 'dues_reminder_max' => 3])])->save());
         $this->asTenant($club, function () {
             TenantIntegration::create(['provider' => 'whatsapp', 'is_enabled' => true, 'credentials' => ['phone_number_id' => 'PNID-9', 'access_token' => 'EAAG-secret'], 'public_identifier' => 'PNID-9']);
@@ -334,6 +328,8 @@ class PaymobLatePaymentReviewTest extends TestCase
         Queue::fake();
         $this->travelTo($intent->expires_at->copy()->addSecond());
         $this->deliver($this->obj($intent));
+        // Due in three days from the clock the reminders run on (set after the travel: an hour later may be the next day).
+        $this->asTenant($club, fn () => Invoice::whereKey([$membership->invoice_id, $other->id])->update(['due_date' => today()->addDays(3)]));
 
         Artisan::call('finance:remind-dues');
         $this->asTenant($club, function () use ($membership, $other) {
