@@ -2,6 +2,7 @@
 
 namespace App\Modules\Messaging\Services;
 
+use App\Core\Support\Files\SafeFiles;
 use App\Modules\Messaging\Models\Attachment;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
@@ -10,7 +11,8 @@ use Illuminate\Support\Str;
 
 /**
  * Chat files on the private disk, in the club's own folder (whatsapp/<club>/<year>/<month>/<random name>): never a
- * public address. Names are random; the original file name is kept only in the attachment row.
+ * public address. Names are random; the original file name is kept only in the attachment row. A path is given only for
+ * a file that landed whole (SafeFiles): a refused or cut write throws FileNotStored instead.
  */
 final class MediaStore
 {
@@ -22,23 +24,26 @@ final class MediaStore
 
     public function disk(): Filesystem
     {
-        return Storage::disk((string) config('services.whatsapp.media_disk', 'local'));
+        return Storage::disk($this->diskName());
+    }
+
+    private function diskName(): string
+    {
+        return (string) config('services.whatsapp.media_disk', 'local');
     }
 
     public function storeUpload(UploadedFile $file, int $tenantId): string
     {
         $extension = strtolower($file->getClientOriginalExtension() ?: (self::EXTENSIONS[(string) $file->getMimeType()] ?? 'bin'));
 
-        return (string) $this->disk()->putFileAs($this->folder($tenantId), $file, Str::uuid().'.'.preg_replace('/[^a-z0-9]/', '', $extension));
+        return SafeFiles::putUpload($file, $this->folder($tenantId), 'file', $this->diskName(), Str::uuid().'.'.preg_replace('/[^a-z0-9]/', '', $extension));
     }
 
     public function storeBytes(string $bytes, ?string $mime, int $tenantId): string
     {
         $mime = strtolower(trim(explode(';', (string) $mime)[0]));
-        $path = $this->folder($tenantId).'/'.Str::uuid().'.'.(self::EXTENSIONS[$mime] ?? 'bin');
-        $this->disk()->put($path, $bytes);
 
-        return $path;
+        return SafeFiles::putBytes($bytes, $this->folder($tenantId).'/'.Str::uuid().'.'.(self::EXTENSIONS[$mime] ?? 'bin'), 'file', $this->diskName());
     }
 
     public function absolutePath(Attachment $attachment): ?string

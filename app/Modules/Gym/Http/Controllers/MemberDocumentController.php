@@ -2,18 +2,22 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Support\Files\SafeFiles;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\MemberDocument;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Contracts, IDs and medical forms live on the private disk under the club's
- * folder and are only served through this controller (permission + tenant scope).
+ * folder and are only served through this controller (permission + tenant scope). A file is kept as it came, and a
+ * record points only at a file that landed whole (SafeFiles): written in the transaction that records it, it goes
+ * again if the record fails; removed, the record goes first and the file once that is saved.
  */
 class MemberDocumentController extends Controller
 {
@@ -27,18 +31,16 @@ class MemberDocumentController extends Controller
         ]);
 
         $file = $request->file('file');
-        $path = $file->store('tenants/'.$tenants->require()->id.'/members/'.$member->id, 'local');
-
-        $member->documents()->create([
+        DB::transaction(fn () => $member->documents()->create([
             'type' => $data['type'],
             'title' => $data['title'],
             'expires_on' => $data['expires_on'] ?? null,
-            'path' => $path,
+            'path' => SafeFiles::putUpload($file, 'tenants/'.$tenants->require()->id.'/members/'.$member->id),
             'original_name' => mb_substr($file->getClientOriginalName(), 0, 200),
             'mime' => $file->getMimeType(),
             'size' => $file->getSize(),
             'uploaded_by' => $request->user()->id,
-        ]);
+        ]));
 
         return back()->with('success', 'تم رفع المستند.');
     }
@@ -52,8 +54,10 @@ class MemberDocumentController extends Controller
 
     public function destroy(MemberDocument $document): RedirectResponse
     {
-        Storage::disk('local')->delete($document->path);
-        $document->delete();
+        DB::transaction(function () use ($document) {
+            $document->delete();
+            SafeFiles::deleteAfterCommit($document->path);
+        });
 
         return back()->with('success', 'تم حذف المستند.');
     }

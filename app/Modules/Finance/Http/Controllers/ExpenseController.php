@@ -5,6 +5,7 @@ namespace App\Modules\Finance\Http\Controllers;
 use App\Core\Auth\PermissionRegistry;
 use App\Core\Export\TableExporter;
 use App\Core\Support\BusinessRuleException;
+use App\Core\Support\Files\SafeFiles;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Core\Support\Period;
@@ -68,7 +69,7 @@ class ExpenseController extends Controller
             // Paid from a drawer during its shift: the shift's closing counts it.
             $expense->cash_shift_id = app(CashShifts::class)->current(Account::find($expense->account_id), $expense->branch_id);
             if ($request->hasFile('attachment')) {
-                $expense->attachment_path = $request->file('attachment')->store('tenants/'.$tenants->require()->id.'/expenses', 'local');
+                $expense->attachment_path = SafeFiles::putUpload($request->file('attachment'), 'tenants/'.$tenants->require()->id.'/expenses', 'attachment');
             }
             $expense->save();
 
@@ -91,12 +92,17 @@ class ExpenseController extends Controller
         if ($expense->isDirty('account_id')) {
             $expense->cash_shift_id = app(CashShifts::class)->current(Account::find($expense->account_id), $expense->branch_id);
         }
-        if ($request->hasFile('attachment')) {
-            $expense->attachment_path = $request->file('attachment')->store('tenants/'.$tenants->require()->id.'/expenses', 'local');
-        }
         // Raised on the same account it spends the difference; moved to another, that account pays it whole.
         $spends = (int) $expense->getOriginal('account_id') === $expense->account_id ? Money::sub($expense->amount, (string) $expense->getOriginal('amount')) : $expense->amount;
-        $this->spending(Account::find($expense->account_id), $spends, fn () => $expense->save());
+        // A new attachment is written in the save's transaction (gone again if the save fails); the one it replaces goes
+        // only once the save committed.
+        $this->spending(Account::find($expense->account_id), $spends, function () use ($request, $tenants, $expense) {
+            if ($request->hasFile('attachment')) {
+                SafeFiles::deleteAfterCommit($expense->attachment_path);
+                $expense->attachment_path = SafeFiles::putUpload($request->file('attachment'), 'tenants/'.$tenants->require()->id.'/expenses', 'attachment');
+            }
+            $expense->save();
+        });
 
         return back()->with('success', 'تم حفظ المصروف.');
     }
