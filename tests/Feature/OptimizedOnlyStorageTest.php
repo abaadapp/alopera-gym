@@ -340,8 +340,10 @@ class OptimizedOnlyStorageTest extends TestCase
 
     public function test_optimized_only_is_the_default_and_the_release_gate_says_which_mode_runs(): void
     {
-        $this->assertFalse(getenv('MEDIA_STORAGE'), 'no MEDIA_STORAGE in the test environment, so the default is read');
-        $this->assertSame('optimized-only', (require config_path('media.php'))['storage']);
+        // CI copies .env.example to .env, so the environment may carry MEDIA_STORAGE: check the default in both places.
+        $this->assertStringContainsString("env('MEDIA_STORAGE', 'optimized-only')", (string) file_get_contents(config_path('media.php')), 'a server without MEDIA_STORAGE runs optimized-only');
+        $this->assertMatchesRegularExpression('/^MEDIA_STORAGE=optimized-only$/m', (string) file_get_contents(base_path('.env.example')));
+        $this->assertTrue(ImageStore::optimizedOnly());
 
         $this->artisan('platform:preflight')->expectsOutputToContain('New images keep only their light copy');
     }
