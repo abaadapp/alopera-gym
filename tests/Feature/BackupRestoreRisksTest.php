@@ -258,12 +258,16 @@ class BackupRestoreRisksTest extends TestCase
     }
 
     /**
-     * ZipArchive hands back an entry's bytes without checking them against the CRC the archive keeps for it.
+     * What a damaged entry does depends on the zip library (libzip) the server's PHP has: one hands its bytes back
+     * without checking them against the CRC the archive keeps (this Mac), another fails the read with "CRC error"
+     * (CI, Ubuntu). Either way the club's rows were already replaced: the files are written after the rows' transaction,
+     * so the restore either brings back a damaged file and says it worked, or stops half-way with the rows replaced and
+     * the files after the damaged one not written.
      * Plan: every entry is checked (crc32 against statIndex) before anything is replaced; a damaged one refuses the restore.
      */
-    public function test_today_a_damaged_file_inside_the_archive_comes_back_damaged_without_a_word(): void
+    public function test_today_a_damaged_file_inside_the_archive_is_found_only_after_the_rows_were_replaced(): void
     {
-        [$club, , , $document, $sha] = $this->clubWithDocument();
+        [$club, , $member, $document, $sha] = $this->clubWithDocument();
         $source = $this->archivePath($club, $this->service()->create($club));
 
         // The contract stored uncompressed, then one byte of it changed on the way (a bad copy, a bad sector).
@@ -279,11 +283,19 @@ class BackupRestoreRisksTest extends TestCase
         $at = strpos($raw, 'MARK-') + 10;
         $raw[$at] = $raw[$at] === 'a' ? 'b' : 'a';
         file_put_contents($copy, $raw);
+        $this->asTenant($club, fn () => $member->forceFill(['full_name' => 'بعد النسخة'])->save());
 
-        $this->service()->restore($club, $copy);
-        Storage::disk('local')->assertExists($document->path);
-        $this->assertNotSame($sha, hash('sha256', Storage::disk('local')->get($document->path)), 'not the contract that was archived');
-        $this->assertSame(1, AuditLog::where('event', 'backup.restored')->count(), 'and the restore is recorded as done');
+        try {
+            $this->service()->restore($club, $copy);
+            // This libzip: the damaged bytes are written, and the restore is recorded as done.
+            $this->assertNotSame($sha, hash('sha256', (string) Storage::disk('local')->get($document->path)), 'not the contract that was archived');
+            $this->assertSame(1, AuditLog::where('event', 'backup.restored')->count());
+        } catch (\ErrorException $e) {
+            // That libzip: the read fails, after the rows were replaced; the restore is not recorded.
+            $this->assertStringContainsString('CRC', $e->getMessage());
+            $this->assertSame(0, AuditLog::where('event', 'backup.restored')->count());
+        }
+        $this->assertSame('سارة', $this->asTenant($club, fn () => $member->fresh()->full_name), 'either way the rows were already replaced');
     }
 
     /** Plan (phase 5): the club's chat files go into its archive (files/whatsapp/…) and come back with it. */
