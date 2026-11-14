@@ -56,8 +56,12 @@ class IntegrationController extends Controller
         'environment_unverified' => 'نية دفع من قبل تمييز الاختبار من الحقيقي — لم تُسجَّل، تُراجع من لوحة Paymob',
     ];
 
-    /** Paymob settings that decide how a callback is read: not changed while a checkout's money may still arrive. */
-    private const CALLBACK_SETTINGS = ['secret_key', 'hmac_secret', 'integration_ids'];
+    /**
+     * Paymob settings that decide how a callback is read: not changed while a checkout's money may still arrive. Both
+     * keys are in it, as PaymobClient::live() reads both: a test public key put in under an open live checkout would
+     * turn its real money into «test».
+     */
+    private const CALLBACK_SETTINGS = ['secret_key', 'public_key', 'hmac_secret', 'integration_ids'];
 
     public function __construct(private readonly IntegrationHub $hub, private readonly TenantContext $tenants) {}
 
@@ -224,7 +228,7 @@ class IntegrationController extends Controller
             }) !== [];
             $open = $rereads ? app(OnlinePaymentService::class)->openCheckouts() : 0;
             if ($open > 0) {
-                return back()->with('error', 'توجد '.$open.' عملية دفع إلكتروني مفتوحة قد يصل مبلغها: لا يُغيَّر الوضع (اختبار/حقيقي) ولا المفتاح السري ولا HMAC secret ولا أرقام الربط حتى تنتهي، وبعد '.OnlinePaymentService::LATE_CALLBACK_MINUTES.' دقيقة من انتهائها. لم يُحفظ شيء.');
+                return back()->with('error', 'توجد '.$open.' عملية دفع إلكتروني مفتوحة قد يصل مبلغها: لا يُغيَّر الوضع (اختبار/حقيقي) ولا المفاتيح ولا HMAC secret ولا أرقام الربط حتى تنتهي، وبعد '.OnlinePaymentService::LATE_CALLBACK_MINUTES.' دقيقة من انتهائها. لم يُحفظ شيء.');
             }
         }
         foreach ($keys as $key) {

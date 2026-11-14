@@ -303,13 +303,14 @@ class PaymobTestModeIsolationTest extends TestCase
         $save = fn (array $change) => $this->actingAs($owner)->put(route('club.integrations.update', 'paymob'),
             array_replace_recursive(['is_enabled' => true, 'mode' => 'live', 'credentials' => []], $change));
 
-        foreach ([['mode' => 'test'], ['credentials' => ['secret_key' => 'omn_sk_test_other']], ['credentials' => ['hmac_secret' => 'other']],
-            ['credentials' => ['integration_ids' => '111, 333']]] as $change) {
+        foreach ([['mode' => 'test'], ['credentials' => ['secret_key' => 'omn_sk_test_other']], ['credentials' => ['public_key' => 'omn_pk_test_other']],
+            ['credentials' => ['hmac_secret' => 'other']], ['credentials' => ['integration_ids' => '111, 333']]] as $change) {
             $save($change)->assertSessionHas('error');
             $this->asTenant($club, function () use ($change) {
                 $row = TenantIntegration::where('provider', 'paymob')->firstOrFail();
                 $this->assertSame('live', $row->mode, json_encode($change));
                 $this->assertSame(self::LIVE_KEYS['secret_key'], $row->credential('secret_key'));
+                $this->assertSame(self::LIVE_KEYS['public_key'], $row->credential('public_key'));
                 $this->assertSame(self::HMAC, $row->credential('hmac_secret'));
                 $this->assertSame('111', $row->credential('integration_ids'));
             });
@@ -347,6 +348,42 @@ class PaymobTestModeIsolationTest extends TestCase
     }
 
     // ── what does not change ──────────────────────────────────────────────────────────────────────────────────────
+
+    public function test_keys_saved_with_online_payment_switched_off_open_no_checkout_anywhere(): void
+    {
+        $club = $this->paymobClub('live', self::LIVE_KEYS);
+        $this->account($club, ['is_enabled' => false]);
+        $member = $this->member($club);
+        $plan = $this->plan($club, ['price' => 25]);
+        $membership = $this->asTenant($club, fn () => app(MembershipService::class)->sell($member, $plan));
+
+        foreach (['testing', 'production'] as $env) {
+            $this->app->detectEnvironment(fn () => $env);
+            $this->asTenant($club, function () use ($membership, $env) {
+                $online = app(OnlinePaymentService::class);
+                $this->assertFalse($online->available(), $env);
+                try {
+                    $online->start($membership->invoice, 'portal');
+                    $this->fail('a switched-off account opened a checkout ('.$env.')');
+                } catch (BusinessRuleException $e) {
+                    $this->assertSame('paymob.unavailable', $e->rule, $env);
+                }
+                $this->assertSame(0, PaymentIntent::count(), $env);
+            });
+        }
+        Http::assertNothingSent();
+    }
+
+    public function test_switching_online_payment_off_does_not_lose_the_money_of_a_live_checkout_already_open(): void
+    {
+        $club = $this->paymobClub('live', self::LIVE_KEYS);
+        $this->onProduction();
+        [$membership, $intent] = $this->pending($club);
+        $this->account($club, ['is_enabled' => false]); // allowed under an open checkout: it changes how nothing is read
+
+        $this->assertSame('processed', $this->deliver($this->obj($intent)), 'the customer already paid: recorded');
+        $this->asTenant($club, fn () => $this->assertSame(Membership::ACTIVE, $membership->fresh()->status));
+    }
 
     public function test_off_production_a_test_account_still_runs_the_whole_flow(): void
     {
