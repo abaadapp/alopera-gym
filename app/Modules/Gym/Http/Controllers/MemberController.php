@@ -182,7 +182,7 @@ class MemberController extends Controller
                 'emergency_contact_name', 'emergency_contact_phone', 'goals', 'source', 'status', 'notes', 'whatsapp_opt_in', 'marketing_opt_in', 'branch_id') + [
                     'date_of_birth' => $member->date_of_birth?->toDateString(),
                     'health_notes' => $member->health_notes,
-                    'photo_url' => $member->photoUrl(),
+                    'photo_url' => $member->photoThumbUrl(), // a 96px box: the thumbnail is plenty
                     'photo_download_url' => $member->photo_path ? route('club.members.photo', $member) : null,
                     'photo_has_original' => ImageStore::hasOriginal($member->photo_path),
                 ],

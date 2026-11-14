@@ -265,7 +265,7 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
                             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                                 {existing.map((url, i) => (
                                     <div key={url} className={cn('group relative aspect-square overflow-hidden rounded-[12px] border border-line', i === 0 && 'ring-2 ring-[#111]/15')}>
-                                        <img src={url} alt="" loading="lazy" decoding="async" className="size-full object-cover" />
+                                        <img src={url} alt="" loading="lazy" decoding="async" className="size-full bg-white object-contain" />
                                         {i === 0 && <span className="absolute top-2 start-2 inline-flex items-center gap-1 rounded-full bg-[#111] px-2 py-0.5 text-[11px] font-medium text-white"><Star className="size-3" /> الرئيسية</span>}
                                         <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 bg-black/50 p-1.5 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                                             {i > 0 && <button type="button" onClick={() => photoAction(i, 'main')} className="rounded-[8px] px-2 py-1 text-[12px] text-white hover:bg-white/20">اجعلها الرئيسية</button>}
@@ -276,7 +276,7 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
                                 ))}
                                 {previews.map((url, i) => (
                                     <div key={url} className="relative aspect-square overflow-hidden rounded-[12px] border border-dashed border-[#d1d5db]">
-                                        <img src={url} alt="" loading="lazy" decoding="async" className="size-full object-cover" />
+                                        <img src={url} alt="" loading="lazy" decoding="async" className="size-full bg-white object-contain" />
                                         <span className="absolute top-2 start-2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] text-[#4b4b4b]">{existing.length === 0 && i === 0 ? 'الرئيسية — ' : ''}تُرفع عند الحفظ</span>
                                         <button type="button" onClick={() => form.setData((d) => ({ ...d, photos: d.photos.filter((_, j) => j !== i), photos_preview: d.photos_preview.filter((_, j) => j !== i), photos_direct: d.photos_direct.filter((_, j) => j !== i) }))} className="absolute top-2 end-2 grid size-7 place-items-center rounded-full bg-white/90 text-ink hover:bg-white" aria-label="إزالة الصورة"><X className="size-4" /></button>
                                     </div>

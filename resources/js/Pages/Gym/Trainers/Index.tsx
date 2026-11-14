@@ -303,7 +303,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                     </Field>
                     <Field label="الصورة" error={form.errors.photo ?? form.errors.photo_preview} className="sm:col-span-2" hint={keptHint(media?.optimize)}>
                         <label className="flex cursor-pointer items-center gap-4 rounded-xl border border-dashed border-line p-3 hover:border-brand-300">
-                            {preview ? <img src={preview} alt="" className="size-16 rounded-xl object-cover" /> : <span className="grid size-16 place-items-center rounded-xl bg-brand-50 text-brand"><ImagePlus className="size-6" /></span>}
+                            {preview ? <img src={preview} alt="" className="size-16 rounded-xl bg-white object-contain" /> : <span className="grid size-16 place-items-center rounded-xl bg-brand-50 text-brand"><ImagePlus className="size-6" /></span>}
                             <span className="text-sm text-muted">اختر صورة</span>
                             <input type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={(e) =>
                                 pickImage(e.target.files?.[0] ?? null, (file, source, ticket) => {

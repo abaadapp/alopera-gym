@@ -156,7 +156,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                     {programs.map((p) => (
                         <Card key={p.id} padded={false} fill className={p.is_active ? 'overflow-hidden' : 'overflow-hidden opacity-60'}>
                             <div className="relative h-32" style={{ background: `linear-gradient(135deg, ${p.color}, ${p.color}99)` }}>
-                                {p.image_url && <img src={p.image_url} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" decoding="async" />}
+                                {p.image_url && <img src={p.image_url} alt="" className="absolute inset-0 size-full object-contain" loading="lazy" decoding="async" />}
                                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent p-3">
                                     <p className="font-display text-lg font-semibold text-white">{p.name}</p>
                                 </div>
@@ -252,7 +252,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                     </EnglishFields>
                     <Field label="صورة البرنامج" error={form.errors.image ?? form.errors.image_preview} className="sm:col-span-2" hint={keptHint(media?.optimize)}>
                         <label className="flex cursor-pointer items-center gap-4 rounded-xl border border-dashed border-line p-3 hover:border-brand-300">
-                            {preview ? <img src={preview} alt="" className="size-16 rounded-lg object-cover" /> : <span className="grid size-16 place-items-center rounded-lg bg-brand-50 text-brand"><ImagePlus className="size-6" /></span>}
+                            {preview ? <img src={preview} alt="" className="size-16 rounded-lg bg-white object-contain" /> : <span className="grid size-16 place-items-center rounded-lg bg-brand-50 text-brand"><ImagePlus className="size-6" /></span>}
                             <span className="text-sm text-muted">اختر صورة (JPG وPNG وWebP وHEIC وAVIF وGIF)</span>
                             <input
                                 type="file"

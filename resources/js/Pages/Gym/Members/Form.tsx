@@ -132,7 +132,7 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
                 <FormSection icon={Camera} title="الصورة" hint="تظهر في ملف العضو وعند الاستقبال">
                     <div className="flex flex-wrap items-start gap-5">
                         <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-[14px] border border-[#e8e8e8] bg-[#fafafa]">
-                            {preview ? <img src={preview} alt="" className="size-full object-cover" /> : <UserRound className="size-8 text-[#d1d5db]" />}
+                            {preview ? <img src={preview} alt="" className="size-full object-contain" /> : <UserRound className="size-8 text-[#d1d5db]" />}
                         </div>
                         <div className="min-w-0 flex-1">
                             <Field error={err.photo ?? err.photo_preview} hint={`صورة واضحة للوجه. ${keptHint(media?.optimize)}`}>

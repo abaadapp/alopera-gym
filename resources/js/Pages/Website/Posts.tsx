@@ -75,7 +75,7 @@ export default function Posts({ posts }: { posts: Post[] }) {
                     {list.map((p) => (
                         <Card key={p.id} padded={false} fill className="overflow-hidden">
                             <div className="aspect-[16/9] bg-brand-50">
-                                {p.image_url ? <img src={p.image_url} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" /> : <div className="grid h-full place-items-center text-brand-300"><Newspaper className="size-8" /></div>}
+                                {p.image_url ? <img src={p.image_url} alt="" className="h-full w-full object-contain" loading="lazy" decoding="async" /> : <div className="grid h-full place-items-center text-brand-300"><Newspaper className="size-8" /></div>}
                             </div>
                             <div className="flex flex-1 flex-col p-5">
                                 <div className="mb-2 flex flex-wrap items-center gap-1.5">
@@ -179,7 +179,7 @@ function PostModal({ post, onClose }: { post: Post | null; onClose: () => void }
                 <Field label="الصورة" error={form.errors.image ?? form.errors.image_preview}>
                     <div className="flex items-center gap-3">
                         <div className="grid h-20 w-32 place-items-center overflow-hidden rounded-xl border border-dashed border-line bg-canvas">
-                            {preview ? <img src={preview} alt="" className="h-full w-full object-cover" /> : <ImagePlus className="size-5 text-muted" />}
+                            {preview ? <img src={preview} alt="" className="h-full w-full object-contain" /> : <ImagePlus className="size-5 text-muted" />}
                         </div>
                         <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-brand-50">
                             <ImagePlus className="size-3.5" /> اختيار صورة

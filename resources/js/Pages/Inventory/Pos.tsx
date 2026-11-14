@@ -260,7 +260,7 @@ export default function Pos({ products, categories, plans, packages, can: allowe
                                     return (
                                         <button key={p.id} type="button" disabled={out} onClick={() => addProduct(p)} className={tile}>
                                             <div className="relative aspect-square w-full overflow-hidden bg-gray-50">
-                                                {p.image_url ? <img src={p.image_url} alt="" loading="lazy" decoding="async" className="size-full object-cover transition-transform duration-300 group-hover:scale-105" /> : <span className="flex size-full items-center justify-center text-gray-300"><Package className="size-10" /></span>}
+                                                {p.image_url ? <img src={p.image_url} alt="" loading="lazy" decoding="async" className="size-full bg-white object-contain transition-transform duration-300 group-hover:scale-105" /> : <span className="flex size-full items-center justify-center text-gray-300"><Package className="size-10" /></span>}
                                                 <span className={cn('absolute end-2 top-2 rounded-full px-2.5 py-1 text-[12px] font-medium', !p.track_stock ? 'bg-[#f2f2f0] text-[#4b4b4b]' : out ? 'bg-[#fef2f2] text-[#b91c1c]' : low ? 'bg-[#fffbeb] text-[#d97706]' : 'bg-[#ecfdf5] text-[#047857]')}>
                                                     {!p.track_stock ? 'خدمة' : out ? 'نفد' : low ? 'كمية قليلة' : 'متوفر'}
                                                 </span>
@@ -320,7 +320,7 @@ export default function Pos({ products, categories, plans, packages, can: allowe
                                     <li key={l.key} className="rounded-xl bg-gray-50 p-2.5">
                                         <div className="flex items-center gap-2.5">
                                             {l.kind === 'product' ? (
-                                                l.product.image_url ? <img src={l.product.image_url} alt="" loading="lazy" decoding="async" className="size-12 shrink-0 rounded-lg object-cover" /> : <span className="grid size-12 shrink-0 place-items-center rounded-lg bg-gray-100 text-gray-400"><Package className="size-5" /></span>
+                                                l.product.image_url ? <img src={l.product.image_url} alt="" loading="lazy" decoding="async" className="size-12 shrink-0 rounded-lg bg-white object-contain" /> : <span className="grid size-12 shrink-0 place-items-center rounded-lg bg-gray-100 text-gray-400"><Package className="size-5" /></span>
                                             ) : (
                                                 <span className="grid size-12 shrink-0 place-items-center rounded-lg bg-[#f5f3ff] text-[#6d28d9]">{l.kind === 'membership' ? <Ticket className="size-5" /> : <Dumbbell className="size-5" />}</span>
                                             )}

@@ -143,7 +143,7 @@ export default function ProductsIndex({ products, counts, categories, filters }:
                         {products.data.map((p) => (
                             <div key={p.id} className={cn('card flex h-full flex-col overflow-hidden', !p.is_active && 'opacity-70')}>
                                 <div className="relative aspect-[4/3] overflow-hidden bg-[#f7f7f5]">
-                                    {p.image_url ? <img src={p.image_url} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <span className="grid size-full place-items-center text-[#c4c4c4]"><Package className="size-10" /></span>}
+                                    {p.image_url ? <img src={p.image_url} alt="" loading="lazy" decoding="async" className="size-full bg-white object-contain" /> : <span className="grid size-full place-items-center text-[#c4c4c4]"><Package className="size-10" /></span>}
                                     <span className="absolute top-2.5 start-2.5"><StockBadge track={p.track_stock} out={p.out} low={p.low} /></span>
                                     <span className="absolute top-2 end-2 rounded-[10px] bg-white/90 backdrop-blur">{actions(p)}</span>
                                 </div>

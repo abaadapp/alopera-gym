@@ -30,13 +30,13 @@ export default function ShopProductPage({ site, seo, product, currency }: { site
                 <div className="grid gap-8 md:grid-cols-2">
                     <div>
                         <div className="aspect-square overflow-hidden rounded-3xl border border-line bg-white">
-                            {photos.length ? <img src={photos[photo]} alt={product.name} className="size-full object-cover" /> : <ProductImage product={product} />}
+                            {photos.length ? <img src={photos[photo]} alt={product.name} decoding="async" fetchPriority="high" className="size-full object-contain" /> : <ProductImage product={product} />}
                         </div>
                         {photos.length > 1 && (
                             <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
                                 {photos.map((url, i) => (
                                     <button key={url} type="button" onClick={() => setPhoto(i)} aria-label={t('الصورة :n', { n: i + 1 })} aria-pressed={photo === i} className={cn('size-16 shrink-0 overflow-hidden rounded-2xl border-2 transition', photo === i ? 'border-brand' : 'border-transparent opacity-70 hover:opacity-100')}>
-                                        <img src={url} alt="" loading="lazy" decoding="async" className="size-full object-cover" />
+                                        <img src={url} alt="" loading="lazy" decoding="async" className="size-full bg-white object-contain" />
                                     </button>
                                 ))}
                             </div>

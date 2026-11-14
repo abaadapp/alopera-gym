@@ -24,7 +24,7 @@ export function ProgramCard({ program }: { program: ProgramData }) {
         <article className="group overflow-hidden rounded-3xl border border-line bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-brand/5">
             <div className="relative aspect-[4/3] overflow-hidden" style={{ background: `linear-gradient(135deg, ${program.color}22, ${program.color}55)` }}>
                 {program.image_url ? (
-                    <img src={program.image_url} alt={program.name} loading="lazy" decoding="async" width={480} height={360} className="size-full object-cover transition duration-500 group-hover:scale-105" />
+                    <img src={program.image_url} alt={program.name} loading="lazy" decoding="async" width={480} height={360} className="size-full object-contain transition duration-500 group-hover:scale-105" />
                 ) : (
                     <div className="grid size-full place-items-center">
                         <Dumbbell className="size-12 opacity-60" style={{ color: program.color }} />
