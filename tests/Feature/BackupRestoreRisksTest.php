@@ -11,7 +11,6 @@ use App\Modules\Gym\Models\MemberDocument;
 use App\Modules\Messaging\Models\Attachment;
 use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Models\Message;
-use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -28,9 +27,9 @@ use ZipArchive;
  * Two kinds of test:
  *  - what already holds and must keep holding (a sound archive is complete; an archive restores, files readable after;
  *    an older archive, without the newer tables, still restores; a cut or foreign archive is refused, nothing replaced);
- *  - test_today_…: what happens TODAY, written down as evidence (phases 4 and 5 of the save-integrity task). The backup
- *    and restore code is not changed until the owner approves the plan; the approved fix turns each of these around
- *    (the docblock of each says into what).
+ *  - test_today_…: what the archive's creation, its fourteen and its WhatsApp files do TODAY, written down as evidence
+ *    (#165). On this plan branch only the restore is rebuilt (all or nothing: RestoreAllOrNothingTest); creating the
+ *    archive, the fourteen kept and the nightly schedule are not changed until the owner approves the plan.
  */
 class BackupRestoreRisksTest extends TestCase
 {
@@ -208,7 +207,7 @@ class BackupRestoreRisksTest extends TestCase
         $this->assertFalse($this->inspect($this->archivePath($club, $new))['sound'], 'for one that cannot be opened');
     }
 
-    /** Plan: the rows are read in one snapshot (REPEATABLE READ, read only), so an archive is always restorable. */
+    /** Plan (creating the archive): the rows are read in one snapshot (REPEATABLE READ, read only), so an archive is always restorable. */
     public function test_today_a_save_during_the_backup_makes_an_archive_that_cannot_be_restored(): void
     {
         [$club, $owner, $member] = $this->clubWithDocument();
@@ -227,105 +226,14 @@ class BackupRestoreRisksTest extends TestCase
         $this->assertTrue($done);
 
         $this->asTenant($club, fn () => $member->forceFill(['full_name' => 'بعد النسخة'])->save());
+        // The all-or-nothing restore refuses it whole (a document whose member is not in the archive): nothing replaced.
         try {
             $this->service()->restore($club, $this->archivePath($club, $name));
             $this->fail('restored');
-        } catch (QueryException $e) {
-            $this->assertStringContainsString('foreign key', $e->getMessage(), 'a document whose member is not in the archive');
+        } catch (BusinessRuleException $e) {
+            $this->assertSame('backup.restore_failed', $e->rule);
         }
         $this->assertSame('بعد النسخة', $this->asTenant($club, fn () => $member->fresh()->full_name), 'nothing replaced: the transaction rolled back');
-    }
-
-    /** Plan: files are written and checked before the rows are replaced; a failure leaves rows and files as they were. */
-    public function test_today_a_restore_whose_files_cannot_be_written_replaces_the_rows_and_says_it_worked(): void
-    {
-        [$club, $owner, $member, $document] = $this->clubWithDocument();
-        $archive = $this->archivePath($club, $this->service()->create($club));
-        $upload = new UploadedFile(copy($archive, $tmp = tempnam(sys_get_temp_dir(), 'up').'.zip') ? $tmp : $archive, 'backup.zip', 'application/zip', null, true);
-        $archivesBefore = count(Storage::disk('local')->allFiles('backups'));
-        $this->asTenant($club, fn () => $member->forceFill(['full_name' => 'بعد النسخة'])->save());
-        Storage::disk('local')->delete($document->path);
-
-        // The disk refuses every write: the safety copy before the restore, then every file of the archive.
-        FailingDisk::install('local', 'refuse');
-        $this->actingAs($owner)->post(route('club.backups.restore'), ['archive' => $upload, 'confirm' => $club->slug])->assertSessionHas('success');
-
-        $this->assertSame('سارة', $this->asTenant($club, fn () => $member->fresh()->full_name), 'the rows were replaced');
-        $this->assertTrue($this->asTenant($club, fn () => MemberDocument::whereKey($document->id)->exists()), 'the document row is back');
-        Storage::disk('local')->assertMissing($document->path);
-        $this->actingAs($owner)->get(route('club.documents.download', $document->id))->assertNotFound();
-        $this->assertCount($archivesBefore, Storage::disk('local')->allFiles('backups'), 'and no safety copy was kept before it');
-    }
-
-    /**
-     * What a damaged entry does depends on the zip library (libzip) the server's PHP has: one hands its bytes back
-     * without checking them against the CRC the archive keeps (this Mac), another fails the read with "CRC error"
-     * (CI, Ubuntu). Either way the club's rows were already replaced: the files are written after the rows' transaction,
-     * so the restore either brings back a damaged file and says it worked, or stops half-way with the rows replaced and
-     * the files after the damaged one not written.
-     * Plan: every entry is checked (crc32 against statIndex) before anything is replaced; a damaged one refuses the restore.
-     */
-    public function test_today_a_damaged_file_inside_the_archive_is_found_only_after_the_rows_were_replaced(): void
-    {
-        [$club, , $member, $document, $sha] = $this->clubWithDocument();
-        $source = $this->archivePath($club, $this->service()->create($club));
-
-        // The contract stored uncompressed, then one byte of it changed on the way (a bad copy, a bad sector).
-        $copy = tempnam(sys_get_temp_dir(), 'dmg').'.zip';
-        copy($source, $copy);
-        $zip = new ZipArchive;
-        $zip->open($copy);
-        $entry = 'files/private/'.$document->path;
-        $zip->addFromString($entry, (string) $zip->getFromName($entry));
-        $zip->setCompressionName($entry, ZipArchive::CM_STORE);
-        $zip->close();
-        $raw = (string) file_get_contents($copy);
-        $at = strpos($raw, 'MARK-') + 10;
-        $raw[$at] = $raw[$at] === 'a' ? 'b' : 'a';
-        file_put_contents($copy, $raw);
-        $this->asTenant($club, fn () => $member->forceFill(['full_name' => 'بعد النسخة'])->save());
-
-        try {
-            $this->service()->restore($club, $copy);
-            // This libzip: the damaged bytes are written, and the restore is recorded as done.
-            $this->assertNotSame($sha, hash('sha256', (string) Storage::disk('local')->get($document->path)), 'not the contract that was archived');
-            $this->assertSame(1, AuditLog::where('event', 'backup.restored')->count());
-        } catch (\ErrorException $e) {
-            // That libzip: the read fails, after the rows were replaced; the restore is not recorded.
-            $this->assertStringContainsString('CRC', $e->getMessage());
-            $this->assertSame(0, AuditLog::where('event', 'backup.restored')->count());
-        }
-        $this->assertSame('سارة', $this->asTenant($club, fn () => $member->fresh()->full_name), 'either way the rows were already replaced');
-    }
-
-    /**
-     * The rows replaced, then the files not written (a full or read-only disk after the transaction committed): the
-     * restore records itself as done and counts as written the files it could not write. What recovers it TODAY, with
-     * no code change: the same archive restored again once the disk works. The rows are replaced again with the same
-     * rows, and every file is written. It is safe to repeat, and nothing is doubled.
-     * Plan: staging + a journal make this a resume of the remaining files, never a second replacement of the rows.
-     */
-    public function test_today_rows_replaced_then_files_failed_is_recorded_as_done_and_the_same_restore_again_recovers_it(): void
-    {
-        [$club, $owner, $member, $document, $sha] = $this->clubWithDocument();
-        $archive = $this->archivePath($club, $this->service()->create($club));
-        $this->asTenant($club, fn () => $member->forceFill(['full_name' => 'بعد النسخة'])->save());
-        $this->asTenant($club, fn () => MemberDocument::query()->delete());
-        Storage::disk('local')->delete($document->path);
-
-        $disk = FailingDisk::install('local', 'refuse');
-        $this->service()->restore($club, $archive);
-        $this->assertSame('سارة', $this->asTenant($club, fn () => $member->fresh()->full_name), 'the rows were replaced');
-        Storage::disk('local')->assertMissing($document->path);
-        $logged = AuditLog::where('event', 'backup.restored')->latest('id')->value('properties');
-        $this->assertSame(1, $logged['files']['written'], 'recorded as written although the disk refused it');
-        $rowsAfterFirst = $this->asTenant($club, fn () => [Member::count(), MemberDocument::count()]);
-
-        // Recovery today: the disk fixed, the same archive restored again.
-        $disk->mode('ok');
-        $this->service()->restore($club, $archive);
-        $this->assertSame($rowsAfterFirst, $this->asTenant($club, fn () => [Member::count(), MemberDocument::count()]), 'nothing doubled');
-        $this->assertSame($sha, hash('sha256', $this->actingAs($owner)->get(route('club.documents.download', $document->id))->assertOk()->streamedContent()));
     }
 
     /**
