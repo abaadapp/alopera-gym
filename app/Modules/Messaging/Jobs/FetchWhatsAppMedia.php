@@ -2,6 +2,7 @@
 
 namespace App\Modules\Messaging\Jobs;
 
+use App\Core\Support\Files\FileNotStored;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
 use App\Modules\Messaging\Gateways\WhatsAppGateway;
@@ -12,6 +13,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
@@ -69,13 +71,22 @@ class FetchWhatsAppMedia implements ShouldQueue
                 return;
             }
 
-            $attachment->forceFill([
-                'path' => $store->storeBytes((string) $file->bytes, $file->mime ?? $attachment->mime, $attachment->tenant_id),
-                'mime' => $attachment->mime ?? $file->mime,
-                'size' => strlen((string) $file->bytes),
-                'status' => Attachment::STORED,
-                'error' => null,
-            ])->save();
+            // Marked stored only with a file that landed whole, in one transaction: a failed save of the row takes the file
+            // back. A disk that refused it is tried again; the last time, the attachment says so instead of waiting forever.
+            try {
+                DB::transaction(fn () => $attachment->forceFill([
+                    'path' => $store->storeBytes((string) $file->bytes, $file->mime ?? $attachment->mime, $attachment->tenant_id),
+                    'mime' => $attachment->mime ?? $file->mime,
+                    'size' => strlen((string) $file->bytes),
+                    'status' => Attachment::STORED,
+                    'error' => null,
+                ])->save());
+            } catch (FileNotStored $e) {
+                if ($this->attempts() < $this->tries) {
+                    throw $e;
+                }
+                $attachment->forceFill(['status' => Attachment::FAILED, 'error' => 'تعذر حفظ الملف على الخادم.'])->save();
+            }
         });
     }
 }
