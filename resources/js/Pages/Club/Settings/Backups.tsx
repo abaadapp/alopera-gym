@@ -17,7 +17,7 @@ function size(bytes: number) {
     return `${number(bytes / 1024, 0)} KB`;
 }
 
-export default function Backups({ backups }: { backups: Backup[] }) {
+export default function Backups({ backups, interrupted = 0 }: { backups: Backup[]; interrupted?: number }) {
     const { tenant } = useShared();
     const [creating, setCreating] = useState(false);
     const form = useForm<{ archive: File | null; confirm: string }>({ archive: null, confirm: '' });
@@ -35,6 +35,13 @@ export default function Backups({ backups }: { backups: Backup[] }) {
     return (
         <SettingsScreen title="النسخ الاحتياطي" width="full">
             <SettingsTitle title="النسخ الاحتياطي والاستعادة" description="نسخة تلقائية يومية الساعة 3 فجرًا (آخر 14 نسخة)، ويمكنك إنشاء نسخة يدويًا في أي وقت" actions={<Button onClick={create} loading={creating} icon={<Database className="size-4" />}>إنشاء نسخة الآن</Button>} />
+
+            {interrupted > 0 && (
+                <div className="mb-6 flex items-start gap-3 rounded-xl border border-[#fecaca] bg-[#fef2f2] p-4 text-[13px] text-[#991b1b]">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    <p>توقفت استعادة سابقة في منتصفها (توقف الخادم أثناءها). تُكمَل تلقائيًا قبل أي نسخة أو استعادة جديدة، أو في النسخة الليلية: إلى الأمام إن كانت البيانات قد اعتُمدت، وإلى الخلف إن لم تُعتمد. لا تُفقد بيانات النادي.</p>
+                </div>
+            )}
 
             <div className="grid gap-6 lg:grid-cols-3">
                 <Card padded={false} className="lg:col-span-2">
