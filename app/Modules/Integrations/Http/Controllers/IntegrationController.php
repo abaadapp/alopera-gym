@@ -45,6 +45,8 @@ class IntegrationController extends Controller
         'processed' => 'سُجّلت الدفعة', 'duplicate' => 'مكرر — لم يُسجَّل مرة أخرى', 'failed_payment' => 'دفع مرفوض من البنك',
         'amount_mismatch' => 'المبلغ لا يطابق — لم يُسجَّل', 'rejected_signature' => 'توقيع غير صحيح — رُفض', 'unknown_intent' => 'عملية غير معروفة',
         'ignored_refund' => 'رد أو إلغاء من Paymob — لم يُسجَّل دفعة', 'order_mismatch' => 'رقم الطلب لا يطابق — لم يُسجَّل',
+        'error' => 'لم تُسجَّل الدفعة (خطأ عند تسجيلها) — تُسجَّل إن أُعيد الإشعار، وإلا تُطابق من لوحة Paymob',
+        'recorded_with_error' => 'سُجّلت الدفعة — وتعذّرت خطوة بعدها (في سجل الأخطاء)',
     ];
 
     public function __construct(private readonly IntegrationHub $hub, private readonly TenantContext $tenants) {}
@@ -95,7 +97,7 @@ class IntegrationController extends Controller
                 ->get(['id', 'reference', 'signature_valid', 'outcome', 'created_at'])
                 ->map(fn (PaymentWebhookEvent $e) => [
                     'id' => $e->id, 'reference' => $e->reference, 'valid' => $e->signature_valid,
-                    'outcome' => self::WEBHOOK_OUTCOMES[$e->outcome] ?? $e->outcome, 'ok' => in_array($e->outcome, ['processed', 'duplicate', 'ignored_refund'], true),
+                    'outcome' => self::WEBHOOK_OUTCOMES[$e->outcome] ?? $e->outcome, 'ok' => in_array($e->outcome, ['processed', 'duplicate', 'ignored_refund', 'recorded_with_error'], true),
                     'at' => $e->created_at->format('Y-m-d H:i'),
                 ]),
             'endpoints' => [
