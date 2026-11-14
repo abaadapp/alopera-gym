@@ -29,10 +29,16 @@ use Throwable;
  *
  * The browser returning from the payment page proves nothing and changes
  * nothing. Only a webhook with a valid HMAC, for the exact amount of a known
- * intent, records a payment — once.
+ * intent, records a payment — once. And only what that HMAC signs binds it to
+ * the intent: one of the club's own integrations, the intent's Paymob order,
+ * money captured (an authorization alone is not), and a transaction not
+ * already in the books for another payment.
  */
 final class OnlinePaymentService
 {
+    /** pg_advisory_xact_lock key space (with the Paymob order): an intent without an order takes one, one at a time. */
+    public const ORDER_LOCKS = 74205;
+
     public function __construct(
         private readonly TenantContext $tenants,
         private readonly PaymobClient $paymob,
@@ -152,6 +158,18 @@ final class OnlinePaymentService
 
             $integration->markWebhook();
 
+            // Money through one of this club's own integrations (cards, Apple Pay…) only. The id is signed; the list
+            // is the club's, never the callback's. A callback naming none is not taken for one.
+            $signedIntegration = Arr::get($obj, 'integration_id');
+            $integrationId = is_int($signedIntegration) || (is_string($signedIntegration) && ctype_digit($signedIntegration)) ? (int) $signedIntegration : 0;
+            if (! in_array($integrationId, PaymobClient::integrationIds($integration), true)) {
+                $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, [
+                    'reason' => 'integration', 'integration' => is_scalar($signedIntegration) ? (string) $signedIntegration : null,
+                ]));
+
+                return $this->log($intent->tenant_id, $transactionId, $reference, true, 'integration_mismatch', $payload, $ip);
+            }
+
             // The reference that found the intent is not signed; the order id is. A signed callback of another order
             // (same amount) is not let onto this intent.
             $signedOrder = (string) Arr::get($obj, 'order.id', '');
@@ -159,6 +177,13 @@ final class OnlinePaymentService
                 $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, ['reason' => 'order', 'order' => $signedOrder]));
 
                 return $this->log($intent->tenant_id, $transactionId, $reference, true, 'order_mismatch', $payload, $ip);
+            }
+            // Paymob gave no order for this checkout. The signed order must then be one no other intent holds; the
+            // payment binds it to this intent (below, under a lock), so every later callback must name it.
+            if ($intent->provider_order_id === null && ($why = $this->unboundOrder($intent, $signedOrder)) !== null) {
+                $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, ['reason' => $why, 'order' => $signedOrder]));
+
+                return $this->log($intent->tenant_id, $transactionId, $reference, true, $why, $payload, $ip);
             }
 
             // A refund or void made on Paymob's side arrives as its own (child) transaction, signed and successful, for
@@ -190,6 +215,13 @@ final class OnlinePaymentService
                 return $this->log($intent->tenant_id, $transactionId, $reference, true, 'failed_payment', $payload, $ip);
             }
 
+            // An authorization only holds the money on the card; its capture takes it, as a transaction of its own.
+            // Counting both would record one payment twice (the second as the customer's credit). Nothing changes on
+            // the intent: the capture, or the end of the checkout, decides it.
+            if (self::flag($obj, 'is_auth') && ! self::flag($obj, 'is_capture')) {
+                return $this->log($intent->tenant_id, $transactionId, $reference, true, 'authorized_only', $payload, $ip);
+            }
+
             $amountMinor = (int) Arr::get($obj, 'amount_cents', -1);
             $currency = (string) Arr::get($obj, 'currency', '');
             if ($amountMinor !== Money::toMinor($intent->amount) || strtoupper($currency) !== strtoupper($intent->currency)) {
@@ -208,12 +240,33 @@ final class OnlinePaymentService
             //   the error is reported, never turned into «not recorded»;
             // - not known (the database gone): not acknowledged, so a resend finds out; recording is idempotent.
             try {
-                $outcome = DB::transaction(function () use ($intent, $transactionId) {
+                $outcome = DB::transaction(function () use ($intent, $transactionId, $signedOrder) {
                     $intent = PaymentIntent::whereKey($intent->id)->lockForUpdate()->firstOrFail();
+
+                    // Taking an order: one intent at a time per order, and asked again now that it is ours to take.
+                    $binds = $intent->provider_order_id === null;
+                    if ($binds) {
+                        DB::select('select pg_advisory_xact_lock(?, hashtext(?))', [self::ORDER_LOCKS, $signedOrder]);
+                        if (($why = $this->unboundOrder($intent, $signedOrder)) !== null) {
+                            $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, ['reason' => $why, 'order' => $signedOrder]));
+
+                            return $why;
+                        }
+                    }
 
                     $result = $this->audit->as('gateway', null, 'paymob', fn () => $this->payments->recordGatewayPayment(
                         $intent->invoice()->firstOrFail(), $intent->amount, 'paymob', $transactionId, $intent->reference
                     ));
+
+                    // This transaction is already in the books for another payment: never this intent's money, and
+                    // never a reason to call it paid.
+                    if (! $result['created'] && $result['payment']->reference !== $intent->reference) {
+                        $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, [
+                            'reason' => 'transaction', 'transaction' => $transactionId, 'payment' => $result['payment']->id,
+                        ]));
+
+                        return 'transaction_elsewhere';
+                    }
 
                     if ($intent->status !== PaymentIntent::PAID) {
                         $intent->forceFill([
@@ -221,14 +274,14 @@ final class OnlinePaymentService
                             'payment_id' => $result['payment']->id,
                             'provider_transaction_id' => $transactionId,
                             'paid_at' => now(),
-                        ])->save();
+                        ] + ($binds ? ['provider_order_id' => $signedOrder] : []))->save();
                     }
 
                     return $result['created'] ? 'processed' : 'duplicate';
                 });
             } catch (Throwable $e) {
                 report($e);
-                $outcome = $this->recorded($transactionId) ? 'recorded_with_error' : 'error';
+                $outcome = $this->recorded($transactionId, $intent->reference) ? 'recorded_with_error' : 'error';
             }
 
             if ($outcome === 'error') {
@@ -246,19 +299,47 @@ final class OnlinePaymentService
         });
     }
 
-    /** Is this Paymob transaction in the books? False when it is not, or when the database cannot say. */
-    private function recorded(string $transactionId): bool
+    /**
+     * Is this Paymob transaction in the books, as this intent's payment? False when it is not (or is another payment's),
+     * or when the database cannot say.
+     */
+    private function recorded(string $transactionId, string $reference): bool
     {
         if ($transactionId === '') {
             return false;
         }
         try {
-            return Payment::where('gateway', 'paymob')->where('gateway_transaction_id', $transactionId)->exists();
+            return Payment::where('gateway', 'paymob')->where('gateway_transaction_id', $transactionId)->where('reference', $reference)->exists();
         } catch (Throwable $e) {
             report($e);
 
             return false;
         }
+    }
+
+    /**
+     * Why an intent Paymob gave no order cannot take this signed one: none is named, or another intent holds it.
+     * Null when it can.
+     */
+    private function unboundOrder(PaymentIntent $intent, string $signedOrder): ?string
+    {
+        if ($signedOrder === '') {
+            return 'order_unverified';
+        }
+
+        return PaymentIntent::where('provider_order_id', $signedOrder)->whereKeyNot($intent->id)->exists() ? 'order_mismatch' : null;
+    }
+
+    /**
+     * A Paymob flag as it arrives: a JSON boolean, or the text "true".
+     *
+     * @param  array<string, mixed>  $obj
+     */
+    private static function flag(array $obj, string $key): bool
+    {
+        $value = Arr::get($obj, $key);
+
+        return $value === true || (is_string($value) && strcasecmp($value, 'true') === 0);
     }
 
     /** @param array<string, mixed> $payload */

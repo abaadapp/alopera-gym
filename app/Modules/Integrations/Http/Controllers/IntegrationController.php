@@ -47,6 +47,10 @@ class IntegrationController extends Controller
         'ignored_refund' => 'رد أو إلغاء من Paymob — لم يُسجَّل دفعة', 'order_mismatch' => 'رقم الطلب لا يطابق — لم يُسجَّل',
         'error' => 'لم تُسجَّل الدفعة (خطأ عند تسجيلها) — تُسجَّل إن أُعيد الإشعار، وإلا تُطابق من لوحة Paymob',
         'recorded_with_error' => 'سُجّلت الدفعة — وتعذّرت خطوة بعدها (في سجل الأخطاء)',
+        'integration_mismatch' => 'عبر تكامل غير مضبوط لدى النادي — لم يُسجَّل',
+        'authorized_only' => 'تفويض فقط ولم يُحصَّل المبلغ — لم يُسجَّل',
+        'order_unverified' => 'بلا رقم طلب يُتحقق به — لم يُسجَّل',
+        'transaction_elsewhere' => 'العملية مسجّلة لدفعة أخرى — لم يُسجَّل',
     ];
 
     public function __construct(private readonly IntegrationHub $hub, private readonly TenantContext $tenants) {}
