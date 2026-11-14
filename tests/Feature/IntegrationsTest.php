@@ -162,7 +162,7 @@ class IntegrationsTest extends TestCase
         $this->assertSame('connected', $this->cards($club, $owner)['paymob']['status']['state'], 'a payment page Paymob opened proves the keys');
 
         $obj = ['id' => 9001, 'pending' => false, 'amount_cents' => 25000, 'success' => true, 'is_voided' => false, 'is_refunded' => false,
-            'error_occured' => false, 'currency' => 'OMR', 'order' => ['id' => 77, 'merchant_order_id' => $intent->reference]];
+            'error_occured' => false, 'currency' => 'OMR', 'integration_id' => 111, 'order' => ['id' => 77, 'merchant_order_id' => $intent->reference]];
         $this->postJson(route('webhooks.paymob').'?hmac=bad', ['obj' => $obj])->assertStatus(401);
         $this->assertSame('error', $this->cards($club, $owner)['paymob']['status']['state']);
 
