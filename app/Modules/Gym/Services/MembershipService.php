@@ -390,6 +390,13 @@ final class MembershipService
     public function cancel(Membership $membership, string $reason): Membership
     {
         return DB::transaction(function () use ($membership, $reason) {
+            // The invoice before the membership, the order every payment takes (the invoice, then InvoicePaid activating
+            // the membership): a cancellation and a payment at once then wait for each other instead of deadlocking
+            // (SQLSTATE 40P01), and what the invoice holds is read under its lock. Its id is set once, when it is sold.
+            $invoiceId = Membership::whereKey($membership->id)->value('invoice_id');
+            if ($invoiceId) {
+                Invoice::whereKey($invoiceId)->lockForUpdate()->first();
+            }
             $membership = Membership::whereKey($membership->id)->lockForUpdate()->firstOrFail();
 
             if (in_array($membership->status, [Membership::CANCELLED, Membership::EXPIRED], true)) {

@@ -149,9 +149,9 @@ class PaymobLatePaymentConcurrencyTest extends TestCase
     }
 
     /**
-     * Cancelling a membership locks it, then its invoice; a payment locks the invoice, then the membership. At once,
-     * PostgreSQL ends one of them (a deadlock): whichever it is, nothing wrong is written, and the money is recorded
-     * once when Paymob sends the callback again (its resend policy is not verified: see docs/INTEGRATIONS.md).
+     * Cancelling a membership locks its invoice, then the membership — the order a payment takes (the invoice, then the
+     * membership). Held right after the membership's lock, the moment that used to be a deadlock (PostgreSQL ended the
+     * callback, 500), the callback now waits, then finds the sale withdrawn and holds the money.
      */
     public function test_a_membership_cancelled_while_its_payment_comes_in_leaves_nothing_wrong(): void
     {
@@ -171,26 +171,14 @@ class PaymobLatePaymentConcurrencyTest extends TestCase
             },
         ]);
 
-        [$cancel, $webhook] = $results;
-        $this->assertNotSame('not at the same time', $webhook['value'], json_encode($results));
-        // Never both: a cancelled sale with its money applied, or an active membership on a voided invoice.
-        $this->assertFalse($cancel['ok'] && $webhook['ok'] && $webhook['value'] === 'processed', json_encode($results));
-
-        if ($webhook['value'] === 'error') {
-            // The callback was the one ended: nothing recorded, answered 500 so that Paymob sends it again.
-            $this->asTenant($club, fn () => $this->assertSame(0, Payment::count(), json_encode($results)));
-            $this->assertSame('held_for_review', self::deliver($obj), 'sent again: the sale is cancelled, the money held');
-        }
+        // Both done, neither ended by PostgreSQL: the cancellation first, then the callback, which holds the money.
+        $this->assertSame([[true, Membership::CANCELLED], [true, 'held_for_review']], array_map(fn ($r) => [$r['ok'], $r['value']], $results), json_encode($results));
 
         $this->asTenant($club, function () use ($membership, $results) {
             $payment = Payment::where('gateway', 'paymob')->sole();
-            $status = $membership->fresh()->status;
             $invoice = Invoice::findOrFail($membership->invoice_id);
-            if ($status === Membership::ACTIVE) {
-                $this->assertSame([Invoice::PAID, '0.000'], [$invoice->status, $payment->credit_amount], json_encode($results));
-            } else {
-                $this->assertSame([Membership::CANCELLED, Invoice::VOID, '25.000'], [$status, $invoice->status, $payment->credit_amount], json_encode($results));
-            }
+            $this->assertSame([Membership::CANCELLED, Invoice::VOID, '25.000', '0.000'],
+                [$membership->fresh()->status, $invoice->status, $payment->credit_amount, $payment->credit_used], json_encode($results));
             $this->assertSame(1, PaymentIntent::where('status', PaymentIntent::PAID)->count());
             $this->assertSame(JournalLine::sum('debit'), JournalLine::sum('credit'));
         });
