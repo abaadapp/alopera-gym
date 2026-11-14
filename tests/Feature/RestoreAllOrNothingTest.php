@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Core\Backup\DiskSpace;
 use App\Core\Backup\RestoreFiles;
 use App\Core\Backup\TenantBackupService;
 use App\Core\Backup\TenantTables;
@@ -287,6 +288,36 @@ class RestoreAllOrNothingTest extends TestCase
     }
 
     /** The database commits, then PHP sees an error (the connection lost on the way back): the restore ends whole, forward. */
+    /**
+     * The safety copy taken before a restore cannot be made (here: no room for its archive): the restore stops before
+     * anything is replaced, no new or half-built archive is left, the archive kept before stays sound, nothing "restored".
+     */
+    public function test_a_safety_copy_that_cannot_be_made_stops_the_restore_before_anything_is_replaced(): void
+    {
+        [$club, $archive, , $b] = $this->archivedThenChanged();
+        $this->app->instance(DiskSpace::class, new class extends DiskSpace
+        {
+            public function ensure(string $path, int $needed, string $rule, string $what): void
+            {
+                if ($what === 'لإنشاء النسخة الاحتياطية') {
+                    throw new BusinessRuleException($rule, 'no room for the archive');
+                }
+            }
+        });
+
+        try {
+            $this->service()->restoreWithSafetyCopy($club, $archive);
+            $this->fail('the restore went through without its safety copy');
+        } catch (BusinessRuleException $e) {
+            $this->assertSame('backup.restore_failed', $e->rule);
+        }
+        $this->assertUnchanged($b, $club, 'safety copy refused');
+        $this->assertSame([basename($archive)], array_map('basename', Storage::disk('local')->files($this->service()->directory($club))), 'no new or half-built archive');
+        $this->assertSame(1, AuditLog::where('event', 'backup.created')->count(), 'only the archive taken before');
+        $this->assertSame(1, AuditLog::where('event', 'backup.failed')->count());
+        $this->service()->verifyArchive($archive);
+    }
+
     public function test_an_error_after_the_database_committed_finishes_the_restore_forward(): void
     {
         [$club, $archive, $a] = $this->archivedThenChanged();

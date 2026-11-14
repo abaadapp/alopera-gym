@@ -202,7 +202,7 @@ class BackupRestoreRisksTest extends TestCase
         }
     }
 
-    // ── What happens today: evidence for the plan awaiting approval ────────────────────────────────────────────
+    // ── Creating an archive: an error, never a success, and no sound archive pushed out ────────────────────────
 
     /** A disk that refuses the archive: an error, backup.failed, no backup.created, and the archive kept before stays sound. */
     public function test_a_refused_archive_write_is_an_error_and_keeps_every_archive(): void
