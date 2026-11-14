@@ -33,9 +33,24 @@ use Throwable;
  * the intent: one of the club's own integrations, the intent's Paymob order,
  * money captured (an authorization alone is not), and a transaction not
  * already in the books for another payment.
+ *
+ * Test and live money never mix on the production server: a checkout is opened there only by a live integration
+ * (PaymobClient::live), each intent carries the environment it was opened in (its reference: PL- live, PT- test), and a
+ * callback moves money there only for a live intent of a live integration.
  */
 final class OnlinePaymentService
 {
+    /** The environment an intent was opened in, written once in its reference. Older references (PI-) do not say. */
+    public const LIVE_PREFIX = 'PL-';
+
+    public const TEST_PREFIX = 'PT-';
+
+    /**
+     * A checkout ends at expires_at, but its money can still be on its way (a payment finished just before, a callback
+     * sent again): the account's mode, keys and integrations stay as they are this long after.
+     */
+    public const LATE_CALLBACK_MINUTES = 60;
+
     public function __construct(
         private readonly TenantContext $tenants,
         private readonly PaymobClient $paymob,
@@ -50,7 +65,21 @@ final class OnlinePaymentService
 
     public function available(): bool
     {
-        return PaymobClient::ready($this->integration());
+        return PaymobClient::takesPayments($this->integration());
+    }
+
+    /**
+     * Checkouts whose money may still arrive: opened (or being opened) and not past their end by LATE_CALLBACK_MINUTES.
+     * While there are any, the account's mode, keys and integrations are not changed under them.
+     */
+    public function openCheckouts(): int
+    {
+        return PaymentIntent::query()
+            ->where(fn ($q) => $q->where('status', PaymentIntent::PENDING)
+                ->orWhere(fn ($q) => $q->where('status', PaymentIntent::FAILED)->whereNotNull('checkout_url')))
+            ->where(fn ($q) => $q->where('expires_at', '>', now()->subMinutes(self::LATE_CALLBACK_MINUTES))
+                ->orWhere(fn ($q) => $q->whereNull('expires_at')->where('created_at', '>', now()->subDay())))
+            ->count();
     }
 
     /**
@@ -65,6 +94,12 @@ final class OnlinePaymentService
         if (! PaymobClient::ready($integration)) {
             throw new BusinessRuleException('paymob.unavailable', 'الدفع الإلكتروني غير مفعّل لهذا النادي حاليًا. يمكنك الدفع في الاستقبال.');
         }
+        // A test account never opens a checkout for a real invoice on the production server.
+        if (! PaymobClient::takesPayments($integration)) {
+            throw new BusinessRuleException('paymob.test_mode', 'الدفع الإلكتروني غير مفعّل لهذا النادي حاليًا. يمكنك الدفع في الاستقبال.');
+        }
+        $live = PaymobClient::live($integration);
+        $prefix = $live ? self::LIVE_PREFIX : self::TEST_PREFIX;
         if (! $invoice->isOpen() || Money::isZero($invoice->balance())) {
             throw new BusinessRuleException('invoice.not_open', 'لا يوجد مبلغ مستحق على هذه الفاتورة.');
         }
@@ -81,7 +116,9 @@ final class OnlinePaymentService
             $expires = $hold->lt($expires) ? $hold : $expires;
         }
 
+        // Given again only if opened in the same environment.
         $open = PaymentIntent::where('invoice_id', $invoice->id)->where('status', PaymentIntent::PENDING)->whereNotNull('checkout_url')
+            ->where('reference', 'like', $prefix.'%')
             ->where('expires_at', '>', now()->addMinutes(10))->where('expires_at', '<=', $expires)->latest('id')->first();
         if ($open && Money::cmp($open->amount, $invoice->balance()) === 0) {
             return $open;
@@ -90,7 +127,7 @@ final class OnlinePaymentService
         $intent = PaymentIntent::create([
             'invoice_id' => $invoice->id,
             'provider' => 'paymob',
-            'reference' => 'PI-'.Str::upper(Str::random(20)),
+            'reference' => $prefix.Str::upper(Str::random(20)),
             'amount' => $invoice->balance(),
             'currency' => $invoice->currency,
             'status' => PaymentIntent::PENDING,
@@ -116,6 +153,14 @@ final class OnlinePaymentService
         if ($checkout['order_id'] === null) {
             $intent->forceFill(['status' => PaymentIntent::FAILED, 'failure_reason' => 'paymob.no_order'])->save();
             throw new BusinessRuleException('paymob.no_order', 'تعذّر فتح صفحة الدفع الآن. يمكنك الدفع في الاستقبال.');
+        }
+
+        // The account changed while Paymob was opening the checkout (another environment, or no longer taking money):
+        // the page is not handed out under settings it was not opened with.
+        $now = TenantIntegration::whereKey($integration->id)->first();
+        if (! PaymobClient::takesPayments($now) || PaymobClient::live($now) !== $live) {
+            $intent->forceFill(['status' => PaymentIntent::FAILED, 'failure_reason' => 'paymob.mode_changed'])->save();
+            throw new BusinessRuleException('paymob.mode_changed', 'تعذّر فتح صفحة الدفع الآن. يمكنك الدفع في الاستقبال.');
         }
 
         $intent->forceFill(['checkout_url' => $checkout['url'], 'provider_order_id' => $checkout['order_id']])->save();
@@ -161,6 +206,14 @@ final class OnlinePaymentService
             }
 
             $integration->markWebhook();
+
+            // On the production server, money only from a live checkout of a live account — asked before anything
+            // changes, a decline included (a test decline neither fails a real attempt nor messages a real customer).
+            if (($why = self::environmentProblem($intent, $integration, $obj)) !== null) {
+                $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, ['reason' => $why]));
+
+                return $this->log($intent->tenant_id, $transactionId, $reference, true, $why, $payload, $ip);
+            }
 
             // Money through one of this club's own integrations (cards, Apple Pay…) only. The id is signed; the list
             // is the club's, never the callback's. A callback naming none is not taken for one.
@@ -239,13 +292,19 @@ final class OnlinePaymentService
             //   the error is reported, never turned into «not recorded»;
             // - not known (the database gone): not acknowledged, so a resend finds out; recording is idempotent.
             try {
-                $outcome = DB::transaction(function () use ($intent, $transactionId, $signedOrder) {
+                $outcome = DB::transaction(function () use ($intent, $transactionId, $signedOrder, $integration, $obj) {
                     $intent = PaymentIntent::whereKey($intent->id)->lockForUpdate()->firstOrFail();
 
                     // Read again under the lock, before any money: the order this intent holds now, not when the
                     // callback came in.
                     if (($why = self::orderProblem($intent, $signedOrder)) !== null) {
                         $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, ['reason' => $why, 'order' => $signedOrder]));
+
+                        return $why;
+                    }
+                    // And the account as it is now: not switched to test (or to other keys) since the callback came in.
+                    if (($why = self::environmentProblem($intent, TenantIntegration::whereKey($integration->id)->first(), $obj)) !== null) {
+                        $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, ['reason' => $why]));
 
                         return $why;
                     }
@@ -311,6 +370,28 @@ final class OnlinePaymentService
 
             return false;
         }
+    }
+
+    /**
+     * Why this callback's money is not real here: on the production server, an intent opened in test (or a callback
+     * that says it is not live, or an account no longer live) is a test payment, and an intent older than the
+     * environment mark cannot be shown to be live. Null when it moves money: always off production (nothing is real
+     * there); on it, a live intent of a live account. `is_live` is not signed: it can stop money, never let it in.
+     *
+     * @param  array<string, mixed>  $obj
+     */
+    private static function environmentProblem(PaymentIntent $intent, ?TenantIntegration $integration, array $obj): ?string
+    {
+        if (! app()->isProduction()) {
+            return null;
+        }
+        $isLive = Arr::get($obj, 'is_live');
+        if (str_starts_with($intent->reference, self::TEST_PREFIX) || ! PaymobClient::live($integration)
+            || $isLive === false || (is_string($isLive) && strcasecmp($isLive, 'false') === 0)) {
+            return 'test_payment';
+        }
+
+        return str_starts_with($intent->reference, self::LIVE_PREFIX) ? null : 'environment_unverified';
     }
 
     /**

@@ -20,6 +20,7 @@ use App\Modules\Messaging\Services\TemplateCatalog;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobClient;
+use App\Modules\Payments\Services\OnlinePaymentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -51,7 +52,12 @@ class IntegrationController extends Controller
         'authorized_only' => 'تفويض فقط ولم يُحصَّل المبلغ — لم يُسجَّل',
         'order_unverified' => 'نية دفع بلا رقم طلب من Paymob يُتحقق به — لم يُسجَّل',
         'transaction_elsewhere' => 'العملية مسجّلة لدفعة أخرى — لم يُسجَّل',
+        'test_payment' => 'دفعة اختبار على نظام الإنتاج — لم تُسجَّل ولم يتغير شيء',
+        'environment_unverified' => 'نية دفع من قبل تمييز الاختبار من الحقيقي — لم تُسجَّل، تُراجع من لوحة Paymob',
     ];
+
+    /** Paymob settings that decide how a callback is read: not changed while a checkout's money may still arrive. */
+    private const CALLBACK_SETTINGS = ['secret_key', 'hmac_secret', 'integration_ids'];
 
     public function __construct(private readonly IntegrationHub $hub, private readonly TenantContext $tenants) {}
 
@@ -67,7 +73,7 @@ class IntegrationController extends Controller
     {
         $tenant = $this->tenants->require();
         $row = TenantIntegration::where('provider', TenantIntegration::PAYMOB)->first();
-        $ready = PaymobClient::ready($row);
+        $ready = PaymobClient::takesPayments($row); // what the club's channels really do: a test account takes nothing on production
         $shop = PermissionRegistry::moduleEnabled('sales') ? ShopSettings::of($tenant) : null;
 
         return Inertia::render('Integrations/Paymob', [
@@ -207,6 +213,20 @@ class IntegrationController extends Controller
         $integration = TenantIntegration::firstOrNew(['provider' => $provider]);
         $credentials = $integration->credentials ?? [];
         $changed = $integration->mode !== $data['mode'] && $provider === 'paymob';
+
+        // Test or live, the keys and the integrations decide how a checkout's callback is read: changing them under a
+        // checkout still open would read its money with settings it was not opened with.
+        if ($provider === 'paymob' && $integration->exists) {
+            $rereads = $changed || array_filter(self::CALLBACK_SETTINGS, function ($key) use ($data, $credentials) {
+                $value = trim((string) ($data['credentials'][$key] ?? ''));
+
+                return $value !== '' && ($credentials[$key] ?? null) !== $value;
+            }) !== [];
+            $open = $rereads ? app(OnlinePaymentService::class)->openCheckouts() : 0;
+            if ($open > 0) {
+                return back()->with('error', 'توجد '.$open.' عملية دفع إلكتروني مفتوحة قد يصل مبلغها: لا يُغيَّر الوضع (اختبار/حقيقي) ولا المفتاح السري ولا HMAC secret ولا أرقام الربط حتى تنتهي، وبعد '.OnlinePaymentService::LATE_CALLBACK_MINUTES.' دقيقة من انتهائها. لم يُحفظ شيء.');
+            }
+        }
         foreach ($keys as $key) {
             $value = trim((string) ($data['credentials'][$key] ?? ''));
             if ($value !== '' && ($credentials[$key] ?? null) !== $value) {
