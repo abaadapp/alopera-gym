@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Core\Backup\DiskSpace;
 use App\Core\Backup\TenantBackupService;
 use App\Core\Support\BusinessRuleException;
 use App\Models\AuditLog;
@@ -13,7 +14,6 @@ use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Models\Message;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\Concerns\BuildsClubs;
 use Tests\Support\FailingDisk;
@@ -27,9 +27,11 @@ use ZipArchive;
  * Two kinds of test:
  *  - what already holds and must keep holding (a sound archive is complete; an archive restores, files readable after;
  *    an older archive, without the newer tables, still restores; a cut or foreign archive is refused, nothing replaced);
- *  - test_today_…: what the archive's creation, its fourteen and its WhatsApp files do TODAY, written down as evidence
- *    (#165). On this plan branch only the restore is rebuilt (all or nothing: RestoreAllOrNothingTest); creating the
- *    archive, the fourteen kept and the nightly schedule are not changed until the owner approves the plan.
+ *  - creating an archive under failure: a refused or cut write, a full disk — an error and backup.failed, never a
+ *    success, and none of the fourteen archives pushed out; the safety copy before a restore reused when nothing
+ *    changed. (A save during the backup and a process killed mid-way: BackupConcurrencyTest; the restore under
+ *    failure: RestoreAllOrNothingTest.)
+ *  - test_today_whatsapp_…: chat files are not in the club archive (a separate media archive is planned, #165).
  */
 class BackupRestoreRisksTest extends TestCase
 {
@@ -86,6 +88,26 @@ class BackupRestoreRisksTest extends TestCase
         return ['sound' => $sound, 'entries' => $entries];
     }
 
+    /** Fourteen sound archives of the club as it is (copies of one real backup), oldest first. @return list<string> */
+    private function fourteenSound(Tenant $club): array
+    {
+        $dir = $this->service()->directory($club);
+        $first = $this->service()->create($club);
+        $sound = Storage::disk('local')->get($dir.'/'.$first);
+        Storage::disk('local')->delete($dir.'/'.$first);
+        foreach (range(1, TenantBackupService::KEEP) as $day) {
+            Storage::disk('local')->put($dir.sprintf('/backup-202611%02d-030000.zip', $day), $sound);
+        }
+
+        return $this->kept($club);
+    }
+
+    /** @return list<string> the archives kept, oldest first */
+    private function kept(Tenant $club): array
+    {
+        return collect(Storage::disk('local')->files($this->service()->directory($club)))->map(fn ($f) => basename($f))->sort()->values()->all();
+    }
+
     // ── What holds today and must keep holding ─────────────────────────────────────────────────────────────────
 
     public function test_a_sound_archive_holds_every_row_and_file_of_the_club_whole(): void
@@ -104,7 +126,12 @@ class BackupRestoreRisksTest extends TestCase
         $this->assertSame($manifest['counts'], array_map('count', $data), 'the manifest counts what data.json holds');
         $this->assertSame($sha, hash('sha256', $zip->getFromName('files/private/'.$document->path)), 'the contract as it was uploaded');
         $zip->close();
-        $this->assertSame($name, AuditLog::where('event', 'backup.created')->latest('id')->value('properties')['file']);
+        $created = AuditLog::where('event', 'backup.created')->latest('id')->value('properties');
+        $this->assertSame($name, $created['file']);
+        $this->assertSame(hash_file('sha256', $file), $created['sha256'], 'recorded with the stored file\'s own fingerprint');
+        $this->assertSame([$sha, 'files/private/'.$document->path], [$manifest['files']['files/private/'.$document->path]['sha256'], array_key_first($manifest['files'])]);
+        $this->assertSame(['entries' => 3, 'files' => 1], array_intersect_key($this->service()->verifyArchive($file), ['entries' => 0, 'files' => 0]));
+        $this->assertSame([], array_values(array_filter(Storage::disk('local')->allFiles('backups'), fn ($f) => ! str_ends_with($f, '.zip'))), 'nothing half-built left');
     }
 
     public function test_an_archive_restores_the_rows_and_the_files_and_the_document_downloads_after(): void
@@ -138,6 +165,7 @@ class BackupRestoreRisksTest extends TestCase
         foreach (['payment_intents', 'gym_document_alerts', 'gym_document_renewals', 'whatsapp_contacts'] as $table) {
             unset($data[$table], $manifest['counts'][$table]);
         }
+        unset($manifest['files'], $manifest['data_sha256'], $manifest['content_sha256']); // older releases wrote none of these
         $zip->addFromString('data.json', json_encode($data, JSON_UNESCAPED_UNICODE));
         $zip->addFromString('manifest.json', json_encode($manifest, JSON_UNESCAPED_UNICODE));
         $zip->close();
@@ -176,90 +204,91 @@ class BackupRestoreRisksTest extends TestCase
 
     // ── What happens today: evidence for the plan awaiting approval ────────────────────────────────────────────
 
-    /** Plan: the stored archive is read back and checked before backup.created and before any old one is pruned. */
-    public function test_today_a_refused_archive_write_is_still_reported_as_created(): void
+    /** A disk that refuses the archive: an error, backup.failed, no backup.created, and the archive kept before stays sound. */
+    public function test_a_refused_archive_write_is_an_error_and_keeps_every_archive(): void
     {
         [$club, $owner] = $this->clubWithDocument();
+        $first = $this->service()->create($club);
         FailingDisk::install('local', 'refuse');
 
-        $this->actingAs($owner)->post(route('club.backups.store'))->assertSessionHas('success');
-        $name = AuditLog::where('event', 'backup.created')->latest('id')->value('properties')['file'];
-        $this->assertFalse(Storage::disk('local')->exists($this->service()->directory($club).'/'.$name), 'no archive on the disk');
+        $this->actingAs($owner)->post(route('club.backups.store'))->assertSessionHasErrors('error')->assertSessionMissing('success');
+        $this->assertSame(1, AuditLog::where('event', 'backup.created')->count(), 'only the first one');
+        $this->assertSame(1, AuditLog::where('event', 'backup.failed')->count());
+        $this->assertSame([$first], array_map('basename', Storage::disk('local')->files($this->service()->directory($club))), 'nothing else left behind');
+        $this->service()->verifyArchive($this->archivePath($club, $first));
     }
 
-    /** Plan: the same check keeps a cut archive out, so it can never push a sound one out of the fourteen kept. */
-    public function test_today_a_cut_archive_pushes_a_sound_one_out_of_the_fourteen_kept(): void
+    /** A disk that keeps only part of the archive: refused, and none of the fourteen sound archives is pushed out. */
+    public function test_a_cut_archive_is_refused_and_never_pushes_a_sound_one_out(): void
     {
         [$club] = $this->clubWithDocument();
-        $dir = $this->service()->directory($club);
-        $sound = $this->service()->disk()->get($dir.'/'.$this->service()->create($club));
-        Storage::disk('local')->delete($dir.'/'.basename((string) collect(Storage::disk('local')->files($dir))->first()));
-        foreach (range(1, TenantBackupService::KEEP) as $day) {
-            Storage::disk('local')->put($dir.sprintf('/backup-202611%02d-030000.zip', $day), $sound);
-        }
+        $kept = $this->fourteenSound($club);
 
         FailingDisk::install('local', 'short');
-        $new = $this->service()->create($club);
-        $kept = collect(Storage::disk('local')->files($dir))->map(fn ($f) => basename($f))->sort()->values();
-
-        $this->assertCount(TenantBackupService::KEEP, $kept);
-        $this->assertNotContains('backup-20261101-030000.zip', $kept, 'the oldest sound archive was removed');
-        $this->assertFalse($this->inspect($this->archivePath($club, $new))['sound'], 'for one that cannot be opened');
+        try {
+            $this->service()->create($club);
+            $this->fail('created');
+        } catch (BusinessRuleException $e) {
+            $this->assertSame('backup.failed', $e->rule);
+        }
+        $this->assertSame($kept, $this->kept($club), 'the same fourteen');
+        foreach ($kept as $name) {
+            $this->service()->verifyArchive($this->archivePath($club, $name));
+        }
     }
 
-    /** Plan (creating the archive): the rows are read in one snapshot (REPEATABLE READ, read only), so an archive is always restorable. */
-    public function test_today_a_save_during_the_backup_makes_an_archive_that_cannot_be_restored(): void
+    /** A disk without room: refused before anything is written, for a backup and for a restore. */
+    public function test_a_full_disk_refuses_the_backup_and_the_restore_before_anything_is_written(): void
     {
-        [$club, $owner, $member] = $this->clubWithDocument();
-        // A member and her document saved while the backup runs: after it read the members, before the documents.
-        $done = false;
-        DB::listen(function ($query) use (&$done, $club, $owner) {
-            if (! $done && str_starts_with($query->sql, 'select * from "gym_members"')) {
-                $done = true;
-                $late = $this->member($club, ['full_name' => 'عضوة جديدة']);
-                $this->asTenant($club, function () use ($owner, $late) {
-                    MemberDocument::create(['member_id' => $late->id, 'type' => 'id', 'title' => 'هوية', 'path' => 'x', 'original_name' => 'x', 'mime' => 'application/pdf', 'size' => 1, 'uploaded_by' => $owner->id]);
-                });
+        [$club, , $member] = $this->clubWithDocument();
+        $kept = $this->fourteenSound($club);
+        $this->app->instance(DiskSpace::class, new class extends DiskSpace
+        {
+            public function free(string $path): ?int
+            {
+                return 1024 * 1024;
             }
         });
-        $name = $this->service()->create($club);
-        $this->assertTrue($done);
-
         $this->asTenant($club, fn () => $member->forceFill(['full_name' => 'بعد النسخة'])->save());
-        // The all-or-nothing restore refuses it whole (a document whose member is not in the archive): nothing replaced.
-        try {
-            $this->service()->restore($club, $this->archivePath($club, $name));
-            $this->fail('restored');
-        } catch (BusinessRuleException $e) {
-            $this->assertSame('backup.restore_failed', $e->rule);
+
+        foreach (['create' => fn () => $this->service()->create($club), 'restore' => fn () => $this->service()->restore($club, $this->archivePath($club, $kept[13]))] as $what => $work) {
+            try {
+                $work();
+                $this->fail("$what went through");
+            } catch (BusinessRuleException $e) {
+                $this->assertSame('backup.no_space', $e->rule, $what);
+            }
         }
-        $this->assertSame('بعد النسخة', $this->asTenant($club, fn () => $member->fresh()->full_name), 'nothing replaced: the transaction rolled back');
+        $this->assertSame($kept, $this->kept($club));
+        $this->assertSame('بعد النسخة', $this->asTenant($club, fn () => $member->fresh()->full_name), 'nothing replaced');
+        $this->assertSame([], Storage::disk('local')->allFiles(TenantBackupService::STAGING));
+    }
+
+    /** Two backups in the same second keep two names: neither replaces the other. */
+    public function test_two_backups_in_the_same_second_are_both_kept(): void
+    {
+        [$club] = $this->clubWithDocument();
+        $this->travelTo(now()->setTime(10, 0, 0));
+        $a = $this->service()->create($club);
+        $b = $this->service()->create($club);
+        $this->assertNotSame($a, $b);
+        $this->assertCount(2, $this->kept($club));
     }
 
     /**
-     * Each restore from the panel first keeps a safety copy of the club as it is now, and the fourteen-archive rule then
-     * removes the oldest. A recovery retried from the panel thus adds a copy of the half-restored state and pushes a
-     * sound archive out, once per attempt.
-     * Plan: while a restore is incomplete, nothing is pruned, and the retry resumes instead of starting over.
+     * The safety copy before a restore, when the newest archive already holds the club exactly as it is (a retry after
+     * a refused restore, nothing changed since): that archive is reused, so no copy is doubled and none pushed out.
      */
-    public function test_today_each_restore_from_the_panel_pushes_the_oldest_archive_out(): void
+    public function test_a_restore_from_the_panel_reuses_the_newest_archive_when_it_holds_the_club_as_it_is(): void
     {
         [$club, $owner] = $this->clubWithDocument();
-        $dir = $this->service()->directory($club);
-        $sound = $this->service()->disk()->get($dir.'/'.$this->service()->create($club));
-        foreach (Storage::disk('local')->files($dir) as $f) {
-            Storage::disk('local')->delete($f);
-        }
-        foreach (range(1, TenantBackupService::KEEP) as $day) {
-            Storage::disk('local')->put($dir.sprintf('/backup-202611%02d-030000.zip', $day), $sound);
-        }
+        $kept = $this->fourteenSound($club);
         $upload = tempnam(sys_get_temp_dir(), 'up').'.zip';
-        file_put_contents($upload, $sound);
+        copy($this->archivePath($club, $kept[13]), $upload);
 
         $this->actingAs($owner)->post(route('club.backups.restore'), ['archive' => new UploadedFile($upload, 'backup.zip', 'application/zip', null, true), 'confirm' => $club->slug])->assertSessionHas('success');
-        $kept = collect(Storage::disk('local')->files($dir))->map(fn ($f) => basename($f))->sort()->values();
-        $this->assertCount(TenantBackupService::KEEP, $kept);
-        $this->assertNotContains('backup-20261101-030000.zip', $kept, 'the oldest archive was removed by the safety copy');
+        $this->assertSame($kept, $this->kept($club), 'the same fourteen, none doubled, none pushed out');
+        $this->assertSame($kept[13], AuditLog::where('event', 'backup.reused')->latest('id')->value('properties')['file']);
     }
 
     /** Plan (phase 5): the club's chat files go into its archive (files/whatsapp/…) and come back with it. */

@@ -11,7 +11,6 @@ use App\Models\Tenant;
 use App\Modules\Gym\Models\MemberDocument;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -245,7 +244,7 @@ class RestoreAllOrNothingTest extends TestCase
 
         // The disk works again: recovery puts every file back as it was.
         $this->files->fail = [];
-        $this->service()->recoverInterrupted($club);
+        $this->service()->recover($club);
         $this->assertUnchanged($b, $club, 'recovered');
         $this->assertSame('back', AuditLog::where('event', 'backup.restore_recovered')->latest('id')->value('properties')['direction']);
 
@@ -266,7 +265,7 @@ class RestoreAllOrNothingTest extends TestCase
         $this->assertNotEmpty(Storage::disk('local')->allFiles(TenantBackupService::STAGING));
 
         $this->files->fail = [];
-        $this->service()->recoverInterrupted($club);
+        $this->service()->recover($club);
         $this->assertSame([], Storage::disk('local')->allFiles(TenantBackupService::STAGING));
         $this->assertSame($a['rows'], $this->state($club)['rows'], 'forward: still the archive');
         $this->assertSame('forward', AuditLog::where('event', 'backup.restore_recovered')->latest('id')->value('properties')['direction']);
@@ -307,11 +306,19 @@ class RestoreAllOrNothingTest extends TestCase
     public function test_a_second_restore_of_the_same_club_waits_for_the_first(): void
     {
         [$club, $archive, , $b] = $this->archivedThenChanged();
-        $lock = Cache::lock('club-restore:'.$club->id, 60);
-        $lock->get();
+        // The first one, in another session: it holds the club's lock (a PostgreSQL session lock) while it runs.
+        config(['database.connections.other' => config('database.connections.pgsql')]);
+        DB::connection('other')->select('select pg_advisory_lock(?, ?)', [TenantBackupService::LOCKS, $club->id]);
 
-        $this->assertSame('backup.restore_running', $this->restoreFails($club, $archive)->rule);
-        $lock->release();
+        $this->assertSame('backup.busy', $this->restoreFails($club, $archive)->rule);
+        try {
+            $this->service()->create($club);
+            $this->fail('a backup went through while a restore ran');
+        } catch (BusinessRuleException $e) {
+            $this->assertSame('backup.busy', $e->rule);
+        }
+        DB::connection('other')->select('select pg_advisory_unlock(?, ?)', [TenantBackupService::LOCKS, $club->id]);
+        DB::purge('other');
         $this->assertUnchanged($b, $club, 'while another runs');
     }
 }

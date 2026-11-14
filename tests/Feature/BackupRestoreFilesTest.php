@@ -31,7 +31,12 @@ class BackupRestoreFilesTest extends TestCase
         Storage::fake('public');
     }
 
-    /** A real backup of the club, plus the given entries (name => bytes, or [bytes, unix mode] for a link). */
+    /**
+     * A real backup of the club, plus the given entries (name => bytes, or [bytes, unix mode] for a link), as older
+     * releases wrote archives (every archive kept before the manifest listed its files): no file list, so these entries
+     * reach the path and content filters that such archives rely on. A newer archive with an added entry is refused
+     * before that (test_an_entry_added_to_a_newer_archive_is_refused).
+     */
     private function archive(Tenant $club, array $entries): string
     {
         $service = app(TenantBackupService::class);
@@ -39,6 +44,9 @@ class BackupRestoreFilesTest extends TestCase
         copy(Storage::disk('local')->path($service->path($club, $service->create($club))), $copy);
         $zip = new ZipArchive;
         $zip->open($copy);
+        $manifest = json_decode((string) $zip->getFromName('manifest.json'), true);
+        unset($manifest['files'], $manifest['data_sha256'], $manifest['content_sha256']);
+        $zip->addFromString('manifest.json', (string) json_encode($manifest, JSON_UNESCAPED_UNICODE));
         foreach ($entries as $name => $bytes) {
             $zip->addFromString($name, is_array($bytes) ? $bytes[0] : $bytes);
             if (is_array($bytes)) {
@@ -261,5 +269,28 @@ class BackupRestoreFilesTest extends TestCase
         $this->assertSame(self::PDF, Storage::disk('local')->get("$t/documents/id.pdf"));
         $this->assertSame('Original', $this->asTenant($club, fn () => $member->fresh()->full_name));
         $this->assertSame([], Storage::disk('local')->allFiles($t.'/'.self::ISOLATED));
+    }
+
+    public function test_an_entry_added_to_a_newer_archive_is_refused_before_anything_is_replaced(): void
+    {
+        $club = $this->club();
+        $service = app(TenantBackupService::class);
+        $member = $this->member($club, ['full_name' => 'قبل']);
+        $copy = tempnam(sys_get_temp_dir(), 'restore-test');
+        copy(Storage::disk('local')->path($service->path($club, $service->create($club))), $copy);
+        $zip = new ZipArchive;
+        $zip->open($copy);
+        $zip->addFromString('files/private/tenants/'.$club->id.'/members/1/extra.pdf', '%PDF-1.4 added later');
+        $zip->close();
+        $this->asTenant($club, fn () => $member->forceFill(['full_name' => 'بعد'])->save());
+
+        try {
+            $service->restore($club, $copy);
+            $this->fail('restored');
+        } catch (BusinessRuleException $e) {
+            $this->assertSame('backup.invalid', $e->rule);
+        }
+        $this->assertSame('بعد', $this->asTenant($club, fn () => $member->fresh()->full_name));
+        Storage::disk('local')->assertMissing('tenants/'.$club->id.'/members/1/extra.pdf');
     }
 }
