@@ -19,6 +19,37 @@ class MembershipPlan extends Model
 
     public const TYPES = ['gym' => 'دخول النادي', 'classes' => 'حصص جماعية', 'combo' => 'شاملة'];
 
+    /**
+     * What each type gives, as the owner sets it on the plan («صلاحيات الباقة»): the door any day of the period, and
+     * class bookings. The type is what is stored and sold (plan_snapshot); the two switches are how the owner chooses
+     * it. A plan with neither is not a plan the club can sell.
+     */
+    public const ACCESS = ['gym' => ['gym' => true, 'classes' => false], 'classes' => ['gym' => false, 'classes' => true], 'combo' => ['gym' => true, 'classes' => true]];
+
+    /** The type for the owner's two switches, or null when both are off. */
+    public static function typeFor(bool $gym, bool $classes): ?string
+    {
+        foreach (self::ACCESS as $type => $access) {
+            if ($access['gym'] === $gym && $access['classes'] === $classes) {
+                return $type;
+            }
+        }
+
+        return null;
+    }
+
+    /** New sales open the door any day of the period (a classes-only plan opens it on a day with a class booked). */
+    public function allowsGym(): bool
+    {
+        return self::ACCESS[$this->type]['gym'] ?? false;
+    }
+
+    /** New sales book classes, within the plan's programs and sessions. */
+    public function allowsClasses(): bool
+    {
+        return self::ACCESS[$this->type]['classes'] ?? false;
+    }
+
     protected $table = 'gym_membership_plans';
 
     protected $guarded = ['id', 'tenant_id'];

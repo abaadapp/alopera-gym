@@ -14,6 +14,9 @@ import type { SessionData } from '../Site/Schedule';
 
 export interface MembershipData {
     id: number;
+    /** What this period gives, as it was sold (GymPresenter::membership). */
+    opens_door_any_day?: boolean;
+    books_classes?: boolean;
     plan: string;
     plan_id: number;
     kind: string;
@@ -79,9 +82,18 @@ export function MembershipCard({ membership, compact = false }: { membership: Me
                 </div>
                 <div className="rounded-2xl bg-white/10 p-3">
                     <p className="text-xs text-white/70">{t('الحصص المتبقية')}</p>
-                    <p className="mt-1 font-display text-xl font-semibold num">{membership.sessions_left ?? '∞'}</p>
+                    {/* What this period was sold with: a plan without classes shows none, not «∞». */}
+                    {membership.books_classes === false
+                        ? <p className="mt-1 text-sm font-semibold">{t('غير مشمولة')}</p>
+                        : <p className="mt-1 font-display text-xl font-semibold num">{membership.sessions_left ?? '∞'}</p>}
                 </div>
             </div>
+            {membership.books_classes === false && (
+                <p className="relative mt-4 text-xs text-white/80">{t('باقتك الحالية لا تشمل حجز الحصص.')}</p>
+            )}
+            {membership.books_classes !== false && membership.opens_door_any_day === false && (
+                <p className="relative mt-4 text-xs text-white/80">{t('الدخول إلى النادي يوم الحصة المحجوزة فقط')}</p>
+            )}
             {membership.status === 'active' && (
                 <div className="relative mt-5">
                     <div className="h-2 overflow-hidden rounded-full bg-white/15">
@@ -169,7 +181,7 @@ export default function Dashboard({ site, seo, profile, current, next, upcoming,
                     <section className="rounded-2xl border border-line bg-white p-5">
                         <div className="flex items-center justify-between">
                             <h2 className="flex items-center gap-2 font-display text-lg font-semibold"><CalendarCheck className="size-5 text-brand" /> {t('حصصي القادمة')}</h2>
-                            <Link href={route('portal.classes')} className="text-sm text-brand">{t('احجز حصة')}</Link>
+                            {current?.books_classes !== false && <Link href={route('portal.classes')} className="text-sm text-brand">{t('احجز حصة')}</Link>}
                         </div>
                         {upcoming.length === 0 ? (
                             <p className="py-6 text-center text-sm text-muted">{t('لا توجد حجوزات قادمة.')}</p>

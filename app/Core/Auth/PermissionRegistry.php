@@ -167,7 +167,8 @@ final class PermissionRegistry
     /**
      * Sensitive: salaries and bank data, preparing, approving and paying salaries (and undoing a payout), the books and
      * the bank accounts, undoing money, closed months, stock approvals, supplier purchases, exports, accounts and roles,
-     * branches, integrations, backups. Whoever holds one uses it; only the owner gives or takes it (Grants::decides).
+     * branches, integrations, backups, and the plans (what each plan gives, the door and the classes, and its price).
+     * Whoever holds one uses it; only the owner gives or takes it (Grants::decides).
      */
     public const SENSITIVE = [
         'payroll.salaries', 'payroll.compensation', 'payroll.prepare', 'payroll.edit', 'payroll.approve', 'payroll.pay', 'payroll.reports',
@@ -177,6 +178,8 @@ final class PermissionRegistry
         'members.export', 'reports.export',
         'users.manage', 'roles.manage', 'employees.access', 'branches.manage', 'integrations.manage', 'backups.manage',
         'whatsapp.manage_settings',
+        // «صلاحيات الباقة»: the owner's, or whoever the owner grants it to by name; a holder cannot pass it on.
+        'plans.manage',
     ];
 
     /** What each permission lets its holder do, in a line under its name in the editors. */
@@ -191,7 +194,7 @@ final class PermissionRegistry
         'memberships.freeze' => 'يجمّد العضوية مدةً ثم يستأنفها فتمتد نهايتها.',
         'memberships.cancel' => 'يلغي عضوية قائمة قبل نهايتها.',
         'memberships.upgrade' => 'ينقل العضو إلى باقة أعلى ويحسب الفرق.',
-        'plans.manage' => 'ينشئ الباقات ويحدد أسعارها ومددها والخصومات عليها.',
+        'plans.manage' => 'ينشئ الباقات ويحدد صلاحياتها (دخول النادي وحجز الحصص) وأسعارها ومددها والخصومات عليها. يمنحها صاحب النشاط بالاسم.',
         'classes.view' => 'يرى جدول الحصص والبرامج ومواعيدها.',
         'classes.manage' => 'ينشئ البرامج والحصص ويعدّل مواعيدها وسعتها.',
         'trainers.manage' => 'يضيف المدربين ويحدد مواعيد عملهم.',
