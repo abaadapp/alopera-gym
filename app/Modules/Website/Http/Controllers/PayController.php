@@ -5,6 +5,7 @@ namespace App\Modules\Website\Http\Controllers;
 use App\Core\Papers\Papers;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
+use App\Modules\Finance\Models\Payment;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Services\OnlinePaymentService;
@@ -55,6 +56,7 @@ class PayController extends Controller
         return $this->page('Site/PaymentReturn', [
             'reference' => $intent->reference,
             'status' => $intent->status,
+            'held' => self::held($intent),
             'amount' => $intent->amount,
             'currency' => $intent->currency,
             'invoice' => $intent->invoice?->only('number') + ['token' => $intent->invoice?->public_token],
@@ -68,7 +70,17 @@ class PayController extends Controller
     {
         $intent = PaymentIntent::where('reference', $reference)->firstOrFail();
 
-        return response()->json(['status' => $intent->status]);
+        return response()->json(['status' => $intent->status, 'held' => self::held($intent)]);
+    }
+
+    /**
+     * Paymob confirmed the money and it is in the books, but held for the club's review (applied to nothing yet): the
+     * customer is told it arrived and is being reviewed — never that it failed, never that it is all done.
+     */
+    private static function held(PaymentIntent $intent): bool
+    {
+        return $intent->status === PaymentIntent::PAID && $intent->payment_id !== null
+            && Payment::whereKey($intent->payment_id)->gatewayCreditLeft()->whereColumn('credit_amount', 'amount')->exists();
     }
 
     /** The invoice link sent to the member: the invoice paper itself (as printed and as the PDF), and a pay button. */

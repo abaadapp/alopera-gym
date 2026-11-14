@@ -12,12 +12,15 @@ use App\Models\TenantIntegration;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\PaymentService;
+use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Payments\Events\OnlinePaymentFailed;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobClient;
 use App\Modules\Payments\Paymob\PaymobSignature;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -102,6 +105,11 @@ final class OnlinePaymentService
         $prefix = $live ? self::LIVE_PREFIX : self::TEST_PREFIX;
         if (! $invoice->isOpen() || Money::isZero($invoice->balance())) {
             throw new BusinessRuleException('invoice.not_open', 'لا يوجد مبلغ مستحق على هذه الفاتورة.');
+        }
+        // Confirmed online money already waits on this invoice for the club's review: no second checkout, or the
+        // customer would pay twice.
+        if (Payment::where('invoice_id', $invoice->id)->gatewayCreditLeft()->exists()) {
+            throw new BusinessRuleException('paymob.held', 'وصلنا تأكيد دفعة إلكترونية لهذه الفاتورة وهي قيد المراجعة لدى النادي؛ لا حاجة للدفع مرة أخرى.');
         }
 
         // A website order holds its stock only until reserved_until: its checkout must not outlive the hold, or the
@@ -292,7 +300,8 @@ final class OnlinePaymentService
             //   the error is reported, never turned into «not recorded»;
             // - not known (the database gone): not acknowledged, so a resend finds out; recording is idempotent.
             try {
-                $outcome = DB::transaction(function () use ($intent, $transactionId, $signedOrder, $integration, $obj) {
+                $signedAt = is_scalar(Arr::get($obj, 'created_at')) ? (string) Arr::get($obj, 'created_at') : null;
+                $outcome = DB::transaction(function () use ($intent, $transactionId, $signedOrder, $integration, $obj, $signedAt) {
                     $intent = PaymentIntent::whereKey($intent->id)->lockForUpdate()->firstOrFail();
 
                     // Read again under the lock, before any money: the order this intent holds now, not when the
@@ -309,8 +318,13 @@ final class OnlinePaymentService
                         return $why;
                     }
 
+                    // The invoice, then what it pays for (the order every payment takes), and only then the decision: the
+                    // money is applied — the membership activated, the order paid — only while all of it still stands as
+                    // it was sold; otherwise it is recorded and held for staff, nothing activated.
+                    $invoice = Invoice::whereKey($intent->invoice_id)->lockForUpdate()->firstOrFail();
+                    $hold = $this->holdReason($intent, $invoice);
                     $result = $this->audit->as('gateway', null, 'paymob', fn () => $this->payments->recordGatewayPayment(
-                        $intent->invoice()->firstOrFail(), $intent->amount, 'paymob', $transactionId, $intent->reference
+                        $invoice, $intent->amount, 'paymob', $transactionId, $intent->reference, $hold, $signedAt
                     ));
 
                     // This transaction is already in the books for another payment: never this intent's money, and
@@ -332,7 +346,7 @@ final class OnlinePaymentService
                         ])->save();
                     }
 
-                    return $result['created'] ? 'processed' : 'duplicate';
+                    return $result['created'] ? ($hold !== null ? 'held_for_review' : 'processed') : 'duplicate';
                 });
             } catch (Throwable $e) {
                 report($e);
@@ -370,6 +384,54 @@ final class OnlinePaymentService
 
             return false;
         }
+    }
+
+    /**
+     * Why confirmed money cannot simply pay this invoice now (null when it can). Read with the invoice locked, and the
+     * order and the memberships it pays for locked in turn: the checkout's time is over (asked of our clock when the
+     * callback is handled — Paymob's own time is kept for review, never read as the capture's), the invoice is no
+     * longer open, the order is cancelled or its hold is over, or a membership is no longer waiting, has ended, or now
+     * overlaps another period of the member (an upgrade replaces its previous one, as activate() does). A sale has no
+     * overlap when it is made (MembershipService::assertNoOverlap): one found here came after it.
+     */
+    private function holdReason(PaymentIntent $intent, Invoice $invoice): ?string
+    {
+        if (! $invoice->isOpen()) {
+            return 'invoice_closed';
+        }
+        if ($intent->expires_at !== null && now()->gt($intent->expires_at)) {
+            return 'checkout_expired';
+        }
+
+        $sale = Sale::where('invoice_id', $invoice->id)->where('source', Sale::WEBSITE)->lockForUpdate()->first();
+        if ($sale && ($sale->status !== Sale::PENDING || $sale->reserved_until === null || now()->gt($sale->reserved_until))) {
+            return 'order_closed';
+        }
+
+        $items = $invoice->items()->whereIn('itemable_type', ['membership', 'pt_subscription'])->get(['itemable_type', 'itemable_id']);
+        $today = CarbonImmutable::today();
+        $memberships = Membership::whereIn('id', $items->where('itemable_type', 'membership')->pluck('itemable_id')->unique())->orderBy('id')->lockForUpdate()->get();
+        foreach ($memberships as $membership) {
+            if ($membership->status !== Membership::PENDING) {
+                return 'membership_not_pending';
+            }
+            if ($membership->ends_on->lt($today)) {
+                return 'membership_ended';
+            }
+            if ($membership->kind !== Membership::KIND_UPGRADE && Membership::where('member_id', $membership->member_id)->whereKeyNot($membership->id)
+                ->whereIn('status', [Membership::ACTIVE, Membership::SCHEDULED, Membership::FROZEN])
+                ->where('starts_on', '<=', $membership->ends_on->toDateString())->where('ends_on', '>=', $membership->starts_on->toDateString())->exists()) {
+                return 'membership_overlap';
+            }
+        }
+        $subscriptions = PtSubscription::whereIn('id', $items->where('itemable_type', 'pt_subscription')->pluck('itemable_id')->unique())->orderBy('id')->lockForUpdate()->get();
+        foreach ($subscriptions as $subscription) {
+            if ($subscription->status !== PtSubscription::PENDING) {
+                return 'pt_not_pending';
+            }
+        }
+
+        return null;
     }
 
     /**

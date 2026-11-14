@@ -173,9 +173,15 @@ final class PaymentService
      * Record money confirmed by a gateway webhook. Idempotent per gateway
      * transaction id: a repeated callback returns the existing payment.
      *
+     * Held (a reason given): the money is recorded in full as the customer's credit on this invoice and nothing of it is
+     * applied — the invoice stays as it is, nothing is activated, no stock moves — until someone decides (allocate()
+     * with payments.record, refundCredit() with payments.refund), each with a reason.
+     *
+     * @param  string|null  $holdReason  one of Payment::HOLD_REASONS
+     * @param  string|null  $signedAt  the gateway's own time for the transaction, as it sent it (kept, not interpreted)
      * @return array{payment: Payment, created: bool}
      */
-    public function recordGatewayPayment(Invoice $invoice, string|float $amount, string $gateway, string $transactionId, ?string $reference = null): array
+    public function recordGatewayPayment(Invoice $invoice, string|float $amount, string $gateway, string $transactionId, ?string $reference = null, ?string $holdReason = null, ?string $signedAt = null): array
     {
         $existing = Payment::where('gateway', $gateway)->where('gateway_transaction_id', $transactionId)->first();
         if ($existing) {
@@ -183,7 +189,7 @@ final class PaymentService
         }
 
         try {
-            $payment = DB::transaction(function () use ($invoice, $amount, $gateway, $transactionId, $reference) {
+            $payment = DB::transaction(function () use ($invoice, $amount, $gateway, $transactionId, $reference, $holdReason, $signedAt) {
                 $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
 
                 // Checked again under the lock: a concurrent duplicate may have just committed.
@@ -194,7 +200,7 @@ final class PaymentService
 
                 // Money arrived even if the invoice was meanwhile paid at the desk or voided: what the invoice still
                 // owes is applied, the rest is the customer's credit — applied to another invoice or paid back.
-                $fits = $invoice->isOpen() ? Money::min($amount, $invoice->balance()) : '0';
+                $fits = $invoice->isOpen() && $holdReason === null ? Money::min($amount, $invoice->balance()) : '0';
                 $credit = Money::sub($amount, $fits);
 
                 $payment = Payment::create([
@@ -215,7 +221,13 @@ final class PaymentService
                     'paid_at' => now(),
                 ]);
 
-                if (! Money::isZero($credit)) {
+                if ($holdReason !== null) {
+                    $payment->forceFill(['notes' => 'دفعة إلكترونية مؤكدة محجوزة للمراجعة ('.(Payment::HOLD_REASONS[$holdReason] ?? $holdReason).'): '
+                        .$credit.' لم تُطبَّق على الفاتورة ولم يُفعَّل بها شيء. تُخصَّص لفاتورتها أو تُرد، بقرار وسبب.'])->save();
+                    $this->audit->log('payment.gateway_held', $payment, ['invoice' => $invoice->number, 'amount' => $credit, 'reason' => $holdReason,
+                        'gateway_time' => $signedAt]);
+                    app(StaffAlerts::class)->gatewayCredit($payment, $holdReason); // written with the payment: gone too if it rolls back
+                } elseif (! Money::isZero($credit)) {
                     $payment->forceFill(['notes' => 'دفعة إلكترونية تتجاوز رصيد الفاتورة: '.$credit.' رصيد دائن للعميل، يُخصَّص لفاتورة أخرى أو يُرد.'])->save();
                     $this->audit->log('payment.gateway_overpayment', $payment, ['invoice' => $invoice->number, 'credit' => $credit]);
                     app(StaffAlerts::class)->gatewayCredit($payment); // written with the payment: gone too if it rolls back
@@ -322,17 +334,18 @@ final class PaymentService
      * Pay back (part of) a customer's credit — money received and never applied to an invoice. Same rules as a refund:
      * at the desk it is made at once, by bank transfer or through Paymob it waits for confirmation, holding its amount.
      */
-    public function refundCredit(Payment $credit, string|float $amount, string $method, ?string $reference = null, ?int $accountId = null): Payment
+    public function refundCredit(Payment $credit, string|float $amount, string $method, ?string $reference = null, ?int $accountId = null, ?string $reason = null): Payment
     {
         if (! in_array($method, Payment::REFUND_METHODS, true)) {
             throw new BusinessRuleException('refund.method', 'طريقة رد غير مدعومة.', 'method');
         }
         $account = $this->accountFor($method, $accountId);
 
-        return app(AccountFunds::class)->exclusive($account, fn () => DB::transaction(function () use ($credit, $amount, $method, $reference, $account) {
+        return app(AccountFunds::class)->exclusive($account, fn () => DB::transaction(function () use ($credit, $amount, $method, $reference, $account, $reason) {
             $this->lockInvoices($credit->invoice_id);
             $credit = Payment::whereKey($credit->id)->lockForUpdate()->firstOrFail();
             $this->assertCredit($credit, $amount);
+            $reason = $this->gatewayCreditReason($credit, $reason);
             if ($method === 'paymob' && $credit->method !== 'paymob') {
                 throw new BusinessRuleException('refund.no_gateway_payment', 'هذا الرصيد لم يُدفع إلكترونيًا؛ اختر طريقة رد أخرى.', 'method');
             }
@@ -364,7 +377,8 @@ final class PaymentService
             if (! $waits) {
                 $credit->forceFill(['credit_used' => Money::add($credit->credit_used, $amount)])->save();
             }
-            $this->audit->log($waits ? 'payment.refund_requested' : 'payment.refunded', $refund, ['credit_of' => $credit->receipt_number, 'amount' => $refund->amount, 'method' => $method]);
+            $this->audit->log($waits ? 'payment.refund_requested' : 'payment.refunded', $refund, ['credit_of' => $credit->receipt_number, 'amount' => $refund->amount, 'method' => $method]
+                + ($reason !== null ? ['reason' => $reason] : []));
             $this->settleCreditAlert($credit);
 
             return $refund;
@@ -375,12 +389,19 @@ final class PaymentService
      * Apply (part of) a customer's credit to another open invoice of the same customer: the invoice is paid by it as by
      * any payment (InvoicePaid when it is settled), and the books move the amount out of the customer's credit.
      */
-    public function allocate(Payment $credit, Invoice $invoice, string|float $amount): PaymentAllocation
+    public function allocate(Payment $credit, Invoice $invoice, string|float $amount, ?string $reason = null): PaymentAllocation
     {
-        return DB::transaction(function () use ($credit, $invoice, $amount) {
+        return DB::transaction(function () use ($credit, $invoice, $amount, $reason) {
             $this->lockInvoices($credit->invoice_id, $invoice->id);
             $credit = Payment::whereKey($credit->id)->lockForUpdate()->firstOrFail();
             $this->assertCredit($credit, $amount);
+            $reason = $this->gatewayCreditReason($credit, $reason);
+            // Gateway money held on its own invoice goes to that invoice, or back to the customer — never to another
+            // invoice while its own is still open (read under the lock: a void meanwhile is seen).
+            if ($credit->gateway === 'paymob' && (int) $credit->invoice_id !== (int) $invoice->id
+                && Invoice::whereKey($credit->invoice_id)->first()?->isOpen()) {
+                throw new BusinessRuleException('credit.own_invoice_open', 'هذا المبلغ دفعة إلكترونية مؤكدة لفاتورة ما زالت مفتوحة: يُخصَّص لفاتورته، أو يُرد، أو تُلغى فاتورته أولًا.', 'invoice_id');
+            }
             $invoice = $this->lockOpen($invoice);
             $this->assertAmountFits($invoice, $amount);
             if ($credit->payer_id !== null && ($credit->payer_type !== $invoice->billable_type || (int) $credit->payer_id !== (int) $invoice->billable_id)) {
@@ -404,7 +425,8 @@ final class PaymentService
             $invoice->forceFill(['paid_total' => Money::add($invoice->paid_total, $allocation->amount)]);
             $fullyPaid = $invoice->settledStatus() === Invoice::PAID;
             $invoice->forceFill(['status' => $fullyPaid ? Invoice::PAID : Invoice::PARTIALLY_PAID, 'paid_at' => $fullyPaid ? now() : null])->save();
-            $this->audit->log('payment.credit_applied', $allocation, ['credit_of' => $credit->receipt_number, 'invoice' => $invoice->number, 'amount' => $allocation->amount]);
+            $this->audit->log('payment.credit_applied', $allocation, ['credit_of' => $credit->receipt_number, 'invoice' => $invoice->number, 'amount' => $allocation->amount]
+                + ($reason !== null ? ['reason' => $reason] : []));
             $this->settleCreditAlert($credit);
 
             if ($fullyPaid) {
@@ -497,6 +519,17 @@ final class PaymentService
     }
 
     /** The bell's «online money left as credit» is done once none of it is left (a refund of it waiting to be made counts). */
+    /** Gateway money is applied or paid back only with a reason, kept in the audit trail with who and when. */
+    private function gatewayCreditReason(Payment $credit, ?string $reason): ?string
+    {
+        $reason = trim((string) $reason);
+        if ($credit->gateway === 'paymob' && $reason === '') {
+            throw new BusinessRuleException('credit.reason', 'اكتب سبب القرار: هذا المبلغ دفعة إلكترونية مؤكدة، ويُسجَّل السبب في سجل التدقيق.', 'reason');
+        }
+
+        return $reason === '' ? null : mb_substr($reason, 0, 500);
+    }
+
     private function settleCreditAlert(Payment $credit): void
     {
         if (Money::isZero($credit->creditLeft())) {

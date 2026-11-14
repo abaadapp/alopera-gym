@@ -12,6 +12,8 @@ interface Props {
     seo: { title: string };
     reference: string;
     status: 'pending' | 'paid' | 'failed' | 'expired' | string;
+    /** Paymob confirmed the money, and the club reviews it before the membership or order goes ahead. */
+    held?: boolean;
     amount: string;
     currency: string;
     invoice: { number?: string; token?: string | null };
@@ -26,7 +28,7 @@ const MAX_POLLS = 40; // ~2 minutes
  * Landing page after the payment gateway. The query string from the gateway is
  * ignored on purpose: only the status recorded by the verified webhook is shown.
  */
-export default function PaymentReturn({ site, seo, reference, status: initial, amount, currency, invoice, order }: Props) {
+export default function PaymentReturn({ site, seo, reference, status: initial, held: heldAtFirst = false, amount, currency, invoice, order }: Props) {
     const { member } = useShared();
     const t = useT();
     const cart = useCart();
@@ -44,6 +46,7 @@ export default function PaymentReturn({ site, seo, reference, status: initial, a
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [order]);
     const [status, setStatus] = useState(initial);
+    const [held, setHeld] = useState(heldAtFirst);
     const [timedOut, setTimedOut] = useState(false);
     const polls = useRef(0);
 
@@ -54,8 +57,11 @@ export default function PaymentReturn({ site, seo, reference, status: initial, a
             try {
                 const res = await fetch(route('site.pay.status', { reference }), { headers: { Accept: 'application/json' } });
                 if (res.ok) {
-                    const data = (await res.json()) as { status: string };
-                    if (data.status !== 'pending') setStatus(data.status);
+                    const data = (await res.json()) as { status: string; held?: boolean };
+                    if (data.status !== 'pending') {
+                        setHeld(Boolean(data.held));
+                        setStatus(data.status);
+                    }
                 }
             } catch {
                 /* network hiccup — keep polling */
@@ -69,6 +75,15 @@ export default function PaymentReturn({ site, seo, reference, status: initial, a
     }, [status, reference]);
 
     const view = (() => {
+        // Confirmed and in the books, but held for the club's review: neither a failure nor «all done».
+        if (status === 'paid' && held) {
+            return {
+                icon: <CheckCircle2 className="size-14 text-amber-500" />,
+                title: t('تم استلام تأكيد الدفع'),
+                text: t('لكن الاشتراك أو الطلب قيد المراجعة لدى النادي، وسيتواصل معك. لا داعي للدفع مرة أخرى.'),
+                tone: 'bg-amber-50',
+            };
+        }
         if (status === 'paid') {
             return {
                 icon: <CheckCircle2 className="size-14 text-emerald-500" />,

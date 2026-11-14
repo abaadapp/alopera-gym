@@ -119,12 +119,13 @@ class PaymentController extends Controller
         $data = $request->validate([
             'invoice_id' => ['required', 'integer', TenantRule::exists('invoices')],
             'amount' => ['required', 'numeric', 'min:0.001', 'max:999999'],
+            'reason' => ['nullable', 'string', 'max:500'], // required for gateway money (PaymentService)
             'client_key' => SubmittedOnce::RULE,
-        ], [], ['invoice_id' => 'الفاتورة', 'amount' => 'المبلغ']);
+        ], [], ['invoice_id' => 'الفاتورة', 'amount' => 'المبلغ', 'reason' => 'السبب']);
         $invoice = Invoice::findOrFail($data['invoice_id']);
         // The invoice comes in the body, not the address: it is held to the user's branch here, as the payment is.
         abort_unless(app(BranchContext::class)->allows($request->user(), $invoice->owningBranchId()), 404);
-        SubmittedOnce::run($data['client_key'] ?? null, 'credit-allocate:'.$payment->id, fn () => $this->payments->allocate($payment, $invoice, $data['amount'])->id);
+        SubmittedOnce::run($data['client_key'] ?? null, 'credit-allocate:'.$payment->id, fn () => $this->payments->allocate($payment, $invoice, $data['amount'], $data['reason'] ?? null)->id);
 
         return back()->with('success', 'خُصّص '.Money::normalize($data['amount']).' من الرصيد للفاتورة '.$invoice->number.'.');
     }
@@ -137,10 +138,11 @@ class PaymentController extends Controller
             'method' => ['required', Rule::in(Payment::REFUND_METHODS)],
             'reference' => ['nullable', 'string', 'max:120', 'required_if:method,card'],
             'account_id' => ['nullable', 'integer', TenantRule::exists('gym_accounts')],
+            'reason' => ['nullable', 'string', 'max:500'], // required for gateway money (PaymentService)
             'client_key' => SubmittedOnce::RULE,
-        ], ['reference.required_if' => 'أدخل رقم العملية من جهاز الشبكة.']);
+        ], ['reference.required_if' => 'أدخل رقم العملية من جهاز الشبكة.'], ['reason' => 'السبب']);
         $refund = Payment::findOrFail(SubmittedOnce::run($data['client_key'] ?? null, 'credit-refund-payment:'.$payment->id,
-            fn () => $this->payments->refundCredit($payment, $data['amount'], $data['method'], $data['reference'] ?? null, isset($data['account_id']) ? (int) $data['account_id'] : null)->id));
+            fn () => $this->payments->refundCredit($payment, $data['amount'], $data['method'], $data['reference'] ?? null, isset($data['account_id']) ? (int) $data['account_id'] : null, $data['reason'] ?? null)->id));
 
         return back()->with('success', $refund->status === Payment::PENDING ? 'سُجّل طلب الرد بانتظار تأكيد تنفيذه.' : 'تم رد المبلغ من الرصيد.');
     }

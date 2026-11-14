@@ -131,5 +131,8 @@
     "النظام تحت الصيانة": "Down for maintenance",
     "نُجري تحديثًا سريعًا. عد بعد دقائق.": "We're making a quick update. Please come back in a few minutes.",
     "يلزم تسجيل الدخول": "Sign-in required",
-    "سجّل الدخول للمتابعة.": "Sign in to continue."
+    "سجّل الدخول للمتابعة.": "Sign in to continue.",
+    "تم استلام تأكيد الدفع": "Payment confirmation received",
+    "لكن الاشتراك أو الطلب قيد المراجعة لدى النادي، وسيتواصل معك. لا داعي للدفع مرة أخرى.": "Your membership or order is being reviewed by the club, who will contact you. There is no need to pay again.",
+    "وصلنا تأكيد دفعة إلكترونية لهذه الفاتورة وهي قيد المراجعة لدى النادي؛ لا حاجة للدفع مرة أخرى.": "We have received confirmation of an online payment for this invoice and the club is reviewing it; there is no need to pay again."
 }
