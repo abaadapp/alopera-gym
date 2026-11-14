@@ -19,7 +19,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * Queues and sends WhatsApp messages for the current club.
@@ -30,6 +32,36 @@ use Illuminate\Support\Facades\DB;
  */
 final class WhatsAppService
 {
+    /**
+     * Hand a queued message to the queue once the transaction that wrote it commits. A queue that refuses it then (down,
+     * unreachable) neither undoes nor fails what was committed with it (a payment, a sale): the error is reported and the
+     * message waits, scheduled for now, for messaging:dispatch-scheduled to hand it over again on its next run. The job
+     * sends only a message still queued, so a message handed over twice is sent once.
+     */
+    public static function queueAfterCommit(Message $message): void
+    {
+        DB::afterCommit(fn () => self::dispatchOrRetry($message->id, $message->tenant_id));
+    }
+
+    /** Hand the message to the queue now; refused, it goes back to scheduled-for-now, to be handed over on the next run. */
+    public static function dispatchOrRetry(int $messageId, int $tenantId): bool
+    {
+        try {
+            Bus::dispatch(new SendWhatsAppMessage($messageId, $tenantId));
+
+            return true;
+        } catch (Throwable $e) {
+            report($e);
+            try {
+                Message::whereKey($messageId)->where('status', Message::QUEUED)->update(['status' => Message::SCHEDULED, 'scheduled_at' => now()]);
+            } catch (Throwable $again) {
+                report($again); // the database is gone too: the message stays queued, as it was
+            }
+
+            return false;
+        }
+    }
+
     /** Meta error codes that concern the account or its credentials, not one message. */
     private const CONNECTION_ERRORS = ['190', '10', '100', '200', '368', '131031', '133010'];
 
@@ -134,7 +166,7 @@ final class WhatsAppService
         }
 
         if (! $skip && ! $at) {
-            SendWhatsAppMessage::dispatch($message->id, $message->tenant_id)->afterCommit();
+            self::queueAfterCommit($message);
         }
 
         return $message;
@@ -184,7 +216,7 @@ final class WhatsAppService
         }
 
         if (! $skip) {
-            SendWhatsAppMessage::dispatch($message->id, $message->tenant_id)->afterCommit();
+            self::queueAfterCommit($message);
         }
 
         return $message;
@@ -262,7 +294,7 @@ final class WhatsAppService
             $conversation->forceFill(['unread_count' => 0])->save();
         }
         if ($message->status === Message::QUEUED) {
-            SendWhatsAppMessage::dispatch($message->id, $message->tenant_id)->afterCommit();
+            self::queueAfterCommit($message);
         }
     }
 
