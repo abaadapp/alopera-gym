@@ -94,11 +94,10 @@ class ExpenseController extends Controller
         }
         // Raised on the same account it spends the difference; moved to another, that account pays it whole.
         $spends = (int) $expense->getOriginal('account_id') === $expense->account_id ? Money::sub($expense->amount, (string) $expense->getOriginal('amount')) : $expense->amount;
-        // A new attachment is written in the save's transaction (gone again if the save fails); the one it replaces goes
-        // only once the save committed.
+        // A new attachment is written in the save's transaction: kept whole or the save fails, and gone again if the save
+        // fails. The one it replaces stays on the disk as before (a financial record: the audit trail keeps its path).
         $this->spending(Account::find($expense->account_id), $spends, function () use ($request, $tenants, $expense) {
             if ($request->hasFile('attachment')) {
-                SafeFiles::deleteAfterCommit($expense->attachment_path);
                 $expense->attachment_path = SafeFiles::putUpload($request->file('attachment'), 'tenants/'.$tenants->require()->id.'/expenses', 'attachment');
             }
             $expense->save();

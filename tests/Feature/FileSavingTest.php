@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Core\Support\Files\FileNotStored;
+use App\Models\AuditLog;
 use App\Modules\Documents\Models\BusinessDocument;
 use App\Modules\Documents\Models\DocumentRenewal;
 use App\Modules\Finance\Models\Expense;
@@ -233,7 +234,51 @@ class FileSavingTest extends TestCase
         $this->assertSame([], $this->filesOnDisk(), 'the first attachment, written whole, is removed with the failed invoice');
     }
 
-    public function test_an_expense_keeps_its_old_attachment_until_the_new_one_is_saved(): void
+    public function test_invoice_attachments_and_the_payment_proof_of_an_issued_invoice_are_kept_shown_and_downloaded(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $this->fundAccounts($club);
+        [$attachment, $proof] = [$this->pdf('عقد-القاعة.pdf'), $this->pdf('تحويل.pdf')];
+
+        $this->actingAs($owner)->post(route('club.invoices.store'), [
+            'customer_name' => 'زبون', 'lines' => [['description' => 'تأجير قاعة', 'quantity' => 1, 'unit_price' => 20]], 'client_key' => (string) Str::uuid(),
+            'issue' => 1, 'attachments' => [$attachment], 'payment_method' => 'bank_transfer', 'paid_amount' => '20', 'payment_reference' => 'TR-9', 'payment_proof' => $proof,
+        ])->assertSessionHasNoErrors()->assertSessionHas('success');
+        [$invoice, $payment] = $this->asTenant($club, fn () => [Invoice::sole(), Payment::sole()]);
+
+        // Opened again: the invoice lists its attachment, the payments list says the transfer has its proof; both download as they came.
+        $url = '';
+        $this->actingAs($owner)->get(route('club.invoices.show', $invoice))->assertOk()->assertInertia(function ($page) use (&$url) {
+            $this->assertSame('عقد-القاعة.pdf', $page->toArray()['props']['invoice']['attachments'][0]['name']);
+            $url = $page->toArray()['props']['invoice']['attachments'][0]['url'];
+        });
+        $this->assertSame(hash_file('sha256', $attachment->getRealPath()), hash('sha256', $this->actingAs($owner)->get($url)->assertOk()->streamedContent()));
+        $this->actingAs($owner)->get(route('club.payments.index'))->assertOk()->assertInertia(fn ($page) => $page->where('payments.data.0.has_proof', true));
+        $this->assertSame(hash_file('sha256', $proof->getRealPath()), hash('sha256', $this->actingAs($owner)->get(route('club.payments.proof', $payment))->assertOk()->streamedContent()));
+
+        // Never to another club.
+        $stranger = $this->owner($this->club('Other'));
+        $this->actingAs($stranger)->get($url)->assertNotFound();
+        $this->actingAs($stranger)->get(route('club.payments.proof', $payment))->assertNotFound();
+    }
+
+    public function test_a_payment_proof_on_the_invoice_form_the_disk_refuses_issues_nothing(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $this->fundAccounts($club);
+
+        FailingDisk::install('local', 'refuse');
+        $this->actingAs($owner)->post(route('club.invoices.store'), [
+            'customer_name' => 'زبون', 'lines' => [['description' => 'تأجير قاعة', 'quantity' => 1, 'unit_price' => 20]], 'client_key' => (string) Str::uuid(),
+            'issue' => 1, 'payment_method' => 'bank_transfer', 'paid_amount' => '20', 'payment_reference' => 'TR-9', 'payment_proof' => $this->pdf('تحويل.pdf'),
+        ])->assertSessionHasErrors('payment_proof')->assertSessionMissing('success');
+        $this->asTenant($club, fn () => $this->assertSame([0, 0], [Invoice::count(), Payment::count()]));
+        $this->assertSame([], $this->filesOnDisk());
+    }
+
+    public function test_an_expense_attachment_replaced_keeps_the_old_receipt_and_downloads_the_new_one(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
@@ -256,10 +301,15 @@ class FileSavingTest extends TestCase
         $this->assertSame([$old], array_keys($this->filesOnDisk()));
 
         $disk->mode('ok');
-        $this->actingAs($owner)->put(route('club.expenses.update', $expense), $form + ['attachment' => $this->pdf()])->assertSessionHasNoErrors();
+        $receipt = $this->pdf('receipt-2.pdf');
+        $this->actingAs($owner)->put(route('club.expenses.update', $expense), $form + ['attachment' => $receipt])->assertSessionHasNoErrors()->assertSessionHas('success');
         $new = $expense->fresh()->attachment_path;
         $this->assertNotSame($old, $new);
-        $this->assertSame([$new], array_keys($this->filesOnDisk()), 'the replaced attachment goes once its replacement is saved');
+        // A financial record: the receipt it replaces stays on the disk as before, and the audit trail keeps its path.
+        $this->assertEqualsCanonicalizing([$old, $new], array_keys($this->filesOnDisk()));
+        $this->asTenant($club, fn () => $this->assertTrue(AuditLog::where('subject_id', $expense->id)->where('old_values', 'like', '%'.basename($old).'%')->exists()));
+        $download = $this->actingAs($owner)->get(route('club.expenses.attachment', $expense))->assertOk();
+        $this->assertSame(hash_file('sha256', $receipt->getRealPath()), hash('sha256', $download->streamedContent()));
     }
 
     public function test_a_supplier_bill_attachment_the_disk_refuses_records_no_bill(): void
