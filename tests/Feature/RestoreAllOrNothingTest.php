@@ -355,6 +355,11 @@ final class FaultyRestoreFiles extends RestoreFiles
 
     public function putString(string $disk, string $path, string $contents): void
     {
+        if (! str_ends_with($path, '/journal.json')) {
+            parent::putString($disk, $path, $contents); // a mark that a file was there before (…/had/n)
+
+            return;
+        }
         $this->step('journal');
         // The journal lists the moves to come: one in per file, one aside per file already there.
         $journal = json_decode($contents, true);

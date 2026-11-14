@@ -859,10 +859,18 @@ final class TenantBackupService
         return $counts;
     }
 
-    /** @param array{n: int, disk: string, path: string, sha: string} $item */
+    /**
+     * Puts one staged file in place. A file already there is first marked as such (…/had/n, written before it moves, so
+     * the mark survives any stop) and moved aside to …/previous/n.
+     *
+     * @param  array{n: int, disk: string, path: string, sha: string}  $item
+     */
     private function place(string $dir, array $item): void
     {
         if ($this->files->exists($item['disk'], $item['path']) && ! $this->files->exists('local', $dir.'/previous/'.$item['n'])) {
+            if (! $this->files->exists('local', $dir.'/had/'.$item['n'])) {
+                $this->files->putString('local', $dir.'/had/'.$item['n'], '');
+            }
             $this->files->move($item['disk'], $item['path'], 'local', $dir.'/previous/'.$item['n']);
         }
         $this->files->move('local', $dir.'/new/'.$item['n'], $item['disk'], $item['path']);
@@ -872,8 +880,9 @@ final class TenantBackupService
     }
 
     /**
-     * Each file as it was before the run, last placed first: the one moved aside comes back; one the run put where
-     * nothing was goes; one still staged was never placed.
+     * Each file as it was before the run, last placed first, and safe to run again after any stop: a file that was
+     * there (marked …/had/n) comes back from …/previous/n, or is back already; a file the run put where nothing was
+     * goes; one still staged was never placed.
      *
      * @param  list<array{n: int, disk: string, path: string, sha: string}>  $items
      */
@@ -882,6 +891,8 @@ final class TenantBackupService
         foreach (array_reverse($items) as $item) {
             if ($this->files->exists('local', $dir.'/previous/'.$item['n'])) {
                 $this->files->move('local', $dir.'/previous/'.$item['n'], $item['disk'], $item['path']);
+            } elseif ($this->files->exists('local', $dir.'/had/'.$item['n'])) {
+                continue; // it was there before, and is back (or never left)
             } elseif (! $this->files->exists('local', $dir.'/new/'.$item['n']) && $this->files->sha256($item['disk'], $item['path']) === $item['sha']) {
                 $this->files->delete($item['disk'], $item['path']);
             }
