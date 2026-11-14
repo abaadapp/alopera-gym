@@ -7,6 +7,7 @@ use GuzzleHttp\Psr7\Utils;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 /**
  * One S3-compatible bucket (DigitalOcean Spaces, or another provider for the independent copy), reached through
@@ -214,7 +215,8 @@ final class Bucket
     }
 
     /**
-     * A request to the bucket; a lost connection, a timeout or a reset becomes a refusal with a plain message.
+     * A request to the bucket; a lost connection, a timeout or a reset becomes a refusal with a plain message, and a
+     * warning in the log that names the bucket but never the signed address.
      *
      * @param  callable(): Response  $request
      *
@@ -225,7 +227,10 @@ final class Bucket
         try {
             return $request();
         } catch (ConnectionException|TransferException $e) {
-            throw new ImageRejected(self::UNREACHABLE, 0, $e);
+            // Logged without the address: a signed address carries the access key's id and a live signature.
+            Log::warning('image bucket unreachable', ['bucket' => $this->label(), 'error' => class_basename($e), 'reason' => preg_replace('#https?://\S+#', '[address]', $e->getMessage())]);
+
+            throw new ImageRejected(self::UNREACHABLE);
         }
     }
 

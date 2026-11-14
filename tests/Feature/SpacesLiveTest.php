@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Group;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
@@ -24,12 +25,12 @@ use Tests\TestCase;
  * the signatures and the hashes itself. Not part of the normal run (phpunit.xml leaves the group out); it runs only when
  * asked for and given test buckets:
  *
- *   SPACES_LIVE_TEST=1 MEDIA_SPACES_KEY=… MEDIA_SPACES_SECRET=… MEDIA_SPACES_REGION=… MEDIA_SPACES_BUCKET=…-test… \
- *   MEDIA_SPACES_ENDPOINT=https://fra1.digitaloceanspaces.com MEDIA_COPY_…=… \
- *   DB_DATABASE=<name>_testing php artisan test --group=spaces-live
+ *   scripts/spaces-live-test.sh <keys file outside the repository> <name>_testing
  *
- * Both bucket names must contain "test": it never runs against the real originals. It writes under tenants/{test club}/
- * and incoming/ and removes what it wrote, except what versioning keeps.
+ * (the script reads the keys from that file, sets SPACES_LIVE_TEST=1, and hides the keys in everything it prints).
+ * Both bucket names must contain "test", and neither may be the database copies' bucket (SPACES_BUCKET): it never runs
+ * against real originals or other data. It writes under tenants/{test club}/, incoming/ and selftest/ and removes what
+ * it wrote, except what versioning keeps. Nothing it prints carries a key or a signed address.
  */
 #[Group('spaces-live')]
 class SpacesLiveTest extends TestCase
@@ -49,6 +50,7 @@ class SpacesLiveTest extends TestCase
             $settings = (array) config('media.'.$which);
             $this->assertTrue((new Bucket($settings))->configured(), "media.$which is not set");
             $this->assertStringContainsString('test', (string) $settings['bucket'], 'a test bucket only, never the real originals');
+            $this->assertNotSame((string) env('SPACES_BUCKET'), (string) $settings['bucket'], 'never the database copies\' bucket');
         }
         config(['media.originals' => 'spaces', 'gym.max_image_kb' => 25_600, 'media.max_pixels' => 50_000_000]);
         Storage::fake('public');
@@ -77,8 +79,9 @@ class SpacesLiveTest extends TestCase
     {
         $ticket = $this->postJson(route($route), ['name' => $name, 'type' => $type, 'size' => strlen($bytes), 'sha256' => hash('sha256', $bytes), 'md5' => md5($bytes)])
             ->assertOk()->json();
-        $put = Http::timeout(120)->withHeaders($ticket['headers'])->withBody($bytes, $type)->put($ticket['url']);
-        $this->assertTrue($put->successful(), 'the real bucket took the signed put: HTTP '.$put->status().' '.$put->body());
+        $put = Http::timeout(600)->withHeaders($ticket['headers'])->withBody($bytes, $type)->put($ticket['url']);
+        // Only the status and the S3 error code: an error body can name the access key.
+        $this->assertTrue($put->successful(), 'the real bucket took the signed put: HTTP '.$put->status().' '.(preg_match('#<Code>([A-Za-z]+)</Code>#', $put->body(), $m) ? $m[1] : ''));
 
         return [$ticket['ticket'], $ticket];
     }
@@ -118,7 +121,7 @@ class SpacesLiveTest extends TestCase
     private function downloaded(Member $member): string
     {
         $location = (string) $this->get(route('club.members.photo', $member))->assertRedirect()->headers->get('Location');
-        $response = Http::timeout(120)->get($location);
+        $response = Http::timeout(600)->get($location);
         $this->assertTrue($response->successful(), 'the signed download works: HTTP '.$response->status());
         $this->assertStringContainsString('attachment', (string) $response->header('Content-Disposition'));
 
@@ -129,7 +132,7 @@ class SpacesLiveTest extends TestCase
 
     public function test_the_bucket_itself_passes_the_self_test(): void
     {
-        $this->assertSame(0, Artisan::call('media:spaces-check', ['--origin' => 'http://127.0.0.1:8791']), Artisan::output());
+        $this->assertSame(0, Artisan::call('media:spaces-check', ['--origin' => getenv('SPACES_LIVE_ORIGIN') ?: 'http://127.0.0.1:8791']), Artisan::output());
         $this->assertSame(0, Artisan::call('media:spaces-check', ['--bucket' => 'copy']), Artisan::output());
     }
 
@@ -308,8 +311,15 @@ class SpacesLiveTest extends TestCase
         // The daily copy, one way, checked.
         $this->assertSame(0, Artisan::call('media:originals-copy', ['--from' => 'main', '--to' => 'copy']), Artisan::output());
         $this->assertSame(0, Artisan::call('media:originals-check', ['--bucket' => 'copy', '--deep' => count($kept)]), Artisan::output());
-        // The copy's own key cannot delete what it holds.
-        $this->assertFalse(Bucket::copy()->delete(array_key_first($kept)), 'the independent copy refuses a delete from its writer');
+        // Can the copy's own key delete? Tried on a test object, never on an original. A key that cannot (MinIO, B2) is
+        // what the plan wants; Spaces' limited keys are read or read/write/delete, so on Spaces it can, and that is said.
+        $probe = 'selftest/'.Str::uuid().'.bin';
+        $tmp = (string) tempnam(sys_get_temp_dir(), 'probe');
+        file_put_contents($tmp, 'probe');
+        $this->assertTrue(Bucket::copy()->put($probe, $tmp, hash('sha256', 'probe'), md5('probe'), 'application/octet-stream'));
+        @unlink($tmp);
+        fwrite(STDERR, Bucket::copy()->delete($probe) ? "  note: the copy's key CAN delete (on Spaces a limited key is read or read/write/delete)\n" : "  the copy's key cannot delete\n");
+        $this->assertNotNull(Bucket::copy()->head(array_key_first($kept)), 'the originals are still in the copy');
 
         // The main bucket loses them all.
         foreach (array_keys($kept) as $key) {

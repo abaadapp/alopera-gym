@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>تراخيص البرامج مفتوحة المصدر — Alopera Gym</title>
+<style>
+  :root { color-scheme: light; --ink: #111; --soft: #4b5563; --line: #e5e7eb; --bg: #fff; --tint: #f9fafb; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.7 system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 56px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  h2 { font-size: 18px; margin: 28px 0 8px; }
+  p, li { color: var(--soft); }
+  a { color: #1d4ed8; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 8px; text-align: start; vertical-align: top; }
+  th { background: var(--tint); }
+  code { font-size: 12px; word-break: break-all; direction: ltr; unicode-bidi: embed; }
+  .en { direction: ltr; text-align: left; border-top: 1px solid var(--line); margin-top: 32px; padding-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>تراخيص البرامج مفتوحة المصدر</h1>
+  <p>يستخدم المتصفح في لوحة النادي مكتبة <strong>libheif-js</strong> لعرض صور الآيفون (HEIC/HEIF) في المتصفحات التي لا تقرؤها بنفسها. تعمل داخل متصفح المستخدم فقط، على الصورة التي اختارها، ولا تغيّر الصورة الأصلية، وتُحمَّل فقط عند اختيار صورة من هذا النوع. تُرسَل دون أي تعديل، كملف مستقل.</p>
+
+  <h2>الترخيص وأصحاب الحقوق</h2>
+  <ul>
+    <li><bdi dir="ltr">libheif-js 1.23.5</bdi>: <bdi dir="ltr">Copyright (c) Kiril Vatev</bdi>. الترخيص: <bdi dir="ltr">GNU LGPL v3</bdi>.</li>
+    <li><bdi dir="ltr">libheif 1.23.5</bdi>: <bdi dir="ltr">Copyright (c) 2017-2020 Struktur AG, Copyright (c) 2017-2026 Dirk Farin</bdi>. الترخيص: <bdi dir="ltr">GNU LGPL v3</bdi>.</li>
+    <li><bdi dir="ltr">libde265 1.0.15</bdi> (فك ترميز <bdi dir="ltr">HEVC</bdi>): <bdi dir="ltr">Copyright (c) 2013-2014 Struktur AG, Copyright (c) 2013-2023 Dirk Farin</bdi>. الترخيص: <bdi dir="ltr">GNU LGPL v3</bdi>.</li>
+    <li>مُترجمة إلى <bdi dir="ltr">WebAssembly</bdi> بأداة <bdi dir="ltr">Emscripten</bdi>، ورخصتها <bdi dir="ltr">MIT / University of Illinois NCSA</bdi>.</li>
+  </ul>
+  <p>نص الرخصتين (<bdi dir="ltr">GNU LGPL v3</bdi> و<bdi dir="ltr">GNU GPL v3</bdi> التي تبني عليها): <a href="libheif-js/LICENSE.txt">LICENSE.txt</a> · الإشعار الكامل: <a href="libheif-js/NOTICE.txt">NOTICE.txt</a></p>
+
+  <h2>الشيفرة المصدرية (نسخة محفوظة هنا)</h2>
+  <table>
+    <thead><tr><th>الملف</th><th>ما فيه</th><th>SHA-256</th><th>المصدر الأصلي</th></tr></thead>
+    <tbody>
+      <tr><td><a href="libheif-js/source/libheif-1.23.5.tar.gz">libheif-1.23.5.tar.gz</a> (2.3 MB)</td><td>libheif، ومعه سكربت بنائه لـ WebAssembly</td><td><code>fd9036064c4432f0550d15072ddf34956a248279ee9aeaff0fba3fa0f77d8f1a</code></td><td><a href="https://github.com/strukturag/libheif/releases/tag/v1.23.5">GitHub</a></td></tr>
+      <tr><td><a href="libheif-js/source/libde265-1.0.15.tar.gz">libde265-1.0.15.tar.gz</a> (0.8 MB)</td><td>فك ترميز HEVC</td><td><code>00251986c29d34d3af7117ed05874950c875dd9292d016be29d3b3762666511d</code></td><td><a href="https://github.com/strukturag/libde265/releases/tag/v1.0.15">GitHub</a></td></tr>
+      <tr><td><a href="libheif-js/source/libheif-emscripten-1.23.5.tar.gz">libheif-emscripten-1.23.5.tar.gz</a></td><td>خطوات بناء الاثنين إلى WebAssembly</td><td><code>8e3395ca983e369448bea84d223c35f1117373953e00219588415f1bc37c86ea</code></td><td><a href="https://github.com/catdad-experiments/libheif-emscripten/tree/v1.23.5">GitHub</a></td></tr>
+      <tr><td><a href="libheif-js/source/libheif-js-1.23.5.tar.gz">libheif-js-1.23.5.tar.gz</a></td><td>غلاف JavaScript وسكربت تجميعه</td><td><code>b2bcc4d1e94a47eff30afa05671374170f2f9f5ad88dd2e3cb1196d2df4d6f76</code></td><td><a href="https://github.com/catdad-experiments/libheif-js/tree/1.23.5">GitHub</a></td></tr>
+    </tbody>
+  </table>
+  <p>قائمة البصمات: <a href="libheif-js/source/SHA256SUMS.txt">SHA256SUMS.txt</a>. شيفرة التطبيق الذي يحمّل المكتبة منشورة في <a href="https://github.com/abaadapp/alopera-gym">github.com/abaadapp/alopera-gym</a> (<code>resources/js/lib/image-prep.ts</code>).</p>
+
+  <h2>استبدال المكتبة</h2>
+  <p>المكتبة ملف مستقل يحمّله التطبيق وقت التشغيل عبر واجهتها المعروفة (<code>HeifDecoder().decode</code> ثم <code>image.display</code>). يمكن وضع نسخة متوافقة من libheif-js مكانها ببناء التطبيق بها (<code>npm install</code> ثم <code>npm run build</code>). لا تمنع شروط هذا التطبيق تعديل المكتبة ولا الهندسة العكسية لتصحيح ذلك التعديل.</p>
+
+  <section class="en">
+    <h2>Open-source software</h2>
+    <p>The club panel uses libheif-js 1.23.5 (with libheif 1.23.5 and libde265 1.0.15), unmodified, to show HEIC/HEIF photos in browsers that cannot read them. It is covered by the GNU Lesser General Public License v3 (<a href="libheif-js/LICENSE.txt">licence texts</a>, <a href="libheif-js/NOTICE.txt">notice</a>). Its Corresponding Source is kept on this server, above, with the upstream links. An interface-compatible build can replace it; nothing in this application's terms forbids modifying it or reverse engineering it to debug such modifications.</p>
+  </section>
+</main>
+</body>
+</html>

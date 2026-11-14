@@ -20,7 +20,7 @@ export default defineConfig({
                     if (file.type === 'chunk' && file.fileName.includes('libheif-bundle')) {
                         file.code =
                             '/*! libheif-js 1.23.5 (libheif 1.23.5, libde265 1.0.15), unmodified. GNU LGPL-3.0. ' +
-                            'Licence, copyright and source: /licenses/libheif-js/NOTICE.txt */\n' +
+                            'Licence, copyright and source: /licenses/index.html */\n' +
                             file.code;
                     }
                 }

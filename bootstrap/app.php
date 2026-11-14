@@ -118,6 +118,8 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         // An image that was refused or could not be stored: the reason, on the field it came from; nothing was saved.
+        // It is an answer to the user, not an error of the app, so it is not logged (a failure behind it is, on its own).
+        $exceptions->dontReport(ImageRejected::class);
         $exceptions->render(function (ImageRejected $e, Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {
                 return response()->json(['message' => $e->getMessage(), 'errors' => [$e->field ?? 'image' => [$e->getMessage()]]], 422);

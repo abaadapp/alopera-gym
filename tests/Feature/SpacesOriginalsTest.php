@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Core\Support\Images\ImageRejected;
 use App\Core\Support\Images\SpacesOriginals;
 use App\Core\Support\Images\SpacesSigner;
 use App\Core\Support\ImageStore;
@@ -11,7 +12,9 @@ use App\Modules\Website\Models\SiteMedia;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia;
 use Tests\Concerns\BuildsClubs;
@@ -250,6 +253,8 @@ class SpacesOriginalsTest extends TestCase
     public function test_a_lost_connection_to_the_bucket_keeps_everything_says_so_and_the_same_ticket_works_after(): void
     {
         $this->enable();
+        Exceptions::fake();
+        Log::spy();
         $club = $this->club();
         $this->actingAs($this->owner($club));
         $form = fn (string $t) => ['full_name' => 'Noor', 'phone' => '96891112233', 'photo_direct' => $t, 'photo_preview' => UploadedFile::fake()->image('v.jpg', 400, 300)];
@@ -273,6 +278,13 @@ class SpacesOriginalsTest extends TestCase
             $old = $this->asTenant($club, fn () => $member->fresh()->photo_path);
         }
         $this->assertCount(1, array_filter(array_keys($this->bucket), fn ($k) => str_starts_with($k, 'tenants/')), 'one original: the current one');
+
+        // The refusal is the user's answer, not logged as an error; the lost connection is a warning without the
+        // signed address (it carries the access key's id and a live signature).
+        Exceptions::assertNotReported(ImageRejected::class);
+        Log::shouldHaveReceived('warning')->times(3)->withArgs(fn (string $message, array $context) => $message === 'image bucket unreachable'
+            && $context['bucket'] === 'alopera-originals@fra1.digitaloceanspaces.com'
+            && ! str_contains(json_encode($context), 'X-Amz') && ! str_contains(json_encode($context), 'DO00EXAMPLEKEY'));
     }
 
     public function test_a_direct_upload_is_kept_without_the_app_reading_it_whole(): void

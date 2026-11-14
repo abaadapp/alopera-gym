@@ -49,17 +49,16 @@ Sending the library's file to a user's browser is conveying it, so LGPL-3.0 §4 
 
 | Obligation | How it is met |
 |---|---|
-| Prominent notice that the library is used and is under the LGPL (§4a) | `public/licenses/libheif-js/NOTICE.txt` (served at `/licenses/libheif-js/NOTICE.txt`), and a notice line at the top of the library's own file (`vite.config.js` adds it at build). **A visible link in the panel is the owner's decision** (see below). |
+| Prominent notice that the library is used and is under the LGPL (§4a) | The page `/licenses/index.html` (`public/licenses/index.html`), linked from the sign-in page's footer («تراخيص البرامج مفتوحة المصدر», beside «جميع الحقوق محفوظة», same style), `NOTICE.txt` beside the licence, and a notice line at the top of the library's own file (`vite.config.js` adds it at build). |
 | Give the GPL-3.0 and LGPL-3.0 texts (§4b) | `public/licenses/libheif-js/LICENSE.txt`: the upstream LICENSE, byte for byte (its SHA-256 equals the libheif-emscripten v1.23.5 release asset). |
 | Copyright notices (§4c) | In NOTICE.txt: libheif-js (Kiril Vatev), libheif (Struktur AG, Dirk Farin), libde265 (Struktur AG, Dirk Farin). |
 | Let the user use a changed library (§4d) | The library is a separate, unmodified file loaded at run time through its interface; the application's source is public, so it can be rebuilt with another libheif-js. Nothing in the app's terms forbids changing or reverse engineering it. |
-| Corresponding Source (GPL-3.0 §6d) | NOTICE.txt gives the exact source archives (libheif 1.23.5 with its SHA-256, libde265 1.0.15), the WebAssembly build (libheif-emscripten v1.23.5) and libheif-js 1.23.5. When the source is on someone else's server, we stay responsible for it remaining available: **keeping our own copy is the owner's decision** (below). |
+| Corresponding Source (GPL-3.0 §6d) | A copy is kept on our own server, in `public/licenses/libheif-js/source/`, with `SHA256SUMS.txt`, and listed on the page with its upstream links. The archives are libheif 1.23.5 (its SHA-256 equals the published one), libde265 1.0.15, the WebAssembly build steps (libheif-emscripten v1.23.5) and libheif-js 1.23.5. Together they are 3.1 MB. |
 | Installation Information (§4e) | Not applicable: it is for consumer devices, not a website. |
 
-Owner decisions before merging:
-- **A visible link.** For example «تراخيص البرامج المفتوحة» in the login page footer or in the club settings, pointing to `/licenses/libheif-js/NOTICE.txt`. It is not added, because the screens copy the reference design.
-- **Our own copy of the source.** The archives are about 4.5 MB (libheif 2.3 MB, libde265 0.85 MB, the WebAssembly build 1.4 MB). They could be served beside the notice, or kept in this public repository, instead of relying only on GitHub.
-- **HEVC patents.** A legal question, not a technical one.
+`OpenSourceNoticesTest` keeps all of this in step with the installed version: the licence text byte for byte, every archive against its checksum and on the page, the version named, and the sign-in page's link. Upgrading the library without its notice and source fails there.
+
+Still open, and not technical: **HEVC patents** are a legal question.
 - **Audit:** `npm audit` reported 0 vulnerabilities at install. Review before each upgrade; do not take `heic2any` (its last release is from 2023, with an old libheif).
 
 ## Upload limits and 25 MB photos
@@ -145,14 +144,25 @@ The settings are `MEDIA_SPACES_KEY`, `_SECRET`, `_REGION`, `_BUCKET` and `_ENDPO
 
 ## Tests against real buckets
 
-`tests/Feature/SpacesLiveTest.php` (group `spaces-live`) is left out of the normal run and CI. It runs only when asked, with `SPACES_LIVE_TEST=1` and two buckets whose names contain `test`:
+`tests/Feature/SpacesLiveTest.php` (group `spaces-live`) is left out of the normal run and CI. It runs through one script, from this computer, against two test buckets:
 
 ```
-SPACES_LIVE_TEST=1 MEDIA_SPACES_KEY=… MEDIA_SPACES_SECRET=… MEDIA_SPACES_REGION=fra1 MEDIA_SPACES_BUCKET=alopera-originals-test \
-MEDIA_SPACES_ENDPOINT=https://fra1.digitaloceanspaces.com MEDIA_COPY_KEY=… MEDIA_COPY_SECRET=… MEDIA_COPY_REGION=ams3 \
-MEDIA_COPY_BUCKET=alopera-originals-copy-test MEDIA_COPY_ENDPOINT=https://ams3.digitaloceanspaces.com \
-DB_DATABASE=<name>_testing php artisan test --group=spaces-live
+scripts/spaces-live-test.sh <keys file> <name>_testing                 # self-tests, then the live tests
+scripts/spaces-live-test.sh <keys file> <name>_testing serve [port]    # the isolated app on the test bucket, for a browser check
 ```
+
+- **The keys file** holds `MEDIA_SPACES_KEY`, `_SECRET`, `_REGION`, `_BUCKET`, `_ENDPOINT` and `MEDIA_COPY_KEY`, `_SECRET`, `_REGION`, `_BUCKET`, `_ENDPOINT`.
+  - It must be outside the repository and `chmod 600`. Nothing is ever written to a tracked file or to GitHub.
+- **The script refuses:**
+  - a bucket whose name lacks `test`;
+  - the database copies' bucket (`SPACES_BUCKET`);
+  - a CDN endpoint;
+  - a database without `test`;
+  - the production server.
+- **Nothing printed carries a key or a signed address.** Everything goes through a filter that hides the keys, the secrets and every signature, and the app's log is off for the run.
+- **In the app itself:**
+  - an image refusal is not logged;
+  - a lost connection to the bucket is a warning naming the bucket, never the address.
 
 It covers:
 - the self-test on both buckets;
@@ -163,7 +173,16 @@ It covers:
 - older local images after the switch;
 - the copy, a loss and the restore, plus a damaged original that is not spread and is repaired from the copy.
 
-**Run so far:** against two local MinIO servers, each with a key limited to its bucket (the copy's key cannot delete). That is a real S3 implementation that checks the signatures and hashes itself, but **not Spaces**. The same run on a test Space is still to do.
+**Run so far:** against two local MinIO servers, through the script, each with a key limited to its bucket (the copy's key cannot delete). That is a real S3 implementation that checks the signatures and hashes itself, but **not Spaces**. The same run on a test Space is still to do.
+
+**What Spaces allows for keys:**
+- Keys are made only in the DigitalOcean control panel, not by API or CLI.
+- A limited key is **read** or **read/write/delete** on a bucket. So on Spaces, the independent copy's key can always delete. The live test says so instead of failing.
+  - For the real copy, a provider whose keys can write without deleting (for example Backblaze B2, with object lock) is the safer choice.
+- Bucket settings need a full-access key, or the control panel for CORS:
+  - versioning (API only);
+  - lifecycle rules;
+  - CORS.
 
 ## Restore plan for originals in Spaces (for approval)
 
@@ -177,7 +196,7 @@ Layers (the tools are built and tested; nothing is scheduled or switched on):
 1. **Versioning in the bucket,** with noncurrent versions kept 30 days.
    - Covers a wrongly deleted or overwritten original.
    - Restore: the previous version by its version id (tested: the removed original came back byte for byte).
-2. **An independent copy** (`MEDIA_COPY_*`): another bucket under a key of its own that **cannot delete**.
+2. **An independent copy** (`MEDIA_COPY_*`): another bucket under a key of its own that **cannot delete** (possible at Backblaze B2 or with object lock; not with a Spaces limited key, which is read or read/write/delete).
    - Filled by `php artisan media:originals-copy --from=main --to=copy`, once a day after approval. The command:
      - streams each original;
      - checks its bytes against the recorded SHA-256 and the source's MD5;

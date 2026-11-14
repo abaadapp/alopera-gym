@@ -22,6 +22,8 @@ What is used (unmodified)
 
 Source code (Corresponding Source)
 ----------------------------------
+A copy of each archive below is kept on this server, in source/ beside this file (checksums: source/SHA256SUMS.txt);
+the page /licenses/index.html lists them. Upstream:
 - libheif 1.23.5: https://github.com/strukturag/libheif/releases/download/v1.23.5/libheif-1.23.5.tar.gz
   (sha256 fd9036064c4432f0550d15072ddf34956a248279ee9aeaff0fba3fa0f77d8f1a)
 - libde265 1.0.15: https://github.com/strukturag/libde265/releases/download/v1.0.15/libde265-1.0.15.tar.gz
