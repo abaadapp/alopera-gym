@@ -12,7 +12,9 @@ use App\Models\User;
  * acting user holds themselves (the owner holds them all). The sensitive ones (PermissionRegistry::SENSITIVE) only the
  * owner adds to or takes from a role or a list; whoever holds one may use it, not pass it on. An account that opens more than the acting user is not
  * theirs to edit, rename, reset or switch off — only someone holding at least as much may. The owner role is given
- * and taken only by an owner.
+ * and taken only by an owner. A list of a person's own replaces their role's: for an account whose role carries a
+ * sensitive permission only the owner starts one (UserController::update), so nothing the owner takes off a role
+ * lives on in a copy. Roles and accounts are read again under their row lock before an edit is saved.
  */
 final class Grants
 {

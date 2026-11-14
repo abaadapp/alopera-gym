@@ -17,6 +17,7 @@ use App\Modules\Payroll\Models\Employee;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -98,35 +99,51 @@ class UserController extends Controller
             return back()->with('error', 'يجب أن يبقى مالك واحد نشط على الأقل.');
         }
 
-        // Following the role, or a list of its own (sent only by the editor that shows it): the actor decides only the
-        // permissions they hold, the sensitive ones only if they are the owner; nobody sets their own.
-        $custom = $user->custom_permissions;
-        if ($request->has('custom')) {
-            abort_if($user->id === $request->user()->id, 403, 'لا تعدّل صلاحياتك بنفسك.');
-            $role = Role::findOrFail($data['role_id']);
-            $custom = null;
-            if ($request->boolean('custom') && $role->key !== SystemRoles::OWNER) {
-                $stored = $user->custom_permissions !== null ? PermissionRegistry::sanitize($user->custom_permissions) : $role->expandedPermissions();
-                $custom = [...Grants::merge($request->user(), $stored, (array) $request->input('permissions', [])), ...PermissionRegistry::dormant($user->custom_permissions ?? [])];
-            }
-            if ($custom === null && $user->custom_permissions !== null && ! Grants::mayAssign($request->user(), $role)) {
-                throw ValidationException::withMessages(['custom' => 'يفتح الدور ما لا تملكه؛ لا يمكنك إعادة هذا الحساب إلى صلاحيات دوره كاملة.']);
-            }
-        }
+        // Read again under its lock, then decided and saved: an edit at the same moment as the owner's (taking
+        // plans.manage off this list) works from what the owner saved, and never puts back what the owner took off.
+        [$user, $old] = DB::transaction(function () use ($request, $user, $data) {
+            $user = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
+            abort_unless($user->id === $request->user()->id || Grants::mayManage($request->user(), $user), 403, 'هذا الحساب يفتح ما لا تفتحه، فلا تعدّله.');
 
-        $old = $user->only('role_id', 'is_active', 'email', 'custom_permissions');
-        $user->fill(collect($data)->only('name', 'phone')->all());
-        $user->email = strtolower($data['email']);
-        $user->role_id = $data['role_id'];
-        $user->branch_id = $data['branch_id'] ?? null;
-        $user->is_active = $data['is_active'] ?? true;
-        $user->custom_permissions = $custom;
-        if (! empty($data['password'])) {
-            $user->password = $data['password'];
-            // A new password ends the account's «remember me» logins, as one changed from «حسابي» does.
-            $user->setRememberToken(Str::random(60));
-        }
-        $user->save();
+            // Following the role, or a list of its own (sent only by the editor that shows it): the actor decides only
+            // the permissions they hold, the sensitive ones only if they are the owner; nobody sets their own.
+            $custom = $user->custom_permissions;
+            if ($request->has('custom')) {
+                abort_if($user->id === $request->user()->id, 403, 'لا تعدّل صلاحياتك بنفسك.');
+                $role = Role::findOrFail($data['role_id']);
+                $custom = null;
+                if ($request->boolean('custom') && $role->key !== SystemRoles::OWNER) {
+                    // A list of its own replaces the role's, so one started from the role would keep the role's sensitive
+                    // permissions (plans.manage among them) past the owner taking them off the role. Only the owner
+                    // starts one for an account whose role carries what only the owner decides, as only the owner gives
+                    // such a role (Grants::mayAssign).
+                    if ($user->custom_permissions === null && ! Grants::mayAssign($request->user(), $role)) {
+                        throw ValidationException::withMessages(['custom' => 'دور هذا الحساب يحمل صلاحيات يقررها صاحب النشاط وحده، فقائمته الخاصة يضعها صاحب النشاط.']);
+                    }
+                    $stored = $user->custom_permissions !== null ? PermissionRegistry::sanitize($user->custom_permissions) : $role->expandedPermissions();
+                    $custom = [...Grants::merge($request->user(), $stored, (array) $request->input('permissions', [])), ...PermissionRegistry::dormant($user->custom_permissions ?? [])];
+                }
+                if ($custom === null && $user->custom_permissions !== null && ! Grants::mayAssign($request->user(), $role)) {
+                    throw ValidationException::withMessages(['custom' => 'يفتح الدور ما لا تملكه؛ لا يمكنك إعادة هذا الحساب إلى صلاحيات دوره كاملة.']);
+                }
+            }
+
+            $old = $user->only('role_id', 'is_active', 'email', 'custom_permissions');
+            $user->fill(collect($data)->only('name', 'phone')->all());
+            $user->email = strtolower($data['email']);
+            $user->role_id = $data['role_id'];
+            $user->branch_id = $data['branch_id'] ?? null;
+            $user->is_active = $data['is_active'] ?? true;
+            $user->custom_permissions = $custom;
+            if (! empty($data['password'])) {
+                $user->password = $data['password'];
+                // A new password ends the account's «remember me» logins, as one changed from «حسابي» does.
+                $user->setRememberToken(Str::random(60));
+            }
+            $user->save();
+
+            return [$user, $old];
+        });
         if (! empty($data['password']) && $user->is($request->user())) {
             // Your own password, changed here: this device signs in with it from now on (auth.session keeps the
             // signed-in account's fingerprint), so only your other devices are signed out.

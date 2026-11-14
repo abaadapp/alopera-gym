@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Role;
 use App\Models\Tenant;
+use App\Models\User;
 use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\Member;
@@ -16,6 +18,9 @@ use Tests\TestCase;
  * A classes-only plan (#70, «صلاحيات الباقة») at the same moment, in separate processes on PostgreSQL. Its credit is
  * spent once: two bookings at once on its last class leave one booking and the credit used once, and the same class
  * booked twice at once is booked once. The membership row and the class row are read under their locks.
+ *
+ * plans.manage is the owner's to give and take: an edit of a role or of an account made at the same moment as the
+ * owner's never puts back what the owner took off (each reads the row again under its lock before saving).
  */
 class PlanPermissionsConcurrencyTest extends TestCase
 {
@@ -96,5 +101,69 @@ class PlanPermissionsConcurrencyTest extends TestCase
             $this->assertSame(1, Booking::count());
             $this->assertSame(1, $membership->fresh()->sessions_used);
         });
+    }
+
+    public function test_an_edit_of_an_account_at_the_same_moment_never_puts_back_plans_the_owner_took_off_it(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $manager = $this->staff($club, 'manager');
+        $colleague = $this->staff($club, 'manager');
+        // The owner gave the plans to the manager role, and to the colleague's own list.
+        $role = $this->asTenant($club, fn () => Role::where('key', 'manager')->sole());
+        $this->asTenant($club, fn () => $role->update(['permissions' => [...$role->permissions, 'plans.manage']]));
+        $list = $role->fresh()->permissions;
+        $colleague->forceFill(['custom_permissions' => $list])->save();
+        $form = fn (User $u, array $permissions) => ['name' => $u->name, 'email' => $u->email, 'role_id' => $u->role_id, 'is_active' => true, 'custom' => true, 'permissions' => $permissions];
+
+        $results = $this->concurrently([
+            // The manager saves the colleague's list as the screen showed it, slowed down once the account was read.
+            function (string $dir) use ($manager, $colleague, $list, $form) {
+                self::pauseAfter('select count(*) as "aggregate" from "users" where "email"', $dir, 1.0);
+
+                return $this->actingAs($manager->fresh())->put(route('club.users.update', $colleague), $form($colleague, $list))->getStatusCode();
+            },
+            // Meanwhile the owner takes the plans off the colleague's list.
+            function (string $dir) use ($owner, $colleague, $list, $form) {
+                self::waitFor("$dir/inside");
+
+                return $this->actingAs($owner->fresh())->put(route('club.users.update', $colleague), $form($colleague, array_values(array_diff($list, ['plans.manage']))))->getStatusCode();
+            },
+        ]);
+
+        $this->assertSame([302, 302], array_column($results, 'value'), json_encode($results, JSON_UNESCAPED_UNICODE));
+        $this->assertNotContains('plans.manage', $colleague->fresh()->custom_permissions, 'the manager\'s save put back what the owner took off');
+        $this->assertFalse($colleague->fresh()->hasPermission('plans.manage'));
+    }
+
+    public function test_an_edit_of_a_role_at_the_same_moment_never_puts_back_plans_the_owner_took_off_it(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $manager = $this->staff($club, 'manager');
+        // The owner lets the manager edit roles, and made a role that edits plans.
+        $role = $this->asTenant($club, fn () => Role::where('key', 'manager')->sole());
+        $this->asTenant($club, fn () => $role->update(['permissions' => [...$role->permissions, 'roles.manage']]));
+        $planners = $this->asTenant($club, fn () => Role::create(['key' => 'custom_planners', 'name' => 'Planners', 'permissions' => ['plans.manage', 'members.view'], 'is_system' => false]));
+
+        $results = $this->concurrently([
+            // The manager adds a permission of their own to the role, the rest as the screen showed it, slowed down once
+            // the role was read.
+            function (string $dir) use ($manager, $planners) {
+                self::pauseAfter('select * from "roles" where "id" = ?', $dir, 1.0);
+
+                return $this->actingAs($manager->fresh())->put(route('club.roles.update', $planners), ['name' => 'Planners', 'permissions' => ['plans.manage', 'members.view', 'members.manage']])->getStatusCode();
+            },
+            // Meanwhile the owner takes the plans off the role.
+            function (string $dir) use ($owner, $planners) {
+                self::waitFor("$dir/inside");
+
+                return $this->actingAs($owner->fresh())->put(route('club.roles.update', $planners), ['name' => 'Planners', 'permissions' => ['members.view']])->getStatusCode();
+            },
+        ]);
+
+        $this->assertSame([302, 302], array_column($results, 'value'), json_encode($results, JSON_UNESCAPED_UNICODE));
+        // The manager's own addition stands; the plans stay off.
+        $this->assertEqualsCanonicalizing(['members.view', 'members.manage'], $this->asTenant($club, fn () => $planners->fresh()->permissions), 'the manager\'s save put back what the owner took off');
     }
 }
