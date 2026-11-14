@@ -1,19 +1,20 @@
 <?php
 
 /*
- * Uploaded images (App\Core\Support\ImageStore). By default each upload is kept three ways ('storage' below):
+ * Uploaded images (App\Core\Support\ImageStore). With MEDIA_STORAGE=originals each upload is kept three ways:
  *  - the original, byte for byte, on a private disk (it may carry the camera's location), for download only;
  *  - a light display copy (WebP, PNG for a logo) on the public disk, made once at upload;
  *  - a small thumbnail beside it for lists and cards.
  * Nothing here is switched on by default beyond the local disks; Spaces, the CDN and direct upload stay off until set.
  */
 return [
-    // How each new upload is kept; images kept before stay as they are, under their own names:
-    //  - 'originals' (the default): the three pieces above;
-    //  - 'optimized-only': the browser makes the light copy before sending (so a phone sends a few hundred KB, not
-    //    megabytes) and the server keeps only that copy and its thumbnail, never the heavy original. A download then
-    //    gives that copy, never called "the original". Off until the owner approves it.
-    'storage' => env('MEDIA_STORAGE', 'originals'),
+    // How each new upload is kept; images kept before stay as they are, under their own names, in either mode:
+    //  - 'optimized-only' (the default, approved by the owner with the release of PR #158): the browser makes the light
+    //    copy before sending (a phone sends tens of KB, not megabytes) and the server keeps only that copy and its
+    //    thumbnail, never the heavy original. A download then gives that copy, never called "the original";
+    //  - 'originals': the three pieces above. On the droplet each original also counts in all 14 nightly club
+    //    archives (docs/MEDIA.md), so it is the way back, not the way to run.
+    'storage' => env('MEDIA_STORAGE', 'optimized-only'),
 
     // The display copy's longest side, by use (a smaller picture is never enlarged, nothing is ever cropped). A folder
     // not listed keeps the size its caller gives. The logo keeps its own (App\Core\Branding\OfficialLogo).

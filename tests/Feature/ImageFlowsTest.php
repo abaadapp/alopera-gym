@@ -27,6 +27,8 @@ class ImageFlowsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // These describe MEDIA_STORAGE=originals (the way back); the default, optimized-only, is OptimizedOnlyStorageTest.
+        config(['media.storage' => 'originals']);
         Storage::fake('public');
         Storage::fake('local');
     }

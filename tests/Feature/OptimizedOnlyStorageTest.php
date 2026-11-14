@@ -9,6 +9,7 @@ use App\Core\Support\Images\SpacesOriginals;
 use App\Core\Support\ImageStore;
 use App\Models\Tenant;
 use App\Modules\Gym\Models\Member;
+use App\Modules\Gym\Services\MembershipService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -335,5 +336,59 @@ class OptimizedOnlyStorageTest extends TestCase
         $this->assertSame([1920, 1080, false], [$media[0]['width'], $media[0]['height'], $media[0]['has_original']]);
         $this->assertSame([1920, 640], [$media[1]['width'], $media[1]['height']], 'longest side 1920, nothing cropped');
         $this->assertSame([], Storage::disk('local')->allFiles());
+    }
+
+    public function test_optimized_only_is_the_default_and_the_release_gate_says_which_mode_runs(): void
+    {
+        $this->assertFalse(getenv('MEDIA_STORAGE'), 'no MEDIA_STORAGE in the test environment, so the default is read');
+        $this->assertSame('optimized-only', (require config_path('media.php'))['storage']);
+
+        $this->artisan('platform:preflight')->expectsOutputToContain('New images keep only their light copy');
+    }
+
+    public function test_light_copies_keep_working_after_switching_back_to_originals(): void
+    {
+        $light = $this->store($this->upload('light.webp', $this->encoded($this->gd(300, 200), 'webp')));
+        config(['media.storage' => 'originals']);
+
+        $this->assertFalse(ImageStore::hasOriginal($light));
+        $this->assertNotNull(ImageStore::url($light));
+        $this->assertStringEndsWith('-thumb.webp', (string) ImageStore::thumbUrl($light));
+        $after = $this->store($this->upload('after.jpg', $this->encoded($this->gd(300, 200), 'jpeg', 92)));
+        $this->assertTrue(ImageStore::hasOriginal($after), 'a new upload keeps its original again');
+
+        $this->asTenant($this->club, fn () => ImageStore::delete($light));
+        $this->assertFalse(Storage::disk('public')->exists($light));
+        $this->assertFalse(Storage::disk('public')->exists(ImageStore::parse($light)['thumb']));
+        $this->assertTrue(Storage::disk('public')->exists($after), 'the others stay');
+    }
+
+    public function test_a_logo_kept_as_it_came_prints_on_the_page_and_in_the_pdf(): void
+    {
+        // An interlaced, palette PNG with a see-through corner: the kinds a PDF engine is pickiest about.
+        $image = imagecreate(600, 200);
+        imagecolorallocate($image, 255, 255, 255);
+        $ink = imagecolorallocate($image, 124, 58, 237);
+        imagecolortransparent($image, imagecolorallocate($image, 0, 255, 0));
+        imagefilledrectangle($image, 20, 20, 180, 180, $ink);
+        imagestring($image, 5, 220, 90, 'ALOPERA GYM', $ink);
+        imageinterlace($image, true);
+        $png = $this->encoded($image, 'png');
+
+        $owner = $this->owner($this->club);
+        $this->actingAs($owner)->post(route('club.settings.update'), ['_method' => 'put', 'name' => $this->club->name, 'primary_color' => '#9d174d', 'secondary_color' => '#f9a8d4', 'logo' => $this->upload('logo.png', $png)])
+            ->assertSessionHasNoErrors();
+        $logo = (string) $this->club->fresh()->setting('logo_file');
+        $this->assertStringEndsWith('-png.png', $logo);
+        $this->assertSame($png, Storage::disk('public')->get($logo), 'kept as it came: clean, light, lossless');
+
+        $member = $this->member($this->club, ['full_name' => 'ليلى أحمد']);
+        $plan = $this->plan($this->club, ['name' => 'باقة شهر', 'price' => 25]);
+        $invoice = $this->asTenant($this->club, fn () => app(MembershipService::class)->sell($member, $plan)->invoice()->firstOrFail());
+
+        $this->actingAs($owner)->get(route('club.papers.show', ['type' => 'invoice', 'id' => $invoice->id]))->assertOk()->assertSee(basename($logo), false);
+        $pdf = $this->actingAs($owner)->get(route('club.papers.pdf', ['type' => 'invoice', 'id' => $invoice->id]))->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF', (string) $pdf->getContent());
+        $this->assertStringContainsString('/Subtype /Image', (string) $pdf->getContent(), 'the logo is drawn in the PDF');
     }
 }
