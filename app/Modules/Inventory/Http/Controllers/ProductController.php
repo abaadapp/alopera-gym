@@ -49,12 +49,16 @@ class ProductController extends Controller
             'sort' => in_array($request->query('sort'), ['price', 'stock', 'newest'], true) ? $request->query('sort') : 'name',
         ];
 
+        // The shelf in view, counted as the stock screen counts it (InventoryController::columns): the branch's own
+        // quantity and reorder level, or the club's total when no branch is in view (a club-wide user who chose none).
+        [$qty, $min] = $this->shelfColumns(app(BranchContext::class)->id());
+
         $base = fn () => Product::query()
             ->when($filters['q'], fn ($q, $t) => $q->where(fn ($w) => $w->where('name', 'ilike', '%'.$t.'%')->orWhere('sku', 'ilike', $t)->orWhere('barcode', $t)))
             ->when($filters['category'] === 'none', fn ($q) => $q->whereNull('product_category_id'))
             ->when(ctype_digit($filters['category']), fn ($q) => $q->where('product_category_id', (int) $filters['category']))
-            ->when($filters['stock'] === 'low', fn ($q) => $q->lowStock())
-            ->when($filters['stock'] === 'out', fn ($q) => $q->where('track_stock', true)->where('stock_quantity', '<=', 0))
+            ->when($filters['stock'] === 'low', fn ($q) => $q->where('track_stock', true)->whereRaw("{$qty} <= {$min}"))
+            ->when($filters['stock'] === 'out', fn ($q) => $q->where('track_stock', true)->whereRaw("{$qty} <= 0"))
             ->when($filters['stock'] === 'untracked', fn ($q) => $q->where('track_stock', false))
             ->when($filters['website'] !== '', fn ($q) => $q->where('show_on_website', $filters['website'] === '1'));
 
@@ -62,10 +66,11 @@ class ProductController extends Controller
         $addons = ProductAddon::where('is_active', true)->with(['products:products.id', 'categories:product_categories.id'])->get();
 
         $products = $base()->with('category:id,name')
+            ->select('products.*')->selectRaw("{$qty} as shelf_quantity, {$min} as shelf_min")
             ->when($filters['status'] !== '', fn ($q) => $q->where('is_active', $filters['status'] === 'active'))
             ->tap(fn (Builder $q) => match ($filters['sort']) {
                 'price' => $q->orderByDesc('price'),
-                'stock' => $q->orderByRaw('track_stock desc, stock_quantity asc'),
+                'stock' => $q->orderByRaw("track_stock desc, {$qty} asc"),
                 'newest' => $q->latest('id'),
                 default => $q->orderBy('name'),
             })
@@ -269,22 +274,42 @@ class ProductController extends Controller
         ]);
     }
 
+    /**
+     * The quantity and reorder level of the shelf in view, as SQL on `products`: a branch's from product_stocks (none
+     * there: 0, and the product's own level), or the club's total.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function shelfColumns(?int $branch): array
+    {
+        if ($branch === null) {
+            return ['products.stock_quantity', 'products.reorder_level'];
+        }
+        $row = fn (string $column) => "(select ps.{$column} from product_stocks ps where ps.product_id = products.id and ps.branch_id = {$branch})";
+
+        return ['coalesce('.$row('quantity').', 0)', 'coalesce('.$row('min_quantity').', products.reorder_level)'];
+    }
+
     /** @return array<string, mixed> */
     private function row(Product $p): array
     {
         $price = (float) $p->price;
+        // In the list, the shelf in view (index); on the product's own page, the club's total as before.
+        $quantity = $p->getAttribute('shelf_quantity') ?? $p->stock_quantity;
+        $min = $p->getAttribute('shelf_min') ?? $p->reorder_level;
 
         // The shelf of the branch in view, which a count from this page sets.
         $this->shelf ??= app(StockService::class)->shelf(app(BranchContext::class)->assign());
 
-        return $p->only('id', 'name', 'sku', 'barcode', 'price', 'cost', 'stock_quantity', 'track_stock', 'is_active', 'show_on_website', 'product_category_id') + [
+        return $p->only('id', 'name', 'sku', 'barcode', 'price', 'cost', 'track_stock', 'is_active', 'show_on_website', 'product_category_id') + [
             'shelf' => $p->track_stock ? (float) ($this->shelf[$p->id]['book'] ?? 0) : null,
             'held' => $p->track_stock ? (float) ($this->shelf[$p->id]['held'] ?? 0) : null,
             'category' => $p->category?->name,
             'image_url' => $p->thumbUrl(),
             'photos_count' => count($p->imagePaths()),
-            'low' => $p->isLowStock(),
-            'out' => $p->track_stock && (float) $p->stock_quantity <= 0,
+            'stock_quantity' => number_format((float) $quantity, 3, '.', ''),
+            'low' => $p->track_stock && (float) $quantity <= (float) $min,
+            'out' => $p->track_stock && (float) $quantity <= 0,
             'margin' => $price > 0 ? round(($price - (float) $p->cost) / $price * 100, 1) : null,
         ];
     }
