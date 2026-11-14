@@ -3,6 +3,7 @@
 namespace App\Core\Backup;
 
 use Illuminate\Support\Facades\Storage;
+use League\Flysystem\Local\LocalFilesystemAdapter;
 use RuntimeException;
 
 /**
@@ -15,12 +16,36 @@ class RestoreFiles
     /** Copies a stream to $disk/$path and checks the copy against $sha256. */
     public function putStream(string $disk, string $path, $stream, string $sha256): void
     {
-        $written = Storage::disk($disk)->writeStream($path, $stream);
+        $written = Storage::disk($disk)->getAdapter() instanceof LocalFilesystemAdapter
+            ? $this->copyInPieces($stream, Storage::disk($disk)->path($path))
+            : Storage::disk($disk)->writeStream($path, $stream);
         if (! $written || $this->sha256($disk, $path) !== $sha256) {
             Storage::disk($disk)->delete($path);
 
             throw new RuntimeException("restore: could not write {$disk}:{$path}");
         }
+    }
+
+    /**
+     * A copy in 1 MB pieces. PHP's own stream copy (what writeStream uses) maps the whole source file into memory, so a
+     * 100 MB file took 100 MB of the process's memory; this keeps it at one piece.
+     */
+    private function copyInPieces($in, string $target): bool
+    {
+        if (! is_dir(dirname($target)) && ! @mkdir(dirname($target), 0755, true) && ! is_dir(dirname($target))) {
+            return false;
+        }
+        $out = @fopen($target, 'wb');
+        if ($out === false) {
+            return false;
+        }
+        $ok = true;
+        while ($ok && ! feof($in)) {
+            $chunk = fread($in, 1 << 20);
+            $ok = $chunk !== false && fwrite($out, $chunk) === strlen($chunk);
+        }
+
+        return fclose($out) && $ok;
     }
 
     public function putString(string $disk, string $path, string $contents): void
