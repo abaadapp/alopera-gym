@@ -1,13 +1,44 @@
 <?php
 
 /*
- * Uploaded images (App\Core\Support\ImageStore). Each upload is kept three ways:
+ * Uploaded images (App\Core\Support\ImageStore). By default each upload is kept three ways ('storage' below):
  *  - the original, byte for byte, on a private disk (it may carry the camera's location), for download only;
  *  - a light display copy (WebP, PNG for a logo) on the public disk, made once at upload;
  *  - a small thumbnail beside it for lists and cards.
  * Nothing here is switched on by default beyond the local disks; Spaces, the CDN and direct upload stay off until set.
  */
 return [
+    // How each new upload is kept; images kept before stay as they are, under their own names:
+    //  - 'originals' (the default): the three pieces above;
+    //  - 'optimized-only': the browser makes the light copy before sending (so a phone sends a few hundred KB, not
+    //    megabytes) and the server keeps only that copy and its thumbnail, never the heavy original. A download then
+    //    gives that copy, never called "the original". Off until the owner approves it.
+    'storage' => env('MEDIA_STORAGE', 'originals'),
+
+    // The display copy's longest side, by use (a smaller picture is never enlarged, nothing is ever cropped). A folder
+    // not listed keeps the size its caller gives. The logo keeps its own (App\Core\Branding\OfficialLogo).
+    'sides' => [
+        'members' => (int) env('MEDIA_SIDE_MEMBERS', 800),
+        'products' => (int) env('MEDIA_SIDE_PRODUCTS', 1200),
+        'trainers' => (int) env('MEDIA_SIDE_TRAINERS', 1600),
+        'programs' => (int) env('MEDIA_SIDE_PROGRAMS', 1600),
+        'posts' => (int) env('MEDIA_SIDE_POSTS', 1920),
+        'site' => (int) env('MEDIA_SIDE_SITE', 1920),
+    ],
+
+    // WebP quality of photos (the browser's and the server's), and of thumbnails.
+    'quality' => (int) env('MEDIA_QUALITY', 82),
+    'thumb_quality' => (int) env('MEDIA_THUMB_QUALITY', 75),
+
+    // optimized-only: the largest file a person may pick. The browser makes the light copy from it; a file this large
+    // is never sent (what is sent still has to fit gym.max_image_kb).
+    'pick_max_kb' => (int) env('MEDIA_PICK_MAX_KB', 40_960),
+
+    // optimized-only: a JPEG, PNG or WebP that is already light (at most this many bits a pixel, no larger than its
+    // use needs, no camera data: EXIF, XMP, text) is kept as it came, not compressed a second time. Anything else is
+    // made light by the server, and loses its camera data on the way.
+    'keep_bits_per_pixel' => 4,
+
     // Where originals are kept. 'local' is storage/app/private, inside the club's folder that club archives collect.
     'originals_disk' => env('MEDIA_ORIGINALS_DISK', 'local'),
 

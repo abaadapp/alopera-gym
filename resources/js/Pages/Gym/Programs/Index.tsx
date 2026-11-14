@@ -4,7 +4,7 @@ import { Clock, Dumbbell, Eye, EyeOff, ImagePlus, Pencil, Plus, Trash2, Users } 
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, EnglishFields, Field, Input, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { number } from '@/lib/format';
-import { IMAGE_ACCEPT, localPreview, pickImage, withTickets } from '@/lib/image-prep';
+import { IMAGE_ACCEPT, imagesReady, keptHint, localPreview, optimizeSpec, pickImage, withTickets } from '@/lib/image-prep';
 import { useShared } from '@/hooks/useShared';
 
 type Program = {
@@ -25,6 +25,7 @@ type Program = {
     schedules_count: number;
     image_url: string | null;
     image_download_url?: string | null;
+    image_has_original?: boolean;
 };
 
 const CATEGORIES: Record<string, string> = { class: 'حصة جماعية', program: 'برنامج تدريبي', pt: 'تدريب شخصي' };
@@ -105,8 +106,9 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
         setOpen(true);
     };
 
-    const submit = (e: FormEvent) => {
+    const submit = async (e: FormEvent) => {
         e.preventDefault();
+        await imagesReady(); // a light copy still being made is sent, not the heavy file
         const options = { forceFormData: true, preserveScroll: true, onSuccess: () => setOpen(false) };
         if (editing) {
             form.transform((data) => ({ ...withTickets(data, ['image']), _method: 'put' }));
@@ -248,7 +250,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                             <Textarea dir="ltr" lang="en" rows={3} maxLength={3000} value={form.data.description_en} onChange={(e) => form.setData('description_en', e.target.value)} />
                         </Field>
                     </EnglishFields>
-                    <Field label="صورة البرنامج" error={form.errors.image ?? form.errors.image_preview} className="sm:col-span-2" hint="تُحفظ الصورة الأصلية كما هي، ويظهر في الموقع نسخة خفيفة منها">
+                    <Field label="صورة البرنامج" error={form.errors.image ?? form.errors.image_preview} className="sm:col-span-2" hint={keptHint(media?.optimize)}>
                         <label className="flex cursor-pointer items-center gap-4 rounded-xl border border-dashed border-line p-3 hover:border-brand-300">
                             {preview ? <img src={preview} alt="" className="size-16 rounded-lg object-cover" /> : <span className="grid size-16 place-items-center rounded-lg bg-brand-50 text-brand"><ImagePlus className="size-6" /></span>}
                             <span className="text-sm text-muted">اختر صورة (JPG وPNG وWebP وHEIC وAVIF وGIF)</span>
@@ -260,11 +262,11 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                                     pickImage(e.target.files?.[0] ?? null, (file, source, ticket) => {
                                         form.setData((d) => (source && d.image !== file ? d : { ...d, image: file, image_preview: source, image_direct: ticket }));
                                         setPreview(file ? localPreview(file, source) : editing?.image_url ?? null);
-                                    }, media?.direct ? route('club.programs.uploads') : null)
+                                    }, media?.direct ? route('club.programs.uploads') : null, optimizeSpec(media?.optimize, 'programs'))
                                 }
                             />
                         </label>
-                        {editing?.image_download_url && !form.data.image && <a href={editing.image_download_url} className="mt-2 inline-block text-[13px] text-muted underline-offset-2 hover:text-ink hover:underline">تنزيل الصورة الأصلية</a>}
+                        {editing?.image_download_url && !form.data.image && <a href={editing.image_download_url} className="mt-2 inline-block text-[13px] text-muted underline-offset-2 hover:text-ink hover:underline">{editing.image_has_original ? 'تنزيل الصورة الأصلية' : 'تنزيل الصورة'}</a>}
                     </Field>
                     <div className="space-y-2 sm:col-span-2">
                         <Toggle checked={form.data.is_public} onChange={(v) => form.setData('is_public', v)} label="يظهر في الموقع" hint="صفحة البرامج وجدول الحصص العام" />

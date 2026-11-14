@@ -20,7 +20,7 @@ class ProgramController extends Controller
         return Inertia::render('Gym/Programs/Index', [
             'programs' => Program::withCount('schedules')->orderBy('sort')->orderBy('name')->get()->map(fn (Program $p) => $p->only(
                 'id', 'name', 'name_en', 'slug', 'category', 'level', 'description', 'description_en', 'color', 'duration_minutes', 'default_capacity', 'is_public', 'is_active', 'sort', 'schedules_count'
-            ) + ['image_url' => $p->imageUrl(), 'image_download_url' => $p->image_path ? route('club.programs.image', $p) : null]),
+            ) + ['image_url' => $p->imageUrl(), 'image_download_url' => $p->image_path ? route('club.programs.image', $p) : null, 'image_has_original' => ImageStore::hasOriginal($p->image_path)]),
         ]);
     }
 
@@ -58,7 +58,7 @@ class ProgramController extends Controller
         } else {
             // The new image is stored and saved first; the old files go only after that worked. A refused image
             // shows its reason on the field and saves nothing.
-            ImageStore::replace($program->image_path, $image, 'programs', 1600, function (string $path) use ($program) {
+            ImageStore::replace($program->image_path, $image, 'programs', null, function (string $path) use ($program) {
                 $program->image_path = $path;
                 $program->save();
             });

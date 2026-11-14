@@ -4,7 +4,7 @@ import { ImagePlus, Newspaper, Pencil, Plus, Tag, Trash2 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, EnglishFields, Field, Input, Modal, PageHeader, Select, Tabs, Textarea, Toggle } from '@/Components/ui';
 import { date } from '@/lib/format';
-import { IMAGE_ACCEPT, pickImage, withTickets } from '@/lib/image-prep';
+import { IMAGE_ACCEPT, imagesReady, optimizeSpec, pickImage, withTickets } from '@/lib/image-prep';
 import { useShared } from '@/hooks/useShared';
 
 interface Post {
@@ -20,6 +20,7 @@ interface Post {
     is_published: boolean;
     image_url: string | null;
     image_download_url?: string | null;
+    image_has_original?: boolean;
     starts_on: string | null;
     ends_on: string | null;
     published_at: string | null;
@@ -118,8 +119,9 @@ function PostModal({ post, onClose }: { post: Post | null; onClose: () => void }
     });
     const preview = useMemo(() => (form.data.image ? URL.createObjectURL(form.data.image_preview ?? form.data.image) : post?.image_url ?? null), [form.data.image, form.data.image_preview, post?.image_url]);
 
-    const submit = (e: FormEvent) => {
+    const submit = async (e: FormEvent) => {
         e.preventDefault();
+        await imagesReady(); // a light copy still being made is sent, not the heavy file
         const url = post ? route('club.website.posts.update', post.id) : route('club.website.posts.store');
         form.transform((d) => withTickets(d, ['image']));
         form.post(url, { preserveScroll: true, onSuccess: onClose });
@@ -182,10 +184,10 @@ function PostModal({ post, onClose }: { post: Post | null; onClose: () => void }
                         <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-brand-50">
                             <ImagePlus className="size-3.5" /> اختيار صورة
                             <input type="file" accept={IMAGE_ACCEPT} className="hidden" onChange={(e) =>
-                                pickImage(e.target.files?.[0] ?? null, (file, source, ticket) => form.setData((d) => (source && d.image !== file ? d : { ...d, image: file, image_preview: source, image_direct: ticket })), media?.direct ? route('club.website.posts.uploads') : null)
+                                pickImage(e.target.files?.[0] ?? null, (file, source, ticket) => form.setData((d) => (source && d.image !== file ? d : { ...d, image: file, image_preview: source, image_direct: ticket })), media?.direct ? route('club.website.posts.uploads') : null, optimizeSpec(media?.optimize, 'posts'))
                             } />
                         </label>
-                        {post?.image_download_url && !form.data.image && <a href={post.image_download_url} className="text-xs text-muted underline-offset-2 hover:text-ink hover:underline">تنزيل الصورة الأصلية</a>}
+                        {post?.image_download_url && !form.data.image && <a href={post.image_download_url} className="text-xs text-muted underline-offset-2 hover:text-ink hover:underline">{post.image_has_original ? 'تنزيل الصورة الأصلية' : 'تنزيل الصورة'}</a>}
                     </div>
                 </Field>
                 <Toggle checked={form.data.is_published} onChange={(v) => form.setData('is_published', v)} label="منشور في الموقع" />

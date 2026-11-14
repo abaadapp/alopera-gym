@@ -5,7 +5,7 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import { BackLink, Button, Card, Field, FormSection, Input, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import type { Option } from '@/types';
 import { useBranchDefault, useShared } from '@/hooks/useShared';
-import { IMAGE_ACCEPT, localPreview, pickImage, withTickets } from '@/lib/image-prep';
+import { IMAGE_ACCEPT, imagesReady, keptHint, localPreview, optimizeSpec, pickImage, withTickets } from '@/lib/image-prep';
 
 interface MemberData {
     id: number;
@@ -75,8 +75,9 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
     });
 
     const { media } = useShared();
-    const submit = (e: FormEvent) => {
+    const submit = async (e: FormEvent) => {
         e.preventDefault();
+        await imagesReady(); // a light copy still being made is sent, not the heavy file
         const url = editing ? route('club.members.update', member.id) : route('club.members.store');
         form.transform((d) => withTickets(d, ['photo']));
         form.post(url, {
@@ -134,7 +135,7 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
                             {preview ? <img src={preview} alt="" className="size-full object-cover" /> : <UserRound className="size-8 text-[#d1d5db]" />}
                         </div>
                         <div className="min-w-0 flex-1">
-                            <Field error={err.photo ?? err.photo_preview} hint="صورة واضحة للوجه. تُحفظ الصورة الأصلية كما هي، وتظهر منها نسخة خفيفة.">
+                            <Field error={err.photo ?? err.photo_preview} hint={`صورة واضحة للوجه. ${keptHint(media?.optimize)}`}>
                                 <input
                                     type="file"
                                     accept={IMAGE_ACCEPT}
@@ -144,7 +145,7 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
                                         pickImage(e.target.files?.[0] ?? null, (file, source, ticket) => {
                                             form.setData((d) => (source && d.photo !== file ? d : { ...d, photo: file, photo_preview: source, photo_direct: ticket }));
                                             if (file) setPreview(localPreview(file, source));
-                                        }, media?.direct ? route('club.members.uploads') : null)
+                                        }, media?.direct ? route('club.members.uploads') : null, optimizeSpec(media?.optimize, 'members'))
                                     }
                                 />
                             </Field>

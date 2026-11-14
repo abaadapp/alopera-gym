@@ -31,7 +31,7 @@ export default function MediaLibrary({ onSelect, selectedId }: { onSelect?: (ite
         setBusy(true);
         setError(null);
         try {
-            const added = await uploadMedia(files, limits.direct === true, limits.max_request_kb);
+            const added = await uploadMedia(files, limits.direct === true, limits.max_request_kb, limits.optimize ?? null);
             setMedia((current) => [...added, ...current.filter((m) => !added.some((a) => a.id === m.id))]);
             if (onSelect && added.length === 1) onSelect(added[0]);
         } catch (e) {
@@ -65,7 +65,7 @@ export default function MediaLibrary({ onSelect, selectedId }: { onSelect?: (ite
                 <Button type="button" variant="outline" size="sm" icon={<ImagePlus />} disabled={busy} onClick={() => input.current?.click()}>
                     اختيار صور من جهازك
                 </Button>
-                <p className="text-[12px] text-muted">JPG وPNG وWebP وHEIC وAVIF وGIF، حتى {Math.round(limits.max_image_kb / 1024)} م.ب للصورة و١٢ صورة في المرة. تُحفظ الصورة الأصلية كما هي، ويظهر في الموقع نسخة كاملة دون قص وبحجم أخف.</p>
+                <p className="text-[12px] text-muted">JPG وPNG وWebP وHEIC وAVIF وGIF، حتى {Math.round((limits.optimize?.pick_max_kb ?? limits.max_image_kb) / 1024)} م.ب للصورة و١٢ صورة في المرة. {limits.optimize ? 'تُجهَّز الصورة في جهازك قبل الرفع، ويُحفظ منها نسخة خفيفة كاملة دون قص.' : 'تُحفظ الصورة الأصلية كما هي، ويظهر في الموقع نسخة كاملة دون قص وبحجم أخف.'}</p>
                 <input ref={input} type="file" multiple accept={accept} className="sr-only" onChange={(e) => { void upload(e.target.files); e.target.value = ''; }} />
             </div>
             {error && <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p>}

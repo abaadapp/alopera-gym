@@ -95,7 +95,7 @@ class MemberController extends Controller
         unset($data['photo'], $data['photo_preview'], $data['photo_direct']);
 
         // The photo is stored first: a refused photo registers nothing, and a failed registration leaves no file.
-        $path = $photo ? ImageStore::store($photo, 'members', 600) : null;
+        $path = $photo ? ImageStore::store($photo, 'members') : null;
         try {
             $member = DB::transaction(function () use ($data, $path) {
                 $member = $this->members->create($data);
@@ -202,7 +202,7 @@ class MemberController extends Controller
         // The old photo goes only once the edit is saved: a refused edit (a phone already taken) keeps it.
         $old = $member->photo_path;
         if ($photo = ImageUpload::from($request, 'photo')) {
-            $member->photo_path = ImageStore::store($photo, 'members', 600);
+            $member->photo_path = ImageStore::store($photo, 'members');
         }
         unset($data['photo'], $data['photo_preview'], $data['photo_direct']);
         try {

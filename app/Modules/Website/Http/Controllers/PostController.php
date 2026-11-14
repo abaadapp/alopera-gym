@@ -22,6 +22,7 @@ class PostController extends Controller
             'posts' => SitePost::latest()->get()->map(fn (SitePost $p) => $p->only('id', 'type', 'title', 'title_en', 'slug', 'excerpt', 'excerpt_en', 'body', 'body_en', 'is_published') + [
                 'image_url' => ImageStore::thumbUrl($p->image_path),
                 'image_download_url' => $p->image_path ? route('club.website.posts.image', $p) : null,
+                'image_has_original' => ImageStore::hasOriginal($p->image_path),
                 'starts_on' => $p->starts_on?->toDateString(), 'ends_on' => $p->ends_on?->toDateString(),
                 'published_at' => $p->published_at?->format('Y-m-d'),
             ]),
@@ -67,7 +68,7 @@ class PostController extends Controller
         if (! $image) {
             $post->save();
         } else {
-            ImageStore::replace($post->image_path, $image, 'posts', 1600, function (string $path) use ($post) {
+            ImageStore::replace($post->image_path, $image, 'posts', null, function (string $path) use ($post) {
                 $post->image_path = $path;
                 $post->save();
             });

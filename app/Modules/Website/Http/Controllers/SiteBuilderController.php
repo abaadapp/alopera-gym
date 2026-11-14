@@ -69,7 +69,7 @@ class SiteBuilderController extends Controller
             // The site's own English for its standard phrases, shown where the owner has not written English yet.
             'englishDefaults' => (object) app('translator')->getLoader()->load('en', '*', '*'),
             'previewUrl' => route('club.website.preview'),
-            'limits' => ['max_image_kb' => (int) config('gym.max_image_kb'), 'types' => MediaLibrary::TYPES, 'direct' => SpacesOriginals::enabled(), 'max_request_kb' => (int) config('media.max_request_kb')],
+            'limits' => ['max_image_kb' => (int) config('gym.max_image_kb'), 'types' => MediaLibrary::TYPES, 'direct' => SpacesOriginals::enabled(), 'max_request_kb' => (int) config('media.max_request_kb'), 'optimize' => ImageStore::browserPlan()],
             'unread' => ContactMessage::where('status', 'new')->count(),
         ]);
     }

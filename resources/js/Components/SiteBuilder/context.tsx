@@ -8,7 +8,7 @@ export interface BuilderContextValue {
     targets: { value: string; label: string }[];
     sections: SectionDoc[];
     schemas: Record<string, SectionTypeSchema>;
-    limits: { max_image_kb: number; types: string[]; direct?: boolean; max_request_kb?: number };
+    limits: { max_image_kb: number; types: string[]; direct?: boolean; max_request_kb?: number; optimize?: import('@/lib/image-prep').OptimizePlan | null };
     /** Errors by path relative to the document (`sections.<id>.data.title`, `contact.email`). */
     errors: Record<string, string>;
     /** Saved sections fed by the gym system that are not on the site now for want of data: id => why. */

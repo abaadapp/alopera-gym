@@ -389,8 +389,8 @@ class WebsiteContentTest extends TestCase
         $this->assertSame(['landscape', 1600, 900], [$wide['orientation'], $wide['width'], $wide['height']]);
         $this->assertSame(['portrait', 800, 1200], [$tall['orientation'], $tall['width'], $tall['height']]);
         $this->assertSame('square', $square['orientation']);
-        // Scaled down to fit, proportions unchanged.
-        $this->assertSame([2400, 1200], [$huge['width'], $huge['height']]);
+        // Scaled down to fit the website's longest side (media.sides.site, 1920), proportions unchanged.
+        $this->assertSame([1920, 960], [$huge['width'], $huge['height']]);
 
         [$doc, $v] = $this->editor($club);
         $doc['sections'][0]['data']['image'] = ['id' => $tall['id'], 'fit' => 'auto'];

@@ -9,7 +9,7 @@ import { cn } from '@/lib/cn';
 import { money, number } from '@/lib/format';
 import type { Option } from '@/types';
 import type { ProductRow } from './Index';
-import { IMAGE_ACCEPT, pickImage, sizeProblem, withTickets } from '@/lib/image-prep';
+import { IMAGE_ACCEPT, imagesReady, optimizeSpec, pickImage, sizeProblem, withTickets } from '@/lib/image-prep';
 
 interface Addon {
     id: number;
@@ -23,7 +23,7 @@ interface Addon {
 }
 
 interface Props {
-    product: (ProductRow & { description: string | null; name_en?: string | null; description_en?: string | null; reorder_level: string; photos: string[]; photo_downloads?: string[] }) | null;
+    product: (ProductRow & { description: string | null; name_en?: string | null; description_en?: string | null; reorder_level: string; photos: string[]; photo_downloads?: string[]; photo_originals?: boolean[] }) | null;
     categories: Option[];
     addons: Addon[];
     maxPhotos: number;
@@ -89,8 +89,9 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [form.errors]);
 
-    const submit = (e: FormEvent) => {
+    const submit = async (e: FormEvent) => {
         e.preventDefault();
+        await imagesReady(); // a light copy still being made is sent, not the heavy file
         const options = { forceFormData: true, preserveScroll: true };
         if (product) {
             form.transform((d) => ({ ...withTickets(d, ['photos']), opening_stock: '', opening_cost: '', _method: 'put' }));
@@ -117,7 +118,7 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
         added.forEach((file) => pickImage(file, (f, source, ticket) => source && form.setData((d) => {
             const at = d.photos.indexOf(f as File);
             return at < 0 ? d : { ...d, photos_preview: d.photos_preview.map((s, i) => (i === at ? source : s)), photos_direct: d.photos_direct.map((t, i) => (i === at ? ticket : t)) };
-        }), media?.direct ? route('club.products.uploads') : null));
+        }), media?.direct ? route('club.products.uploads') : null, optimizeSpec(media?.optimize, 'products')));
     };
     const photoAction = (index: number, action: 'main' | 'remove') => product && router.post(route('club.products.photo', { product: product.id, index }), { action }, { preserveScroll: true, preserveState: true });
     const toggleAddon = (id: number) => form.setData('addon_ids', form.data.addon_ids.includes(id) ? form.data.addon_ids.filter((x) => x !== id) : [...form.data.addon_ids, id]);
@@ -260,7 +261,7 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
                     {tab === 'photos' && (
                         <Card className="p-6">
                             <h3 className="mb-1 font-bold text-ink">صور المنتج</h3>
-                            <p className="mb-4 text-[13px] text-muted">حتى <span className="num">{maxPhotos}</span> صور (JPG وPNG وWebP وHEIC وAVIF وGIF؛ تُحفظ الأصلية كما هي). الصورة الرئيسية تظهر في القوائم ونقطة البيع، والباقي في صفحة المنتج بالمتجر.</p>
+                            <p className="mb-4 text-[13px] text-muted">حتى <span className="num">{maxPhotos}</span> صور (JPG وPNG وWebP وHEIC وAVIF وGIF؛ {media?.optimize ? 'تُجهَّز في جهازك قبل الرفع، وتُحفظ نسخة خفيفة واضحة دون قص' : 'تُحفظ الأصلية كما هي'}). الصورة الرئيسية تظهر في القوائم ونقطة البيع، والباقي في صفحة المنتج بالمتجر.</p>
                             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                                 {existing.map((url, i) => (
                                     <div key={url} className={cn('group relative aspect-square overflow-hidden rounded-[12px] border border-line', i === 0 && 'ring-2 ring-[#111]/15')}>
@@ -268,7 +269,7 @@ export default function ProductForm({ product, categories, addons, maxPhotos }: 
                                         {i === 0 && <span className="absolute top-2 start-2 inline-flex items-center gap-1 rounded-full bg-[#111] px-2 py-0.5 text-[11px] font-medium text-white"><Star className="size-3" /> الرئيسية</span>}
                                         <div className="absolute inset-x-0 bottom-0 flex justify-center gap-1 bg-black/50 p-1.5 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
                                             {i > 0 && <button type="button" onClick={() => photoAction(i, 'main')} className="rounded-[8px] px-2 py-1 text-[12px] text-white hover:bg-white/20">اجعلها الرئيسية</button>}
-                                            {product?.photo_downloads?.[i] && <a href={product.photo_downloads[i]} className="grid size-7 place-items-center rounded-[8px] text-white hover:bg-white/20" aria-label="تنزيل الصورة الأصلية" title="تنزيل الصورة الأصلية"><Download className="size-4" /></a>}
+                                            {product?.photo_downloads?.[i] && <a href={product.photo_downloads[i]} className="grid size-7 place-items-center rounded-[8px] text-white hover:bg-white/20" aria-label={product.photo_originals?.[i] ? 'تنزيل الصورة الأصلية' : 'تنزيل الصورة'} title={product.photo_originals?.[i] ? 'تنزيل الصورة الأصلية' : 'تنزيل الصورة'}><Download className="size-4" /></a>}
                                             <button type="button" onClick={() => photoAction(i, 'remove')} className="grid size-7 place-items-center rounded-[8px] text-white hover:bg-white/20" aria-label="حذف الصورة"><Trash2 className="size-4" /></button>
                                         </div>
                                     </div>

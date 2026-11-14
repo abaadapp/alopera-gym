@@ -1,4 +1,4 @@
-import { batches, displaySource, uploadOriginal } from '@/lib/image-prep';
+import { batches, displaySource, lightCopy, type OptimizePlan, optimizeSpec, uploadOriginal } from '@/lib/image-prep';
 import { xsrf } from '@/lib/http';
 import type { MediaItem } from '@/types/site';
 
@@ -32,8 +32,14 @@ async function read<T>(response: Response): Promise<T> {
  * original as it is (or only its key, after a direct upload), and beside it, at the same index, the browser's display
  * source for a HEIC or a very large photo.
  */
-export async function uploadMedia(files: File[], direct = false, maxRequestKb = 20_480): Promise<MediaItem[]> {
-    const sources = await Promise.all(files.map((f) => displaySource(f, direct).catch(() => null)));
+export async function uploadMedia(files: File[], direct = false, maxRequestKb = 20_480, optimize: OptimizePlan | null = null): Promise<MediaItem[]> {
+    const spec = optimizeSpec(optimize, 'site');
+    if (spec) {
+        // optimized-only: each light copy is sent in place of its file (or the file itself when already light).
+        files = await Promise.all(files.map((f) => lightCopy(f, spec).then((copy) => copy ?? f).catch(() => f)));
+        direct = false;
+    }
+    const sources = spec ? files.map(() => null) : await Promise.all(files.map((f) => displaySource(f, direct).catch(() => null)));
     const items = files.map((file, i) => ({ file, source: sources[i] }));
     const weight = (item: { file: File; source: File | null }) => (direct && item.source ? 0 : item.file.size) + (item.source?.size ?? 0) + 4096;
     const added: MediaItem[] = [];
@@ -74,7 +80,7 @@ export function acceptedTypes(types: string[]): string[] {
 }
 
 /** Files the server would refuse, refused here first with the reason: wrong kind, too large, too many. */
-export function checkFiles(files: File[], limits: { max_image_kb: number; types: string[] }): string | null {
+export function checkFiles(files: File[], limits: { max_image_kb: number; types: string[]; optimize?: OptimizePlan | null }): string | null {
     if (files.length === 0) return null;
     if (files.length > 12) return 'ارفع ١٢ صورة على الأكثر في المرة الواحدة.';
     const allowed = acceptedTypes(limits.types);
@@ -82,7 +88,9 @@ export function checkFiles(files: File[], limits: { max_image_kb: number; types:
     const kind = (f: File) => f.type || acceptedTypes([f.name.split('.').pop() ?? ''])[0];
     const wrong = files.find((f) => !allowed.includes(f.type) && !(f.type === '' && allowed.includes(kind(f)) && /\.(heic|heif|avif)$/i.test(f.name)));
     if (wrong) return `«${wrong.name}» ليست صورة مقبولة. الصيغ المقبولة: JPG وPNG وWebP وHEIC وHEIF وAVIF وGIF.`;
-    const big = files.find((f) => f.size > limits.max_image_kb * 1024);
-    if (big) return `«${big.name}» أكبر من الحد المسموح (${Math.round(limits.max_image_kb / 1024)} م.ب).`;
+    // With light copies the picked file only has to fit what the browser may open; the copy is what is sent.
+    const most = limits.optimize ? limits.optimize.pick_max_kb : limits.max_image_kb;
+    const big = files.find((f) => f.size > most * 1024);
+    if (big) return `«${big.name}» أكبر من الحد المسموح (${Math.round(most / 1024)} م.ب).`;
     return null;
 }

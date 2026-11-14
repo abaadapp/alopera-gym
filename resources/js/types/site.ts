@@ -295,7 +295,7 @@ export interface BuilderProps {
     targets: { value: string; label: string }[];
     siteUrl: string;
     previewUrl: string;
-    limits: { max_image_kb: number; types: string[]; direct?: boolean; max_request_kb?: number };
+    limits: { max_image_kb: number; types: string[]; direct?: boolean; max_request_kb?: number; optimize?: import('@/lib/image-prep').OptimizePlan | null };
     unread: number;
     /** The site's own English for its standard phrases (default headings, buttons): Arabic => English. */
     englishDefaults: Record<string, string>;

@@ -250,6 +250,7 @@ class ProductController extends Controller
                 'reorder_level' => $product->reorder_level,
                 'photos' => $product->imageUrls(),
                 'photo_downloads' => array_map(fn (int $i) => route('club.products.photo.original', [$product, $i]), array_keys($product->imagePaths())),
+                'photo_originals' => array_map(fn (string $path) => ImageStore::hasOriginal($path), array_values($product->imagePaths())),
             ] : null,
             'categories' => ProductCategory::ordered()->get(['id', 'name']),
             // Add-ons chosen product by product are switched here; the others follow their own rule (all products,
@@ -324,7 +325,7 @@ class ProductController extends Controller
         $paths = [];
         try {
             foreach (array_slice(ImageUpload::all($request, 'photos'), 0, $room) as $upload) {
-                $paths[] = ImageStore::store($upload, 'products', 1000);
+                $paths[] = ImageStore::store($upload, 'products');
             }
         } catch (\Throwable $e) {
             array_map(ImageStore::delete(...), $paths);

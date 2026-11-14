@@ -40,7 +40,7 @@ final class OfficialLogo
     private const RATIO = 1448 / 1086;
 
     /** The longest side an uploaded logo is kept at: sharp on A4 at print resolution. */
-    private const UPLOAD_MAX = 1600;
+    public const UPLOAD_MAX = 1600;
 
     /** The club's own upload, when it has one and its file is there. */
     public static function uploaded(?Tenant $tenant): ?string

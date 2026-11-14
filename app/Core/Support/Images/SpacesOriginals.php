@@ -2,6 +2,7 @@
 
 namespace App\Core\Support\Images;
 
+use App\Core\Support\ImageStore;
 use App\Core\Tenancy\TenantContext;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Str;
@@ -30,7 +31,8 @@ final class SpacesOriginals
 
     public static function enabled(): bool
     {
-        return config('media.originals') === 'spaces' && Bucket::main()->configured();
+        // optimized-only keeps no original anywhere, so nothing goes to the bucket either.
+        return config('media.originals') === 'spaces' && ! ImageStore::optimizedOnly() && Bucket::main()->configured();
     }
 
     /**

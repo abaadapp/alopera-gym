@@ -75,6 +75,113 @@ final class ImageInspector
         return new ImageFacts($type, self::TYPES[$type][0], self::TYPES[$type][1], $width, $height, self::animated($type, $path, $head, $whole), $bytes);
     }
 
+    /**
+     * Whether a still JPEG, PNG or WebP carries more than its picture: data about where and how it was taken or any
+     * text a camera or an editor wrote (EXIF with the location, XMP, IPTC, comments, PNG text), or bytes after the
+     * picture's end (a phone's "motion photo" video, anything appended). A colour profile (ICC) is not such data: it
+     * keeps the colours right. Reads only the parts' headers, never the picture. Unknown types count as carrying it.
+     */
+    public static function carriesPrivateData(string $path, string $type): bool
+    {
+        $handle = @fopen($path, 'rb');
+        if (! $handle) {
+            return true;
+        }
+        try {
+            return match ($type) {
+                'jpeg' => self::jpegCarries($handle),
+                'png' => self::pngCarries($handle),
+                'webp' => self::webpCarries($handle),
+                default => true,
+            };
+        } finally {
+            fclose($handle);
+        }
+    }
+
+    /** @param resource $handle */
+    private static function jpegCarries($handle): bool
+    {
+        fseek($handle, 2);
+        while (! feof($handle)) {
+            $marker = fread($handle, 2);
+            if (strlen($marker) < 2 || $marker[0] !== "\xFF") {
+                return true; // not a clean run of segments: treat as carrying data
+            }
+            $code = ord($marker[1]);
+            if ($code === 0xD8 || ($code >= 0xD0 && $code <= 0xD7) || $code === 0x01 || $code === 0xFF) {
+                continue;
+            }
+            if ($code === 0xDA || $code === 0xD9) {
+                // The picture itself starts: no metadata segment comes before it any more. It must end the file.
+                fseek($handle, -2, SEEK_END);
+
+                return fread($handle, 2) !== "\xFF\xD9";
+            }
+            $length = unpack('n', (string) fread($handle, 2))[1] ?? 0;
+            // APP1 (EXIF, XMP), APP13 (IPTC), COM (comments) and the other APPn a camera or an editor writes;
+            // APP0 (JFIF), APP2 (ICC colour profile) and APP14 (Adobe colour transform) only say how to show it.
+            if ($code === 0xFE || ($code >= 0xE1 && $code <= 0xEF && ! in_array($code, [0xE2, 0xEE], true))) {
+                return true;
+            }
+            if ($length < 2 || fseek($handle, $length - 2, SEEK_CUR) !== 0) {
+                return true;
+            }
+        }
+
+        return true;
+    }
+
+    /** @param resource $handle */
+    private static function pngCarries($handle): bool
+    {
+        fseek($handle, 8);
+        while (true) {
+            $head = fread($handle, 8);
+            if (strlen((string) $head) < 8) {
+                return true;
+            }
+            $length = unpack('N', substr($head, 0, 4))[1];
+            $chunk = substr($head, 4, 4);
+            if (in_array($chunk, ['eXIf', 'tEXt', 'zTXt', 'iTXt', 'tIME'], true)) {
+                return true;
+            }
+            if ($chunk === 'IEND') {
+                return ftell($handle) + 4 !== (int) fstat($handle)['size'];
+            }
+            if (fseek($handle, $length + 4, SEEK_CUR) !== 0) {
+                return true;
+            }
+        }
+    }
+
+    /** @param resource $handle */
+    private static function webpCarries($handle): bool
+    {
+        $riff = fread($handle, 12);
+        if (strlen((string) $riff) < 12) {
+            return true;
+        }
+        $end = unpack('V', substr($riff, 4, 4))[1] + 8;
+        if ($end !== (int) fstat($handle)['size']) {
+            return true;
+        }
+        for ($at = 12; $at + 8 <= $end;) {
+            fseek($handle, $at);
+            $head = (string) fread($handle, 8);
+            if (strlen($head) < 8) {
+                return true;
+            }
+            if (in_array(substr($head, 0, 4), ['EXIF', 'XMP '], true)) {
+                return true;
+            }
+            $size = unpack('V', substr($head, 4, 4))[1];
+            $at += 8 + $size + ($size & 1);
+        }
+
+        return false;
+    }
+
     /** The type the bytes say, or null for anything that is not one of the accepted images. */
     public static function sniff(string $head): ?string
     {

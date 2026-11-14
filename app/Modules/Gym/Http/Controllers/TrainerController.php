@@ -28,6 +28,7 @@ class TrainerController extends Controller
             ) + [
                 'photo_url' => $t->photoThumbUrl(),
                 'photo_download_url' => $t->photo_path ? route('club.trainers.photo', $t) : null,
+                'photo_has_original' => ImageStore::hasOriginal($t->photo_path),
                 'user' => $t->user?->only('id', 'name', 'email'),
                 'availability' => $t->availabilities->map(fn ($a) => ['weekday' => $a->weekday, 'starts_at' => substr($a->starts_at, 0, 5), 'ends_at' => substr($a->ends_at, 0, 5)]),
             ]),
@@ -45,7 +46,7 @@ class TrainerController extends Controller
         if (! $photo) {
             $trainer->save();
         } else {
-            ImageStore::commit(null, ImageStore::store($photo, 'trainers', 800), function (string $path) use ($trainer) {
+            ImageStore::commit(null, ImageStore::store($photo, 'trainers'), function (string $path) use ($trainer) {
                 $trainer->photo_path = $path;
                 $trainer->save();
             });
@@ -71,7 +72,7 @@ class TrainerController extends Controller
             $trainer->save();
         } else {
             // The new photo is stored and saved first; the old files go only after that worked.
-            ImageStore::replace($trainer->photo_path, $photo, 'trainers', 800, function (string $path) use ($trainer) {
+            ImageStore::replace($trainer->photo_path, $photo, 'trainers', null, function (string $path) use ($trainer) {
                 $trainer->photo_path = $path;
                 $trainer->save();
             });

@@ -5,7 +5,7 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardFooter, ConfirmAction, EmptyState, EnglishFields, Field, Input, linesOf, Modal, PageHeader, Select, Textarea, Toggle } from '@/Components/ui';
 import { WEEKDAYS, phone as fmtPhone } from '@/lib/format';
 import type { Option } from '@/types';
-import { IMAGE_ACCEPT, localPreview, pickImage, withTickets } from '@/lib/image-prep';
+import { IMAGE_ACCEPT, imagesReady, keptHint, localPreview, optimizeSpec, pickImage, withTickets } from '@/lib/image-prep';
 import { useShared } from '@/hooks/useShared';
 
 type Slot = { weekday: number; starts_at: string; ends_at: string };
@@ -28,6 +28,7 @@ type Trainer = {
     branch_id: number | null;
     photo_url: string | null;
     photo_download_url?: string | null;
+    photo_has_original?: boolean;
     user: { id: number; name: string; email: string } | null;
     availability: Slot[];
 };
@@ -130,8 +131,9 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
         setTag('');
     };
 
-    const submit = (e: FormEvent) => {
+    const submit = async (e: FormEvent) => {
         e.preventDefault();
+        await imagesReady(); // a light copy still being made is sent, not the heavy file
         const options = { forceFormData: true, preserveScroll: true, onSuccess: () => setOpen(false) };
         // A multipart form drops an empty list: no English specialties go as an empty value, so clearing them sticks.
         const english = (data: TrainerForm) => ({ ...data, specialties_en: data.specialties_en.length ? data.specialties_en : null });
@@ -299,7 +301,7 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                     <Field label="الترتيب" error={form.errors.sort}>
                         <Input type="number" value={form.data.sort} onChange={(e) => form.setData('sort', e.target.value)} />
                     </Field>
-                    <Field label="الصورة" error={form.errors.photo ?? form.errors.photo_preview} className="sm:col-span-2" hint="تُحفظ الصورة الأصلية كما هي، وتظهر منها نسخة خفيفة.">
+                    <Field label="الصورة" error={form.errors.photo ?? form.errors.photo_preview} className="sm:col-span-2" hint={keptHint(media?.optimize)}>
                         <label className="flex cursor-pointer items-center gap-4 rounded-xl border border-dashed border-line p-3 hover:border-brand-300">
                             {preview ? <img src={preview} alt="" className="size-16 rounded-xl object-cover" /> : <span className="grid size-16 place-items-center rounded-xl bg-brand-50 text-brand"><ImagePlus className="size-6" /></span>}
                             <span className="text-sm text-muted">اختر صورة</span>
@@ -307,10 +309,10 @@ export default function TrainersIndex({ trainers, users, branches }: { trainers:
                                 pickImage(e.target.files?.[0] ?? null, (file, source, ticket) => {
                                     form.setData((d) => (source && d.photo !== file ? d : { ...d, photo: file, photo_preview: source, photo_direct: ticket }));
                                     setPreview(file ? localPreview(file, source) : editing?.photo_url ?? null);
-                                }, media?.direct ? route('club.trainers.uploads') : null)
+                                }, media?.direct ? route('club.trainers.uploads') : null, optimizeSpec(media?.optimize, 'trainers'))
                             } />
                         </label>
-                        {editing?.photo_download_url && !form.data.photo && <a href={editing.photo_download_url} className="mt-2 inline-block text-[13px] text-muted underline-offset-2 hover:text-ink hover:underline">تنزيل الصورة الأصلية</a>}
+                        {editing?.photo_download_url && !form.data.photo && <a href={editing.photo_download_url} className="mt-2 inline-block text-[13px] text-muted underline-offset-2 hover:text-ink hover:underline">{editing.photo_has_original ? 'تنزيل الصورة الأصلية' : 'تنزيل الصورة'}</a>}
                     </Field>
                     <div className="space-y-2 sm:col-span-2">
                         <Toggle checked={form.data.is_public} onChange={(v) => form.setData('is_public', v)} label="يظهر في الموقع" />
