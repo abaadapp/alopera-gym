@@ -20,6 +20,7 @@ use App\Modules\Messaging\Services\TemplateCatalog;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobClient;
+use App\Modules\Payments\Paymob\PaymobMethods;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -85,6 +86,8 @@ class IntegrationController extends Controller
             'integration' => $this->form('paymob', $row),
             'status' => $this->hub->paymob($row),
             'warning' => $row ? PaymobClient::modeMismatch($row) : null,
+            'methods' => PaymobMethods::states($row),
+            'listedIds' => $row ? PaymobClient::integrationIds($row) : [],
             'checks' => [
                 ['label' => 'المفاتيح الأربعة مُدخلة', 'ok' => $row !== null && array_filter(PaymobClient::REQUIRED, fn ($k) => $row->credential($k) === null) === [], 'at' => null],
                 ['label' => 'قبلت Paymob المفتاح السري وأرقام الربط', 'ok' => $row?->verified_at !== null && ! $row->failing(), 'at' => $row?->verified_at?->format('Y-m-d H:i')],
@@ -121,6 +124,28 @@ class IntegrationController extends Controller
             ],
             'currency' => $tenant->currency,
         ]);
+    }
+
+    /**
+     * Which listed integration id is the cards' and which Apple Pay's: a label only, on ids already in «Integration
+     * IDs», so it changes no checkout and no callback and needs no wait for open checkouts.
+     */
+    public function paymobMethods(Request $request): RedirectResponse
+    {
+        $row = TenantIntegration::where('provider', TenantIntegration::PAYMOB)->first();
+        if (! $row) {
+            return back()->with('error', 'احفظ المفاتيح وأرقام الربط أولًا.');
+        }
+        $listed = PaymobClient::integrationIds($row);
+        $data = $request->validate(array_map(fn () => ['nullable', 'integer', 'in:'.implode(',', $listed ?: [0])], PaymobMethods::LABELLED),
+            ['*.in' => 'اختر رقمًا من «Integration IDs» المحفوظة.']);
+        $methods = array_filter(array_map(fn ($id) => $id === null ? null : (string) $id, array_intersect_key($data, PaymobMethods::LABELLED)), fn ($v) => $v !== null);
+        if (count($methods) !== count(array_unique($methods))) {
+            return back()->with('error', 'لكل وسيلة رقم ربط مختلف. لم يُحفظ شيء.');
+        }
+        $row->forceFill(['settings' => array_merge(array_diff_key($row->settings ?? [], ['methods' => 1]), $methods ? ['methods' => $methods] : [])])->save();
+
+        return back()->with('success', 'تم حفظ وسائل الدفع.');
     }
 
     public function whatsapp(): Response

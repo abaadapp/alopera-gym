@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, useForm } from '@inertiajs/react';
 import { AlertTriangle, CircleCheck, CircleDashed, ShieldCheck } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Card, CardHeader, EmptyState, Notice, PageHeader } from '@/Components/ui';
@@ -8,6 +8,8 @@ interface Props {
     integration: ProviderForm;
     status: IntegrationStatusData;
     warning: string | null;
+    methods: { key: string; label: string; id: number | null; state: 'not_set' | 'set' | 'accepted' | 'proven' | 'unavailable'; reason: string }[];
+    listedIds: number[];
     checks: { label: string; ok: boolean; at: string | null }[];
     usage: { label: string; on: boolean; route?: string | null }[];
     intents: { id: number; reference: string; invoice: string | null; channel: string; amount: string; currency: string; status: string; failure: string | null; at: string }[];
@@ -23,6 +25,65 @@ const FIELDS = [
     { key: 'integration_ids', label: 'Integration IDs', hint: 'رقم أو أكثر مفصولة بفاصلة (بطاقة، Apple Pay…)' },
 ];
 
+const METHOD_STATE: Record<string, { label: string; tone: 'green' | 'amber' | 'red' | 'gray' }> = {
+    not_set: { label: 'غير مهيأة', tone: 'gray' },
+    set: { label: 'مهيأة — لم تُختبر', tone: 'amber' },
+    accepted: { label: 'قبلتها Paymob', tone: 'amber' },
+    proven: { label: 'مختبرة بدفعة فعلية', tone: 'green' },
+    unavailable: { label: 'غير متاحة', tone: 'gray' },
+};
+
+function PaymentMethods({ methods, listedIds }: { methods: Props['methods']; listedIds: number[] }) {
+    const initial = Object.fromEntries(methods.filter((m) => m.key !== 'omannet').map((m) => [m.key, m.id === null ? '' : String(m.id)]));
+    const form = useForm<Record<string, string>>(initial);
+    const pickable = methods.filter((m) => m.key !== 'omannet');
+
+    return (
+        <Card>
+            <CardHeader title="وسائل الدفع" subtitle="لا تُعد الوسيلة جاهزة لمجرد كتابة رقمها: تُقبل في «اختبار الاتصال» ثم تثبتها أول دفعة موقّعة." />
+            <ul className="space-y-3 text-sm">
+                {methods.map((m) => (
+                    <li key={m.key} className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-ink">{m.label}</span>
+                            {m.id !== null && <span className="font-mono text-xs text-muted" dir="ltr">#{m.id}</span>}
+                            <Badge tone={METHOD_STATE[m.state]?.tone ?? 'gray'}>{METHOD_STATE[m.state]?.label ?? m.state}</Badge>
+                        </div>
+                        <p className="text-xs leading-6 text-muted">{m.reason}</p>
+                    </li>
+                ))}
+            </ul>
+            {listedIds.length > 0 && (
+                <form
+                    className="mt-4 space-y-3 border-t border-line pt-4"
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        form.transform((d) => Object.fromEntries(Object.entries(d).map(([k, v]) => [k, v === '' ? null : Number(v)])));
+                        form.put(route('club.integrations.paymob.methods'), { preserveScroll: true });
+                    }}
+                >
+                    {pickable.map((m) => (
+                        <label key={m.key} className="flex flex-wrap items-center gap-2 text-sm">
+                            <span className="min-w-28 text-ink">{m.label}</span>
+                            <select
+                                className="rounded-lg border border-line bg-white px-2 py-1.5 text-sm"
+                                value={form.data[m.key] ?? ''}
+                                onChange={(e) => form.setData(m.key, e.target.value)}
+                            >
+                                <option value="">—</option>
+                                {listedIds.map((id) => <option key={id} value={String(id)}>{id}</option>)}
+                            </select>
+                            {form.errors[m.key] && <span className="text-xs text-red-600">{form.errors[m.key]}</span>}
+                        </label>
+                    ))}
+                    <button type="submit" disabled={form.processing} className="rounded-lg bg-ink px-3 py-1.5 text-sm text-white disabled:opacity-50">حفظ وسائل الدفع</button>
+                </form>
+            )}
+            <p className="mt-3 text-xs leading-6 text-muted">قبل استقبال أموال حقيقية: فعّل Paymob عُمان الوسائل لحساب النادي، وأدخل أرقامها الحقيقية (Live)، ثم «اختبار الاتصال».</p>
+        </Card>
+    );
+}
+
 const INTENT_STATUS: Record<string, { label: string; tone: 'green' | 'amber' | 'red' | 'gray' }> = {
     pending: { label: 'بانتظار الدفع', tone: 'amber' },
     paid: { label: 'مدفوع', tone: 'green' },
@@ -30,7 +91,7 @@ const INTENT_STATUS: Record<string, { label: string; tone: 'green' | 'amber' | '
     expired: { label: 'انتهت المهلة', tone: 'gray' },
 };
 
-export default function PaymobIntegration({ integration, status, warning, checks, usage, intents, events, endpoints }: Props) {
+export default function PaymobIntegration({ integration, status, warning, methods, listedIds, checks, usage, intents, events, endpoints }: Props) {
     const complete = checks[0]?.ok;
 
     return (
@@ -62,6 +123,8 @@ export default function PaymobIntegration({ integration, status, warning, checks
                 </Card>
 
                 <div className="space-y-6 lg:col-span-2">
+                    <PaymentMethods methods={methods} listedIds={listedIds} />
+
                     <Card>
                         <CardHeader title="التحقق" subtitle="«متصل» لا تظهر إلا بعد قبول Paymob للمفاتيح فعلًا" />
                         <CheckList items={checks} />
