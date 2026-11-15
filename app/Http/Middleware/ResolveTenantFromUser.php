@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Core\Backup\RestoreGate;
 use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\User;
@@ -16,7 +17,7 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class ResolveTenantFromUser
 {
-    public function __construct(private readonly TenantContext $tenants) {}
+    public function __construct(private readonly TenantContext $tenants, private readonly RestoreGate $restores) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -39,6 +40,10 @@ class ResolveTenantFromUser
         }
 
         $this->tenants->set($tenant);
+        // Never a page from a restore's half-way state: it is finished first, or the page waits (RestoreGate).
+        if ($held = $this->restores->hold($tenant)) {
+            return $held;
+        }
         $user->setRelation('tenant', $tenant);
         $user->loadMissing('role');
 

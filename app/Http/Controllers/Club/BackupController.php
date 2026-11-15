@@ -18,7 +18,13 @@ class BackupController extends Controller
 
     public function index(): Response
     {
-        return Inertia::render('Club/Settings/Backups', ['backups' => $this->backups->list($this->tenants->require())]);
+        $tenant = $this->tenants->require();
+
+        return Inertia::render('Club/Settings/Backups', [
+            'backups' => $this->backups->list($tenant),
+            // A restore stopped half-way (the server stopped mid-restore): finished by the next backup or restore.
+            'interrupted' => $this->backups->interruptedRuns($tenant),
+        ]);
     }
 
     public function store(): RedirectResponse
@@ -51,9 +57,9 @@ class BackupController extends Controller
             throw ValidationException::withMessages(['confirm' => 'اكتب معرّف النادي ('.$tenant->slug.') للتأكيد.']);
         }
 
-        // Safety net: snapshot the current state before replacing it.
-        $this->backups->create($tenant);
-        $counts = $this->backups->restore($tenant, $request->file('archive')->getRealPath());
+        // The archive is checked and staged first, then a safety copy of the club as it is (proven whole), then the
+        // restore, all or nothing (TenantBackupService::restoreWithSafetyCopy).
+        $counts = $this->backups->restoreWithSafetyCopy($tenant, $request->file('archive')->getRealPath());
 
         return back()->with('success', 'تمت الاستعادة: '.array_sum($counts).' سجلًا.');
     }
