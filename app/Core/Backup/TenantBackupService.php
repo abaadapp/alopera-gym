@@ -6,6 +6,7 @@ use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
 use App\Models\Tenant;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -654,8 +655,6 @@ final class TenantBackupService
             [$items, $report] = $this->stage($zip, $tenant, $files, $listed, $dir);
             $zip->close();
             $open = false;
-            $safety = $safetyCopy ? $this->safetyCopy($tenant) : null;
-            $this->files->putString('local', $dir.'/journal.json', (string) json_encode(['run' => $run, 'tenant' => $tenant->id, 'safety_copy' => $safety, 'items' => $items], JSON_UNESCAPED_UNICODE));
         } catch (Throwable $e) {
             if ($open) {
                 $zip->close();
@@ -671,7 +670,13 @@ final class TenantBackupService
         }
 
         try {
-            $counts = DB::transaction(function () use ($tenant, $data, $items, $dir, $run) {
+            $counts = DB::transaction(function () use ($tenant, $data, $items, $dir, $run, $safetyCopy) {
+                // From here to the commit no other process saves a row of the club (a door scan, a queued job, a form
+                // sent meanwhile): each waits, then saves on the club as restored, or is refused when what it refers to
+                // is gone. The safety copy is taken inside, so it holds the club exactly as it is replaced.
+                $this->lockClubTables();
+                $safety = $safetyCopy ? $this->safetyCopy($tenant) : null;
+                $this->files->putString('local', $dir.'/journal.json', (string) json_encode(['run' => $run, 'tenant' => $tenant->id, 'safety_copy' => $safety, 'items' => $items], JSON_UNESCAPED_UNICODE));
                 $counts = $this->replaceRows($tenant, $data);
                 foreach ($items as $item) {
                     $this->place($dir, $item);
@@ -702,6 +707,9 @@ final class TenantBackupService
             }
             if (! $committed) {
                 $this->audit->log('backup.restore_failed', $tenant, ['run' => $run, 'error' => mb_substr($e->getMessage(), 0, 200)], tenantId: $tenant->id);
+                if ($e instanceof BusinessRuleException) {
+                    throw $e; // the safety copy, or the club's tables kept busy by another process: nothing was replaced
+                }
 
                 throw new BusinessRuleException('backup.restore_failed', 'تعذرت الاستعادة، ولم يتغير شيء: بقيت بيانات النادي وملفاته كما كانت.');
             }
@@ -722,6 +730,29 @@ final class TenantBackupService
         $this->audit->log('backup.restored', $tenant, ['counts' => $counts, 'from' => 'archive', 'files' => $summary, 'run' => $run], tenantId: $tenant->id);
 
         return $counts;
+    }
+
+    /**
+     * Every table of the club locked against writes by any other process until the restore's transaction ends (reads go
+     * on). A process in the middle of a save is waited for, at most twenty seconds (backups.lock_wait_seconds); then the restore
+     * is refused, unchanged.
+     */
+    private function lockClubTables(): void
+    {
+        if (DB::getDriverName() !== 'pgsql') {
+            return;
+        }
+        DB::statement("SET LOCAL lock_timeout = '".max(1, (int) config('backups.lock_wait_seconds', 20))."s'");
+        try {
+            DB::statement('LOCK TABLE '.implode(', ', array_map(fn ($t) => '"'.$t.'"', TenantTables::ORDER)).' IN EXCLUSIVE MODE');
+        } catch (QueryException $e) {
+            if (in_array($e->getCode(), ['55P03', '40P01'], true)) {
+                throw new BusinessRuleException('backup.busy', 'بيانات النادي تُحفظ الآن من عملية أخرى لم تنتهِ، فلم يُستبدل شيء. أعد المحاولة بعد قليل.');
+            }
+
+            throw $e;
+        }
+        DB::statement('SET LOCAL lock_timeout = 0');
     }
 
     /** The club as it is now, proven whole before anything is replaced; a failure refuses the restore. */
@@ -1037,7 +1068,9 @@ final class TenantBackupService
             return;
         }
 
-        DB::statement("SELECT setval(pg_get_serial_sequence('{$table}', 'id'), GREATEST((SELECT COALESCE(MAX(id), 0) FROM {$table}), 1))");
+        // Never back: a row saved after the restore takes an id no row ever had, so nothing that still names a row the
+        // restore took away (a scan on its way, a link, a gateway's reference) can land on a different, new one.
+        DB::statement("SELECT setval(seq, GREATEST((SELECT COALESCE(MAX(id), 0) FROM {$table}), COALESCE(pg_sequence_last_value(seq::regclass), 0), 1)) FROM (SELECT pg_get_serial_sequence('{$table}', 'id') AS seq) AS s");
     }
 
     private function prune(Tenant $tenant): void

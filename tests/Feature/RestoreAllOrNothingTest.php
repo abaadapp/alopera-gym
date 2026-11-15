@@ -361,7 +361,8 @@ class RestoreAllOrNothingTest extends TestCase
         $this->assertUnchanged($b, $club, 'safety copy refused');
         $this->assertSame([basename($archive)], array_map('basename', Storage::disk('local')->files($this->service()->directory($club))), 'no new or half-built archive');
         $this->assertSame(1, AuditLog::where('event', 'backup.created')->count(), 'only the archive taken before');
-        $this->assertSame(1, AuditLog::where('event', 'backup.failed')->count());
+        // Recorded once, after the refused restore rolled back: why (the safety copy), nothing replaced.
+        $this->assertStringContainsString('نسخة أمان', (string) AuditLog::where('event', 'backup.restore_failed')->sole()->properties['error']);
         $this->service()->verifyArchive($archive);
     }
 
@@ -379,6 +380,25 @@ class RestoreAllOrNothingTest extends TestCase
         $this->assertSame($a['rows'], $after['rows'], 'the rows are the archive\'s');
         $this->assertSame($a['files'], array_intersect_key($after['files'], $a['files']), 'and so is every file: never put back under committed rows');
         $this->assertSame([], Storage::disk('local')->allFiles(TenantBackupService::STAGING));
+    }
+
+    /**
+     * Another process in the middle of a long save (a job that holds a table of the club and does not end): the restore
+     * waits for it only so long, then is refused as busy, and nothing was replaced.
+     */
+    public function test_a_restore_is_refused_unchanged_when_another_save_holds_the_club_too_long(): void
+    {
+        [$club, $archive, , $b] = $this->archivedThenChanged();
+        config(['backups.lock_wait_seconds' => 1, 'database.connections.other' => config('database.connections.pgsql')]);
+        DB::connection('other')->beginTransaction();
+        DB::connection('other')->statement('LOCK TABLE "gym_members" IN ROW EXCLUSIVE MODE');
+        try {
+            $this->assertSame('backup.busy', $this->restoreFails($club, $archive)->rule);
+        } finally {
+            DB::connection('other')->rollBack();
+            DB::purge('other');
+        }
+        $this->assertUnchanged($b, $club, 'refused while busy');
     }
 
     public function test_a_second_restore_of_the_same_club_waits_for_the_first(): void

@@ -8,8 +8,11 @@ use App\Core\Backup\TenantTables;
 use App\Models\AuditLog;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Modules\Gym\Models\AccessDevice;
+use App\Modules\Gym\Models\CheckIn;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\MemberDocument;
+use App\Modules\Gym\Services\MemberService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -251,6 +254,79 @@ class BackupConcurrencyTest extends TestCase
         $this->assertSame('back', AuditLog::where('event', 'backup.restore_recovered')->latest('id')->value('properties')['direction']);
     }
 
+    /**
+     * Saves of the club from other processes while a restore replaces it — the door's device API, a background job —
+     * paused after its safety copy, before its rows are replaced. Each waits for the restore, then is saved once on the
+     * club as restored, or is refused when what it refers to is no longer there; none is saved and then wiped out, and
+     * the safety copy holds the club exactly as it was replaced (so nothing saved before the restore is lost either).
+     */
+    public function test_saves_from_devices_and_background_jobs_during_a_restore_wait_or_are_refused_never_lost(): void
+    {
+        $club = $this->club();
+        $kept = $this->member($club, ['full_name' => 'سارة']);
+        $this->activeMembership($club, $kept);
+        $token = $this->asTenant($club, function () {
+            $device = new AccessDevice(['name' => 'Main gate', 'type' => 'turnstile', 'purpose' => 'both', 'direction' => 'in']);
+            $token = $device->issueToken();
+            $device->save();
+
+            return $token;
+        });
+        $archive = $this->service()->disk()->path($this->service()->directory($club).'/'.$this->service()->create($club));
+        // After the archive: a member who is not in it.
+        $later = $this->member($club, ['full_name' => 'بعد النسخة']);
+        $this->activeMembership($club, $later);
+        $before = $this->asTenant($club, fn () => [Member::count(), CheckIn::count()]);
+
+        $scan = fn (Member $member) => function (string $dir) use ($token, $member) {
+            self::waitFor("$dir/inside");
+            $start = microtime(true);
+            $response = $this->withToken($token)->postJson(route('devices.access'), ['credential_type' => 'qr', 'credential' => $member->qr_token]);
+
+            return ['status' => $response->status(), 'allowed' => $response->json('allowed'), 'reason' => $response->json('reason'), 'waited' => round(microtime(true) - $start, 2)];
+        };
+        [$restore, $keptScan, $laterScan, $job] = $this->concurrently([
+            function (string $dir) use ($club, $archive) {
+                app()->instance(RestoreFiles::class, new PausingRestoreFiles($dir, 1.5));
+
+                return $this->service()->restoreWithSafetyCopy($club, $archive);
+            },
+            $scan($kept),
+            $scan($later),
+            function (string $dir) use ($club) {
+                self::waitFor("$dir/inside");
+                $start = microtime(true);
+                $this->asTenant($club, fn () => app(MemberService::class)->create(['full_name' => 'من مهمة خلفية', 'phone' => '96899999999']));
+
+                return ['waited' => round(microtime(true) - $start, 2)];
+            },
+        ]);
+        $this->assertTrue($restore['ok'], json_encode($restore));
+        $context = json_encode([$keptScan, $laterScan, $job], JSON_UNESCAPED_UNICODE);
+
+        $this->asTenant($club, function () use ($kept, $later, $context) {
+            // The scan of a member the archive holds: recorded once, on the club as restored.
+            $this->assertSame(1, CheckIn::where('member_id', $kept->id)->count(), 'her scan, once: '.$context);
+            // The scan of a member the restore took away: refused, nothing of it left.
+            $this->assertSame(0, Member::where('full_name', 'بعد النسخة')->count(), 'not in the archive');
+            $this->assertSame(0, CheckIn::where('member_id', $later->id)->count(), 'no row for a member who is not there: '.$context);
+            // The background job's member: saved once, after the restore.
+            $this->assertSame(1, Member::where('full_name', 'من مهمة خلفية')->count(), 'the job\'s save is kept: '.$context);
+            $this->assertGreaterThan($later->id, Member::where('full_name', 'من مهمة خلفية')->value('id'), 'a new id, never the one of a member the restore took away');
+        });
+        $this->assertTrue($keptScan['ok'] && $keptScan['value']['status'] === 200 && $keptScan['value']['allowed'], $context);
+        $this->assertTrue($laterScan['ok'] && $laterScan['value']['allowed'] === false, 'the scan of a member who is gone is refused: '.$context);
+        $this->assertGreaterThan(1.0, $keptScan['value']['waited'], 'it waited for the restore: '.$context);
+
+        // The safety copy is the club exactly as it was replaced.
+        $safety = collect($this->service()->list($club))->pluck('name')->first(fn ($n) => $n !== basename($archive));
+        $zip = new \ZipArchive;
+        $zip->open($this->service()->disk()->path($this->service()->directory($club).'/'.$safety));
+        $counts = json_decode((string) $zip->getFromName('manifest.json'), true)['counts'];
+        $zip->close();
+        $this->assertSame($before, [$counts['gym_members'], $counts['gym_check_ins']], 'the safety copy: the club as it was replaced');
+    }
+
     /** A save while the backup reads the rows: the archive is the moment it started (one snapshot), and restores. */
     public function test_a_save_during_the_backup_leaves_an_archive_that_restores(): void
     {
@@ -376,5 +452,20 @@ final class CrashingRestoreFiles extends RestoreFiles
         $this->step('move', 'before');
         parent::move($fromDisk, $from, $toDisk, $to);
         $this->step('move', 'after');
+    }
+}
+
+/** RestoreFiles that, once the journal is written (the safety copy taken, nothing replaced yet), says so and pauses. */
+final class PausingRestoreFiles extends RestoreFiles
+{
+    public function __construct(private readonly string $dir, private readonly float $seconds) {}
+
+    public function putString(string $disk, string $path, string $contents): void
+    {
+        parent::putString($disk, $path, $contents);
+        if (str_ends_with($path, '/journal.json')) {
+            file_put_contents($this->dir.'/inside', (string) getmypid());
+            usleep((int) ($this->seconds * 1_000_000));
+        }
     }
 }

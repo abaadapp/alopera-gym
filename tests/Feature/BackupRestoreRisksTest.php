@@ -382,6 +382,65 @@ class BackupRestoreRisksTest extends TestCase
         $this->assertSame('سارة', $this->asTenant($club, fn () => $member->fresh()->full_name));
     }
 
+    /** Rewrites data.json inside $archive as $change(its text) and gives it the manifest of the code before (no newer keys). */
+    private function withData(string $archive, callable $change): void
+    {
+        $zip = new ZipArchive;
+        $zip->open($archive);
+        $text = (string) $zip->getFromName('data.json');
+        $manifest = json_decode($zip->getFromName('manifest.json'), true);
+        unset($manifest['data_sha256'], $manifest['content_sha256'], $manifest['files']);
+        $zip->addFromString('data.json', $change($text));
+        $zip->addFromString('manifest.json', json_encode($manifest));
+        $zip->close();
+    }
+
+    /**
+     * An archive of the code before, data.json on one line (json_encode of every row at once), of a club of 10,000
+     * members, one of whom has notes that look like JSON: read in pieces, every row back exactly, no more memory than a
+     * newer one; and checked as before: a row of another club, a cut file, more after its end, all refused unchanged.
+     */
+    public function test_an_older_one_line_archive_is_read_in_pieces_and_checked_as_before(): void
+    {
+        [$club, , $member] = $this->clubWithDocument();
+        $tricky = 'ملاحظة "مقتبسة" {"tenant_id":999},{ \\ \"} ]],[{ نهاية';
+        $this->asTenant($club, fn () => $member->forceFill(['notes' => $tricky])->save());
+        $this->manyMembers($club, 10000);
+        $before = $this->asTenant($club, fn () => Member::count());
+        $archive = $this->archivePath($club, $this->service()->create($club));
+        $this->withData($archive, fn (string $text) => json_encode(json_decode($text, true), JSON_UNESCAPED_UNICODE));
+        $copy = fn (string $what, callable $change) => tap(dirname($archive).'/'.$what.'.zip', function ($to) use ($archive, $change) {
+            copy($archive, $to);
+            $this->withData($to, $change);
+        });
+        $refused = [
+            'backup.other_tenant' => $copy('other', fn ($t) => preg_replace('/"tenant_id":'.$club->id.',/', '"tenant_id":999999,', $t, 1)),
+            'backup.invalid' => $copy('cut', fn ($t) => substr($t, 0, intdiv(strlen($t), 2))),
+            'backup.invalid ' => $copy('more', fn ($t) => $t.'{"x":[]}'),
+        ];
+
+        $this->asTenant($club, fn () => Member::whereKeyNot($member->id)->limit(5000)->delete());
+        $this->asTenant($club, fn () => $member->forceFill(['notes' => 'بعد النسخة'])->save());
+        foreach ($refused as $rule => $file) {
+            try {
+                $this->service()->restore($club, $file);
+                $this->fail(basename($file).' was restored');
+            } catch (BusinessRuleException $e) {
+                $this->assertSame(trim($rule), $e->rule, basename($file));
+            }
+            $this->assertSame('بعد النسخة', $this->asTenant($club, fn () => $member->fresh()->notes), basename($file).': nothing replaced');
+        }
+
+        memory_reset_peak_usage();
+        $base = memory_get_usage();
+        $this->service()->restore($club, $archive);
+        $restored = memory_get_peak_usage() - $base;
+
+        $this->assertSame($before, $this->asTenant($club, fn () => Member::count()), 'every member back');
+        $this->assertSame($tricky, $this->asTenant($club, fn () => $member->fresh()->notes), 'her notes exactly');
+        $this->assertLessThan(32 * 1048576, $restored, 'restoring it: '.round($restored / 1048576).' MB more');
+    }
+
     /** A disk that keeps only part of the archive: refused, and none of the fourteen sound archives is pushed out. */
     public function test_a_cut_archive_is_refused_and_never_pushes_a_sound_one_out(): void
     {
