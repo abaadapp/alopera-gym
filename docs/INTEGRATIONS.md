@@ -126,3 +126,19 @@ WHATSAPP_VERIFY_TOKEN=...    # أي نص عشوائي طويل — يُدخل ن
 
 ## أجهزة الدخول والبصمة
 انظري [DEVICES.md](DEVICES.md).
+
+### Paymob QuickLink — not used (2026-11-15)
+
+A payment request from the finance section is an ordinary invoice from the invoice editor (payment «آجل»). Its link
+`/pay/{token}` opens a Unified Checkout through the Intention API, and only a signed callback records the money
+(tested end to end in `tests/Feature/FinancePayLinkTest.php`). Paymob's QuickLink API is not used. Its official page
+(developers.paymob.com → QuickLink APIs → Create QuickLink) does not settle three things:
+
+- The response has an `order` number. The page does not say it is the `order.id` that the signed callback carries. The
+  HMAC covers `order.id`, but not `reference_id` and not `merchant_order_id`.
+- Whether `reference_id` comes back in the transaction callback at all.
+- Whether QuickLink is offered to Oman merchants. It needs the API key (a Bearer token from the auth call), which is
+  not in our settings today.
+
+Matching a payment on an unsigned reference is refused here, so QuickLink stays off until Paymob Oman confirms these
+points in writing.
