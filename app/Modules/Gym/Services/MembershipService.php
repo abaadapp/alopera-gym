@@ -20,6 +20,7 @@ use App\Modules\Gym\Models\MembershipPlan;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * Selling, activating, freezing, renewing, upgrading and ending memberships.
@@ -280,8 +281,9 @@ final class MembershipService
                 ])->save();
                 $previous->openFreeze?->update(['ended_on' => $today, 'days' => 0]);
                 $this->event($previous, 'upgraded', ['to' => $membership->id]);
-                // What hung on the old period moves to the new one: its future bookings, and a renewal already sold.
-                $this->bookings->carryFuture($previous, $membership, 'الترقية');
+                // What hung on the old period moves to the new one: a renewal already sold now, its future bookings once
+                // this transaction (the payment's) has committed.
+                $this->settleBookingsAfterCommit($previous);
                 $this->pushBack($membership, $previous->ends_on);
             }
         }
@@ -420,7 +422,7 @@ final class MembershipService
             ])->save();
 
             $membership->openFreeze?->update(['ended_on' => today(), 'days' => 0]);
-            $this->bookings->cancelFutureForMembership($membership, 'إلغاء العضوية');
+            $this->settleBookingsAfterCommit($membership);
 
             if ($wasPending) {
                 $this->coupons->release($membership);
@@ -435,6 +437,26 @@ final class MembershipService
             MembershipCancelled::dispatch($membership);
 
             return $membership;
+        });
+    }
+
+    /**
+     * The cancelled membership's future bookings, carried or released (BookingService::settleCancelled) once the
+     * transaction holding this membership has committed — outside its locks, so it never waits on a class while a
+     * booking waits on the membership. A failure here, or a crash before it, leaves the bookings as they were (booked on
+     * the cancelled membership) for gym:settle-bookings, every minute; it is not this transaction's failure.
+     */
+    private function settleBookingsAfterCommit(Membership $membership): void
+    {
+        $id = $membership->id;
+        DB::afterCommit(function () use ($id) {
+            try {
+                if ($membership = Membership::find($id)) {
+                    app(BookingService::class)->settleCancelled($membership);
+                }
+            } catch (Throwable $e) {
+                report($e);
+            }
         });
     }
 

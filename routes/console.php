@@ -19,6 +19,8 @@ Schedule::command('gym:class-reminders')->everyFifteenMinutes()->withoutOverlapp
 Schedule::command('messaging:dispatch-scheduled')->everyMinute()->withoutOverlapping(10)->onOneServer();
 Schedule::command('accounting:sync')->dailyAt('02:30')->withoutOverlapping(120)->onOneServer();
 Schedule::command('sales:expire-orders')->everyFiveMinutes()->withoutOverlapping(10)->onOneServer();
+// Bookings left on a cancelled membership (a crash after a cancellation or an upgrade's payment): finished within a minute.
+Schedule::command('gym:settle-bookings')->everyMinute()->withoutOverlapping(10)->onOneServer();
 Schedule::command('documents:alerts')->dailyAt('07:30')->withoutOverlapping(120)->onOneServer();
 Schedule::command('notifications:sync')->hourly()->withoutOverlapping(55)->onOneServer();
 Schedule::command('backup:tenants')->dailyAt('03:00')->withoutOverlapping()->onOneServer();
