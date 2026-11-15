@@ -333,13 +333,10 @@ final class MembershipService
                 'freezes_count' => $membership->freezes_count + 1,
             ])->save();
 
-            // Bookings during the freeze would consume a membership she cannot use.
-            $this->bookings->cancelFutureForMembership($membership, 'تجميد العضوية');
-            // So would those on the paid periods after it: they now wait for the resume (heldByFreeze), book nothing and
-            // do not open the door, and the resume moves their dates back.
-            Membership::where('member_id', $membership->member_id)->whereKeyNot($membership->id)
-                ->where('status', Membership::SCHEDULED)->where('starts_on', '>', $membership->starts_on)->get()
-                ->each(fn (Membership $later) => $this->bookings->cancelFutureForMembership($later, 'تجميد العضوية'));
+            // Bookings during the freeze would consume a membership she cannot use; so would those on the paid periods
+            // after it, which now wait for the resume (heldByFreeze), book nothing and do not open the door. Released once
+            // the freeze has committed (BookingService::settleFrozen), never under its lock on the membership.
+            $this->settleBookingsAfterCommit($membership);
 
             $this->event($membership, 'frozen', ['days' => $days, 'reason' => $reason]);
             MembershipFrozen::dispatch($membership);
@@ -441,10 +438,10 @@ final class MembershipService
     }
 
     /**
-     * The cancelled membership's future bookings, carried or released (BookingService::settleCancelled) once the
-     * transaction holding this membership has committed — outside its locks, so it never waits on a class while a
+     * The bookings of a membership just cancelled, frozen or expired, carried or released (BookingService::settle) once
+     * the transaction holding this membership has committed — outside its locks, so it never waits on a class while a
      * booking waits on the membership. A failure here, or a crash before it, leaves the bookings as they were (booked on
-     * the cancelled membership) for gym:settle-bookings, every minute; it is not this transaction's failure.
+     * that membership) for gym:settle-bookings, every minute; it is not this transaction's failure.
      */
     private function settleBookingsAfterCommit(Membership $membership): void
     {
@@ -452,7 +449,7 @@ final class MembershipService
         DB::afterCommit(function () use ($id) {
             try {
                 if ($membership = Membership::find($id)) {
-                    app(BookingService::class)->settleCancelled($membership);
+                    app(BookingService::class)->settle($membership);
                 }
             } catch (Throwable $e) {
                 report($e);
@@ -521,7 +518,7 @@ final class MembershipService
                 if (! $m) {
                     return;
                 }
-                $this->bookings->cancelFutureForMembership($m, 'انتهاء العضوية');
+                $this->settleBookingsAfterCommit($m); // its own transaction has committed: at once
                 $this->event($m, 'expired');
                 MembershipExpired::dispatch($m);
                 $counts['expired']++;
