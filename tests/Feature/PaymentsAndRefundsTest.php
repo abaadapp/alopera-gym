@@ -228,7 +228,7 @@ class PaymentsAndRefundsTest extends TestCase
             } catch (BusinessRuleException $e) {
                 $this->assertSame('paymob.page_open', $e->rule);
             }
-            $this->travelTo($first->expires_at->copy()->addSecond());
+            $this->travelTo($first->expires_at->copy()->addMinutes(OnlinePaymentService::LATE_CALLBACK_MINUTES)->addSecond());
             $this->assertNotSame($first->id, app(OnlinePaymentService::class)->start($invoice->fresh(), 'portal')->id);
         });
         Http::assertSentCount(2);

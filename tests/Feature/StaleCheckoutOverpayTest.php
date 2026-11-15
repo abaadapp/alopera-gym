@@ -103,7 +103,7 @@ class StaleCheckoutOverpayTest extends TestCase
         $old = $this->start($club, $invoice);
         $this->asTenant($club, fn () => app(PaymentService::class)->record($invoice->fresh(), '4.000', 'cash'));
 
-        $this->travelTo($old->expires_at->copy()->addSecond());
+        $this->travelTo($old->expires_at->copy()->addMinutes(OnlinePaymentService::LATE_CALLBACK_MINUTES)->addSecond());
         $new = $this->start($club, $invoice);
         $this->assertInstanceOf(PaymentIntent::class, $new);
         $this->assertSame('6.000', $new->amount);
@@ -120,7 +120,7 @@ class StaleCheckoutOverpayTest extends TestCase
         $this->travelTo($old->expires_at->copy()->subMinutes(5)); // same amount, five minutes left
 
         $this->assertSame('paymob.page_open', $this->start($club, $invoice));
-        $this->travelTo($old->expires_at->copy()->addSecond());
+        $this->travelTo($old->expires_at->copy()->addMinutes(OnlinePaymentService::LATE_CALLBACK_MINUTES)->addSecond());
         $this->assertSame('10.000', $this->start($club, $invoice)->amount);
     }
 
@@ -133,5 +133,88 @@ class StaleCheckoutOverpayTest extends TestCase
 
         $this->post(route('site.pay.start', ['club' => $club->slug, 'token' => $invoice->public_token]))->assertRedirect()->assertSessionHasErrors();
         Http::assertSentCount(1);
+    }
+
+    public function test_the_end_of_a_page_here_is_no_proof_paymob_closed_it(): void
+    {
+        [$club, $invoice] = $this->setUpClub();
+        $old = $this->start($club, $invoice);
+        $this->asTenant($club, fn () => app(PaymentService::class)->record($invoice->fresh(), '4.000', 'cash'));
+
+        // Ended here a minute ago, and until the late-callback window has passed: still no second page.
+        $this->travelTo($old->expires_at->copy()->addMinute());
+        $this->assertSame('paymob.page_open', $this->start($club, $invoice));
+        $this->travelTo($old->expires_at->copy()->addMinutes(OnlinePaymentService::LATE_CALLBACK_MINUTES)->subMinute());
+        $this->assertSame('paymob.page_open', $this->start($club, $invoice));
+        Http::assertSentCount(1);
+    }
+
+    public function test_a_declined_card_leaves_its_page_open_the_link_gives_it_again_and_a_later_success_is_recorded_once(): void
+    {
+        [$club, $invoice] = $this->setUpClub();
+        $page = $this->start($club, $invoice);
+        $declined = $this->signed($page, 11, ['success' => false, 'data' => ['message' => 'Insufficient funds']]);
+        $this->assertSame('failed_payment', $this->deliverObj($club, $declined));
+        $this->assertSame(PaymentIntent::FAILED, $this->asTenant($club, fn () => $page->fresh()->status));
+
+        // Opened again: the same page, not a second one beside it.
+        $again = $this->start($club, $invoice);
+        $this->assertInstanceOf(PaymentIntent::class, $again);
+        $this->assertSame($page->id, $again->id);
+        Http::assertSentCount(1);
+
+        // Another card on that page succeeds: recorded once, the invoice paid, the books balance.
+        $this->assertSame('processed', $this->pay($club, $page, 12));
+        $this->assertSame('duplicate', $this->pay($club, $page, 12));
+        $this->asTenant($club, function () use ($invoice) {
+            $this->assertSame([Invoice::PAID, '10.000'], [$invoice->fresh()->status, $invoice->fresh()->paid_total]);
+            $this->assertSame(1, Payment::where('gateway', 'paymob')->count());
+            $this->assertSame(JournalLine::sum('debit'), JournalLine::sum('credit'));
+        });
+    }
+
+    public function test_a_declined_page_then_a_desk_payment_still_opens_no_second_page(): void
+    {
+        [$club, $invoice] = $this->setUpClub();
+        $page = $this->start($club, $invoice);
+        $this->deliverObj($club, $this->signed($page, 21, ['success' => false]));
+        $this->asTenant($club, fn () => app(PaymentService::class)->record($invoice->fresh(), '4.000', 'cash'));
+
+        $this->assertSame('paymob.page_open', $this->start($club, $invoice));
+        Http::assertSentCount(1);
+    }
+
+    public function test_the_message_explains_the_old_link_what_is_owed_and_both_ways_on(): void
+    {
+        [$club, $invoice] = $this->setUpClub();
+        $this->start($club, $invoice);
+        $this->asTenant($club, fn () => app(PaymentService::class)->record($invoice->fresh(), '4.000', 'cash'));
+
+        try {
+            $this->asTenant($club, fn () => app(OnlinePaymentService::class)->start($invoice->fresh(), 'whatsapp'));
+            $this->fail('a second page was opened');
+        } catch (BusinessRuleException $e) {
+            $m = $e->getMessage();
+            foreach (['رابط دفع سابق', '10.000', 'المتبقي الآن 6.000', 'لا تدفع من الرابط السابق', 'انتظر حتى الساعة', 'الاستقبال'] as $part) {
+                $this->assertStringContainsString($part, $m);
+            }
+            $this->assertStringNotContainsString('أكمل الدفع منه', $m, 'never told to pay the old page when it asks more than is owed');
+        }
+    }
+
+    private function signed(PaymentIntent $intent, int $tx, array $over = []): array
+    {
+        return array_replace_recursive([
+            'id' => $tx, 'pending' => false, 'amount_cents' => Money::toMinor($intent->amount), 'success' => true, 'is_auth' => false,
+            'is_capture' => false, 'is_standalone_payment' => true, 'is_voided' => false, 'is_refunded' => false, 'is_3d_secure' => true,
+            'integration_id' => 111, 'has_parent_transaction' => false, 'order' => ['id' => (int) $intent->provider_order_id, 'merchant_order_id' => $intent->reference],
+            'created_at' => '2026-11-15T10:00:00', 'currency' => 'OMR', 'error_occured' => false, 'owner' => 1,
+            'source_data' => ['pan' => '1234', 'sub_type' => 'Visa', 'type' => 'card'],
+        ], $over);
+    }
+
+    private function deliverObj(Tenant $club, array $obj): string
+    {
+        return $this->asTenant($club, fn () => app(OnlinePaymentService::class)->handleWebhook(['type' => 'TRANSACTION', 'obj' => $obj], PaymobSignature::compute($obj, self::HMAC)));
     }
 }

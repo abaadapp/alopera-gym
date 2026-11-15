@@ -112,7 +112,7 @@ class PayLinkOpeningTest extends TestCase
         $old = $this->start($club, $invoice);
         $this->asTenant($club, fn () => app(PaymentService::class)->record($invoice->fresh(), '4.000', 'cash'));
 
-        $this->travelTo($old->expires_at->copy()->addSecond());
+        $this->travelTo($old->expires_at->copy()->addMinutes(OnlinePaymentService::LATE_CALLBACK_MINUTES)->addSecond());
         $this->assertSame('6.000', $this->start($club, $invoice)->amount);
     }
 
