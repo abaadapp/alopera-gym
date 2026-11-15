@@ -20,20 +20,25 @@ class SettleMembershipBookings extends ForEachTenant
 
     protected function handleTenant(Tenant $tenant): string
     {
+        // Cancelled memberships with a booking still booked; settleCancelled() takes the classes after each one's
+        // cancellation (a class may have started since).
         $ids = Booking::where('status', Booking::BOOKED)
-            ->whereHas('session', fn ($q) => $q->where('starts_at', '>', now()))
             ->whereHas('membership', fn ($q) => $q->where('status', Membership::CANCELLED))
             ->distinct()->orderBy('membership_id')->pluck('membership_id');
+        $bookings = app(BookingService::class);
+        $memberships = Membership::whereIn('id', $ids)->orderBy('id')->get();
 
         if ($this->option('dry-run')) {
-            return "memberships_left={$ids->count()}";
+            $left = $memberships->map(fn (Membership $m) => $bookings->leftAfterCancellation($m))->filter();
+
+            return "dry_run memberships_left={$left->count()} bookings_left={$left->sum()}";
         }
 
         $settled = 0;
-        foreach (Membership::whereIn('id', $ids)->orderBy('id')->get() as $membership) {
-            $settled += app(BookingService::class)->settleCancelled($membership);
+        foreach ($memberships as $membership) {
+            $settled += $bookings->settleCancelled($membership);
         }
 
-        return "memberships={$ids->count()} bookings={$settled}";
+        return "memberships={$memberships->count()} bookings={$settled}";
     }
 }

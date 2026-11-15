@@ -12,6 +12,7 @@ use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\Program;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -224,12 +225,15 @@ final class BookingService
         });
     }
 
-    /** Release future bookings when a membership is frozen, cancelled or expires. */
-    public function cancelFutureForMembership(Membership $membership, string $reason): int
+    /**
+     * Release future bookings when a membership is frozen, cancelled or expires: classes after $since (now, unless the
+     * decision was taken earlier — a cancellation settled after its commit counts from the moment it was cancelled).
+     */
+    public function cancelFutureForMembership(Membership $membership, string $reason, ?CarbonInterface $since = null): int
     {
         $bookings = Booking::where('membership_id', $membership->id)
             ->where('status', Booking::BOOKED)
-            ->whereHas('session', fn ($q) => $q->where('starts_at', '>', now()))
+            ->whereHas('session', fn ($q) => $q->where('starts_at', '>', $since ?? now()))
             ->get();
 
         $released = 0;
@@ -268,7 +272,9 @@ final class BookingService
      * released; cancelled otherwise: released. What is left to do is read from the bookings themselves (a booked future
      * class on a cancelled membership), so gym:settle-bookings finishes whatever a crash or a failure left; each booking
      * is moved or released once however many times this runs (each in its own transaction, read again under its class's
-     * lock).
+     * lock). The classes are those after the moment it was cancelled (`cancelled_at`), as they were when that was decided:
+     * one that started before this ran is settled all the same (a class already marked attended or absent is history and
+     * is left as it is). An upgrade no longer active or scheduled takes nothing: its bookings are released.
      */
     public function settleCancelled(Membership $membership): int
     {
@@ -276,14 +282,26 @@ final class BookingService
         if (! $membership || $membership->status !== Membership::CANCELLED) {
             return 0;
         }
+        $since = $membership->cancelled_at ?? now();
         if ($membership->cancel_reason === 'upgraded') {
             $upgrade = Membership::where('previous_membership_id', $membership->id)->where('kind', Membership::KIND_UPGRADE)
                 ->whereIn('status', [Membership::ACTIVE, Membership::SCHEDULED])->latest('id')->first();
 
-            return $upgrade ? $this->carryFuture($membership, $upgrade, 'الترقية') : $this->cancelFutureForMembership($membership, 'الترقية');
+            return $upgrade ? $this->carryFuture($membership, $upgrade, 'الترقية', $since) : $this->cancelFutureForMembership($membership, 'الترقية', $since);
         }
 
-        return $this->cancelFutureForMembership($membership, 'إلغاء العضوية');
+        return $this->cancelFutureForMembership($membership, 'إلغاء العضوية', $since);
+    }
+
+    /** How many of a cancelled membership's bookings settleCancelled() would still carry or release (nothing is changed). */
+    public function leftAfterCancellation(Membership $membership): int
+    {
+        if ($membership->status !== Membership::CANCELLED) {
+            return 0;
+        }
+
+        return Booking::where('membership_id', $membership->id)->where('status', Booking::BOOKED)
+            ->whereHas('session', fn ($q) => $q->where('starts_at', '>', $membership->cancelled_at ?? now()))->count();
     }
 
     /**
@@ -291,11 +309,11 @@ final class BookingService
      * it; the others are released, as when a membership is cancelled. A new plan without classes keeps none of them.
      * Each booking in its own transaction, the class locked before the booking and the memberships (see settleCancelled).
      */
-    public function carryFuture(Membership $from, Membership $to, string $reason): int
+    public function carryFuture(Membership $from, Membership $to, string $reason, ?CarbonInterface $since = null): int
     {
         $bookings = Booking::where('membership_id', $from->id)
             ->where('status', Booking::BOOKED)
-            ->whereHas('session', fn ($q) => $q->where('starts_at', '>', now()))
+            ->whereHas('session', fn ($q) => $q->where('starts_at', '>', $since ?? now()))
             ->orderBy('id')
             ->get();
 

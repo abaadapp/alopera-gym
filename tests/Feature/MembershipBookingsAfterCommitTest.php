@@ -325,4 +325,127 @@ class MembershipBookingsAfterCommitTest extends TestCase
         $this->asTenant($club, fn () => $this->assertSame([$upgrade->id, 1, 0, 1], [$booking->fresh()->membership_id, $upgrade->fresh()->sessions_used, $current->fresh()->sessions_used, (int) $session->fresh()->booked_count]));
         $this->assertCounts($club);
     }
+
+    public function test_nothing_is_settled_when_the_cancellation_is_rolled_back(): void
+    {
+        $club = $this->club();
+        $member = $this->member($club);
+        $membership = $this->activeMembership($club, $member, $this->plan($club, ['sessions_limit' => 8]));
+        $booking = $this->asTenant($club, fn () => app(BookingService::class)->book($member, $this->classSession($club), 'reception'));
+
+        try {
+            $this->asTenant($club, fn () => DB::transaction(function () use ($membership) {
+                app(MembershipService::class)->cancel($membership, 'إلغاء');
+                throw new \RuntimeException('a later step failed');
+            }));
+        } catch (\RuntimeException) {
+        }
+
+        // Rolled back: the membership stands, and the step after the commit never ran (no commit).
+        $this->asTenant($club, fn () => $this->assertSame([Membership::ACTIVE, Booking::BOOKED, 1], [$membership->fresh()->status, $booking->fresh()->status, $membership->fresh()->sessions_used]));
+        $this->assertCounts($club);
+    }
+
+    public function test_bookings_left_on_a_replaced_membership_are_not_carried_to_an_upgrade_cancelled_since(): void
+    {
+        ['club' => $club, 'current' => $current, 'upgrade' => $upgrade, 'booking' => $booking] = $this->upgradePaidThenCrashed();
+        $this->asTenant($club, fn () => app(MembershipService::class)->cancel($upgrade->fresh(), 'إلغاء الترقية'));
+
+        Artisan::call('gym:settle-bookings');
+        // The upgrade is no longer there to take it: released, its seat and its counted class given back.
+        $this->asTenant($club, fn () => $this->assertSame([Booking::CANCELLED, $current->id, 0, 0],
+            [$booking->fresh()->status, $booking->fresh()->membership_id, $current->fresh()->sessions_used, $upgrade->fresh()->sessions_used]));
+        $this->assertCounts($club);
+    }
+
+    public function test_a_class_that_started_before_the_sweep_is_settled_from_the_moment_of_the_cancellation(): void
+    {
+        $club = $this->club();
+        $member = $this->member($club);
+        $membership = $this->activeMembership($club, $member, $this->plan($club, ['sessions_limit' => 8]));
+        $session = $this->classSession($club); // tomorrow 18:00
+        $booking = $this->asTenant($club, fn () => app(BookingService::class)->book($member, $session, 'reception'));
+        $results = $this->concurrently([function () use ($club, $membership) {
+            self::dieAtTheFirstClassLock();
+
+            return $this->asTenant($club, fn () => app(MembershipService::class)->cancel($membership, 'إلغاء')->status);
+        }]);
+        $this->assertSame('killed before it finished', $results[0]['error'], json_encode($results));
+
+        // The sweep comes only once the class has started: it was after the cancellation, so it is released all the same.
+        $this->travelTo($session->starts_at->addMinutes(10));
+        Artisan::call('gym:settle-bookings');
+        $this->asTenant($club, fn () => $this->assertSame([Booking::CANCELLED, 0, 0], [$booking->fresh()->status, (int) $session->fresh()->booked_count, $membership->fresh()->sessions_used]));
+        $this->assertCounts($club);
+    }
+
+    public function test_a_class_already_closed_before_the_sweep_is_left_as_history(): void
+    {
+        $club = $this->club();
+        $member = $this->member($club);
+        $membership = $this->activeMembership($club, $member, $this->plan($club, ['sessions_limit' => 8]));
+        $session = $this->classSession($club);
+        $booking = $this->asTenant($club, fn () => app(BookingService::class)->book($member, $session, 'reception'));
+        $results = $this->concurrently([function () use ($club, $membership) {
+            self::dieAtTheFirstClassLock();
+
+            return $this->asTenant($club, fn () => app(MembershipService::class)->cancel($membership, 'إلغاء')->status);
+        }]);
+        $this->assertSame('killed before it finished', $results[0]['error'], json_encode($results));
+
+        $this->travelTo($session->ends_at->addHours(2)); // closed an hour after its end
+        $this->asTenant($club, fn () => app(BookingService::class)->closeFinishedSessions()); // marked absent, as every hour
+        $status = $this->asTenant($club, fn () => $booking->fresh()->status);
+        $this->assertNotSame(Booking::BOOKED, $status);
+
+        Artisan::call('gym:settle-bookings');
+        $this->asTenant($club, fn () => $this->assertSame($status, $booking->fresh()->status, 'a closed class is not rewritten'));
+    }
+
+    public function test_an_old_booking_left_on_a_cancelled_membership_is_counted_by_the_dry_run_and_released_once(): void
+    {
+        $club = $this->club();
+        $member = $this->member($club);
+        $membership = $this->activeMembership($club, $member, $this->plan($club, ['sessions_limit' => 8]));
+        $session = $this->classSession($club, null, ['starts_at' => now()->addDays(3)->setTime(18, 0)]);
+        $booking = $this->asTenant($club, fn () => app(BookingService::class)->book($member, $session, 'reception'));
+        // As data from before: cancelled weeks ago, its future booking never released.
+        $this->asTenant($club, fn () => $membership->forceFill(['status' => Membership::CANCELLED, 'cancelled_at' => now()->subWeeks(3), 'cancel_reason' => 'قديم'])->save());
+
+        $this->assertSame(0, Artisan::call('gym:settle-bookings', ['--dry-run' => true]));
+        $this->assertStringContainsString('bookings_left=1', Artisan::output());
+        $this->asTenant($club, fn () => $this->assertSame(Booking::BOOKED, $booking->fresh()->status), 'a dry run changes nothing');
+
+        Artisan::call('gym:settle-bookings');
+        Artisan::call('gym:settle-bookings', ['--dry-run' => true]);
+        $this->assertStringContainsString('bookings_left=0', Artisan::output());
+        $this->asTenant($club, fn () => $this->assertSame([Booking::CANCELLED, 0, 0], [$booking->fresh()->status, (int) $session->fresh()->booked_count, $membership->fresh()->sessions_used]));
+        $this->assertCounts($club);
+    }
+
+    public function test_freezing_the_replaced_membership_while_the_upgrade_payment_comes_in_does_not_deadlock(): void
+    {
+        ['club' => $club, 'current' => $current, 'upgrade' => $upgrade, 'intent' => $intent, 'booking' => $booking] = $this->upgradeWithABooking();
+        $obj = $this->obj($intent);
+
+        $results = $this->concurrently([
+            function (string $dir) use ($club, $current) {
+                self::holdUntilAnotherWaits($dir, self::membershipLock($current->id)); // the freeze holds it
+
+                return [$this->asTenant($club, fn () => app(MembershipService::class)->freeze($current, 7, 'سفر')->status), is_file("$dir/blocked")];
+            },
+            function (string $dir) use ($obj) {
+                self::waitFor("$dir/inside");
+
+                return is_file("$dir/inside") ? self::deliver($obj) : 'not at the same time';
+            },
+        ]);
+
+        $this->assertNoDeadlock($results);
+        // Frozen first (its bookings released then), then the upgrade replaces it: the payment applied.
+        $this->assertSame([[true, [Membership::FROZEN, true]], [true, 'processed']], array_map(fn ($r) => [$r['ok'], $r['value']], $results), json_encode($results));
+        $this->asTenant($club, fn () => $this->assertSame([Membership::CANCELLED, Membership::ACTIVE, Booking::CANCELLED],
+            [$current->fresh()->status, $upgrade->fresh()->status, $booking->fresh()->status]));
+        $this->assertCounts($club);
+    }
 }
