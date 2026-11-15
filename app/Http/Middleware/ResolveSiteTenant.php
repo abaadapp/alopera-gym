@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Core\Auth\SessionPassword;
+use App\Core\Backup\RestoreGate;
 use App\Core\Tenancy\HomeGym;
 use App\Core\Tenancy\TenantContext;
 use App\Models\Tenant;
@@ -19,7 +20,7 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class ResolveSiteTenant
 {
-    public function __construct(private readonly TenantContext $tenants) {}
+    public function __construct(private readonly TenantContext $tenants, private readonly RestoreGate $restores) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -32,6 +33,10 @@ class ResolveSiteTenant
         }
 
         $this->tenants->set($tenant);
+        // Never a page from a restore's half-way state: it is finished first, or the page waits (RestoreGate).
+        if ($held = $this->restores->hold($tenant)) {
+            return $held;
+        }
         URL::defaults(['club' => $tenant->slug]);
         $request->route()->forgetParameter('club');
 
