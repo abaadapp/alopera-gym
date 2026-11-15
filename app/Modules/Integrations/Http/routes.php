@@ -11,6 +11,7 @@ Route::prefix('integrations')->group(function () {
 
     Route::middleware('can:integrations.manage')->group(function () {
         Route::get('/paymob', [IntegrationController::class, 'paymob'])->name('integrations.paymob');
+        Route::put('/paymob/methods', [IntegrationController::class, 'paymobMethods'])->name('integrations.paymob.methods');
     });
 
     // Each provider's keys: Paymob with the integrations; WhatsApp also with whatsapp.manage_settings.
