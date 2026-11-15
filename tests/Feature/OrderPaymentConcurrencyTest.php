@@ -14,7 +14,6 @@ use App\Modules\Inventory\Services\StockService;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Paymob\PaymobSignature;
 use App\Modules\Payments\Services\OnlinePaymentService;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\Concerns\BuildsClubs;
 use Tests\Concerns\RunsConcurrently;
@@ -23,7 +22,8 @@ use Tests\TestCase;
 /**
  * A website order's Paymob callback and a cancellation (by staff, or the scheduler at the end of the window) arriving
  * at the same moment, in separate processes on PostgreSQL. Both take the invoice's lock before the order's, so one
- * waits for the other instead of the two deadlocking and one of them failing.
+ * waits for the other instead of the two deadlocking and one of them failing. Each order is run on purpose: the first
+ * holds the invoice until PostgreSQL shows the second blocked by it, so each test proves the overlap and its outcome.
  */
 class OrderPaymentConcurrencyTest extends TestCase
 {
@@ -60,93 +60,125 @@ class OrderPaymentConcurrencyTest extends TestCase
         });
     }
 
-    /** Inside a task: hold right after the first row lock taken on $table, and say so. */
-    private static function holdAfterLocking(string $table, string $dir, string $signal): void
+    /**
+     * $first takes the invoice and holds it until PostgreSQL shows $second blocked by it (RunsConcurrently's barrier):
+     * the order of the two is proven, not left to timing. $first's result comes back as [value, blocked].
+     *
+     * @return list<array{ok: bool, value: mixed, error: ?string}>
+     */
+    private function race(callable $first, callable $second): array
     {
-        $held = false;
-        DB::listen(function ($query) use ($table, $dir, $signal, &$held) {
-            if (! $held && str_contains($query->sql, 'from "'.$table.'"') && str_contains($query->sql, 'for update')) {
-                $held = true;
-                file_put_contents("$dir/$signal", '1');
-                usleep(800_000);
-            }
+        return $this->concurrently([
+            function (string $dir) use ($first) {
+                self::holdUntilAnotherWaits($dir, fn (string $sql) => str_contains($sql, 'from "invoices"'));
+                $value = $first();
+
+                return [$value, is_file("$dir/blocked")];
+            },
+            function (string $dir) use ($second) {
+                self::waitFor("$dir/inside");
+
+                return is_file("$dir/inside") ? $second() : 'not at the same time';
+            },
+        ]);
+    }
+
+    private function paymobCallback(array $obj, string $hmac): callable
+    {
+        return fn () => app(OnlinePaymentService::class)->handleWebhook(['type' => 'TRANSACTION', 'obj' => $obj], $hmac);
+    }
+
+    /** @param  list<array{ok: bool, value: mixed, error: ?string}>  $results */
+    private function assertOutcomes(array $expected, array $results): void
+    {
+        foreach ($results as $result) {
+            $this->assertStringNotContainsString('deadlock', (string) $result['error'], json_encode($results));
+        }
+        $this->assertSame($expected, array_map(fn ($r) => [$r['ok'], $r['value']], $results), json_encode($results, JSON_UNESCAPED_UNICODE));
+    }
+
+    /** Whatever the order: the money recorded once (never lost), the intent paid once, the books balanced. */
+    private function assertMoney(Tenant $club, string $credit): void
+    {
+        $this->asTenant($club, function () use ($credit) {
+            $this->assertSame($credit, Payment::where('kind', Payment::KIND_PAYMENT)->where('gateway', 'paymob')->sole()->credit_amount);
+            $this->assertSame(1, PaymentIntent::where('status', PaymentIntent::PAID)->count());
+            $this->assertSame(JournalLine::sum('debit'), JournalLine::sum('credit'), 'the books balance');
         });
     }
 
-    public function test_a_paymob_callback_and_a_staff_cancellation_at_once_do_not_deadlock(): void
+    public function test_a_paymob_callback_first_then_a_staff_cancellation_waits_and_follows(): void
     {
         $club = $this->club();
         [$sale, $obj, $hmac, $bar] = $this->paymobOrder($club);
 
-        $results = $this->concurrently([
-            function (string $dir) use ($club, $sale) {
-                self::holdAfterLocking('sales', $dir, 'cancel');
+        $results = $this->race($this->paymobCallback($obj, $hmac),
+            fn () => $this->asTenant($club, fn () => app(OrderService::class)->cancel($sale, 'العميل ألغى', 'paymob')->status));
 
-                return $this->asTenant($club, fn () => app(OrderService::class)->cancel($sale, 'العميل ألغى', 'paymob')->status);
-            },
-            function (string $dir) use ($obj, $hmac) {
-                self::holdAfterLocking('invoices', $dir, 'webhook');
-
-                return app(OnlinePaymentService::class)->handleWebhook(['type' => 'TRANSACTION', 'obj' => $obj], $hmac);
-            },
-        ]);
-
-        foreach ($results as $result) {
-            $this->assertStringNotContainsString('deadlock', (string) $result['error'], json_encode($results));
-            $this->assertTrue($result['ok'], json_encode($results));
-        }
-        // Whichever took the invoice first: the callback (the payment applied, then the order cancelled), or the
-        // cancellation (the order released, then the money held for review on the voided invoice, never applied).
-        $this->assertContains($results[1]['value'], ['processed', 'held_for_review'], 'the payment is recorded');
-
-        $this->asTenant($club, function () use ($sale, $bar, $results) {
-            $this->assertSame(Sale::CANCELLED, $sale->fresh()->status);
-            $this->assertSame(1, Payment::where('kind', Payment::KIND_PAYMENT)->where('gateway', 'paymob')->count(), 'the money is recorded once');
-            if ($results[1]['value'] === 'held_for_review') {
-                $this->assertSame([Invoice::VOID, '1.500', 0], [Invoice::findOrFail($sale->invoice_id)->status,
-                    Payment::where('gateway', 'paymob')->sole()->credit_amount, Payment::where('kind', Payment::KIND_REFUND)->count()], json_encode($results));
-            }
-            $this->assertSame('10.000', $bar->fresh()->stock_quantity, 'the held stock is back');
-            $this->assertSame(JournalLine::sum('debit'), JournalLine::sum('credit'), 'the books balance');
-        });
+        // Paid in time, then cancelled by staff as any paid order: the payment applied, the stock back.
+        $this->assertOutcomes([[true, ['processed', true]], [true, Sale::CANCELLED]], $results);
+        $this->assertMoney($club, '0.000');
+        $this->asTenant($club, fn () => $this->assertSame([Sale::CANCELLED, '10.000'], [$sale->fresh()->status, $bar->fresh()->stock_quantity]));
     }
 
-    public function test_a_paymob_callback_and_the_window_expiring_at_once_do_not_deadlock(): void
+    public function test_a_staff_cancellation_first_then_the_paymob_callback_waits_and_holds_the_money(): void
     {
         $club = $this->club();
-        [$sale, $obj, $hmac] = $this->paymobOrder($club);
+        [$sale, $obj, $hmac, $bar] = $this->paymobOrder($club);
+
+        $results = $this->race(fn () => $this->asTenant($club, fn () => app(OrderService::class)->cancel($sale, 'العميل ألغى', 'paymob')->status),
+            $this->paymobCallback($obj, $hmac));
+
+        // Cancelled first (nothing paid yet, so nothing paid back): the late money is recorded in full and held for review
+        // on the voided invoice, never applied; the stock is back once.
+        $this->assertOutcomes([[true, [Sale::CANCELLED, true]], [true, 'held_for_review']], $results);
+        $this->assertMoney($club, '1.500');
+        $this->asTenant($club, fn () => $this->assertSame([Sale::CANCELLED, Invoice::VOID, '10.000', 0],
+            [$sale->fresh()->status, Invoice::findOrFail($sale->invoice_id)->status, $bar->fresh()->stock_quantity, Payment::where('kind', Payment::KIND_REFUND)->count()]));
+    }
+
+    public function test_the_window_expiring_first_then_the_paymob_callback_holds_the_money(): void
+    {
+        $club = $this->club();
+        [$sale, $obj, $hmac, $bar] = $this->paymobOrder($club);
         $this->asTenant($club, fn () => $sale->forceFill(['reserved_until' => now()->subMinutes(10)])->save());
 
-        $results = $this->concurrently([
-            function (string $dir) use ($club) {
-                self::holdAfterLocking('sales', $dir, 'expire');
+        $results = $this->race(fn () => $this->asTenant($club, fn () => app(OrderService::class)->expireOverdue()), $this->paymobCallback($obj, $hmac));
 
-                return $this->asTenant($club, fn () => app(OrderService::class)->expireOverdue());
-            },
-            function (string $dir) use ($obj, $hmac) {
-                self::holdAfterLocking('invoices', $dir, 'webhook');
+        $this->assertOutcomes([[true, [1, true]], [true, 'held_for_review']], $results);
+        $this->assertMoney($club, '1.500');
+        $this->asTenant($club, fn () => $this->assertSame([Sale::CANCELLED, null, '10.000'], [$sale->fresh()->status, $sale->fresh()->paid_at, $bar->fresh()->stock_quantity]));
+    }
 
-                return app(OnlinePaymentService::class)->handleWebhook(['type' => 'TRANSACTION', 'obj' => $obj], $hmac);
-            },
-        ]);
+    public function test_a_paymob_callback_after_the_window_first_then_the_expiry_still_releases_the_order(): void
+    {
+        $club = $this->club();
+        [$sale, $obj, $hmac, $bar] = $this->paymobOrder($club);
+        $this->asTenant($club, fn () => $sale->forceFill(['reserved_until' => now()->subMinutes(10)])->save());
 
-        foreach ($results as $result) {
-            $this->assertStringNotContainsString('deadlock', (string) $result['error'], json_encode($results));
-            $this->assertTrue($result['ok'], json_encode($results));
-        }
-        // The window was over: whichever went first, the money is recorded and held for review, never applied.
-        $this->assertSame('held_for_review', $results[1]['value']);
+        $results = $this->race($this->paymobCallback($obj, $hmac), fn () => $this->asTenant($club, fn () => app(OrderService::class)->expireOverdue()));
 
-        $this->asTenant($club, function () use ($sale) {
-            $sale = $sale->fresh();
-            $payment = Payment::where('gateway', 'paymob')->sole();
-            // The money is never lost, and the order is never paid after its hold: it is released, and the payment is
-            // the customer's credit, for staff to apply or pay back.
-            $this->assertSame(Sale::CANCELLED, $sale->status);
-            $this->assertNull($sale->paid_at);
-            $this->assertSame('1.500', $payment->credit_amount);
-            $this->assertSame(1, PaymentIntent::where('status', PaymentIntent::PAID)->count());
-            $this->assertSame(JournalLine::sum('debit'), JournalLine::sum('credit'), 'the books balance');
+        // The callback saw the hold over: held, not applied, so the order is still unpaid and the expiry releases it.
+        $this->assertOutcomes([[true, ['held_for_review', true]], [true, 1]], $results);
+        $this->assertMoney($club, '1.500');
+        $this->asTenant($club, fn () => $this->assertSame([Sale::CANCELLED, null, '10.000'], [$sale->fresh()->status, $sale->fresh()->paid_at, $bar->fresh()->stock_quantity]));
+    }
+
+    public function test_a_paymob_callback_in_time_first_then_the_expiry_leaves_the_paid_order_alone(): void
+    {
+        $club = $this->club();
+        [$sale, $obj, $hmac, $bar] = $this->paymobOrder($club);
+
+        // The expiry runs as if its time had come meanwhile (past the hold and its grace), while the callback holds the invoice.
+        $results = $this->race($this->paymobCallback($obj, $hmac), function () use ($club) {
+            $this->travelTo(now()->addMinutes(60));
+
+            return $this->asTenant($club, fn () => app(OrderService::class)->expireOverdue());
         });
+
+        // Paid in time: the expiry, once it has the lock, sees the order paid and leaves it to staff; no stock released.
+        $this->assertOutcomes([[true, ['processed', true]], [true, 0]], $results);
+        $this->assertMoney($club, '0.000');
+        $this->asTenant($club, fn () => $this->assertSame([Sale::PENDING, true, '9.000'], [$sale->fresh()->status, $sale->fresh()->paid_at !== null, $bar->fresh()->stock_quantity]));
     }
 }
