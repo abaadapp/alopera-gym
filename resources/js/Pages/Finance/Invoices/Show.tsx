@@ -188,6 +188,12 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                 </Notice>
             )}
 
+            {invoice.payments.some((p) => p.gateway && p.credit_left !== null && Number(p.credit_left) > 0) && (
+                <Notice tone="amber" icon={<AlertTriangle />} className="mb-6">
+                    وصلت دفعة إلكترونية مؤكدة من Paymob ولم تُطبَّق على فاتورة بعد، وهي قيد المراجعة رصيدًا دائنًا للعميل. لا يُطلب من العميل الدفع مرة أخرى.
+                </Notice>
+            )}
+
             {invoice.status === 'void' && (
                 <Notice tone="red" className="mb-6">
                     هذه الفاتورة ملغاة{invoice.void_reason ? `: ${invoice.void_reason}` : '.'}
