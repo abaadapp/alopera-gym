@@ -229,6 +229,28 @@ class BackupConcurrencyTest extends TestCase
         $this->assertSame([], $this->staging());
     }
 
+    /**
+     * What the club sees after a restore was killed half-way, before backup:recover or the next night: the rows rolled
+     * back (as after the archive), her contract's file already the archive's. The first page anyone opens finishes the
+     * run first (back, here), so the contract downloaded is the one her rows describe: never a mix of the two states.
+     */
+    public function test_the_first_page_after_a_killed_restore_finishes_it_before_showing_anything(): void
+    {
+        [$club, $archive, , $b] = $this->archivedThenChanged();
+        $contract = $this->asTenant($club, fn () => MemberDocument::orderBy('id')->first());
+        $this->killedDuring(fn () => $this->service()->restore($club, $archive), new CrashingRestoreFiles(['move' => [-1, 'after']]));
+        $this->assertSame($b['rows'], $this->state($club)['rows'], 'the rows rolled back by themselves');
+        $this->assertNotSame($b['files'], $this->state($club)['files'], 'the files are the mix a killed run leaves');
+
+        $download = $this->actingAs($this->owner($club))->get(route('club.documents.download', $contract));
+
+        $download->assertOk();
+        $this->assertSame('%PDF-1.4 B-CONTRACT %%EOF', $download->streamedContent(), 'the file her rows describe');
+        $this->assertSame($b, $this->state($club), 'the club exactly as it was');
+        $this->assertSame([], $this->staging());
+        $this->assertSame('back', AuditLog::where('event', 'backup.restore_recovered')->latest('id')->value('properties')['direction']);
+    }
+
     /** A save while the backup reads the rows: the archive is the moment it started (one snapshot), and restores. */
     public function test_a_save_during_the_backup_leaves_an_archive_that_restores(): void
     {

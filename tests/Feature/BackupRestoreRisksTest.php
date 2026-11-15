@@ -12,9 +12,12 @@ use App\Modules\Gym\Models\MemberDocument;
 use App\Modules\Messaging\Models\Attachment;
 use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Models\Message;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Tests\Concerns\BuildsClubs;
 use Tests\Support\FailingDisk;
 use Tests\TestCase;
@@ -216,6 +219,167 @@ class BackupRestoreRisksTest extends TestCase
         $this->assertSame(1, AuditLog::where('event', 'backup.failed')->count());
         $this->assertSame([$first], array_map('basename', Storage::disk('local')->files($this->service()->directory($club))), 'nothing else left behind');
         $this->service()->verifyArchive($this->archivePath($club, $first));
+    }
+
+    /**
+     * A file of the club that is there but cannot be read (its permissions, a disk error): the archive would lack it,
+     * so there is no archive: an error naming it, backup.failed, no backup.created, nothing left behind, and the
+     * archives kept before are all still there. A file removed while the backup runs is not this (see the next test).
+     */
+    public function test_a_file_that_cannot_be_read_fails_the_backup_instead_of_leaving_it_out(): void
+    {
+        [$club, $owner, , $document] = $this->clubWithDocument();
+        $first = $this->service()->create($club);
+        $real = Storage::disk('local')->path($document->path);
+        chmod($real, 0);
+        if (is_readable($real)) {
+            chmod($real, 0644);
+            $this->markTestSkipped('run as root: a file cannot be made unreadable');
+        }
+
+        try {
+            $this->actingAs($owner)->post(route('club.backups.store'))->assertSessionHasErrors('error')->assertSessionMissing('success');
+            try {
+                $this->service()->create($club);
+                $this->fail('an archive without the file was created');
+            } catch (BusinessRuleException $e) {
+                $this->assertSame('backup.failed', $e->rule);
+                $this->assertStringContainsString(basename($document->path), $e->getMessage(), 'the file is named');
+            }
+        } finally {
+            chmod($real, 0644);
+        }
+        $this->assertSame(1, AuditLog::where('event', 'backup.created')->count(), 'only the first one');
+        $this->assertSame(2, AuditLog::where('event', 'backup.failed')->count());
+        $this->assertSame([$first], array_map('basename', Storage::disk('local')->files($this->service()->directory($club))), 'nothing else left behind');
+    }
+
+    /** A file removed between the listing and its reading (deleted by someone meanwhile) is left out, and the backup goes through. */
+    public function test_a_file_removed_after_it_was_listed_is_left_out_and_the_backup_goes_through(): void
+    {
+        [$club] = $this->clubWithDocument();
+        $disk = Storage::disk('public');
+        Storage::set('public', new class($disk->getDriver(), $disk->getAdapter(), $disk->getConfig()) extends FilesystemAdapter
+        {
+            public function allFiles($directory = null)
+            {
+                return [...parent::allFiles($directory), $directory.'/site/removed-meanwhile.png'];
+            }
+        });
+
+        $name = $this->service()->create($club);
+        $checked = $this->service()->verifyArchive($this->archivePath($club, $name));
+        $this->assertSame(1, $checked['files'], 'the contract only');
+        $this->assertSame(1, AuditLog::where('event', 'backup.created')->count());
+    }
+
+    /** $count more members of the club, written straight to the table (a large club, quickly). */
+    private function manyMembers(Tenant $club, int $count): void
+    {
+        $row = (array) DB::table('gym_members')->where('tenant_id', $club->id)->first();
+        unset($row['id']);
+        for ($i = 0; $i < $count; $i += 1000) {
+            $chunk = [];
+            for ($j = $i; $j < min($i + 1000, $count); $j++) {
+                $chunk[] = ['full_name' => 'عضوة رقم '.$j.' '.Str::random(12), 'phone' => '968'.(80000000 + $j), 'member_no' => 'L'.$j, 'qr_token' => Str::random(40), 'email' => null, 'notes' => 'ملاحظة '.Str::random(80)] + $row;
+            }
+            DB::table('gym_members')->insert($chunk);
+        }
+    }
+
+    /**
+     * A club of 10,000 members (data.json about 8 MB): the archive is checked and restored a row at a time, so neither
+     * needs more memory as the club grows (decoded whole, this took about 110 MB more, too much for a 128 MB panel).
+     */
+    public function test_a_large_club_is_archived_and_restored_a_row_at_a_time(): void
+    {
+        [$club, , $member] = $this->clubWithDocument();
+        $this->manyMembers($club, 10000);
+        $before = $this->asTenant($club, fn () => Member::count());
+
+        memory_reset_peak_usage();
+        $base = memory_get_usage();
+        $name = $this->service()->create($club);
+        $created = memory_get_peak_usage() - $base;
+
+        $this->asTenant($club, fn () => Member::whereKeyNot($member->id)->limit(5000)->delete());
+        memory_reset_peak_usage();
+        $base = memory_get_usage();
+        $this->service()->restore($club, $this->archivePath($club, $name));
+        $restored = memory_get_peak_usage() - $base;
+
+        $this->assertSame($before, $this->asTenant($club, fn () => Member::count()), 'every member back');
+        $this->assertLessThan(32 * 1048576, $created, 'creating and checking the archive: '.round($created / 1048576).' MB more');
+        $this->assertLessThan(32 * 1048576, $restored, 'restoring it: '.round($restored / 1048576).' MB more');
+    }
+
+    /** Rewrites data.json inside $archive with $change(lines), as an archive without the newer manifest keys. */
+    private function withDataLines(string $archive, callable $change): void
+    {
+        $zip = new ZipArchive;
+        $zip->open($archive);
+        $lines = explode("\n", (string) $zip->getFromName('data.json'));
+        $manifest = json_decode($zip->getFromName('manifest.json'), true);
+        unset($manifest['data_sha256'], $manifest['content_sha256'], $manifest['files']);
+        $zip->addFromString('data.json', implode("\n", $change($lines)));
+        $zip->addFromString('manifest.json', json_encode($manifest));
+        $zip->close();
+    }
+
+    /**
+     * data.json written a row per line is checked as the one-line one always was: a row of another club, a cut file,
+     * an unknown table are refused before anything is replaced; tables in another order (an archive of a version with
+     * other tables) restore whole.
+     */
+    public function test_a_data_json_a_row_per_line_is_checked_before_anything_is_replaced(): void
+    {
+        [$club, , $member] = $this->clubWithDocument();
+        $name = $this->service()->create($club);
+        $this->asTenant($club, fn () => $member->forceFill(['full_name' => 'بعد النسخة'])->save());
+        $archive = $this->archivePath($club, $name);
+        $copy = fn (string $what) => tap(dirname($archive).'/'.$what.'.zip', fn ($to) => copy($archive, $to));
+        $memberLine = fn (array $lines) => array_key_first(array_filter($lines, fn ($l) => str_contains($l, '"full_name":"سارة"')));
+
+        $other = $copy('other');
+        $this->withDataLines($other, function ($lines) use ($memberLine) {
+            $lines[$memberLine($lines)] = preg_replace('/"tenant_id":\d+/', '"tenant_id":999999', $lines[$memberLine($lines)]);
+
+            return $lines;
+        });
+        $cut = $copy('cut');
+        $this->withDataLines($cut, fn ($lines) => array_slice($lines, 0, $memberLine($lines) + 1));
+        $unknown = $copy('unknown');
+        $this->withDataLines($unknown, fn ($lines) => [$lines[0], '"no_such_table":[', '{"id":1}', '],', ...array_slice($lines, 1)]);
+
+        foreach (['backup.other_tenant' => $other, 'backup.invalid' => $cut, 'backup.invalid ' => $unknown] as $rule => $file) {
+            try {
+                $this->service()->restore($club, $file);
+                $this->fail(basename($file).' was restored');
+            } catch (BusinessRuleException $e) {
+                $this->assertSame(trim($rule), $e->rule, basename($file));
+            }
+            $this->assertSame('بعد النسخة', $this->asTenant($club, fn () => $member->fresh()->full_name), basename($file).': nothing replaced');
+        }
+
+        // The tables in the opposite order: each is found where it is, and restored in the order of their keys.
+        $reversed = $copy('reversed');
+        $this->withDataLines($reversed, function ($lines) {
+            $blocks = [];
+            foreach (array_slice($lines, 1, -2) as $line) {
+                str_ends_with($line, ':[') ? $blocks[] = [$line] : $blocks[array_key_last($blocks)][] = $line;
+            }
+            $blocks = array_reverse($blocks);
+            $out = ['{'];
+            foreach ($blocks as $i => $block) {
+                $last = array_pop($block); // "]," or "]"
+                array_push($out, ...$block);
+                $out[] = $i === count($blocks) - 1 ? ']' : '],';
+            }
+
+            return [...$out, '}', ''];
+        });
+        $this->service()->restore($club, $reversed);
+        $this->assertSame('سارة', $this->asTenant($club, fn () => $member->fresh()->full_name));
     }
 
     /** A disk that keeps only part of the archive: refused, and none of the fourteen sound archives is pushed out. */

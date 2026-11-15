@@ -254,6 +254,53 @@ class RestoreAllOrNothingTest extends TestCase
         $this->assertSame($a['rows'], $this->state($club)['rows']);
     }
 
+    /**
+     * While a restore is putting files in place (its journal on disk, its process holding the club's lock), every page
+     * of the club, the panel and the website, says so (503) instead of showing rows and files from two states; once
+     * that process is gone (it stopped half-way), the next page finishes the run and shows the club whole.
+     */
+    public function test_pages_wait_while_a_restore_places_files_and_the_next_one_after_finishes_it(): void
+    {
+        [$club, $archive, , $b] = $this->archivedThenChanged();
+        $owner = $this->owner($club);
+        $this->files->fail = ['move' => [2, 'and after']];
+        $this->restoreFails($club, $archive);
+        $this->files->fail = [];
+        $this->assertNotSame($b['files'], $this->state($club)['files'], 'the half-way state');
+
+        // Its process still holds the lock: a restore running, not stopped.
+        config(['database.connections.other' => config('database.connections.pgsql')]);
+        DB::connection('other')->select('select pg_advisory_lock(?, ?)', [TenantBackupService::LOCKS, $club->id]);
+        try {
+            $this->actingAs($owner)->get(route('club.dashboard'))->assertStatus(503)->assertSee('استعادة');
+            $this->get(route('site.home', ['club' => $club->slug]))->assertStatus(503);
+            $this->assertNotSame($b['files'], $this->state($club)['files'], 'nothing done while it runs');
+        } finally {
+            DB::connection('other')->select('select pg_advisory_unlock(?, ?)', [TenantBackupService::LOCKS, $club->id]);
+            DB::purge('other');
+        }
+
+        // Its process gone: the next page finishes it, then shows the club whole.
+        $this->actingAs($owner)->get(route('club.dashboard'))->assertOk();
+        $this->assertUnchanged($b, $club, 'finished by the first page');
+        $this->get(route('site.home', ['club' => $club->slug]))->assertOk();
+    }
+
+    /** A stopped run that cannot be finished yet (the disk still failing): the pages wait, then show the club once it is. */
+    public function test_a_restore_that_cannot_be_finished_yet_keeps_the_pages_waiting(): void
+    {
+        [$club, $archive, , $b] = $this->archivedThenChanged();
+        $this->files->fail = ['move' => [2, 'and after']];
+        $this->restoreFails($club, $archive);
+
+        $this->actingAs($this->owner($club))->get(route('club.dashboard'))->assertStatus(503)->assertSee('لم يمكن إكمالها');
+        $this->get(route('site.home', ['club' => $club->slug]))->assertStatus(503);
+
+        $this->files->fail = [];
+        $this->actingAs($this->owner($club))->get(route('club.dashboard'))->assertOk();
+        $this->assertUnchanged($b, $club, 'finished once the disk works');
+    }
+
     /** After the commit the club is the archive's; a staging that cannot be removed then is removed by the next run. */
     public function test_a_clean_up_that_fails_after_the_commit_leaves_the_restore_whole(): void
     {

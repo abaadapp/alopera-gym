@@ -92,6 +92,17 @@ final class TenantBackupService
         return $this->exclusively($tenant, fn () => $this->recoverInterrupted($tenant));
     }
 
+    /**
+     * Whether a restore of the club has written its journal and not finished: it is placing files now, or it stopped
+     * half-way (see RestoreGate). Without one, a single look at a folder that is not there.
+     */
+    public function restoreUnderWay(Tenant $tenant): bool
+    {
+        $root = Storage::disk('local')->path(self::STAGING.'/'.$tenant->id);
+
+        return is_dir($root) && (glob($root.'/*/journal.json') ?: []) !== [];
+    }
+
     /** Restore runs of the club that stopped half-way and wait to be finished. */
     public function interruptedRuns(Tenant $tenant): int
     {
@@ -156,6 +167,7 @@ final class TenantBackupService
         if ($zip->open($file, ZipArchive::CHECKCONS | ZipArchive::RDONLY) !== true) {
             throw new RuntimeException('the archive does not open as a sound zip');
         }
+        $dataFile = (string) tempnam(sys_get_temp_dir(), 'gymrs');
         try {
             $manifest = json_decode((string) $zip->getFromName('manifest.json'), true);
             if (! is_array($manifest) || ($manifest['format'] ?? null) !== self::FORMAT_VERSION) {
@@ -169,7 +181,7 @@ final class TenantBackupService
                 if (str_ends_with($name, '/')) {
                     continue;
                 }
-                [$size, $sha] = $this->readEntry($zip, $i, null);
+                [$size, $sha] = $this->readEntry($zip, $i, $name === 'data.json' ? $dataFile : null);
                 if ($name === 'data.json') {
                     $dataSha = $sha;
                 } elseif (str_starts_with($name, 'files/')) {
@@ -188,14 +200,17 @@ final class TenantBackupService
             if (isset($manifest['data_sha256']) && $manifest['data_sha256'] !== $dataSha) {
                 throw new RuntimeException('data.json is not the one the manifest records');
             }
-            $data = json_decode((string) $zip->getFromName('data.json'), true);
-            if (! is_array($data) || array_map('count', $data) != ($manifest['counts'] ?? null)) {
+            // Every row read back, one at a time (an older one-line data.json whole, as before), and counted.
+            $rows = ArchiveRows::read($dataFile, fn () => null);
+            $rows->close();
+            if ($rows->counts() != ($manifest['counts'] ?? null)) {
                 throw new RuntimeException('the rows in data.json are not the manifest counts');
             }
 
             return ['entries' => $zip->numFiles, 'files' => $files, 'rows' => array_sum($manifest['counts'])];
         } finally {
             $zip->close();
+            @unlink($dataFile);
         }
     }
 
@@ -305,19 +320,20 @@ final class TenantBackupService
             }
         };
         $counts = [];
+        // One row per line (ArchiveRows reads it a row at a time); still one JSON document, as older code reads it.
         $read = function () use ($tenant, $put, &$counts): void {
-            $put('{');
+            $put("{\n");
             foreach (TenantTables::ORDER as $i => $table) {
-                $put(($i ? ',' : '').json_encode($table).':[');
+                $put(($i ? "],\n" : '').json_encode($table).":[\n");
                 $n = 0;
                 foreach ($this->rowsOf($tenant, $table) as $row) {
-                    $put(($n ? ',' : '').json_encode((array) $row, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
+                    $put(($n ? ",\n" : '').json_encode((array) $row, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
                     $n++;
                 }
-                $put(']');
+                $put($n ? "\n" : '');
                 $counts[$table] = $n;
             }
-            $put('}');
+            $put("]\n}\n");
         };
         try {
             // Inside a transaction already (a test's), the snapshot is that transaction's own.
@@ -358,10 +374,16 @@ final class TenantBackupService
             foreach (Storage::disk($disk)->allFiles('tenants/'.$tenant->id) as $file) {
                 $real = Storage::disk($disk)->path($file);
                 $sha = @hash_file('sha256', $real);
-                if ($sha === false) {
-                    continue; // removed since it was listed
+                $size = @filesize($real);
+                if ($sha === false || $size === false) {
+                    clearstatcache(true, $real);
+                    if (! file_exists($real) && ! is_link($real)) {
+                        continue; // removed since it was listed: its row went with it, or goes in the next backup
+                    }
+                    // There but unreadable (permissions, a disk error): an archive without it would be incomplete.
+                    throw new RuntimeException('ملف لا يمكن قراءته: '.$file);
                 }
-                $sources[] = ['entry' => 'files/'.$label.'/'.$file, 'real' => $real, 'size' => (int) filesize($real), 'sha256' => $sha];
+                $sources[] = ['entry' => 'files/'.$label.'/'.$file, 'real' => $real, 'size' => (int) $size, 'sha256' => $sha];
             }
         }
 
@@ -546,21 +568,28 @@ final class TenantBackupService
     {
         $this->recoverInterrupted($tenant);
 
+        // data.json is taken out to a file and read from it a row at a time (ArchiveRows): the club is never all in memory.
+        $dataFile = (string) tempnam(sys_get_temp_dir(), 'gymrs');
+        try {
+            return $this->restoreFrom($tenant, $archivePath, $safetyCopy, $dataFile);
+        } finally {
+            @unlink($dataFile);
+        }
+    }
+
+    private function restoreFrom(Tenant $tenant, string $archivePath, bool $safetyCopy, string $dataFile): array
+    {
         $zip = new ZipArchive;
         if ($zip->open($archivePath) !== true) {
             throw new BusinessRuleException('backup.invalid', 'ملف النسخة الاحتياطية غير صالح.');
         }
 
         $manifest = json_decode((string) $zip->getFromName('manifest.json'), true);
-        $json = (string) $zip->getFromName('data.json');
-        $data = json_decode($json, true);
-
-        if (! is_array($manifest) || ! is_array($data) || ($manifest['format'] ?? null) !== self::FORMAT_VERSION
-            || (isset($manifest['data_sha256']) && $manifest['data_sha256'] !== hash('sha256', $json))) {
+        $index = $zip->locateName('data.json');
+        if (! is_array($manifest) || $index === false || ($manifest['format'] ?? null) !== self::FORMAT_VERSION) {
             $zip->close();
             throw new BusinessRuleException('backup.invalid', 'ملف النسخة الاحتياطية غير صالح أو بإصدار غير مدعوم.');
         }
-        unset($json);
 
         if ((int) ($manifest['tenant_id'] ?? 0) !== $tenant->id) {
             $zip->close();
@@ -568,20 +597,35 @@ final class TenantBackupService
             throw new BusinessRuleException('backup.other_tenant', 'هذه النسخة تخص ناديًا آخر ولا يمكن استعادتها هنا.');
         }
 
-        // Every row must belong to this club — a tampered archive cannot inject rows elsewhere.
-        foreach ($data as $table => $rows) {
-            if (! in_array($table, TenantTables::ORDER, true)) {
-                $zip->close();
-                throw new BusinessRuleException('backup.invalid', 'جدول غير معروف في النسخة: '.$table);
+        // data.json checked against its CRC (and the manifest's SHA-256) on its way out, then every row read: each must
+        // belong to this club — a tampered archive cannot inject rows elsewhere.
+        try {
+            $this->space->ensure(sys_get_temp_dir(), (int) ($zip->statIndex($index)['size'] ?? 0), 'backup.no_space', 'لقراءة بيانات النسخة');
+            [, $dataSha] = $this->readEntry($zip, $index, $dataFile);
+            if (isset($manifest['data_sha256']) && $manifest['data_sha256'] !== $dataSha) {
+                throw new BusinessRuleException('backup.invalid', 'ملف النسخة الاحتياطية غير صالح أو بإصدار غير مدعوم.');
             }
-            if (! isset(TenantTables::PIVOTS[$table])) {
-                foreach ($rows as $row) {
-                    if ((int) ($row['tenant_id'] ?? 0) !== $tenant->id) {
-                        $zip->close();
-                        throw new BusinessRuleException('backup.other_tenant', 'النسخة تحتوي على بيانات نادٍ آخر.');
-                    }
+            $data = ArchiveRows::read($dataFile, function (string $table, array $row) use ($tenant): void {
+                if (! in_array($table, TenantTables::ORDER, true)) {
+                    throw new BusinessRuleException('backup.invalid', 'جدول غير معروف في النسخة: '.$table);
+                }
+                if (! isset(TenantTables::PIVOTS[$table]) && (int) ($row['tenant_id'] ?? 0) !== $tenant->id) {
+                    throw new BusinessRuleException('backup.other_tenant', 'النسخة تحتوي على بيانات نادٍ آخر.');
+                }
+            });
+            foreach (array_keys($data->counts()) as $table) {
+                if (! in_array($table, TenantTables::ORDER, true)) {
+                    throw new BusinessRuleException('backup.invalid', 'جدول غير معروف في النسخة: '.$table);
                 }
             }
+        } catch (BusinessRuleException $e) {
+            $zip->close();
+
+            throw $e;
+        } catch (Throwable) {
+            $zip->close();
+
+            throw new BusinessRuleException('backup.invalid', 'ملف النسخة الاحتياطية غير صالح أو بإصدار غير مدعوم.');
         }
 
         // Every file too, before anything is replaced: a refused archive leaves the club's rows and files as they were.
@@ -663,9 +707,10 @@ final class TenantBackupService
             }
             $counts = [];
             foreach (TenantTables::ORDER as $table) {
-                $counts[$table] = count($data[$table] ?? []);
+                $counts[$table] = $data->counts()[$table] ?? 0;
             }
         }
+        $data->close();
 
         // Committed: the rows and the files are the archive's. If the staging cannot go now, the next run removes it
         // (its marker says the run is done).
@@ -674,7 +719,7 @@ final class TenantBackupService
         $summary = ['written' => $report['written']] + array_map(fn ($list) => array_slice($list, 0, 50), array_filter([
             'kept_private' => $report['kept_private'], 'hidden_skipped' => $report['hidden_skipped'],
         ]));
-        $this->audit->log('backup.restored', $tenant, ['counts' => $counts, 'from' => $data ? 'archive' : null, 'files' => $summary, 'run' => $run], tenantId: $tenant->id);
+        $this->audit->log('backup.restored', $tenant, ['counts' => $counts, 'from' => 'archive', 'files' => $summary, 'run' => $run], tenantId: $tenant->id);
 
         return $counts;
     }
@@ -769,7 +814,7 @@ final class TenantBackupService
                 if ($listed !== null && ($listed[$entry]['sha256'] ?? null) !== $sha) {
                     throw new BusinessRuleException('backup.invalid', 'ملف في النسخة لا يطابق بصمته المسجلة، ولم يُستبدل شيء: '.mb_scrub(mb_substr($path, 0, 120)));
                 }
-                if ($part === 'public' && ! self::isPublicImage($path, (string) file_get_contents($tmp, length: 64 * 1024 * 1024))) {
+                if ($part === 'public' && ! self::isPublicImage($path, $tmp)) {
                     [$disk, $final] = ['local', $folder.self::ISOLATED.'/'.$path];
                     $report['kept_private'][] = $path;
                 } else {
@@ -834,8 +879,8 @@ final class TenantBackupService
         return [$size, hash_final($sha)];
     }
 
-    /** @param array<string, list<array<string, mixed>>> $data */
-    private function replaceRows(Tenant $tenant, array $data): array
+    /** The club's rows replaced by the archive's, table by table in the order of their keys, 500 rows at a time. */
+    private function replaceRows(Tenant $tenant, ArchiveRows $data): array
     {
         foreach (array_reverse(TenantTables::ORDER) as $table) {
             $this->deleteTenantRows($tenant, $table);
@@ -843,14 +888,24 @@ final class TenantBackupService
 
         $counts = [];
         foreach (TenantTables::ORDER as $table) {
-            $rows = $data[$table] ?? [];
+            $rows = $data->of($table);
             if (isset(TenantTables::SELF_REFERENCING[$table])) {
+                // Parents first (a few rows: categories, accounts).
+                $rows = iterator_to_array($rows, false);
                 usort($rows, fn ($a, $b) => $a['id'] <=> $b['id']);
             }
-            foreach (array_chunk($rows, 500) as $chunk) {
-                DB::table($table)->insert($chunk);
+            $n = 0;
+            $chunk = [];
+            foreach ($rows as $row) {
+                $chunk[] = $row;
+                $n++;
+                if (count($chunk) === 500) {
+                    DB::table($table)->insert($chunk);
+                    $chunk = [];
+                }
             }
-            $counts[$table] = count($rows);
+            $chunk && DB::table($table)->insert($chunk);
+            $counts[$table] = $n;
             if (! isset(TenantTables::PIVOTS[$table])) {
                 $this->resetSequence($table);
             }
@@ -949,12 +1004,13 @@ final class TenantBackupService
     }
 
     /** One extension (no "photo.php.png"), an image one, and bytes that really are that image. */
-    private static function isPublicImage(string $path, string $bytes): bool
+    /** A real image of the type its name says, read from the staged copy $file (its header only, not the whole of it). */
+    private static function isPublicImage(string $path, string $file): bool
     {
         if (! preg_match('/^[^.]+\.([a-z]+)$/i', basename($path), $m) || ! isset(self::PUBLIC_IMAGES[strtolower($m[1])])) {
             return false;
         }
-        $info = @getimagesizefromstring($bytes);
+        $info = @getimagesize($file);
 
         return $info !== false && $info[2] === self::PUBLIC_IMAGES[strtolower($m[1])];
     }
