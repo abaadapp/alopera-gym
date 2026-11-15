@@ -104,14 +104,15 @@ class PayLinkOpeningTest extends TestCase
         $this->assertSame(3, $calls, 'two failures, one checkout, and opening it again asks Paymob nothing');
     }
 
-    public function test_a_payment_at_the_desk_changes_what_is_owed_and_the_link_asks_only_the_rest(): void
+    public function test_a_payment_at_the_desk_changes_what_is_owed_and_the_link_asks_only_the_rest_once_the_old_page_ended(): void
     {
         [$club, $invoice] = $this->setUpClub();
         $this->fundAccounts($club);
         Http::fake(['*/v1/intention/' => Http::sequence()->push(['client_secret' => 'a', 'intention_order_id' => 3], 201)->push(['client_secret' => 'b', 'intention_order_id' => 4], 201)]);
-        $this->start($club, $invoice);
+        $old = $this->start($club, $invoice);
         $this->asTenant($club, fn () => app(PaymentService::class)->record($invoice->fresh(), '4.000', 'cash'));
 
+        $this->travelTo($old->expires_at->copy()->addSecond());
         $this->assertSame('6.000', $this->start($club, $invoice)->amount);
     }
 

@@ -137,20 +137,35 @@ final class OnlinePaymentService
                 $expires = $hold->lt($expires) ? $hold : $expires;
             }
 
-            // Given again only if opened in the same environment.
-            $open = PaymentIntent::where('invoice_id', $invoice->id)->where('status', PaymentIntent::PENDING)->whereNotNull('checkout_url')
-                ->where('reference', 'like', $prefix.'%')
-                ->where('expires_at', '>', now()->addMinutes(10))->where('expires_at', '<=', $expires)->latest('id')->first();
-            if ($open && Money::cmp($open->amount, $invoice->balance()) === 0) {
+            // The invoice's checkouts still pending, read in ONE statement: the claim of another request and its URL are
+            // saved at different moments (the URL after Paymob answers, outside this lock), so asking for "a page" and
+            // then for "a claim" in two statements could see neither and open a second checkout.
+            $pending = PaymentIntent::where('invoice_id', $invoice->id)->where('status', PaymentIntent::PENDING)->orderByDesc('id')->get();
+
+            // Given again only if opened in the same environment, for what is owed now, with time left to pay it.
+            $open = $pending->first(fn (PaymentIntent $i) => $i->checkout_url !== null && str_starts_with($i->reference, $prefix)
+                && $i->expires_at !== null && $i->expires_at->gt(now()->addMinutes(10)) && $i->expires_at->lte($expires) && Money::cmp($i->amount, $invoice->balance()) === 0);
+            if ($open) {
                 return [$invoice, $open];
+            }
+
+            // A page handed out earlier and still payable at Paymob — for another amount (the invoice was paid in part at
+            // the desk, credited…) or too close to its end to be given again — cannot be withdrawn from here. A second
+            // page beside it would let the customer pay both: none is opened until it has ended. What is paid on it
+            // above what is owed stays in the books as the customer's credit, for the club's review (PaymentService).
+            $payable = $pending->filter(fn (PaymentIntent $i) => $i->checkout_url !== null && str_starts_with($i->reference, $prefix) && ($i->expires_at === null || $i->expires_at->isFuture()))
+                ->sortByDesc(fn (PaymentIntent $i) => $i->expires_at?->getTimestamp() ?? PHP_INT_MAX)->first();
+            if ($payable) {
+                throw new BusinessRuleException('paymob.page_open', 'صفحة دفع سابقة لهذه الفاتورة بمبلغ '.$payable->amount.' '.$payable->currency
+                    .($payable->expires_at ? ' ما زالت مفتوحة حتى '.$payable->expires_at->timezone(config('app.timezone'))->format('H:i') : ' ما زالت مفتوحة')
+                    .(Money::cmp($payable->amount, $invoice->balance()) === 0 ? '' : '، والمستحق الآن '.$invoice->balance())
+                    .'. ادفع منها إن كانت مفتوحة عندك، أو انتظر انتهاءها ثم افتح الرابط من جديد، أو ادفع في الاستقبال.');
             }
 
             // Another request claimed this invoice's checkout and is still waiting for Paymob's answer: not a second
             // checkout. A claim older than any wait for Paymob is from a request that died on the way: it was never
             // handed to anyone (no URL), so it is no reason to refuse.
-            $opening = PaymentIntent::where('invoice_id', $invoice->id)->where('status', PaymentIntent::PENDING)->whereNull('checkout_url')
-                ->where('created_at', '>', now()->subSeconds(self::OPENING_SECONDS))->exists();
-            if ($opening) {
+            if ($pending->contains(fn (PaymentIntent $i) => $i->checkout_url === null && $i->created_at->gt(now()->subSeconds(self::OPENING_SECONDS)))) {
                 throw new BusinessRuleException('paymob.opening', 'تُفتح صفحة الدفع لهذه الفاتورة الآن في نافذة أخرى. انتظر لحظات ثم أعد فتح الرابط.');
             }
 

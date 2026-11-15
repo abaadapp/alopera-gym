@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Core\Support\BusinessRuleException;
 use App\Models\Tenant;
 use App\Models\TenantIntegration;
 use App\Modules\Accounting\Models\Account;
@@ -218,8 +219,16 @@ class PaymentsAndRefundsTest extends TestCase
             $this->assertSame($first->id, $again->id);
             $this->assertSame(1, PaymentIntent::count());
 
-            // What is owed changed (part paid at the desk): a new checkout for the new amount.
+            // What is owed changed (part paid at the desk): no second page beside the first, still payable at Paymob,
+            // until it has ended; then a new checkout for the new amount.
             app(PaymentService::class)->record($invoice, '5', 'cash');
+            try {
+                app(OnlinePaymentService::class)->start($invoice->fresh(), 'portal');
+                $this->fail('a second payable page was opened beside the first');
+            } catch (BusinessRuleException $e) {
+                $this->assertSame('paymob.page_open', $e->rule);
+            }
+            $this->travelTo($first->expires_at->copy()->addSecond());
             $this->assertNotSame($first->id, app(OnlinePaymentService::class)->start($invoice->fresh(), 'portal')->id);
         });
         Http::assertSentCount(2);
