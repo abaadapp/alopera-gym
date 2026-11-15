@@ -247,6 +247,23 @@ class MembershipBookingsAfterCommitTest extends TestCase
         $this->assertCounts($club);
     }
 
+    public function test_an_upgrade_settled_only_after_its_class_started_carries_the_booking_once(): void
+    {
+        // #175: the upgrade paid, the server gone before the bookings moved, and the sweep late: the class has started.
+        ['club' => $club, 'current' => $current, 'upgrade' => $upgrade, 'session' => $session, 'booking' => $booking] = $this->upgradePaidThenCrashed();
+        $this->travelTo($session->starts_at->addMinutes(10));
+
+        $this->assertSame(0, Artisan::call('gym:settle-bookings'));
+        $settled = fn () => [$booking->fresh()->membership_id, $booking->fresh()->status, (bool) $booking->fresh()->consumed_session,
+            $upgrade->fresh()->sessions_used, $current->fresh()->sessions_used, (int) $session->fresh()->booked_count, Booking::count(), Payment::where('gateway', 'paymob')->count()];
+        // On the upgrade she was booked under when it was decided, counted once there and no longer on the old period.
+        $this->asTenant($club, fn () => $this->assertSame([$upgrade->id, Booking::BOOKED, true, 1, 0, 1, 1, 1], $settled()));
+
+        Artisan::call('gym:settle-bookings'); // again: the same
+        $this->asTenant($club, fn () => $this->assertSame([$upgrade->id, Booking::BOOKED, true, 1, 0, 1, 1, 1], $settled()));
+        $this->assertCounts($club);
+    }
+
     public function test_a_crash_after_a_cancellation_leaves_the_booking_for_the_sweep_to_release_once(): void
     {
         $club = $this->club();

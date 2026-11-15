@@ -13,6 +13,7 @@ use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\Program;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -293,15 +294,76 @@ final class BookingService
         return $this->cancelFutureForMembership($membership, 'إلغاء العضوية', $since);
     }
 
-    /** How many of a cancelled membership's bookings settleCancelled() would still carry or release (nothing is changed). */
-    public function leftAfterCancellation(Membership $membership): int
+    /**
+     * What the bookings of a membership that can no longer use them become, by its status now: cancelled
+     * (settleCancelled), frozen (settleFrozen) or expired (settleExpired); anything else keeps its bookings. Run after the
+     * transaction that changed the status has committed, and by gym:settle-bookings for whatever a crash or a failure left.
+     */
+    public function settle(Membership $membership): int
     {
-        if ($membership->status !== Membership::CANCELLED) {
+        return match (Membership::find($membership->id)?->status) {
+            Membership::CANCELLED => $this->settleCancelled($membership),
+            Membership::FROZEN => $this->settleFrozen($membership),
+            Membership::EXPIRED => $this->settleExpired($membership),
+            default => 0,
+        };
+    }
+
+    /**
+     * A frozen membership's bookings — as a cancellation's (settleCancelled), after the freeze has committed, never inside
+     * it: the freeze holds the membership, a booking (or the member cancelling one) holds its class and then waits for the
+     * membership, and the two deadlocked. Released: the classes after the moment it was frozen (its open freeze), on it
+     * and on the member's paid periods after it, which wait for the resume (heldByFreeze) and book nothing. Each once,
+     * however many times this runs. A membership resumed since keeps what it has: it can use it again.
+     */
+    public function settleFrozen(Membership $membership): int
+    {
+        $membership = Membership::find($membership->id);
+        if (! $membership || $membership->status !== Membership::FROZEN) {
+            return 0;
+        }
+        $since = $membership->openFreeze?->created_at ?? now();
+
+        return $this->heldByTheFreeze($membership)
+            ->sum(fn (Membership $m) => $this->cancelFutureForMembership($m, 'تجميد العضوية', $since));
+    }
+
+    /** An expired membership's bookings after the last day of its period (none, unless a crash left them): released. */
+    public function settleExpired(Membership $membership): int
+    {
+        $membership = Membership::find($membership->id);
+        if (! $membership || $membership->status !== Membership::EXPIRED) {
             return 0;
         }
 
-        return Booking::where('membership_id', $membership->id)->where('status', Booking::BOOKED)
-            ->whereHas('session', fn ($q) => $q->where('starts_at', '>', $membership->cancelled_at ?? now()))->count();
+        return $this->cancelFutureForMembership($membership, 'انتهاء العضوية', $membership->ends_on->endOfDay());
+    }
+
+    /** How many bookings settle() would still carry or release (nothing is changed). */
+    public function leftToSettle(Membership $membership): int
+    {
+        $membership = Membership::find($membership->id);
+        [$memberships, $since] = match ($membership?->status) {
+            Membership::CANCELLED => [collect([$membership]), $membership->cancelled_at ?? now()],
+            Membership::FROZEN => [$this->heldByTheFreeze($membership), $membership->openFreeze?->created_at ?? now()],
+            Membership::EXPIRED => [collect([$membership]), $membership->ends_on->endOfDay()],
+            default => [collect(), now()],
+        };
+
+        return $memberships->isEmpty() ? 0 : Booking::whereIn('membership_id', $memberships->map->getKey()->all())->where('status', Booking::BOOKED)
+            ->whereHas('session', fn ($q) => $q->where('starts_at', '>', $since))->count();
+    }
+
+    /**
+     * The frozen membership and the member's paid periods after it (held by the freeze until the resume moves them back).
+     *
+     * @return Collection<int, Membership>
+     */
+    private function heldByTheFreeze(Membership $frozen): Collection
+    {
+        return Membership::where('member_id', $frozen->member_id)->whereKeyNot($frozen->id)
+            ->where('status', Membership::SCHEDULED)->where('starts_on', '>', $frozen->starts_on)->orderBy('id')->get()
+            ->prepend($frozen);
     }
 
     /**
