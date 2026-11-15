@@ -180,27 +180,71 @@ final class BookingService
         });
     }
 
+    /**
+     * Attended or absent — or a correction of either, as before — on a booking still alive, whose membership covered the
+     * class when it began (#174). The class, then the booking, then its membership, as every booking path takes them,
+     * each read again under its lock: the copy the page carried may since have been cancelled, released by a
+     * cancellation, freeze or expiry, or carried to an upgrade, and saving it turned a cancelled booking into attended.
+     * Neither the seat nor the counted class changes here: they were taken by the booking.
+     */
     public function markAttendance(Booking $booking, string $status): Booking
     {
         if (! in_array($status, [Booking::ATTENDED, Booking::NO_SHOW], true)) {
             $this->fail('attendance.status', 'حالة حضور غير صالحة.');
         }
 
-        $booking->loadMissing('session');
-        if ($booking->status === Booking::CANCELLED) {
-            $this->fail('attendance.cancelled', 'الحجز ملغى.');
-        }
-        if ($booking->session->starts_at->gt(now()->addMinutes(30))) {
-            $this->fail('attendance.too_early', 'لا يمكن تسجيل الحضور قبل موعد الحصة.');
-        }
+        return DB::transaction(function () use ($booking, $status) {
+            $session = ClassSession::whereKey($booking->class_session_id)->lockForUpdate()->firstOrFail();
+            $booking = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
 
-        $booking->forceFill([
-            'status' => $status,
-            'attended_at' => $status === Booking::ATTENDED ? ($booking->attended_at ?? now()) : null,
-            'marked_by' => Auth::guard('web')->id(),
-        ])->save();
+            if ($booking->status === Booking::CANCELLED) {
+                $this->fail('attendance.cancelled', 'الحجز ملغى.');
+            }
+            if ($session->status === ClassSession::CANCELLED) {
+                $this->fail('attendance.session_cancelled', 'الحصة ملغاة.');
+            }
+            if ($session->starts_at->gt(now()->addMinutes(30))) {
+                $this->fail('attendance.too_early', 'لا يمكن تسجيل الحضور قبل موعد الحصة.');
+            }
+            if ($booking->membership_id) {
+                $why = $this->notCovering(Membership::whereKey($booking->membership_id)->lockForUpdate()->first(), $session);
+                if ($why !== null) {
+                    $this->fail('attendance.membership', 'لا يُسجَّل الحضور: '.$why);
+                }
+            }
 
-        return $booking;
+            $booking->forceFill([
+                'status' => $status,
+                'attended_at' => $status === Booking::ATTENDED ? ($booking->attended_at ?? now()) : null,
+                'marked_by' => Auth::guard('web')->id(),
+            ])->save();
+
+            return $booking->setRelation('session', $session);
+        });
+    }
+
+    /**
+     * Why a membership did not cover a class when it began, or null when it did — by the moments the settlement of its
+     * bookings uses (settle()), so a booking is marked exactly when it is not released: paid, the class inside its period,
+     * and not cancelled or frozen before the class began (a class begun before is history it covered); a paid period
+     * waiting behind a freeze (heldByFreeze) covers nothing.
+     */
+    private function notCovering(?Membership $membership, ClassSession $session): ?string
+    {
+        if (! $membership) {
+            return 'العضوية المرتبطة بالحجز غير موجودة.';
+        }
+        $date = $session->starts_at->startOfDay();
+
+        return match (true) {
+            $membership->status === Membership::PENDING => 'العضوية غير مدفوعة.',
+            $membership->status === Membership::CANCELLED && ! $membership->cancelled_at?->gte($session->starts_at) => 'العضوية أُلغيت قبل موعد الحصة.',
+            $membership->status === Membership::FROZEN && ! $membership->openFreeze?->created_at?->gte($session->starts_at) => 'العضوية مجمّدة منذ ما قبل موعد الحصة.',
+            $membership->status === Membership::SCHEDULED && $membership->heldByFreeze() => 'هذه الفترة تنتظر انتهاء تجميد العضوية السابقة.',
+            $membership->ends_on->lt($date) => 'الحصة بعد نهاية العضوية.',
+            $membership->starts_on->gt($date) => 'الحصة قبل بداية العضوية.',
+            default => null,
+        };
     }
 
     /** Staff cancel a whole session (trainer sick, hall closed): every booking is released and refunded. */
