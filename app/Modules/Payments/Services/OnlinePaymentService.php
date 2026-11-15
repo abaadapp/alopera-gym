@@ -46,6 +46,12 @@ final class OnlinePaymentService
     /** The environment an intent was opened in, written once in its reference. Older references (PI-) do not say. */
     public const LIVE_PREFIX = 'PL-';
 
+    /**
+     * How long a checkout being opened (claimed, Paymob not answered yet) keeps a second one from being opened for the
+     * same invoice: longer than any wait for Paymob (PaymobClient waits 20 seconds at most).
+     */
+    public const OPENING_SECONDS = 60;
+
     public const TEST_PREFIX = 'PT-';
 
     /**
@@ -103,45 +109,82 @@ final class OnlinePaymentService
         }
         $live = PaymobClient::live($integration);
         $prefix = $live ? self::LIVE_PREFIX : self::TEST_PREFIX;
-        if (! $invoice->isOpen() || Money::isZero($invoice->balance())) {
-            throw new BusinessRuleException('invoice.not_open', 'لا يوجد مبلغ مستحق على هذه الفاتورة.');
-        }
-        // Confirmed online money already waits on this invoice for the club's review: no second checkout, or the
-        // customer would pay twice.
-        if (Payment::where('invoice_id', $invoice->id)->gatewayCreditLeft()->exists()) {
-            throw new BusinessRuleException('paymob.held', 'وصلنا تأكيد دفعة إلكترونية لهذه الفاتورة وهي قيد المراجعة لدى النادي؛ لا حاجة للدفع مرة أخرى.');
-        }
 
-        // A website order holds its stock only until reserved_until: its checkout must not outlive the hold, or the
-        // customer could pay for an order already cancelled whose stock was sold to someone else.
-        $expires = now()->addSeconds((int) config('services.paymob.intent_ttl_seconds', 3600));
-        $hold = Sale::where('invoice_id', $invoice->id)->where('source', Sale::WEBSITE)->where('status', Sale::PENDING)->value('reserved_until');
-        if ($hold !== null) {
-            $hold = Carbon::parse($hold);
-            if ($hold->lte(now()->addMinute())) {
-                throw new BusinessRuleException('order.not_payable', 'انتهت مهلة الدفع لهذا الطلب.');
+        // Under the invoice's lock: what it owes now, and the one checkout for it — given again, being opened by another
+        // request (two tabs, a double press), or claimed here. Paymob itself is asked after the lock is let go, so a
+        // slow gateway keeps no one waiting on the invoice. The lock is the one the callback takes after its intent's
+        // (intent → invoice); nothing here waits on an intent's row, so the two never wait on each other.
+        [$invoice, $intent] = DB::transaction(function () use ($invoice, $prefix, $channel) {
+            $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            if (! $invoice->isOpen() || Money::isZero($invoice->balance())) {
+                throw new BusinessRuleException('invoice.not_open', 'لا يوجد مبلغ مستحق على هذه الفاتورة.');
             }
-            $expires = $hold->lt($expires) ? $hold : $expires;
-        }
+            // Confirmed online money already waits on this invoice for the club's review: no second checkout, or the
+            // customer would pay twice.
+            if (Payment::where('invoice_id', $invoice->id)->gatewayCreditLeft()->exists()) {
+                throw new BusinessRuleException('paymob.held', 'وصلنا تأكيد دفعة إلكترونية لهذه الفاتورة وهي قيد المراجعة لدى النادي؛ لا حاجة للدفع مرة أخرى.');
+            }
 
-        // Given again only if opened in the same environment.
-        $open = PaymentIntent::where('invoice_id', $invoice->id)->where('status', PaymentIntent::PENDING)->whereNotNull('checkout_url')
-            ->where('reference', 'like', $prefix.'%')
-            ->where('expires_at', '>', now()->addMinutes(10))->where('expires_at', '<=', $expires)->latest('id')->first();
-        if ($open && Money::cmp($open->amount, $invoice->balance()) === 0) {
-            return $open;
-        }
+            // A website order holds its stock only until reserved_until: its checkout must not outlive the hold, or the
+            // customer could pay for an order already cancelled whose stock was sold to someone else.
+            $expires = now()->addSeconds((int) config('services.paymob.intent_ttl_seconds', 3600));
+            $hold = Sale::where('invoice_id', $invoice->id)->where('source', Sale::WEBSITE)->where('status', Sale::PENDING)->value('reserved_until');
+            if ($hold !== null) {
+                $hold = Carbon::parse($hold);
+                if ($hold->lte(now()->addMinute())) {
+                    throw new BusinessRuleException('order.not_payable', 'انتهت مهلة الدفع لهذا الطلب.');
+                }
+                $expires = $hold->lt($expires) ? $hold : $expires;
+            }
 
-        $intent = PaymentIntent::create([
-            'invoice_id' => $invoice->id,
-            'provider' => 'paymob',
-            'reference' => $prefix.Str::upper(Str::random(20)),
-            'amount' => $invoice->balance(),
-            'currency' => $invoice->currency,
-            'status' => PaymentIntent::PENDING,
-            'channel' => $channel,
-            'expires_at' => $expires,
-        ]);
+            // The invoice's checkouts, read in ONE statement: the claim of another request and its URL are saved at
+            // different moments (the URL after Paymob answers, outside this lock), so asking for "a page" and then for
+            // "a claim" in two statements could see neither and open a second checkout.
+            $attempts = PaymentIntent::where('invoice_id', $invoice->id)
+                ->whereIn('status', [PaymentIntent::PENDING, PaymentIntent::FAILED, PaymentIntent::EXPIRED])->orderByDesc('id')->get();
+            // A page handed out (it has a URL) in this environment. A declined card does not close it: Paymob may take
+            // another card on it, and its success is recorded (handleWebhook) — so it is still a page of this invoice.
+            $pages = $attempts->filter(fn (PaymentIntent $i) => $i->checkout_url !== null && str_starts_with($i->reference, $prefix));
+
+            // Given again: the page for what is owed now, with time left to pay it.
+            $open = $pages->first(fn (PaymentIntent $i) => $i->status !== PaymentIntent::EXPIRED && $i->expires_at !== null
+                && $i->expires_at->gt(now()->addMinutes(10)) && $i->expires_at->lte($expires) && Money::cmp($i->amount, $invoice->balance()) === 0);
+            if ($open) {
+                return [$invoice, $open];
+            }
+
+            // Any other page of the invoice: nothing here can withdraw it from Paymob, and its end here is no proof
+            // that Paymob closed it — a payment may still come through it until LATE_CALLBACK_MINUTES after its end
+            // (the window the settings wait for too). A second page beside it would let the customer pay both: none is
+            // opened until then. What is paid on it above what is owed stays in the books as the customer's credit,
+            // for the club's review (PaymentService), and a late payment is held (holdReason) — never applied twice.
+            $live = $pages->filter(fn (PaymentIntent $i) => $i->expires_at === null || $i->expires_at->gt(now()->subMinutes(self::LATE_CALLBACK_MINUTES)))
+                ->sortByDesc(fn (PaymentIntent $i) => $i->expires_at?->getTimestamp() ?? PHP_INT_MAX)->first();
+            if ($live) {
+                throw new BusinessRuleException('paymob.page_open', self::pageOpenMessage($live, $invoice->balance()));
+            }
+
+            // Another request claimed this invoice's checkout and is still waiting for Paymob's answer: not a second
+            // checkout. A claim older than any wait for Paymob is from a request that died on the way: it was never
+            // handed to anyone (no URL), so it is no reason to refuse.
+            if ($attempts->contains(fn (PaymentIntent $i) => $i->status === PaymentIntent::PENDING && $i->checkout_url === null && $i->created_at->gt(now()->subSeconds(self::OPENING_SECONDS)))) {
+                throw new BusinessRuleException('paymob.opening', 'تُفتح صفحة الدفع لهذه الفاتورة الآن في نافذة أخرى. انتظر لحظات ثم أعد فتح الرابط.');
+            }
+
+            return [$invoice, PaymentIntent::create([
+                'invoice_id' => $invoice->id,
+                'provider' => 'paymob',
+                'reference' => $prefix.Str::upper(Str::random(20)),
+                'amount' => $invoice->balance(),
+                'currency' => $invoice->currency,
+                'status' => PaymentIntent::PENDING,
+                'channel' => $channel,
+                'expires_at' => $expires,
+            ])];
+        });
+        if ($intent->checkout_url !== null) {
+            return $intent;
+        }
 
         try {
             $checkout = $this->paymob->createIntention(
@@ -174,6 +217,28 @@ final class OnlinePaymentService
         $intent->forceFill(['checkout_url' => $checkout['url'], 'provider_order_id' => $checkout['order_id']])->save();
 
         return $intent;
+    }
+
+    /**
+     * What the customer is told when a page of the invoice handed out earlier may still take money: that it exists,
+     * what is owed now, and the two ways on — wait until a new link can be opened, or pay at the desk. Paying on the old
+     * page is offered only when it asks exactly what is owed; otherwise the customer is told not to, or they would pay
+     * more than they owe.
+     */
+    private static function pageOpenMessage(PaymentIntent $page, string $owed): string
+    {
+        $tz = (string) config('app.timezone');
+        $after = $page->expires_at?->copy()->addMinutes(self::LATE_CALLBACK_MINUTES)->timezone($tz);
+        $wait = $after ? 'انتظر حتى الساعة '.$after->format('H:i').($after->isToday() ? '' : ' من يوم '.$after->format('Y-m-d')).' ثم افتح الرابط من جديد' : 'انتظر ثم افتح الرابط من جديد';
+
+        if (Money::cmp($page->amount, $owed) === 0) {
+            return 'يوجد رابط دفع سابق لهذه الفاتورة بالمبلغ نفسه ('.$owed.' '.$page->currency.'). أكمل الدفع منه إن كان ما زال مفتوحًا عندك، أو '
+                .$wait.'، أو ادفع في الاستقبال. لا تُفتح صفحة دفع ثانية حتى لا يُخصم المبلغ مرتين.';
+        }
+
+        return 'يوجد رابط دفع سابق لهذه الفاتورة بمبلغ '.$page->amount.' '.$page->currency.' فُتح قبل أن يتغير المتبقي، والمتبقي الآن '
+            .$owed.' '.$page->currency.'. لا تدفع من الرابط السابق حتى لا يُخصم منك غير المتبقي. '
+            .$wait.' لتدفع المتبقي وحده، أو ادفعه الآن في الاستقبال.';
     }
 
     /**
