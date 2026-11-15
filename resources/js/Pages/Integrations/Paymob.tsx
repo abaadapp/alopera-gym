@@ -8,8 +8,7 @@ interface Props {
     integration: ProviderForm;
     status: IntegrationStatusData;
     warning: string | null;
-    methods: { key: string; label: string; id: number | null; state: 'not_set' | 'set' | 'verified' | 'available' | 'unavailable'; reason: string }[];
-    listedIds: number[];
+    methods: { key: string; label: string; labelled: boolean; state: 'not_set' | 'set' | 'verified' | 'available' | 'unavailable'; reason: string }[];
     checks: { label: string; ok: boolean; at: string | null }[];
     usage: { label: string; on: boolean; route?: string | null }[];
     intents: { id: number; reference: string; invoice: string | null; channel: string; amount: string; currency: string; status: string; failure: string | null; at: string }[];
@@ -33,10 +32,11 @@ const METHOD_STATE: Record<string, { label: string; tone: 'green' | 'amber' | 'r
     unavailable: { label: 'غير متاح', tone: 'gray' },
 };
 
-function PaymentMethods({ methods, listedIds }: { methods: Props['methods']; listedIds: number[] }) {
-    const initial = Object.fromEntries(methods.filter((m) => m.key !== 'omannet').map((m) => [m.key, m.id === null ? '' : String(m.id)]));
-    const form = useForm<Record<string, string>>(initial);
+function PaymentMethods({ methods }: { methods: Props['methods'] }) {
+    // The ids are kept with the keys and never come back: a field is typed in, blank keeps what is stored.
     const pickable = methods.filter((m) => m.key !== 'omannet');
+    const form = useForm<{ card: string; apple_pay: string; clear: string[] }>({ card: '', apple_pay: '', clear: [] });
+    const errors = form.errors as Record<string, string | undefined>;
 
     return (
         <Card>
@@ -46,7 +46,6 @@ function PaymentMethods({ methods, listedIds }: { methods: Props['methods']; lis
                     <li key={m.key} className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                             <span className="font-medium text-ink">{m.label}</span>
-                            {m.id !== null && <span className="font-mono text-xs text-muted" dir="ltr">#{m.id}</span>}
                             {m.key === 'omannet' && <span className="text-xs text-muted">ضمن تكامل البطاقات</span>}
                             <Badge tone={METHOD_STATE[m.state]?.tone ?? 'gray'}>{METHOD_STATE[m.state]?.label ?? m.state}</Badge>
                         </div>
@@ -54,32 +53,43 @@ function PaymentMethods({ methods, listedIds }: { methods: Props['methods']; lis
                     </li>
                 ))}
             </ul>
-            {listedIds.length > 0 && (
-                <form
-                    className="mt-4 space-y-3 border-t border-line pt-4"
-                    onSubmit={(e) => {
-                        e.preventDefault();
-                        form.transform((d) => Object.fromEntries(Object.entries(d).map(([k, v]) => [k, v === '' ? null : Number(v)])));
-                        form.put(route('club.integrations.paymob.methods'), { preserveScroll: true });
-                    }}
-                >
-                    {pickable.map((m) => (
-                        <label key={m.key} className="flex flex-wrap items-center gap-2 text-sm">
-                            <span className="min-w-28 text-ink">{m.label}</span>
-                            <select
-                                className="rounded-lg border border-line bg-white px-2 py-1.5 text-sm"
-                                value={form.data[m.key] ?? ''}
-                                onChange={(e) => form.setData(m.key, e.target.value)}
-                            >
-                                <option value="">—</option>
-                                {listedIds.map((id) => <option key={id} value={String(id)}>{id}</option>)}
-                            </select>
-                            {form.errors[m.key] && <span className="text-xs text-red-600">{form.errors[m.key]}</span>}
-                        </label>
-                    ))}
-                    <button type="submit" disabled={form.processing} className="rounded-lg bg-ink px-3 py-1.5 text-sm text-white disabled:opacity-50">حفظ وسائل الدفع</button>
-                </form>
-            )}
+            <form
+                className="mt-4 space-y-3 border-t border-line pt-4"
+                onSubmit={(e) => {
+                    e.preventDefault();
+                    form.put(route('club.integrations.paymob.methods'), { preserveScroll: true, onSuccess: () => form.reset() });
+                }}
+            >
+                <p className="text-xs leading-6 text-muted">رقم ربط كل وسيلة من «Integration IDs» المحفوظة. يُحفظ مع المفاتيح ولا يُعرض بعد الحفظ؛ اترك الحقل فارغًا ليبقى كما هو.</p>
+                {pickable.map((m) => {
+                    const key = m.key as 'card' | 'apple_pay';
+                    const clearing = form.data.clear.includes(key);
+                    return (
+                        <div key={key} className="flex flex-wrap items-center gap-2 text-sm">
+                            <label htmlFor={`method-${key}`} className="min-w-28 text-ink">{m.label}</label>
+                            <input
+                                id={`method-${key}`}
+                                inputMode="numeric"
+                                dir="ltr"
+                                autoComplete="off"
+                                disabled={clearing}
+                                placeholder={m.labelled ? 'محدد — اكتب رقمًا آخر لتغييره' : 'غير محدد'}
+                                className="min-w-0 flex-1 rounded-lg border border-line bg-white px-2 py-1.5 text-sm disabled:opacity-50"
+                                value={form.data[key]}
+                                onChange={(e) => form.setData(key, e.target.value.replace(/[^\d]/g, ''))}
+                            />
+                            {m.labelled && (
+                                <label className="flex items-center gap-1 text-xs text-muted">
+                                    <input type="checkbox" checked={clearing} onChange={(e) => form.setData('clear', e.target.checked ? [...form.data.clear, key] : form.data.clear.filter((k) => k !== key))} />
+                                    إزالة التحديد
+                                </label>
+                            )}
+                            {errors[key] && <span className="w-full text-xs text-red-600">{errors[key]}</span>}
+                        </div>
+                    );
+                })}
+                <button type="submit" disabled={form.processing} className="rounded-lg bg-ink px-3 py-1.5 text-sm text-white disabled:opacity-50">حفظ وسائل الدفع</button>
+            </form>
             <p className="mt-3 text-xs leading-6 text-muted">قبل استقبال أموال حقيقية: تفعّل Paymob عُمان الوسائل لحساب النادي (Apple Pay بأرقام Live فقط، وOmanNet ضمن تكامل البطاقات)، ثم تُدخل أرقامها الحقيقية، ثم «اختبار الاتصال». لا يظهر في صفحة الدفع إلا ما فعّلته Paymob، ولا يعرض النظام زر Apple Pay خاصًا به.</p>
         </Card>
     );
@@ -92,7 +102,7 @@ const INTENT_STATUS: Record<string, { label: string; tone: 'green' | 'amber' | '
     expired: { label: 'انتهت المهلة', tone: 'gray' },
 };
 
-export default function PaymobIntegration({ integration, status, warning, methods, listedIds, checks, usage, intents, events, endpoints }: Props) {
+export default function PaymobIntegration({ integration, status, warning, methods, checks, usage, intents, events, endpoints }: Props) {
     const complete = checks[0]?.ok;
 
     return (
@@ -124,7 +134,7 @@ export default function PaymobIntegration({ integration, status, warning, method
                 </Card>
 
                 <div className="space-y-6 lg:col-span-2">
-                    <PaymentMethods methods={methods} listedIds={listedIds} />
+                    <PaymentMethods methods={methods} />
 
                     <Card>
                         <CardHeader title="التحقق" subtitle="«متصل» لا تظهر إلا بعد قبول Paymob للمفاتيح فعلًا" />

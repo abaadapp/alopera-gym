@@ -86,8 +86,8 @@ class IntegrationController extends Controller
             'integration' => $this->form('paymob', $row),
             'status' => $this->hub->paymob($row),
             'warning' => $row ? PaymobClient::modeMismatch($row) : null,
+            // Each method's state and whether an id is labelled for it — never the id: the ids are kept with the keys.
             'methods' => PaymobMethods::states($row),
-            'listedIds' => $row ? PaymobClient::integrationIds($row) : [],
             'checks' => [
                 ['label' => 'المفاتيح الأربعة مُدخلة', 'ok' => $row !== null && array_filter(PaymobClient::REQUIRED, fn ($k) => $row->credential($k) === null) === [], 'at' => null],
                 ['label' => 'قبلت Paymob المفتاح السري وأرقام الربط', 'ok' => $row?->verified_at !== null && ! $row->failing(), 'at' => $row?->verified_at?->format('Y-m-d H:i')],
@@ -127,8 +127,9 @@ class IntegrationController extends Controller
     }
 
     /**
-     * Which listed integration id is the cards' and which Apple Pay's: a label only, on ids already in «Integration
-     * IDs», so it changes no checkout and no callback and needs no wait for open checkouts.
+     * Which of the listed integration ids is the cards' and which Apple Pay's: a label only, on ids already in
+     * «Integration IDs», so it changes no checkout and no callback and needs no wait for open checkouts. Kept with the
+     * keys (encrypted, never sent back to the browser): a blank field keeps what is stored, «clear» removes it.
      */
     public function paymobMethods(Request $request): RedirectResponse
     {
@@ -136,14 +137,29 @@ class IntegrationController extends Controller
         if (! $row) {
             return back()->with('error', 'احفظ المفاتيح وأرقام الربط أولًا.');
         }
+        $data = $request->validate(array_map(fn () => ['nullable', 'string', 'max:20', 'regex:/^\d+$/'], PaymobMethods::LABELLED) + [
+            'clear' => ['array'], 'clear.*' => ['in:'.implode(',', array_keys(PaymobMethods::LABELLED))],
+        ], ['*.regex' => 'رقم الربط أرقام فقط.']);
+
         $listed = PaymobClient::integrationIds($row);
-        $data = $request->validate(array_map(fn () => ['nullable', 'integer', 'in:'.implode(',', $listed ?: [0])], PaymobMethods::LABELLED),
-            ['*.in' => 'اختر رقمًا من «Integration IDs» المحفوظة.']);
-        $methods = array_filter(array_map(fn ($id) => $id === null ? null : (string) $id, array_intersect_key($data, PaymobMethods::LABELLED)), fn ($v) => $v !== null);
-        if (count($methods) !== count(array_unique($methods))) {
+        $credentials = $row->credentials ?? [];
+        foreach (array_keys(PaymobMethods::LABELLED) as $method) {
+            $value = trim((string) ($data[$method] ?? ''));
+            if (in_array($method, $data['clear'] ?? [], true)) {
+                unset($credentials[PaymobMethods::KEY_PREFIX.$method]);
+            } elseif ($value !== '') {
+                if (! in_array((int) $value, $listed, true)) {
+                    // Which ids are listed is not said: they are kept with the keys.
+                    return back()->withErrors([$method => 'هذا الرقم ليس من «Integration IDs» المحفوظة. لم يُحفظ شيء.']);
+                }
+                $credentials[PaymobMethods::KEY_PREFIX.$method] = (string) (int) $value;
+            }
+        }
+        $labels = array_filter(array_map(fn ($m) => $credentials[PaymobMethods::KEY_PREFIX.$m] ?? null, array_keys(PaymobMethods::LABELLED)));
+        if (count($labels) !== count(array_unique($labels))) {
             return back()->with('error', 'لكل وسيلة رقم ربط مختلف. لم يُحفظ شيء.');
         }
-        $row->forceFill(['settings' => array_merge(array_diff_key($row->settings ?? [], ['methods' => 1]), $methods ? ['methods' => $methods] : [])])->save();
+        $row->forceFill(['credentials' => $credentials])->save();
 
         return back()->with('success', 'تم حفظ وسائل الدفع.');
     }

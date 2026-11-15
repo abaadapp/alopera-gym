@@ -25,6 +25,9 @@ final class PaymobMethods
 {
     public const LABELLED = ['card' => 'البطاقات البنكية', 'apple_pay' => 'Apple Pay'];
 
+    /** Each label is kept with the keys (TenantIntegration::credentials, encrypted), under this prefix. */
+    public const KEY_PREFIX = 'method_';
+
     public const NOT_SET = 'not_set';
 
     public const SET = 'set';
@@ -38,11 +41,11 @@ final class PaymobMethods
     /** @return array<string, int|null> */
     public static function ids(?TenantIntegration $integration): array
     {
-        $saved = (array) ($integration?->option('methods') ?? []);
         $listed = $integration ? PaymobClient::integrationIds($integration) : [];
         $ids = [];
         foreach (array_keys(self::LABELLED) as $method) {
-            $id = isset($saved[$method]) && ctype_digit((string) $saved[$method]) ? (int) $saved[$method] : null;
+            $saved = (string) $integration?->credential(self::KEY_PREFIX.$method);
+            $id = ctype_digit($saved) ? (int) $saved : null;
             // A label of an id no longer listed labels nothing.
             $ids[$method] = $id !== null && in_array($id, $listed, true) ? $id : null;
         }
@@ -50,7 +53,7 @@ final class PaymobMethods
         return $ids;
     }
 
-    /** @return list<array{key: string, label: string, id: int|null, state: string, reason: string}> */
+    /** @return list<array{key: string, label: string, labelled: bool, state: string, reason: string}> what the screen shows: never an id */
     public static function states(?TenantIntegration $integration): array
     {
         $ids = self::ids($integration);
@@ -68,7 +71,7 @@ final class PaymobMethods
                 $accepted => [self::VERIFIED, 'قبلت Paymob أرقام الربط في «اختبار الاتصال»، ولم تصل عبره دفعة بعد.'],
                 default => [self::SET, 'الرقم محدد، ولم ينجح «اختبار الاتصال» بعد.'],
             };
-            $rows[] = ['key' => $method, 'label' => $label, 'id' => $id, 'state' => $state, 'reason' => $reason];
+            $rows[] = ['key' => $method, 'label' => $label, 'labelled' => $id !== null, 'state' => $state, 'reason' => $reason];
         }
 
         $card = $ids['card'];
@@ -79,7 +82,7 @@ final class PaymobMethods
             $oman => [self::VERIFIED, 'وصلت دفعة موقّعة ببطاقة OmanNet، لكن الدفع الإلكتروني غير مفعّل الآن.'],
             default => [self::SET, 'يعمل ضمن تكامل البطاقات إن فعّلته Paymob عُمان لحساب النادي، ولا يثبت ذلك إلا أول دفعة موقّعة ببطاقة OmanNet.'],
         };
-        $rows[] = ['key' => 'omannet', 'label' => 'OmanNet', 'id' => $card, 'state' => $state, 'reason' => $reason];
+        $rows[] = ['key' => 'omannet', 'label' => 'OmanNet', 'labelled' => $card !== null, 'state' => $state, 'reason' => $reason];
 
         return $rows;
     }

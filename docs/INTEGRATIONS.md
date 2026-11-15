@@ -155,7 +155,7 @@ The Paymob settings screen shows one state for each method, and never "available
 | متاح فعليًا | a signed, recorded payment came through the method, **and** the club takes online payments now |
 
 A label is only a description of the ids already in «Integration IDs». The checkout and the callbacks still use that
-list as they did; no migration, and labels live in `tenant_integrations.settings.methods`.
+list as they did. There is no migration: each label is kept with the keys in the encrypted `credentials` (`method_card`, `method_apple_pay`), and it is never sent to the browser. The screen shows only whether a method has one.
 
 - **Cards.** The card integration id, from the dashboard: Settings → Payment Integrations, in Test or Live mode.
 - **OmanNet.** Paymob's documentation lists it among the card schemes ("Cards — Methods included: Visa, Mastercard,

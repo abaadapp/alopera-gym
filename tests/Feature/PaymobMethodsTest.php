@@ -7,6 +7,7 @@ use App\Models\TenantIntegration;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobMethods;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
 
@@ -17,10 +18,22 @@ class PaymobMethodsTest extends TestCase
 
     private function paymob(Tenant $club, array $attributes = []): TenantIntegration
     {
+        // Labels are kept with the keys: given here as settings.methods for brevity, stored as credentials.method_*.
+        $methods = $attributes['settings']['methods'] ?? [];
+        unset($attributes['settings']);
+        $credentials = ($attributes['credentials'] ?? ['secret_key' => 'sk_test', 'public_key' => 'pk_test', 'hmac_secret' => 'h', 'integration_ids' => '111, 222'])
+            + array_combine(array_map(fn ($k) => PaymobMethods::KEY_PREFIX.$k, array_keys($methods)), array_values($methods));
+        unset($attributes['credentials']);
+
         return $this->asTenant($club, fn () => TenantIntegration::create($attributes + [
-            'provider' => 'paymob', 'is_enabled' => true, 'mode' => 'test',
-            'credentials' => ['secret_key' => 'sk_test', 'public_key' => 'pk_test', 'hmac_secret' => 'h', 'integration_ids' => '111, 222'],
+            'provider' => 'paymob', 'is_enabled' => true, 'mode' => 'test', 'credentials' => $credentials,
         ]));
+    }
+
+    /** @return array<string, int|null> */
+    private function ids(Tenant $club): array
+    {
+        return $this->asTenant($club, fn () => PaymobMethods::ids(TenantIntegration::where('provider', 'paymob')->first()));
     }
 
     /** @return array<string, array<string, mixed>> */
@@ -44,9 +57,10 @@ class PaymobMethodsTest extends TestCase
 
         $s = $this->states($club);
         $this->assertSame(PaymobMethods::SET, $s['card']['state']);
-        $this->assertSame(111, $s['card']['id']);
+        $this->assertSame(111, $this->ids($club)['card']);
+        $this->assertTrue($s['card']['labelled']);
         $this->assertSame(PaymobMethods::SET, $s['omannet']['state'], 'OmanNet is a card scheme: set with the card id, never more without proof');
-        $this->assertSame(111, $s['omannet']['id']);
+        $this->assertTrue($s['omannet']['labelled']);
         $this->assertSame(PaymobMethods::UNAVAILABLE, $s['apple_pay']['state'], 'Apple Pay has live integration ids only');
     }
 
@@ -56,7 +70,7 @@ class PaymobMethodsTest extends TestCase
         $this->paymob($club, ['settings' => ['methods' => ['card' => '333']]]);
 
         $this->assertSame(PaymobMethods::NOT_SET, $this->states($club)['card']['state']);
-        $this->assertNull($this->states($club)['card']['id']);
+        $this->assertNull($this->ids($club)['card']);
     }
 
     public function test_accepted_after_the_check_and_proven_only_by_a_signed_recorded_payment_of_this_club(): void
@@ -86,24 +100,38 @@ class PaymobMethodsTest extends TestCase
         $this->assertSame(PaymobMethods::SET, $this->states($club)['apple_pay']['state']);
     }
 
-    public function test_labelling_takes_only_listed_distinct_ids_and_changes_no_key_or_integration(): void
+    public function test_labelling_takes_only_listed_distinct_ids_keeps_them_encrypted_and_never_sends_an_id_back(): void
     {
         $club = $this->club();
         $row = $this->paymob($club);
         $owner = $this->owner($club);
-        $before = $row->credentials;
+        $put = fn (array $data) => $this->actingAs($owner)->put(route('club.integrations.paymob.methods'), $data);
 
-        $this->actingAs($owner)->put(route('club.integrations.paymob.methods'), ['card' => 999])->assertSessionHasErrors('card');
-        $this->actingAs($owner)->put(route('club.integrations.paymob.methods'), ['card' => 111, 'apple_pay' => 111])->assertSessionHas('error');
-        $this->actingAs($owner)->put(route('club.integrations.paymob.methods'), ['card' => 111, 'apple_pay' => 222])->assertSessionHasNoErrors()->assertSessionHas('success');
+        $put(['card' => '999'])->assertSessionHasErrors('card');
+        $this->assertStringNotContainsString('111', (string) session('errors')?->first('card'), 'the listed ids are not told');
+        $put(['card' => '111', 'apple_pay' => '111'])->assertSessionHas('error');
+        $put(['card' => '111', 'apple_pay' => '222'])->assertSessionHasNoErrors()->assertSessionHas('success');
+        $this->assertSame(['card' => 111, 'apple_pay' => 222], $this->ids($club));
 
-        $row = $this->asTenant($club, fn () => TenantIntegration::where('provider', 'paymob')->first());
-        $this->assertSame(['card' => '111', 'apple_pay' => '222'], $row->option('methods'));
-        $this->assertSame($before, $row->credentials);
-        $this->assertTrue($row->is_enabled);
+        // A blank field keeps what is stored; «clear» removes it; the keys and the list are untouched.
+        $put(['card' => '', 'clear' => ['apple_pay']])->assertSessionHasNoErrors();
+        $this->assertSame(['card' => 111, 'apple_pay' => null], $this->ids($club));
+        $stored = $this->asTenant($club, fn () => TenantIntegration::where('provider', 'paymob')->first());
+        $this->assertSame(['sk_test', 'pk_test', 'h', '111, 222'], [$stored->credential('secret_key'), $stored->credential('public_key'), $stored->credential('hmac_secret'), $stored->credential('integration_ids')]);
+        $this->assertTrue($stored->is_enabled);
+        $this->assertArrayNotHasKey('methods', $stored->settings ?? []);
 
-        $this->actingAs($owner)->get(route('club.integrations.paymob'))->assertOk()
-            ->assertInertia(fn ($page) => $page->where('listedIds', [111, 222])->has('methods', 3));
+        // At rest: encrypted with the keys, the number nowhere in plain text.
+        $raw = DB::table('tenant_integrations')->where('id', $row->id)->first();
+        $this->assertStringNotContainsString('method_card', (string) $raw->credentials);
+        $this->assertStringNotContainsString('111', (string) $raw->settings);
+
+        // On the screen: states and «labelled», never an id or the list.
+        $html = $this->actingAs($owner)->get(route('club.integrations.paymob'))->assertOk()
+            ->assertInertia(fn ($page) => $page->has('methods', 3)->missing('listedIds')->missing('methods.0.id')->where('methods.0.labelled', true))
+            ->getContent();
+        $this->assertStringNotContainsString('111', $html);
+        $this->assertStringNotContainsString('222', $html);
     }
 
     public function test_staff_without_integrations_manage_cannot_label_methods(): void
@@ -111,7 +139,7 @@ class PaymobMethodsTest extends TestCase
         $club = $this->club();
         $this->paymob($club);
 
-        $this->actingAs($this->staff($club, 'manager'))->put(route('club.integrations.paymob.methods'), ['card' => 111])->assertForbidden();
+        $this->actingAs($this->staff($club, 'manager'))->put(route('club.integrations.paymob.methods'), ['card' => '111'])->assertForbidden();
     }
 
     public function test_available_only_with_a_signed_payment_and_online_payment_taking_money_now(): void
@@ -151,8 +179,8 @@ class PaymobMethodsTest extends TestCase
             'credentials' => ['secret_key' => 'sk_test', 'public_key' => 'pk_test', 'hmac_secret' => 'h', 'integration_ids' => '333']]);
         $this->event($rowA, true, 'processed', 333); // club A's event naming club B's id
 
-        $this->assertSame(111, $this->states($a)['card']['id']);
-        $this->assertSame(333, $this->states($b)['card']['id']);
+        $this->assertSame(111, $this->ids($a)['card']);
+        $this->assertSame(333, $this->ids($b)['card']);
         $this->assertSame(PaymobMethods::VERIFIED, $this->states($b)['card']['state'], 'another club\'s callback proves nothing here');
     }
 }
