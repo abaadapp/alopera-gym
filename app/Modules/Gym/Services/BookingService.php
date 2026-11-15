@@ -261,8 +261,35 @@ final class BookingService
     }
 
     /**
+     * What a cancelled membership's future bookings become — run after the transaction that cancelled it (a cancellation,
+     * or the payment of the upgrade that replaced it) has committed, never inside it: a booking locks its class, then the
+     * membership, so a payment or a cancellation must not lock a class while it holds the membership (the two deadlocked,
+     * and one of them was the Paymob callback). Replaced by an upgrade (`upgraded`): carried to it where it allows, else
+     * released; cancelled otherwise: released. What is left to do is read from the bookings themselves (a booked future
+     * class on a cancelled membership), so gym:settle-bookings finishes whatever a crash or a failure left; each booking
+     * is moved or released once however many times this runs (each in its own transaction, read again under its class's
+     * lock).
+     */
+    public function settleCancelled(Membership $membership): int
+    {
+        $membership = Membership::find($membership->id);
+        if (! $membership || $membership->status !== Membership::CANCELLED) {
+            return 0;
+        }
+        if ($membership->cancel_reason === 'upgraded') {
+            $upgrade = Membership::where('previous_membership_id', $membership->id)->where('kind', Membership::KIND_UPGRADE)
+                ->whereIn('status', [Membership::ACTIVE, Membership::SCHEDULED])->latest('id')->first();
+
+            return $upgrade ? $this->carryFuture($membership, $upgrade, 'الترقية') : $this->cancelFutureForMembership($membership, 'الترقية');
+        }
+
+        return $this->cancelFutureForMembership($membership, 'إلغاء العضوية');
+    }
+
+    /**
      * An upgrade: the old membership's future bookings count on the new one where its plan, dates and sessions allow
      * it; the others are released, as when a membership is cancelled. A new plan without classes keeps none of them.
+     * Each booking in its own transaction, the class locked before the booking and the memberships (see settleCancelled).
      */
     public function carryFuture(Membership $from, Membership $to, string $reason): int
     {
@@ -273,28 +300,31 @@ final class BookingService
             ->get();
 
         foreach ($bookings as $booking) {
-            $session = ClassSession::whereKey($booking->class_session_id)->lockForUpdate()->firstOrFail();
-            $booking = $this->stillBooked($booking);
-            if (! $booking) {
-                continue; // cancelled since the list was read
-            }
-            $target = Membership::whereKey($to->id)->lockForUpdate()->firstOrFail();
-            $date = $session->starts_at->startOfDay();
-            if (! ($target->starts_on->lte($date) && $target->ends_on->gte($date) && $target->booksClasses() && $this->programAllowed($target, $session) && $target->hasSessionsLeft())) {
-                $this->release($booking, $session, $reason);
-                BookingCancelled::dispatch($booking, $reason);
+            DB::transaction(function () use ($booking, $from, $to, $reason) {
+                $session = ClassSession::whereKey($booking->class_session_id)->lockForUpdate()->firstOrFail();
+                $booking = $this->stillBooked($booking);
+                if (! $booking || $booking->membership_id !== $from->id) {
+                    return; // cancelled, or already carried, since the list was read
+                }
+                $target = Membership::whereKey($to->id)->lockForUpdate()->firstOrFail();
+                $date = $session->starts_at->startOfDay();
+                if (! (in_array($target->status, [Membership::ACTIVE, Membership::SCHEDULED], true) && $target->starts_on->lte($date) && $target->ends_on->gte($date)
+                    && $target->booksClasses() && $this->programAllowed($target, $session) && $target->hasSessionsLeft())) {
+                    $this->release($booking, $session, $reason);
+                    BookingCancelled::dispatch($booking, $reason);
 
-                continue;
-            }
+                    return;
+                }
 
-            if ($booking->consumed_session) {
-                Membership::whereKey($from->id)->where('sessions_used', '>', 0)->decrement('sessions_used');
-            }
-            $consumes = $target->sessions_total !== null;
-            if ($consumes) {
-                Membership::whereKey($target->id)->increment('sessions_used');
-            }
-            $booking->forceFill(['membership_id' => $target->id, 'consumed_session' => $consumes])->save();
+                if ($booking->consumed_session) {
+                    Membership::whereKey($from->id)->where('sessions_used', '>', 0)->decrement('sessions_used');
+                }
+                $consumes = $target->sessions_total !== null;
+                if ($consumes) {
+                    Membership::whereKey($target->id)->increment('sessions_used');
+                }
+                $booking->forceFill(['membership_id' => $target->id, 'consumed_session' => $consumes])->save();
+            });
         }
 
         return $bookings->count();

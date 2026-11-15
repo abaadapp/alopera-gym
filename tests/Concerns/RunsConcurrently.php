@@ -122,4 +122,29 @@ trait RunsConcurrently
             }
         });
     }
+
+    /**
+     * Inside a task: right after the first row lock this process takes that $matches ($sql, $bindings), hold it until
+     * PostgreSQL shows another process blocked by this one, then go on, and say so in "$dir/blocked" — a barrier that
+     * proves the two overlapped instead of leaving it to timing. Gives up after ten seconds, without the file.
+     */
+    protected static function holdUntilAnotherWaits(string $dir, callable $matches): void
+    {
+        DB::listen(function ($query) use ($dir, $matches) {
+            if (! is_file("$dir/inside") && str_contains($query->sql, 'for update') && $matches($query->sql, $query->bindings)) {
+                touch("$dir/inside");
+                $until = microtime(true) + 10;
+                do {
+                    // pg_locks is read live on every call (pg_stat_activity keeps one snapshot per transaction).
+                    $blocked = DB::selectOne('select count(*) as n from pg_locks where not granted and pg_backend_pid() = any(pg_blocking_pids(pid))')->n;
+                    if ($blocked > 0) {
+                        touch("$dir/blocked");
+
+                        return;
+                    }
+                    usleep(20_000);
+                } while (microtime(true) < $until);
+            }
+        });
+    }
 }
