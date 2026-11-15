@@ -423,6 +423,16 @@ final class OnlinePaymentService
                 ->where('starts_on', '<=', $membership->ends_on->toDateString())->where('ends_on', '>=', $membership->starts_on->toDateString())->exists()) {
                 return 'membership_overlap';
             }
+            // An upgrade is priced less what was left of the membership it replaces: applied only while that one still
+            // stands to be replaced (as activate() replaces it), not cancelled or ended since — or its credit could be
+            // given twice (off the upgrade, then again when the cancelled one is paid back). Locked after the upgrade,
+            // as activate() takes them.
+            if ($membership->kind === Membership::KIND_UPGRADE && $membership->previous_membership_id) {
+                $previous = Membership::whereKey($membership->previous_membership_id)->lockForUpdate()->first();
+                if (! $previous || ! in_array($previous->status, [Membership::ACTIVE, Membership::FROZEN, Membership::SCHEDULED], true)) {
+                    return 'membership_previous_closed';
+                }
+            }
         }
         $subscriptions = PtSubscription::whereIn('id', $items->where('itemable_type', 'pt_subscription')->pluck('itemable_id')->unique())->orderBy('id')->lockForUpdate()->get();
         foreach ($subscriptions as $subscription) {

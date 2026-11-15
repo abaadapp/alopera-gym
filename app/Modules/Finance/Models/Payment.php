@@ -50,6 +50,7 @@ class Payment extends Model implements BranchOwned
         'membership_not_pending' => 'الاشتراك لم يعد بانتظار الدفع',
         'membership_ended' => 'انتهت مدة الاشتراك',
         'membership_overlap' => 'للعضو اشتراك آخر يغطي الفترة نفسها',
+        'membership_previous_closed' => 'الاشتراك الذي تحلّ محله الترقية أُلغي أو انتهى',
         'pt_not_pending' => 'باقة التدريب لم تعد بانتظار الدفع',
     ];
 
