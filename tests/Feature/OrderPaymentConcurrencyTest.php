@@ -95,11 +95,17 @@ class OrderPaymentConcurrencyTest extends TestCase
             $this->assertStringNotContainsString('deadlock', (string) $result['error'], json_encode($results));
             $this->assertTrue($result['ok'], json_encode($results));
         }
-        $this->assertSame('processed', $results[1]['value'], 'the payment is recorded');
+        // Whichever took the invoice first: the callback (the payment applied, then the order cancelled), or the
+        // cancellation (the order released, then the money held for review on the voided invoice, never applied).
+        $this->assertContains($results[1]['value'], ['processed', 'held_for_review'], 'the payment is recorded');
 
-        $this->asTenant($club, function () use ($sale, $bar) {
+        $this->asTenant($club, function () use ($sale, $bar, $results) {
             $this->assertSame(Sale::CANCELLED, $sale->fresh()->status);
             $this->assertSame(1, Payment::where('kind', Payment::KIND_PAYMENT)->where('gateway', 'paymob')->count(), 'the money is recorded once');
+            if ($results[1]['value'] === 'held_for_review') {
+                $this->assertSame([Invoice::VOID, '1.500', 0], [Invoice::findOrFail($sale->invoice_id)->status,
+                    Payment::where('gateway', 'paymob')->sole()->credit_amount, Payment::where('kind', Payment::KIND_REFUND)->count()], json_encode($results));
+            }
             $this->assertSame('10.000', $bar->fresh()->stock_quantity, 'the held stock is back');
             $this->assertSame(JournalLine::sum('debit'), JournalLine::sum('credit'), 'the books balance');
         });

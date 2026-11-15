@@ -109,6 +109,9 @@ final class PaymentService
         $out = $payment->kind === Payment::KIND_REFUND ? Account::find($payment->account_id) : null;
 
         return app(AccountFunds::class)->exclusive($out, fn () => DB::transaction(function () use ($payment, $reference, $out) {
+            // The invoice before the payment, as cancel(), refundCredit() and allocate() take them: a confirmation and a
+            // cancellation of the same payment at once then wait for each other instead of deadlocking (40P01).
+            $this->lockInvoices($payment->invoice_id);
             $payment = Payment::whereKey($payment->id)->lockForUpdate()->firstOrFail();
 
             if ($payment->status !== Payment::PENDING) {
