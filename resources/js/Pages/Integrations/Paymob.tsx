@@ -8,7 +8,7 @@ interface Props {
     integration: ProviderForm;
     status: IntegrationStatusData;
     warning: string | null;
-    methods: { key: string; label: string; id: number | null; state: 'not_set' | 'set' | 'accepted' | 'proven' | 'unavailable'; reason: string }[];
+    methods: { key: string; label: string; id: number | null; state: 'not_set' | 'set' | 'verified' | 'available' | 'unavailable'; reason: string }[];
     listedIds: number[];
     checks: { label: string; ok: boolean; at: string | null }[];
     usage: { label: string; on: boolean; route?: string | null }[];
@@ -26,11 +26,11 @@ const FIELDS = [
 ];
 
 const METHOD_STATE: Record<string, { label: string; tone: 'green' | 'amber' | 'red' | 'gray' }> = {
-    not_set: { label: 'غير مهيأة', tone: 'gray' },
-    set: { label: 'مهيأة — لم تُختبر', tone: 'amber' },
-    accepted: { label: 'قبلتها Paymob', tone: 'amber' },
-    proven: { label: 'مختبرة بدفعة فعلية', tone: 'green' },
-    unavailable: { label: 'غير متاحة', tone: 'gray' },
+    not_set: { label: 'غير مهيأ', tone: 'gray' },
+    set: { label: 'مهيأ — لم يُتحقق منه', tone: 'amber' },
+    verified: { label: 'تم التحقق', tone: 'amber' },
+    available: { label: 'متاح فعليًا', tone: 'green' },
+    unavailable: { label: 'غير متاح', tone: 'gray' },
 };
 
 function PaymentMethods({ methods, listedIds }: { methods: Props['methods']; listedIds: number[] }) {
@@ -40,13 +40,14 @@ function PaymentMethods({ methods, listedIds }: { methods: Props['methods']; lis
 
     return (
         <Card>
-            <CardHeader title="وسائل الدفع" subtitle="لا تُعد الوسيلة جاهزة لمجرد كتابة رقمها: تُقبل في «اختبار الاتصال» ثم تثبتها أول دفعة موقّعة." />
+            <CardHeader title="وسائل الدفع" subtitle="«متاح فعليًا» لا تظهر لمجرد كتابة الرقم: يلزم دفعة موقّعة عبر الوسيلة والدفع الإلكتروني مفعّل." />
             <ul className="space-y-3 text-sm">
                 {methods.map((m) => (
                     <li key={m.key} className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                             <span className="font-medium text-ink">{m.label}</span>
                             {m.id !== null && <span className="font-mono text-xs text-muted" dir="ltr">#{m.id}</span>}
+                            {m.key === 'omannet' && <span className="text-xs text-muted">ضمن تكامل البطاقات</span>}
                             <Badge tone={METHOD_STATE[m.state]?.tone ?? 'gray'}>{METHOD_STATE[m.state]?.label ?? m.state}</Badge>
                         </div>
                         <p className="text-xs leading-6 text-muted">{m.reason}</p>
@@ -79,7 +80,7 @@ function PaymentMethods({ methods, listedIds }: { methods: Props['methods']; lis
                     <button type="submit" disabled={form.processing} className="rounded-lg bg-ink px-3 py-1.5 text-sm text-white disabled:opacity-50">حفظ وسائل الدفع</button>
                 </form>
             )}
-            <p className="mt-3 text-xs leading-6 text-muted">قبل استقبال أموال حقيقية: فعّل Paymob عُمان الوسائل لحساب النادي، وأدخل أرقامها الحقيقية (Live)، ثم «اختبار الاتصال».</p>
+            <p className="mt-3 text-xs leading-6 text-muted">قبل استقبال أموال حقيقية: تفعّل Paymob عُمان الوسائل لحساب النادي (Apple Pay بأرقام Live فقط، وOmanNet ضمن تكامل البطاقات)، ثم تُدخل أرقامها الحقيقية، ثم «اختبار الاتصال». لا يظهر في صفحة الدفع إلا ما فعّلته Paymob، ولا يعرض النظام زر Apple Pay خاصًا به.</p>
         </Card>
     );
 }

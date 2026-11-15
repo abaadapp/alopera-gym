@@ -33,6 +33,15 @@ class PaymentIntent extends Model
         ];
     }
 
+    /**
+     * What the screens show: a checkout still pending whose time is up reads «expired». Display only — the row stays
+     * pending, since its end here is no proof Paymob closed it: a late callback is still read (and held for review).
+     */
+    public function displayStatus(): string
+    {
+        return $this->status === self::PENDING && $this->expires_at !== null && $this->expires_at->isPast() ? self::EXPIRED : $this->status;
+    }
+
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);

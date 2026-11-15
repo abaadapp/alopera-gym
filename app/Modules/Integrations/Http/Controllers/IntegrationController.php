@@ -106,7 +106,7 @@ class IntegrationController extends Controller
                 'channel' => self::CHANNELS[$i->channel] ?? $i->channel,
                 'amount' => $i->amount,
                 'currency' => $i->currency,
-                'status' => $i->status,
+                'status' => $i->displayStatus(),
                 'failure' => $i->failure_reason,
                 'at' => $i->created_at->format('Y-m-d H:i'),
             ]),

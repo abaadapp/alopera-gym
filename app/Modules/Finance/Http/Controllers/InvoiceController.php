@@ -458,7 +458,7 @@ class InvoiceController extends Controller
                 'pay_link' => $invoice->isOpen() ? app(MemberNotifier::class)->paymentLink($invoice) : null,
                 'public_link' => app(MemberNotifier::class)->invoiceLink($invoice),
             ],
-            'intents' => PaymentIntent::where('invoice_id', $invoice->id)->latest()->limit(10)->get()->map(fn ($i) => $i->only('id', 'reference', 'amount', 'status', 'channel', 'failure_reason') + ['created_at' => $i->created_at->format('Y-m-d H:i')]),
+            'intents' => PaymentIntent::where('invoice_id', $invoice->id)->latest()->limit(10)->get()->map(fn ($i) => $i->only('id', 'reference', 'amount', 'channel', 'failure_reason') + ['status' => $i->displayStatus(), 'created_at' => $i->created_at->format('Y-m-d H:i')]),
             'onlinePayments' => $online->available(),
             // Where a payment lands when chosen (empty: the method's account in the finance settings).
             'moneyAccounts' => Account::money()->postable()->orderBy('code')->get(['id', 'name', 'kind']),

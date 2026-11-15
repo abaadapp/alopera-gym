@@ -9,6 +9,7 @@ use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Paymob\PaymobSignature;
+use App\Modules\Payments\Services\OnlinePaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
@@ -178,5 +179,29 @@ class FinancePayLinkTest extends TestCase
 
         $this->get(route('site.pay.show', ['club' => $other->slug, 'token' => $invoice->public_token]))->assertNotFound();
         $this->actingAs($this->staff($club, 'trainer'))->post(route('club.invoices.store'), $this->claim(['client_key' => 'claim-x']))->assertForbidden();
+    }
+
+    public function test_a_checkout_whose_time_is_up_shows_expired_but_stays_pending_for_a_late_callback(): void
+    {
+        Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_e', 'intention_order_id' => 4409], 201)]);
+        $club = $this->club();
+        $this->paymob($club);
+        $owner = $this->owner($club);
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->claim());
+        $invoice = $this->only($club);
+        $intent = $this->asTenant($club, fn () => app(OnlinePaymentService::class)->start($invoice, 'whatsapp'));
+
+        $this->travelTo($intent->expires_at->copy()->addMinute());
+        $this->actingAs($owner)->get(route('club.invoices.show', $invoice))->assertOk()
+            ->assertInertia(fn ($page) => $page->where('intents.0.status', PaymentIntent::EXPIRED));
+        $this->assertSame(PaymentIntent::PENDING, $this->asTenant($club, fn () => $intent->fresh()->status), 'display only: the row stays pending');
+
+        // Its money arriving late is not lost: recorded and held for review, the invoice untouched.
+        $payload = $this->signedCallback($intent, 4409);
+        $this->webhook($payload)->assertOk();
+        $this->asTenant($club, function () use ($invoice) {
+            $this->assertSame('0.000', $invoice->fresh()->paid_total);
+            $this->assertSame(1, Payment::where('gateway', 'paymob')->whereColumn('credit_amount', 'amount')->count());
+        });
     }
 }

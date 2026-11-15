@@ -29,11 +29,11 @@ class PaymobMethodsTest extends TestCase
         return $this->asTenant($club, fn () => collect(PaymobMethods::states(TenantIntegration::where('provider', 'paymob')->first()))->keyBy('key')->all());
     }
 
-    private function event(TenantIntegration $row, bool $valid, string $outcome, int $integrationId): void
+    private function event(TenantIntegration $row, bool $valid, string $outcome, int $integrationId, string $scheme = 'Visa'): void
     {
         PaymentWebhookEvent::create([
             'tenant_id' => $row->tenant_id, 'provider' => 'paymob', 'transaction_id' => (string) random_int(1, 1_000_000_000), 'reference' => 'X',
-            'signature_valid' => $valid, 'outcome' => $outcome, 'payload' => ['obj' => ['integration_id' => $integrationId]],
+            'signature_valid' => $valid, 'outcome' => $outcome, 'payload' => ['obj' => ['integration_id' => $integrationId, 'source_data' => ['type' => 'card', 'sub_type' => $scheme]]],
         ]);
     }
 
@@ -45,8 +45,8 @@ class PaymobMethodsTest extends TestCase
         $s = $this->states($club);
         $this->assertSame(PaymobMethods::SET, $s['card']['state']);
         $this->assertSame(111, $s['card']['id']);
-        $this->assertSame(PaymobMethods::UNAVAILABLE, $s['omannet']['state']);
-        $this->assertNull($s['omannet']['id']);
+        $this->assertSame(PaymobMethods::SET, $s['omannet']['state'], 'OmanNet is a card scheme: set with the card id, never more without proof');
+        $this->assertSame(111, $s['omannet']['id']);
         $this->assertSame(PaymobMethods::UNAVAILABLE, $s['apple_pay']['state'], 'Apple Pay has live integration ids only');
     }
 
@@ -65,16 +65,16 @@ class PaymobMethodsTest extends TestCase
         $other = $this->club('Other');
         $row = $this->paymob($club, ['verified_at' => now(), 'settings' => ['methods' => ['card' => '111']]]);
         $theirs = $this->paymob($other);
-        $this->assertSame(PaymobMethods::ACCEPTED, $this->states($club)['card']['state']);
+        $this->assertSame(PaymobMethods::VERIFIED, $this->states($club)['card']['state']);
 
         $this->event($row, false, 'processed', 111);
         $this->event($row, true, 'amount_mismatch', 111);
         $this->event($row, true, 'processed', 222);
         $this->event($theirs, true, 'processed', 111);
-        $this->assertSame(PaymobMethods::ACCEPTED, $this->states($club)['card']['state'], 'unsigned, unrecorded, another id or another club proves nothing');
+        $this->assertSame(PaymobMethods::VERIFIED, $this->states($club)['card']['state'], 'unsigned, unrecorded, another id or another club proves nothing');
 
         $this->event($row, true, 'processed', 111);
-        $this->assertSame(PaymobMethods::PROVEN, $this->states($club)['card']['state']);
+        $this->assertSame(PaymobMethods::AVAILABLE, $this->states($club)['card']['state'], 'a signed payment through it, and the club takes online payments');
     }
 
     public function test_apple_pay_on_a_live_account_follows_the_same_steps(): void
@@ -112,5 +112,47 @@ class PaymobMethodsTest extends TestCase
         $this->paymob($club);
 
         $this->actingAs($this->staff($club, 'manager'))->put(route('club.integrations.paymob.methods'), ['card' => 111])->assertForbidden();
+    }
+
+    public function test_available_only_with_a_signed_payment_and_online_payment_taking_money_now(): void
+    {
+        $club = $this->club();
+        $row = $this->paymob($club, ['verified_at' => now(), 'settings' => ['methods' => ['card' => '111']]]);
+        $this->event($row, true, 'processed', 111);
+        $this->assertSame(PaymobMethods::AVAILABLE, $this->states($club)['card']['state']);
+
+        // Switched off: proven, but not available now.
+        $this->asTenant($club, fn () => TenantIntegration::where('provider', 'paymob')->update(['is_enabled' => false]));
+        $this->assertSame(PaymobMethods::VERIFIED, $this->states($club)['card']['state']);
+    }
+
+    public function test_omannet_is_proven_only_by_a_signed_omannet_card_payment_through_the_card_id(): void
+    {
+        $club = $this->club();
+        $row = $this->paymob($club, ['verified_at' => now(), 'settings' => ['methods' => ['card' => '111']]]);
+        $this->assertSame(PaymobMethods::SET, $this->states($club)['omannet']['state'], 'the connection check proves nothing of OmanNet');
+
+        $this->event($row, true, 'processed', 111, 'MasterCard');
+        $this->event($row, false, 'processed', 111, 'OmanNet');
+        $this->event($row, true, 'processed', 222, 'OmanNet');
+        $this->event($row, true, 'amount_mismatch', 111, 'OmanNet');
+        $this->assertSame(PaymobMethods::SET, $this->states($club)['omannet']['state']);
+
+        $this->event($row, true, 'processed', 111, 'OMAN-NET');
+        $this->assertSame(PaymobMethods::AVAILABLE, $this->states($club)['omannet']['state']);
+    }
+
+    public function test_two_clubs_with_different_ids_keep_their_own_labels_and_proofs(): void
+    {
+        $a = $this->club();
+        $b = $this->club('B');
+        $rowA = $this->paymob($a, ['verified_at' => now(), 'settings' => ['methods' => ['card' => '111']]]);
+        $this->paymob($b, ['verified_at' => now(), 'settings' => ['methods' => ['card' => '333']],
+            'credentials' => ['secret_key' => 'sk_test', 'public_key' => 'pk_test', 'hmac_secret' => 'h', 'integration_ids' => '333']]);
+        $this->event($rowA, true, 'processed', 333); // club A's event naming club B's id
+
+        $this->assertSame(111, $this->states($a)['card']['id']);
+        $this->assertSame(333, $this->states($b)['card']['id']);
+        $this->assertSame(PaymobMethods::VERIFIED, $this->states($b)['card']['state'], 'another club\'s callback proves nothing here');
     }
 }

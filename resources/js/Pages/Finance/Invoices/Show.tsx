@@ -125,7 +125,7 @@ const intentStatus: Record<string, ['green' | 'amber' | 'red' | 'gray', string]>
     pending: ['amber', 'بانتظار الدفع'],
     paid: ['green', 'مدفوع'],
     failed: ['red', 'فشل'],
-    expired: ['gray', 'منتهي'],
+    expired: ['gray', 'انتهت مهلته — قد يصل إشعار متأخر فيُراجع'],
 };
 
 const channelLabel: Record<string, string> = { portal: 'البوابة', website: 'الموقع', whatsapp: 'رابط واتساب', reception: 'الاستقبال' };
