@@ -63,7 +63,7 @@ class IntegrationController extends Controller
      * keys are in it, as PaymobClient::live() reads both: a test public key put in under an open live checkout would
      * turn its real money into «test».
      */
-    private const CALLBACK_SETTINGS = ['secret_key', 'public_key', 'hmac_secret', 'integration_ids'];
+    private const CALLBACK_SETTINGS = ['secret_key', 'public_key', 'hmac_secret', 'integration_ids', 'method_card', 'method_omannet', 'method_apple_pay'];
 
     public function __construct(private readonly IntegrationHub $hub, private readonly TenantContext $tenants) {}
 
@@ -86,10 +86,12 @@ class IntegrationController extends Controller
             'integration' => $this->form('paymob', $row),
             'status' => $this->hub->paymob($row),
             'warning' => $row ? PaymobClient::modeMismatch($row) : null,
-            // Each method's state and whether an id is labelled for it — never the id: the ids are kept with the keys.
+            // Each method's state and whether a number is saved for it — never the number: it is kept with the keys.
             'methods' => PaymobMethods::states($row),
+            // Pay links: the club's own invoice links (/pay/{token}) through the checkout; Paymob QuickLink is not used.
+            'links' => ['on' => $ready, 'invoices_route' => 'club.invoices.index', 'create_route' => 'club.invoices.create'],
             'checks' => [
-                ['label' => 'المفاتيح الأربعة مُدخلة', 'ok' => $row !== null && array_filter(PaymobClient::REQUIRED, fn ($k) => $row->credential($k) === null) === [], 'at' => null],
+                ['label' => 'المفاتيح الثلاثة مُدخلة ورقم ربط واحد على الأقل', 'ok' => $row !== null && array_filter(PaymobClient::REQUIRED, fn ($k) => $row->credential($k) === null) === [] && PaymobClient::checkoutIds($row) !== [], 'at' => null],
                 ['label' => 'قبلت Paymob المفتاح السري وأرقام الربط', 'ok' => $row?->verified_at !== null && ! $row->failing(), 'at' => $row?->verified_at?->format('Y-m-d H:i')],
                 ['label' => 'وصل إشعار دفع موقّع (يثبت HMAC secret)', 'ok' => $row?->last_webhook_at !== null, 'at' => $row?->last_webhook_at?->format('Y-m-d H:i')],
             ],
@@ -127,41 +129,46 @@ class IntegrationController extends Controller
     }
 
     /**
-     * Which of the listed integration ids is the cards' and which Apple Pay's: a label only, on ids already in
-     * «Integration IDs», so it changes no checkout and no callback and needs no wait for open checkouts. Kept with the
-     * keys (encrypted, never sent back to the browser): a blank field keeps what is stored, «clear» removes it.
+     * Each method's own integration id — cards, OmanNet (when Paymob gave it an integration of its own), Apple Pay — sent
+     * to every checkout and accepted on callbacks. Kept with the keys (encrypted, never sent back): a blank field keeps
+     * what is stored, «clear» removes it. Like the keys, not changed while a checkout's money may still arrive, and a
+     * change drops the earlier connection check.
      */
     public function paymobMethods(Request $request): RedirectResponse
     {
         $row = TenantIntegration::where('provider', TenantIntegration::PAYMOB)->first();
         if (! $row) {
-            return back()->with('error', 'احفظ المفاتيح وأرقام الربط أولًا.');
+            return back()->with('error', 'احفظ المفاتيح أولًا.');
         }
-        $data = $request->validate(array_map(fn () => ['nullable', 'string', 'max:20', 'regex:/^\d+$/'], PaymobMethods::LABELLED) + [
-            'clear' => ['array'], 'clear.*' => ['in:'.implode(',', array_keys(PaymobMethods::LABELLED))],
-        ], ['*.regex' => 'رقم الربط أرقام فقط.']);
+        $methods = array_keys(PaymobClient::METHOD_KEYS);
+        $data = $request->validate(array_fill_keys($methods, ['nullable', 'string', 'max:32', 'regex:/^\d+$/', 'not_regex:/^0+$/']) + [
+            'clear' => ['array'], 'clear.*' => ['in:'.implode(',', $methods)],
+        ], ['*.regex' => 'رقم الربط أرقام فقط، كما يظهر في لوحة Paymob.', '*.not_regex' => 'رقم الربط لا يكون صفرًا.']);
 
-        $listed = PaymobClient::integrationIds($row);
         $credentials = $row->credentials ?? [];
-        foreach (array_keys(PaymobMethods::LABELLED) as $method) {
+        foreach (PaymobClient::METHOD_KEYS as $method => $key) {
             $value = trim((string) ($data[$method] ?? ''));
             if (in_array($method, $data['clear'] ?? [], true)) {
-                unset($credentials[PaymobMethods::KEY_PREFIX.$method]);
+                unset($credentials[$key]);
             } elseif ($value !== '') {
-                if (! in_array((int) $value, $listed, true)) {
-                    // Which ids are listed is not said: they are kept with the keys.
-                    return back()->withErrors([$method => 'هذا الرقم ليس من «Integration IDs» المحفوظة. لم يُحفظ شيء.']);
-                }
-                $credentials[PaymobMethods::KEY_PREFIX.$method] = (string) (int) $value;
+                $credentials[$key] = (string) (int) $value;
             }
         }
-        $labels = array_filter(array_map(fn ($m) => $credentials[PaymobMethods::KEY_PREFIX.$m] ?? null, array_keys(PaymobMethods::LABELLED)));
-        if (count($labels) !== count(array_unique($labels))) {
-            return back()->with('error', 'لكل وسيلة رقم ربط مختلف. لم يُحفظ شيء.');
+        $saved = array_filter(array_map(fn ($key) => $credentials[$key] ?? null, PaymobClient::METHOD_KEYS));
+        if (count($saved) !== count(array_unique($saved))) {
+            return back()->with('error', 'لكل وسيلة رقم تكامل مختلف في لوحة Paymob. لم يُحفظ شيء.');
         }
-        $row->forceFill(['credentials' => $credentials])->save();
+        $changed = array_filter(PaymobClient::METHOD_KEYS, fn ($key) => ($credentials[$key] ?? null) !== ($row->credentials[$key] ?? null)) !== [];
+        if (! $changed) {
+            return back()->with('success', 'لا تغيير.');
+        }
+        if (($open = app(OnlinePaymentService::class)->openCheckouts()) > 0) {
+            return back()->with('error', 'توجد '.$open.' عملية دفع إلكتروني مفتوحة قد يصل مبلغها: لا تُغيَّر أرقام الربط حتى تنتهي، وبعد '.OnlinePaymentService::LATE_CALLBACK_MINUTES.' دقيقة من انتهائها. لم يُحفظ شيء.');
+        }
+        // New numbers are unproven: the club tests them before any method reads «checked».
+        $row->forceFill(['credentials' => $credentials, 'verified_at' => null, 'last_error' => null, 'last_error_at' => null])->save();
 
-        return back()->with('success', 'تم حفظ وسائل الدفع.');
+        return back()->with('success', 'تم حفظ أرقام الربط. اضغط «اختبار الاتصال» للتحقق منها.');
     }
 
     public function whatsapp(): Response

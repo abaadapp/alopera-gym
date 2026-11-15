@@ -15,12 +15,19 @@ use Illuminate\Support\Str;
 /**
  * Paymob "Intention" API (unified checkout), Oman region by default.
  *
- * Per club: secret key, public key, HMAC secret and one or more integration
- * ids (card, Apple Pay…) from the club's own Paymob dashboard.
+ * Per club: secret key, public key, HMAC secret, and the integration ids of its own Paymob account — one per method
+ * (cards, OmanNet when Paymob gave it an integration of its own, Apple Pay), and any older list in «integration_ids».
+ * Every id goes to the checkout in `payment_methods`, which «can be provided as integers» and whose ids' «status
+ * (Live/Test) … should match the status of the secret key» (Paymob, Create Intention): Apple Pay has Live ids only, so
+ * it is left out of a checkout opened with test keys rather than have Paymob refuse the whole page.
  */
 final class PaymobClient
 {
-    public const REQUIRED = ['secret_key', 'public_key', 'hmac_secret', 'integration_ids'];
+    /** The keys every checkout needs; and at least one integration id (checkoutIds). */
+    public const REQUIRED = ['secret_key', 'public_key', 'hmac_secret'];
+
+    /** Each method's integration id, kept with the keys (encrypted, write-only on the settings screen). */
+    public const METHOD_KEYS = ['card' => 'method_card', 'omannet' => 'method_omannet', 'apple_pay' => 'method_apple_pay'];
 
     public static function ready(?TenantIntegration $integration): bool
     {
@@ -34,7 +41,7 @@ final class PaymobClient
             }
         }
 
-        return true;
+        return self::checkoutIds($integration) !== [];
     }
 
     /**
@@ -62,10 +69,40 @@ final class PaymobClient
         return self::ready($integration) && (self::live($integration) || ! app()->isProduction());
     }
 
-    /** @return list<int> */
+    /** @return array<string, int|null> each method's own integration id, as saved */
+    public static function methodIds(?TenantIntegration $integration): array
+    {
+        return array_map(function (string $key) use ($integration) {
+            $raw = trim((string) $integration?->credential($key));
+
+            return ctype_digit($raw) && (int) $raw > 0 ? (int) $raw : null;
+        }, self::METHOD_KEYS);
+    }
+
+    /**
+     * Every integration of the club a callback may come through: the older list and each method's id. A callback
+     * naming none of them is not the club's money (OnlinePaymentService).
+     *
+     * @return list<int>
+     */
     public static function integrationIds(TenantIntegration $integration): array
     {
-        return array_values(array_filter(array_map('intval', preg_split('/[\s,]+/', (string) $integration->credential('integration_ids')))));
+        $listed = array_filter(array_map('intval', preg_split('/[\s,]+/', (string) $integration->credential('integration_ids'))));
+
+        return array_values(array_unique(array_merge($listed, array_values(array_filter(self::methodIds($integration))))));
+    }
+
+    /**
+     * What a checkout offers: every id, but Apple Pay's only under live keys (it has no test ids; sent with test keys
+     * it would not match their environment).
+     *
+     * @return list<int>
+     */
+    public static function checkoutIds(TenantIntegration $integration): array
+    {
+        $applePay = self::methodIds($integration)['apple_pay'];
+
+        return array_values(array_filter(self::integrationIds($integration), fn (int $id) => $id !== $applePay || $integration->mode === 'live'));
     }
 
     /**
@@ -85,7 +122,7 @@ final class PaymobClient
                 ->post($base.'/v1/intention/', [
                     'amount' => Money::toMinor($intent->amount),
                     'currency' => $intent->currency,
-                    'payment_methods' => self::integrationIds($integration),
+                    'payment_methods' => self::checkoutIds($integration),
                     'items' => [[
                         'name' => Str::limit('Invoice '.$invoice->number, 50, ''),
                         'amount' => Money::toMinor($intent->amount),
@@ -133,8 +170,8 @@ final class PaymobClient
      */
     public function probe(TenantIntegration $integration, string $currency): array
     {
-        if (self::integrationIds($integration) === [] || $integration->credential('secret_key') === null) {
-            return ['ok' => false, 'message' => 'أدخل Secret key وIntegration IDs أولًا.'];
+        if (self::checkoutIds($integration) === [] || $integration->credential('secret_key') === null) {
+            return ['ok' => false, 'message' => 'أدخل Secret key ورقم ربط واحدًا على الأقل (البطاقات غالبًا) أولًا.'];
         }
 
         $base = rtrim((string) config('services.paymob.base_url'), '/');
@@ -145,7 +182,7 @@ final class PaymobClient
                 ->post($base.'/v1/intention/', [
                     'amount' => Money::toMinor('1.000'),
                     'currency' => $currency,
-                    'payment_methods' => self::integrationIds($integration),
+                    'payment_methods' => self::checkoutIds($integration),
                     'items' => [['name' => 'Connection check', 'amount' => Money::toMinor('1.000'), 'quantity' => 1]],
                     'billing_data' => [
                         'first_name' => 'Connection', 'last_name' => 'Check', 'phone_number' => '+96800000000',
@@ -168,6 +205,7 @@ final class PaymobClient
             return ['ok' => false, 'message' => $message];
         }
 
+        // Saving any key, id or the mode drops this (IntegrationController): a method saved later is not taken for checked.
         $integration->markVerified(['paymob_checked_mode' => $integration->mode]);
 
         return ['ok' => true, 'message' => 'قبلت Paymob المفاتيح وفتحت صفحة دفع تجريبية لم تُرسل لأحد.'];

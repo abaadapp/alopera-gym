@@ -5,6 +5,7 @@ namespace App\Modules\Integrations\Services;
 use App\Models\TenantIntegration;
 use App\Models\User;
 use App\Modules\Gym\Models\AccessDevice;
+use App\Modules\Payments\Paymob\PaymobClient;
 use Illuminate\Support\Collection;
 
 /**
@@ -32,7 +33,7 @@ final class IntegrationHub
     ];
 
     public const PAYMOB_FIELDS = [
-        'secret_key' => 'Secret key', 'public_key' => 'Public key', 'hmac_secret' => 'HMAC secret', 'integration_ids' => 'Integration IDs',
+        'secret_key' => 'Secret key', 'public_key' => 'Public key', 'hmac_secret' => 'HMAC secret',
     ];
 
     public const WHATSAPP_FIELDS = [
@@ -85,6 +86,10 @@ final class IntegrationHub
             return $this->state(self::OFF, $row?->credential('secret_key') ? 'المفاتيح محفوظة والدفع الإلكتروني متوقف.' : 'لم يُربط حساب Paymob بعد.');
         }
         $missing = $this->missing($row, self::PAYMOB_FIELDS);
+        // At least one integration id the checkout can offer: the cards' (or the older list).
+        if (PaymobClient::checkoutIds($row) === []) {
+            $missing[] = 'رقم تكامل البطاقات';
+        }
         if ($missing !== []) {
             return $this->state(self::SETUP, 'ينقص: '.implode('، ', $missing).'.');
         }

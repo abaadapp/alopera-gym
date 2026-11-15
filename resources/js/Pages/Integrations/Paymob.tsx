@@ -1,5 +1,5 @@
 import { Link, useForm } from '@inertiajs/react';
-import { AlertTriangle, CircleCheck, CircleDashed, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Apple, CircleCheck, CircleDashed, CreditCard, Landmark, Link2, ShieldCheck } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Card, CardHeader, EmptyState, Notice, PageHeader } from '@/Components/ui';
 import { CheckList, CopyRow, IntegrationBack, IntegrationSummary, KeysForm, VerifyButton, type IntegrationStatusData, type ProviderForm } from '@/Components/Integrations';
@@ -8,7 +8,8 @@ interface Props {
     integration: ProviderForm;
     status: IntegrationStatusData;
     warning: string | null;
-    methods: { key: string; label: string; labelled: boolean; state: 'not_set' | 'set' | 'verified' | 'available' | 'unavailable'; reason: string }[];
+    methods: { key: 'card' | 'omannet' | 'apple_pay'; label: string; saved: boolean; state: 'not_set' | 'saved' | 'checked' | 'enabled' | 'available' | 'wrong_mode'; reason: string; within_cards?: boolean }[];
+    links: { on: boolean; invoices_route: string; create_route: string };
     checks: { label: string; ok: boolean; at: string | null }[];
     usage: { label: string; on: boolean; route?: string | null }[];
     intents: { id: number; reference: string; invoice: string | null; channel: string; amount: string; currency: string; status: string; failure: string | null; at: string }[];
@@ -21,76 +22,98 @@ const FIELDS = [
     { key: 'secret_key', label: 'Secret key', hint: 'من لوحة Paymob ← Settings ← Account info', secret: true },
     { key: 'public_key', label: 'Public key' },
     { key: 'hmac_secret', label: 'HMAC secret', hint: 'للتحقق من توقيع إشعارات الدفع', secret: true },
-    { key: 'integration_ids', label: 'Integration IDs', hint: 'رقم أو أكثر مفصولة بفاصلة (بطاقة، Apple Pay…)' },
+    { key: 'integration_ids', label: 'أرقام ربط إضافية (اختياري)', hint: 'الطريقة السابقة: أرقام مفصولة بفاصلة. يكفي رقم البطاقات في قسمه أدناه.' },
 ];
 
 const METHOD_STATE: Record<string, { label: string; tone: 'green' | 'amber' | 'red' | 'gray' }> = {
-    not_set: { label: 'غير مهيأ', tone: 'gray' },
-    set: { label: 'مهيأ — لم يُتحقق منه', tone: 'amber' },
-    verified: { label: 'تم التحقق', tone: 'amber' },
-    available: { label: 'متاح فعليًا', tone: 'green' },
-    unavailable: { label: 'غير متاح', tone: 'gray' },
+    not_set: { label: 'غير مضاف', tone: 'gray' },
+    saved: { label: 'رقم محفوظ', tone: 'amber' },
+    checked: { label: 'تم التحقق من الربط', tone: 'amber' },
+    enabled: { label: 'مفعّلة لدى Paymob', tone: 'amber' },
+    available: { label: 'متاحة فعليًا', tone: 'green' },
+    wrong_mode: { label: 'لا تناسب بيئة المفاتيح', tone: 'red' },
 };
 
-function PaymentMethods({ methods }: { methods: Props['methods'] }) {
-    // The ids are kept with the keys and never come back: a field is typed in, blank keeps what is stored.
-    const pickable = methods.filter((m) => m.key !== 'omannet');
-    const form = useForm<{ card: string; apple_pay: string; clear: string[] }>({ card: '', apple_pay: '', clear: [] });
-    const errors = form.errors as Record<string, string | undefined>;
+type MethodKey = 'card' | 'omannet' | 'apple_pay';
+
+/** The three method sections share one form: the numbers are kept with the keys and never come back (blank keeps). */
+function useMethodForm() {
+    return useForm<{ card: string; omannet: string; apple_pay: string; clear: MethodKey[] }>({ card: '', omannet: '', apple_pay: '', clear: [] });
+}
+
+function StateLine({ method }: { method: Props['methods'][number] }) {
+    return (
+        <div className="space-y-1">
+            <Badge tone={METHOD_STATE[method.state]?.tone ?? 'gray'}>{METHOD_STATE[method.state]?.label ?? method.state}</Badge>
+            <p className="text-xs leading-6 text-muted">{method.reason}</p>
+        </div>
+    );
+}
+
+function MethodSection({ method, form, icon, title, subtitle, hint, note }: {
+    method: Props['methods'][number]; form: ReturnType<typeof useMethodForm>; icon: React.ReactNode; title: string; subtitle: string; hint: string; note?: React.ReactNode;
+}) {
+    const key = method.key;
+    const clearing = form.data.clear.includes(key);
+    const error = (form.errors as Record<string, string | undefined>)[key];
 
     return (
         <Card>
-            <CardHeader title="وسائل الدفع" subtitle="«متاح فعليًا» لا تظهر لمجرد كتابة الرقم: يلزم دفعة موقّعة عبر الوسيلة والدفع الإلكتروني مفعّل." />
-            <ul className="space-y-3 text-sm">
-                {methods.map((m) => (
-                    <li key={m.key} className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium text-ink">{m.label}</span>
-                            {m.key === 'omannet' && <span className="text-xs text-muted">ضمن تكامل البطاقات</span>}
-                            <Badge tone={METHOD_STATE[m.state]?.tone ?? 'gray'}>{METHOD_STATE[m.state]?.label ?? m.state}</Badge>
-                        </div>
-                        <p className="text-xs leading-6 text-muted">{m.reason}</p>
-                    </li>
-                ))}
-            </ul>
+            <CardHeader title={<span className="flex items-center gap-2">{icon}{title}</span>} subtitle={subtitle} />
             <form
-                className="mt-4 space-y-3 border-t border-line pt-4"
+                className="space-y-3"
                 onSubmit={(e) => {
                     e.preventDefault();
                     form.put(route('club.integrations.paymob.methods'), { preserveScroll: true, onSuccess: () => form.reset() });
                 }}
             >
-                <p className="text-xs leading-6 text-muted">رقم ربط كل وسيلة من «Integration IDs» المحفوظة. يُحفظ مع المفاتيح ولا يُعرض بعد الحفظ؛ اترك الحقل فارغًا ليبقى كما هو.</p>
-                {pickable.map((m) => {
-                    const key = m.key as 'card' | 'apple_pay';
-                    const clearing = form.data.clear.includes(key);
-                    return (
-                        <div key={key} className="flex flex-wrap items-center gap-2 text-sm">
-                            <label htmlFor={`method-${key}`} className="min-w-28 text-ink">{m.label}</label>
-                            <input
-                                id={`method-${key}`}
-                                inputMode="numeric"
-                                dir="ltr"
-                                autoComplete="off"
-                                disabled={clearing}
-                                placeholder={m.labelled ? 'محدد — اكتب رقمًا آخر لتغييره' : 'غير محدد'}
-                                className="min-w-0 flex-1 rounded-lg border border-line bg-white px-2 py-1.5 text-sm disabled:opacity-50"
-                                value={form.data[key]}
-                                onChange={(e) => form.setData(key, e.target.value.replace(/[^\d]/g, ''))}
-                            />
-                            {m.labelled && (
-                                <label className="flex items-center gap-1 text-xs text-muted">
-                                    <input type="checkbox" checked={clearing} onChange={(e) => form.setData('clear', e.target.checked ? [...form.data.clear, key] : form.data.clear.filter((k) => k !== key))} />
-                                    إزالة التحديد
-                                </label>
-                            )}
-                            {errors[key] && <span className="w-full text-xs text-red-600">{errors[key]}</span>}
-                        </div>
-                    );
-                })}
-                <button type="submit" disabled={form.processing} className="rounded-lg bg-ink px-3 py-1.5 text-sm text-white disabled:opacity-50">حفظ وسائل الدفع</button>
+                <label htmlFor={`method-${key}`} className="block text-sm font-medium text-ink">رقم التكامل (Integration ID)</label>
+                <div className="flex flex-wrap items-center gap-2">
+                    <input
+                        id={`method-${key}`}
+                        inputMode="numeric"
+                        dir="ltr"
+                        autoComplete="off"
+                        disabled={clearing}
+                        placeholder={method.saved ? 'محفوظ — اكتب رقمًا آخر لتغييره' : 'غير مضاف'}
+                        className="min-w-0 flex-1 rounded-lg border border-line bg-white px-3 py-2 text-sm disabled:opacity-50"
+                        value={form.data[key]}
+                        onChange={(e) => form.setData(key, e.target.value.replace(/[^\d]/g, ''))}
+                    />
+                    <button type="submit" disabled={form.processing} className="rounded-lg bg-ink px-3 py-2 text-sm text-white disabled:opacity-50">حفظ</button>
+                </div>
+                <p className="text-xs leading-6 text-muted">{hint}</p>
+                {method.saved && (
+                    <label className="flex items-center gap-1.5 text-xs text-muted">
+                        <input type="checkbox" checked={clearing} onChange={(e) => form.setData('clear', e.target.checked ? [...form.data.clear, key] : form.data.clear.filter((k) => k !== key))} />
+                        إزالة الرقم المحفوظ
+                    </label>
+                )}
+                {error && <p className="text-xs text-red-600">{error}</p>}
+                {note}
+                <div className="border-t border-line pt-3"><StateLine method={method} /></div>
             </form>
-            <p className="mt-3 text-xs leading-6 text-muted">قبل استقبال أموال حقيقية: تفعّل Paymob عُمان الوسائل لحساب النادي (Apple Pay بأرقام Live فقط، وOmanNet ضمن تكامل البطاقات)، ثم تُدخل أرقامها الحقيقية، ثم «اختبار الاتصال». لا يظهر في صفحة الدفع إلا ما فعّلته Paymob، ولا يعرض النظام زر Apple Pay خاصًا به.</p>
+        </Card>
+    );
+}
+
+function PayLinks({ links }: { links: Props['links'] }) {
+    return (
+        <Card>
+            <CardHeader title={<span className="flex items-center gap-2"><Link2 className="size-4" />روابط الدفع</span>} subtitle="رابط دفع آمن لكل فاتورة مفتوحة، يُنسخ أو يُرسل بواتساب من صفحة الفاتورة." />
+            <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2.5">
+                    {links.on ? <CircleCheck className="size-[18px] shrink-0 text-emerald-600" /> : <CircleDashed className="size-[18px] shrink-0 text-[#9ca3af]" />}
+                    <span className={links.on ? 'text-ink' : 'text-muted'}>{links.on ? 'روابط الفواتير تفتح صفحة الدفع' : 'روابط الفواتير تعرض الفاتورة فقط حتى يُفعَّل الدفع الإلكتروني'}</span>
+                </li>
+            </ul>
+            <div className="mt-3 flex flex-wrap gap-3 text-xs">
+                <Link href={route(links.create_route)} className="text-[#1d4ed8] underline">فاتورة جديدة (مطالبة بمبلغ ووصف)</Link>
+                <Link href={route(links.invoices_route)} className="text-[#1d4ed8] underline">فواتير العملاء</Link>
+            </div>
+            <p className="mt-3 text-xs leading-6 text-muted">
+                لا تُسجَّل دفعة عند إصدار الرابط ولا عند رجوع العميل من Paymob؛ تُسجَّل فقط بإشعار موقّع ومطابق، مرة واحدة. روابط Paymob السريعة (QuickLink) غير مستخدمة: لم تثبت وثائق Paymob ربط إشعارها الموقّع بالفاتورة.
+            </p>
         </Card>
     );
 }
@@ -102,8 +125,10 @@ const INTENT_STATUS: Record<string, { label: string; tone: 'green' | 'amber' | '
     expired: { label: 'انتهت المهلة', tone: 'gray' },
 };
 
-export default function PaymobIntegration({ integration, status, warning, methods, checks, usage, intents, events, endpoints }: Props) {
+export default function PaymobIntegration({ integration, status, warning, methods, links, checks, usage, intents, events, endpoints }: Props) {
     const complete = checks[0]?.ok;
+    const methodForm = useMethodForm();
+    const byKey = Object.fromEntries(methods.map((m) => [m.key, m])) as Record<MethodKey, Props['methods'][number]>;
 
     return (
         <ClubLayout title="Paymob — الدفع الإلكتروني">
@@ -118,7 +143,8 @@ export default function PaymobIntegration({ integration, status, warning, method
             )}
 
             <div className="grid gap-6 lg:grid-cols-5 [&>*]:min-w-0">
-                <Card className="lg:col-span-3">
+                <div className="space-y-6 lg:col-span-3">
+                <Card>
                     <CardHeader title="المفاتيح والوضع" subtitle="تُحفظ مشفّرة. وضع «اختبار» لمفاتيح الاختبار، و«إنتاج» لاستقبال مدفوعات حقيقية." />
                     <KeysForm
                         provider="paymob"
@@ -133,15 +159,39 @@ export default function PaymobIntegration({ integration, status, warning, method
                     )}
                 </Card>
 
+                <MethodSection method={byKey.card} form={methodForm} icon={<CreditCard className="size-4" />} title="البطاقات البنكية"
+                    subtitle="Visa وMastercard وغيرها، من تكامل البطاقات في حسابك."
+                    hint="من لوحة Paymob ← Payment Integrations، بالبيئة نفسها التي مفاتيحها أعلاه (Test أو Live)." />
+                <MethodSection method={byKey.omannet} form={methodForm} icon={<Landmark className="size-4" />} title="OmanNet"
+                    subtitle="بطاقات الخصم العُمانية."
+                    hint="اختياري: أدخله فقط إن أعطتك Paymob تكاملًا مستقلًا لـ OmanNet برقم غير رقم البطاقات. إن كان OmanNet مفعّلًا ضمن تكامل البطاقات فاترك الحقل فارغًا."
+                    note={byKey.omannet.within_cards ? <p className="rounded-lg bg-[#f8fafc] px-3 py-2 text-xs leading-6 text-muted">بلا رقم مستقل: يتبع OmanNet تكامل البطاقات.</p> : undefined} />
+                <MethodSection method={byKey.apple_pay} form={methodForm} icon={<Apple className="size-4" />} title="Apple Pay"
+                    subtitle="يظهر داخل صفحة دفع Paymob على الأجهزة التي تدعمه، بعد أن تفعّله Paymob لحسابك. لا يعرض النظام زرًا خاصًا به."
+                    hint="اختياري: رقم تكامل Apple Pay الحقيقي (Live) — لا أرقام تجريبية له لدى Paymob، فلا يُرسل مع مفاتيح الاختبار." />
+                <PayLinks links={links} />
+                </div>
+
                 <div className="space-y-6 lg:col-span-2">
-                    <PaymentMethods methods={methods} />
+                    <Card>
+                        <CardHeader title="حالة وسائل الدفع" subtitle="«متاحة فعليًا» لا تظهر لمجرد حفظ رقم: يلزم دفعة موقّعة عبرها والدفع الإلكتروني مفعّل." />
+                        <ul className="space-y-3 text-sm">
+                            {methods.map((m) => (
+                                <li key={m.key} className="flex flex-wrap items-center justify-between gap-2">
+                                    <span className="font-medium text-ink">{m.label}</span>
+                                    <Badge tone={METHOD_STATE[m.state]?.tone ?? 'gray'}>{METHOD_STATE[m.state]?.label ?? m.state}</Badge>
+                                </li>
+                            ))}
+                        </ul>
+                    </Card>
 
                     <Card>
-                        <CardHeader title="التحقق" subtitle="«متصل» لا تظهر إلا بعد قبول Paymob للمفاتيح فعلًا" />
+                        <CardHeader title="اختبار الاتصال" subtitle="«متصل» لا تظهر إلا بعد قبول Paymob للمفاتيح وأرقام الربط فعلًا" />
                         <CheckList items={checks} />
                         <p className="mt-3 text-xs leading-6 text-muted">
                             «اختبار الاتصال» يفتح لدى Paymob صفحة دفع تجريبية بمبلغ 1.000 لا تُرسل لأحد ولا يُخصم منها شيء، ثم تنتهي وحدها.
                         </p>
+                        <div className="mt-3"><VerifyButton provider="paymob" disabled={!complete} /></div>
                     </Card>
 
                     <Card>
