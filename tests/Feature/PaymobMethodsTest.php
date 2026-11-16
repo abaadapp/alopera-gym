@@ -122,6 +122,31 @@ class PaymobMethodsTest extends TestCase
         $this->assertStringNotContainsString('333', $html);
     }
 
+    public function test_the_page_after_a_reload_shows_what_was_saved_and_a_blank_save_keeps_it(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $keys = fn (array $data) => $this->actingAs($owner)->put(route('club.integrations.update', 'paymob'), $data)->assertSessionHasNoErrors();
+        $reload = fn () => $this->actingAs($owner)->get(route('club.integrations.paymob'))->assertOk();
+
+        $keys(['is_enabled' => true, 'mode' => 'test', 'credentials' => ['secret_key' => 'omn_sk_test_reload', 'public_key' => 'omn_pk_test_reload', 'hmac_secret' => 'hmac-reload']]);
+        $this->actingAs($owner)->put(route('club.integrations.paymob.methods'), ['card' => '6101', 'apple_pay' => '6103'])->assertSessionHasNoErrors();
+        $saved = fn ($page) => $page->where('integration.mode', 'test')
+            ->where('integration.present', ['secret_key' => true, 'public_key' => true, 'hmac_secret' => true, 'integration_ids' => false])
+            ->where('methods.0.saved', true)->where('methods.0.state', PaymobMethods::SAVED)
+            ->where('methods.1.saved', false)->where('methods.1.within_cards', true)
+            ->where('methods.2.saved', true)->where('methods.2.state', PaymobMethods::WRONG_MODE);
+        $html = $reload()->assertInertia(fn ($page) => $saved($page->where('integration.is_enabled', true)))->getContent();
+        foreach (['omn_sk_test_reload', 'hmac-reload', '6101', '6103'] as $value) {
+            $this->assertStringNotContainsString($value, $html);
+        }
+
+        // Saved again with the key fields blank and the switch off: the keys and the numbers stay; only the switch moved.
+        $keys(['is_enabled' => false, 'mode' => 'test', 'credentials' => ['secret_key' => '', 'public_key' => '', 'hmac_secret' => '']]);
+        $reload()->assertInertia(fn ($page) => $saved($page->where('integration.is_enabled', false)));
+        $this->assertSame('omn_sk_test_reload', $this->row($club)->credential('secret_key'));
+    }
+
     public function test_every_method_number_goes_to_the_checkout_and_apple_pay_only_under_live_keys(): void
     {
         $club = $this->club();
