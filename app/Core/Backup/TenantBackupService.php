@@ -519,6 +519,8 @@ final class TenantBackupService
             'file' => self::INCOMPLETE.'/'.$name, 'size' => $size, 'sha256' => $sha,
             'missing_attachments' => count($missing), 'attachment_ids' => array_slice($missing, 0, 50),
         ], tenantId: $tenant->id);
+        // In the server's log too (ids and a count, never a path or a file's contents): the nightly's output goes nowhere.
+        Log::warning('backup incomplete: attachments recorded as stored have no file', ['tenant' => $tenant->id, 'missing' => count($missing), 'ids' => array_slice($missing, 0, 20)]);
         if ($safetyCopy) {
             return self::INCOMPLETE.'/'.$name;
         }
