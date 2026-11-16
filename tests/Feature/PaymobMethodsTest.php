@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Core\Support\BusinessRuleException;
 use App\Models\Tenant;
 use App\Models\TenantIntegration;
 use App\Modules\Finance\Models\Payment;
@@ -13,7 +14,9 @@ use App\Modules\Payments\Paymob\PaymobMethods;
 use App\Modules\Payments\Paymob\PaymobSignature;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
@@ -148,6 +151,55 @@ class PaymobMethodsTest extends TestCase
         $this->assertSame('duplicate', $this->deliver($club, $this->signedObj($intent, 333, 2)));
         $this->assertSame(1, $this->asTenant($club, fn () => Payment::where('gateway', 'paymob')->count()));
         $this->assertSame(PaymobMethods::AVAILABLE, $this->states($club)['omannet']['state']);
+    }
+
+    public function test_keys_hmac_and_numbers_stay_out_of_the_logs_and_the_audit_on_every_path(): void
+    {
+        $logged = [];
+        Event::listen(MessageLogged::class, function (MessageLogged $m) use (&$logged) {
+            $logged[] = $m->message.' '.json_encode($m->context, JSON_PARTIAL_OUTPUT_ON_ERROR);
+        });
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $secrets = ['omn_sk_test_LEAKCHECK_91', 'omn_pk_test_LEAKCHECK_92', 'hmac-LEAKCHECK-93'];
+        $this->actingAs($owner)->put(route('club.integrations.update', 'paymob'), [
+            'is_enabled' => true, 'mode' => 'test',
+            'credentials' => ['secret_key' => $secrets[0], 'public_key' => $secrets[1], 'hmac_secret' => $secrets[2]],
+        ])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->put(route('club.integrations.paymob.methods'), ['card' => '918273', 'omannet' => '918274'])->assertSessionHasNoErrors();
+
+        // Paymob refusing, then unreachable, on the check and on a checkout; then a forged callback and a signed one.
+        Http::fake(['*/v1/intention/' => Http::sequence()
+            ->push(['detail' => 'Integration ID/Name does not exist in our system'], 404)
+            ->pushFailedConnection()
+            ->pushFailedConnection()
+            ->push(['client_secret' => 'cs', 'intention_order_id' => 4601], 201)]);
+        $this->actingAs($owner)->post(route('club.integrations.verify', 'paymob'))->assertSessionHas('error');
+        $this->actingAs($owner)->post(route('club.integrations.verify', 'paymob'))->assertSessionHas('error');
+        $invoice = $this->invoice($club);
+        try {
+            $this->asTenant($club, fn () => app(OnlinePaymentService::class)->start($invoice, 'whatsapp'));
+            $this->fail('an unreachable Paymob opens no checkout');
+        } catch (BusinessRuleException) {
+        }
+        $intent = $this->asTenant($club, fn () => app(OnlinePaymentService::class)->start($invoice->fresh(), 'whatsapp'));
+        $obj = $this->signedObj($intent, 918274, 46011);
+        $this->postJson(route('webhooks.paymob').'?hmac=forged', ['type' => 'TRANSACTION', 'obj' => $obj]);
+        $this->postJson(route('webhooks.paymob').'?hmac='.PaymobSignature::compute($obj, $secrets[2]), ['type' => 'TRANSACTION', 'obj' => $obj])->assertOk();
+        $this->assertSame(1, $this->asTenant($club, fn () => Payment::where('gateway', 'paymob')->count()));
+
+        // The secret key and the HMAC secret are nowhere, the callback log and the checkout records included. The public
+        // key is in the checkout page's address by Paymob's design (unifiedcheckout/?publicKey=…), and the numbers in
+        // Paymob's own callbacks; but the club's copies of both stay encrypted: not in the logs, the audit or the settings.
+        $plain = implode("\n", [...$logged, DB::table('audit_logs')->get()->toJson(), DB::table('tenant_integrations')->select('settings', 'last_error')->get()->toJson()]);
+        $everything = $plain."\n".DB::table('payment_webhook_events')->get()->toJson()."\n".DB::table('payment_intents')->get()->toJson();
+        foreach ([$secrets[0], $secrets[2]] as $secret) {
+            $this->assertStringNotContainsString($secret, $everything);
+        }
+        foreach ([$secrets[1], '918273', '918274'] as $value) {
+            $this->assertStringNotContainsString($value, $plain);
+        }
+        $this->assertNotEmpty(DB::table('audit_logs')->get(), 'the saves were audited, without their values');
     }
 
     public function test_the_ladder_saved_checked_enabled_available_and_a_failed_check(): void
