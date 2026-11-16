@@ -145,38 +145,57 @@ points in writing.
 
 ### Paymob payment methods: what the club needs from its Paymob dashboard (2026-11-15)
 
-The Paymob settings screen shows one state for each method, and never "available" just because a number was saved:
+The Paymob screen has one section per method. Each holds the integration id of that method, from the club's own
+dashboard (Settings → Payment Integrations), in the same mode, Test or Live, as the keys above it.
+
+**Where the ids live and how they are used**
+- The ids are kept with the keys, encrypted in `credentials.method_card`, `method_omannet` and `method_apple_pay`.
+- They are write-only: the screen shows only whether a number is saved, a blank field keeps the stored one, and
+  «إزالة الرقم المحفوظ» removes it.
+- Every saved id goes into the checkout's `payment_methods`. Paymob says that field takes "Integration ID(s) … as
+  integers", and that "the status (Live/Test) of the provided ID(s) should match the status of the secret key".
+  Callbacks are accepted through any of them.
+- The older `integration_ids` list still works and is sent too.
+- The ids are not changed while a checkout's money may still arrive (the same guard as the keys). A change drops the
+  earlier connection check.
+
+**States**
 
 | State | Meaning |
 |---|---|
-| غير مهيأ | no integration id is labelled for the method |
-| مهيأ | an id is labelled, but «اختبار الاتصال» has not passed |
-| تم التحقق | Paymob accepted the ids in «اختبار الاتصال», or a signed payment came through while online payment is off |
-| متاح فعليًا | a signed, recorded payment came through the method, **and** the club takes online payments now |
+| غير مضاف | no number saved |
+| رقم محفوظ | a number is kept, and nothing has been checked since it was saved |
+| تم التحقق من الربط | «اختبار الاتصال» opened a checkout with it, under the keys and mode saved since |
+| مفعّلة لدى Paymob | a signed callback came through it: Paymob ran a payment on it, paid or declined |
+| متاحة فعليًا | a signed, recorded payment came through it, **and** the club takes online payments now |
 
-A label is only a description of the ids already in «Integration IDs». The checkout and the callbacks still use that
-list as they did. There is no migration: each label is kept with the keys in the encrypted `credentials` (`method_card`, `method_apple_pay`), and it is never sent to the browser. The screen shows only whether a method has one.
+**Cards.** The card integration id.
 
-- **Cards.** The card integration id, from the dashboard: Settings → Payment Integrations, in Test or Live mode.
-- **OmanNet.** Paymob's documentation lists it among the card schemes ("Cards — Methods included: Visa, Mastercard,
-  Amex, MADA, OmanNet", Overview page, Aug 2026). It has no integration id or API of its own, so the system adds none.
-  - Paymob Oman must enable OmanNet on the club's card integration.
-  - It is shown as proven only by a signed payment through the card id whose `source_data.sub_type` names OmanNet.
-  - The exact value Paymob sends there is not documented. Any other value proves nothing, so a wrong guess can only
-    keep the state below "available", never raise it.
-- **Apple Pay.** "The Apple Pay payment method has Live integration IDs only" (Apple Pay [All regions]).
-  - It is unavailable in test mode.
-  - The documentation asks for Apple Pay certificates for the SDK, and domain verification plus certificates for Pixel.
-    It says nothing about Unified Checkout, which this system uses. Ask Paymob Oman whether the club's account needs
-    either.
-  - The system shows no Apple Pay button of its own. The method appears only on Paymob's page, wherever Paymob shows it.
-- **From the dashboard, typed into the settings screen and never into a chat or a ticket:**
-  - Secret key and Public key, which are mode-specific (`sk_live`/`pk_live` in Live);
-  - the HMAC secret;
-  - the integration ids.
-  - The API key is not needed by this system today.
-- **Set by the club in Paymob:**
-  - the transaction processed callback, `https://app.aloperagym.om/webhooks/paymob`;
-  - the redirect URL, copied from the settings screen.
-- **Still unproven: the unit of an OMR amount.** The system sends baisa (×1000). The documentation says "cents" and gives
-  EGP examples only. A sandbox payment, or a written answer from Paymob Oman, must settle it before live money.
+**OmanNet.** Paymob's documentation lists it among the card schemes ("Cards — Methods included: Visa, Mastercard,
+Amex, MADA, OmanNet"). An account may also be given an OmanNet integration of its own.
+- With its own number, it climbs the states like any method.
+- Without one, it goes with the cards. A payment proves it only when its signed card scheme (`source_data.sub_type`)
+  names OmanNet. The exact value is not documented, and any other value proves nothing.
+
+**Apple Pay.** "The Apple Pay payment method has Live integration IDs only."
+- Under test keys its number is kept but not sent, so Paymob does not refuse the whole page. The screen says the
+  number does not suit the environment.
+- The documentation asks for certificates for the SDK, and domain verification plus certificates for Pixel. It says
+  nothing of the hosted Unified Checkout, which this system uses. Ask Paymob Oman whether the club's account needs
+  either.
+- The system shows no Apple Pay button of its own.
+
+**Pay links.** The club's own invoice links (`/pay/{token}`) open the checkout. The «روابط الدفع» section links to the
+invoices. QuickLink is not used (see above).
+
+**From the dashboard, typed into the settings screen and never into a chat or a ticket:**
+- Secret key and Public key, which are mode-specific;
+- the HMAC secret;
+- each method's integration id.
+- The API key is not needed today.
+
+**Set by the club in Paymob:** the transaction processed callback `https://app.aloperagym.om/webhooks/paymob`, on each
+integration it uses.
+
+**Still unproven: the unit of an OMR amount.** The system sends baisa (×1000). The documentation says "cents" and gives
+EGP examples only. A sandbox payment, or a written answer from Paymob Oman, must settle it before live money.

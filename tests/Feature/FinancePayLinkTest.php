@@ -8,6 +8,7 @@ use App\Models\TenantIntegration;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Payments\Models\PaymentIntent;
+use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobSignature;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -152,6 +153,62 @@ class FinancePayLinkTest extends TestCase
         auth()->logout();
         $this->post(route('site.pay.start', ['club' => $club->slug, 'token' => $other->public_token]));
         $this->assertSame(0, $this->asTenant($club, fn () => PaymentIntent::where('invoice_id', $other->id)->count()));
+    }
+
+    public function test_a_partly_paid_claim_paid_its_balance_through_paymob_is_paid_once_and_asks_nothing_more(): void
+    {
+        Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_5', 'intention_order_id' => 4405], 201)]);
+        $club = $this->club();
+        $this->paymob($club);
+        $owner = $this->owner($club);
+        $this->fundAccounts($club);
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->claim(['payment_method' => 'cash', 'paid_amount' => 2, 'lines' => [['description' => 'تأجير القاعة', 'quantity' => 1, 'unit_price' => 10]]]))->assertSessionHasNoErrors();
+        auth()->logout();
+        $invoice = $this->only($club);
+
+        $this->post(route('site.pay.start', ['club' => $club->slug, 'token' => $invoice->public_token]));
+        $intent = $this->asTenant($club, fn () => PaymentIntent::where('invoice_id', $invoice->id)->sole());
+        $this->assertSame('8.000', $intent->amount);
+        $this->assertSame(0, $this->asTenant($club, fn () => Payment::where('gateway', 'paymob')->count()), 'opening the page is no money');
+
+        $this->webhook($this->signedCallback($intent, 4405))->assertOk();
+        $this->webhook($this->signedCallback($intent, 4405))->assertOk();
+        $this->asTenant($club, function () use ($invoice) {
+            $invoice = $invoice->fresh();
+            $this->assertSame(Invoice::PAID, $invoice->status);
+            $this->assertSame('0.000', $invoice->balance());
+            $this->assertSame('8.000', Payment::where('gateway', 'paymob')->sole()->amount);
+        });
+
+        // Paid in full: the link opens no other page.
+        $this->post(route('site.pay.start', ['club' => $club->slug, 'token' => $invoice->public_token]));
+        $this->assertSame(1, $this->asTenant($club, fn () => PaymentIntent::where('invoice_id', $invoice->id)->count()));
+    }
+
+    public function test_a_claim_voided_while_its_page_is_open_takes_the_late_money_for_review_not_onto_the_void_invoice(): void
+    {
+        Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_6', 'intention_order_id' => 4406], 201)]);
+        $club = $this->club();
+        $this->paymob($club);
+        $owner = $this->owner($club);
+        $this->actingAs($owner)->post(route('club.invoices.store'), $this->claim())->assertSessionHasNoErrors();
+        auth()->logout();
+        $invoice = $this->only($club);
+        $this->post(route('site.pay.start', ['club' => $club->slug, 'token' => $invoice->public_token]));
+        $intent = $this->asTenant($club, fn () => PaymentIntent::where('invoice_id', $invoice->id)->sole());
+
+        $this->actingAs($owner)->post(route('club.invoices.void', $invoice), ['reason' => 'خطأ'])->assertSessionHasNoErrors();
+        auth()->logout();
+        $this->webhook($this->signedCallback($intent, 4406))->assertOk();
+
+        $this->asTenant($club, function () use ($invoice, $intent) {
+            $this->assertSame(Invoice::VOID, $invoice->fresh()->status, 'the money does not reopen or pay a void invoice');
+            $payment = Payment::where('gateway', 'paymob')->sole();
+            $this->assertSame($intent->amount, $payment->creditLeft(), 'it waits as credit for review');
+            $this->assertSame('held_for_review', PaymentWebhookEvent::where('provider', 'paymob')->latest('id')->value('outcome'));
+        });
+        $this->post(route('site.pay.start', ['club' => $club->slug, 'token' => $invoice->public_token]));
+        $this->assertSame(1, $this->asTenant($club, fn () => PaymentIntent::where('invoice_id', $invoice->id)->count()), 'a void claim opens no page');
     }
 
     public function test_paymob_down_opens_nothing_and_records_nothing(): void
