@@ -140,4 +140,20 @@ class BackupAlertTest extends TestCase
         $this->service()->create($other);
         $this->assertNull($this->alertSeenBy($this->owner($other)), 'another club\'s backups are its own');
     }
+
+    public function test_the_panels_backup_button_never_says_success_for_an_incomplete_backup(): void
+    {
+        [$club, $attachment] = $this->clubWithChatFile();
+        Storage::disk('local')->delete($attachment->path);
+
+        $response = $this->actingAs($this->owner($club))->from(route('club.backups.index'))->post(route('club.backups.store'));
+
+        $response->assertRedirect(route('club.backups.index'))->assertSessionMissing('success')->assertSessionHasErrors('error');
+        $error = session('errors')->first('error');
+        $this->assertStringContainsString('النسخة الاحتياطية ناقصة', $error);
+        $this->assertStringContainsString('لا تُحسب ضمن النسخ السليمة', $error);
+        $this->assertStringNotContainsString(self::PATH_MARK, $error);
+        $this->assertSame([], $this->service()->list($club), 'no sound archive listed');
+        $this->assertSame('incomplete', $this->alertSeenBy($this->owner($club))['kind']);
+    }
 }
