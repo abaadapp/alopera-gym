@@ -5,6 +5,7 @@ namespace App\Core\Backup;
 use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
 use App\Models\Tenant;
+use App\Modules\Messaging\Services\MediaStore;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -612,6 +613,11 @@ final class TenantBackupService
                 }
                 if (! isset(TenantTables::PIVOTS[$table]) && (int) ($row['tenant_id'] ?? 0) !== $tenant->id) {
                     throw new BusinessRuleException('backup.other_tenant', 'النسخة تحتوي على بيانات نادٍ آخر.');
+                }
+                // A chat attachment names its file by path: only one inside this club's chat folder, or the restored row
+                // would open (and send on WhatsApp) another club's file or anything else on the disk.
+                if ($table === 'whatsapp_attachments' && ($row['path'] ?? null) !== null && ! MediaStore::insideClub((string) $row['path'], $tenant->id)) {
+                    throw new BusinessRuleException('backup.invalid', 'النسخة تحتوي على مرفق واتساب بمسار خارج مجلد النادي، ولم يُستبدل شيء.');
                 }
             });
             foreach (array_keys($data->counts()) as $table) {
