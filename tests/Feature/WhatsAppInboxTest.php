@@ -235,8 +235,8 @@ class WhatsAppInboxTest extends TestCase
         $a = $this->club();
         $b = $this->club();
         $chat = $this->chat($a, '96891000005');
-        $file = $this->asTenant($a, fn () => Message::where('conversation_id', $chat->id)->first()->attachments()->create(['kind' => 'document', 'mime' => 'application/pdf', 'path' => 'whatsapp/a.pdf', 'status' => Attachment::STORED]));
-        Storage::disk('local')->put('whatsapp/a.pdf', 'PDF');
+        $file = $this->asTenant($a, fn () => Message::where('conversation_id', $chat->id)->first()->attachments()->create(['kind' => 'document', 'mime' => 'application/pdf', 'path' => 'whatsapp/'.$a->id.'/2026/11/a.pdf', 'status' => Attachment::STORED]));
+        Storage::disk('local')->put('whatsapp/'.$a->id.'/2026/11/a.pdf', 'PDF'); // where MediaStore puts a club's chat files
         $ownerB = $this->owner($b);
 
         $this->actingAs($ownerB)->getJson(route('club.whatsapp.show', $chat->id))->assertNotFound();
