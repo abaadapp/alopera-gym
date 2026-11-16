@@ -64,6 +64,12 @@ final class SiteRenderer
      * @param  array<string, mixed>  $doc
      * @return array{chrome: array<string, mixed>, page: array{sections: list<array<string, mixed>>}, site: array<string, mixed>, seo: array{title: string, description: string}}
      */
+    /** A legal page's text (privacy, terms) in the page's language, from the given document. @param array<string, mixed> $doc */
+    public function legalBody(array $doc, string $page): string
+    {
+        return (string) (SitePages::of(SiteTranslation::apply($doc, SiteLanguage::current()))[$page]['body'] ?? '');
+    }
+
     public function render(array $doc, bool $preview = false): array
     {
         $this->begin();
@@ -96,7 +102,8 @@ final class SiteRenderer
                 'footer' => ['line' => ($doc['footer']['line'] ?? '') ?: null, 'links' => $links($doc['footer']['links'] ?? []), 'show_hours' => (bool) ($doc['footer']['show_hours'] ?? true), 'show_social' => (bool) ($doc['footer']['show_social'] ?? true)],
                 'home_url' => $this->homeUrl,
                 'preview' => $preview,
-                'pages' => SitePages::of($doc),
+                // Every page's heading words; the legal pages' long text goes only to its own page (legalBody).
+                'pages' => collect(SitePages::of($doc))->map(fn (array $page) => array_diff_key($page, ['body' => true]))->all(),
             ],
             'page' => ['sections' => $sections],
             'site' => $this->siteInfo($doc),

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import { Link, useForm } from '@inertiajs/react';
 import { ArrowLeft, ArrowRight, Check, CreditCard, Lock, Store } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
-import { Diamond, priceText } from '@/Components/Site/ui';
+import { Diamond, phrase, priceText } from '@/Components/Site/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { currencyLabel, money } from '@/lib/format';
@@ -299,7 +299,10 @@ export default function Join({ site, seo, plans, selected, onlinePayments, payAt
                                 </div>
                                 <div className="flex flex-col gap-3 pt-1">
                                     <Consent checked={form.data.accept_terms} onChange={(v) => set('accept_terms', v)} error={errors.accept_terms}>
-                                        {t('أوافق على الشروط والأحكام وسياسة النادي')}
+                                        {phrase(t('أوافق على :terms و:privacy'), {
+                                            terms: <a href={route('site.terms')} target="_blank" rel="noopener" className="font-semibold text-[var(--site-accent)] underline underline-offset-4">{t('الشروط والأحكام')}</a>,
+                                            privacy: <a href={route('site.privacy')} target="_blank" rel="noopener" className="font-semibold text-[var(--site-accent)] underline underline-offset-4">{t('سياسة الخصوصية')}</a>,
+                                        })}
                                     </Consent>
                                     <Consent checked={form.data.marketing_opt_in} onChange={(v) => form.setData('marketing_opt_in', v)}>
                                         {t('أوافق على استلام العروض والأخبار التسويقية عبر واتساب (يمكنك إلغاء ذلك في أي وقت)')}

@@ -117,6 +117,23 @@ class SiteController extends Controller
         ]);
     }
 
+    /** The privacy policy: the owner's text from «إدارة الموقع» (it starts from SitePages' legal text). */
+    public function privacy(): Response
+    {
+        return $this->sitePage('privacy', 'Site/Legal', ['page' => 'privacy', 'body' => $this->legalBody('privacy')]);
+    }
+
+    /** The terms and conditions, as the privacy policy. */
+    public function terms(): Response
+    {
+        return $this->sitePage('terms', 'Site/Legal', ['page' => 'terms', 'body' => $this->legalBody('terms')]);
+    }
+
+    private function legalBody(string $page): string
+    {
+        return app(SiteRenderer::class)->legalBody(app(SiteContent::class)->live($this->site()), $page);
+    }
+
     public function contact(): Response
     {
         return $this->sitePage('contact', 'Site/Contact', []);

@@ -201,7 +201,14 @@ export default function SiteLayout({ site, children, seoTitle }: { site: SiteInf
                         )}
                     </div>
                     <div className="border-t border-[rgba(26,22,18,0.08)]">
-                        <p className="mx-auto m-0 max-w-[1360px] px-5 py-5 text-[13px] text-[#7A7060] sm:px-10">© {new Date().getFullYear()} {tenant?.name}</p>
+                        <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 py-5 text-[13px] text-[#7A7060] sm:px-10">
+                            <p className="m-0">© {new Date().getFullYear()} {tenant?.name}</p>
+                            {/* The legal pages, on every page of the site. */}
+                            <nav className="flex gap-5" aria-label={t('السياسات')}>
+                                <a href={route('site.privacy')} className="hover:text-[var(--site-accent)]">{t('سياسة الخصوصية')}</a>
+                                <a href={route('site.terms')} className="hover:text-[var(--site-accent)]">{t('الشروط والأحكام')}</a>
+                            </nav>
+                        </div>
                     </div>
                 </footer>
 
