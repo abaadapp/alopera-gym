@@ -1,11 +1,12 @@
 import { Head, useForm, usePage } from '@inertiajs/react';
 import type { FormEvent } from 'react';
-import { AdminScope, Button, Field, Flash, Input } from '@/Components/ui';
+import { AdminScope, Button, Checkbox, Field, Flash, Input } from '@/Components/ui';
 
 /**
- * Sign in to the panel: the club's official logo, then e-mail, password and «دخول», alone in the middle of a quiet
- * page. It has its own layout on purpose: AuthLayout stays as it is for the password-reset pages, whose routes and
- * flow are unchanged (the link to them is simply not shown here). `remember` is still sent, as false, as before.
+ * Sign in to the panel: the club's official logo, then e-mail, password, «تذكرني» and «دخول», alone in the middle of a
+ * quiet page. It has its own layout on purpose: AuthLayout stays as it is for the password-reset pages, whose routes and
+ * flow are unchanged (the link to them is simply not shown here). «تذكرني» is off until ticked and sends `remember`
+ * (true or false) to Laravel's own remember-me; nothing typed here is kept in the browser.
  */
 export default function Login() {
     const { logo } = usePage<{ logo: string }>().props;
@@ -31,6 +32,7 @@ export default function Login() {
                         <Field label="كلمة المرور" error={form.errors.password}>
                             <Input type="password" dir="ltr" autoComplete="current-password" value={form.data.password} onChange={(e) => form.setData('password', e.target.value)} required />
                         </Field>
+                        <Checkbox label="تذكرني" name="remember" checked={form.data.remember} onChange={(e) => form.setData('remember', e.target.checked)} />
                         <Button type="submit" className="w-full" loading={form.processing}>دخول</Button>
                     </form>
                 </main>
