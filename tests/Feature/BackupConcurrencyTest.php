@@ -13,6 +13,9 @@ use App\Modules\Gym\Models\CheckIn;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\MemberDocument;
 use App\Modules\Gym\Services\MemberService;
+use App\Modules\Messaging\Models\Attachment;
+use App\Modules\Messaging\Models\Conversation;
+use App\Modules\Messaging\Models\Message;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -68,8 +71,9 @@ class BackupConcurrencyTest extends TestCase
             $rows[$table] = md5((string) json_encode($query->get()));
         }
         $files = [];
-        foreach (['local', 'public'] as $disk) {
-            foreach (Storage::disk($disk)->allFiles('tenants/'.$club->id) as $file) {
+        foreach (['local' => 'tenants/'.$club->id, 'public' => 'tenants/'.$club->id, 'local:chat' => 'whatsapp/'.$club->id] as $disk => $folder) {
+            $disk = explode(':', $disk)[0];
+            foreach (Storage::disk($disk)->allFiles($folder) as $file) {
                 $files[$disk.':'.$file] = hash('sha256', (string) Storage::disk($disk)->get($file));
             }
         }
@@ -80,7 +84,7 @@ class BackupConcurrencyTest extends TestCase
 
     /**
      * The archive taken in state A, then state B: her name changed, her contract replaced at the same path, the site
-     * image changed, a second document added.
+     * image changed, a second document added, her WhatsApp voice note replaced at the same path.
      *
      * @return array{0: Tenant, 1: string, 2: array, 3: array}
      */
@@ -93,6 +97,13 @@ class BackupConcurrencyTest extends TestCase
         $this->document($club, $owner, $member, 'A-ID');
         $contract = $this->asTenant($club, fn () => MemberDocument::orderBy('id')->first());
         Storage::disk('public')->put('tenants/'.$club->id.'/site/hero.png', $this->png(200));
+        $voice = 'whatsapp/'.$club->id.'/2026/11/voice.ogg';
+        Storage::disk('local')->put($voice, 'A-VOICE');
+        $this->asTenant($club, function () use ($voice) {
+            $conversation = Conversation::create(['phone' => '96891112233', 'status' => 'open']);
+            $message = Message::create(['conversation_id' => $conversation->id, 'direction' => 'inbound', 'type' => 'audio', 'status' => 'received']);
+            Attachment::create(['message_id' => $message->id, 'kind' => 'audio', 'mime' => 'audio/ogg', 'size' => 7, 'path' => $voice, 'status' => Attachment::STORED]);
+        });
 
         $archive = $this->service()->disk()->path($this->service()->directory($club).'/'.$this->service()->create($club));
         $a = $this->state($club);
@@ -100,6 +111,7 @@ class BackupConcurrencyTest extends TestCase
         $this->asTenant($club, fn () => $member->forceFill(['full_name' => 'بعد النسخة'])->save());
         Storage::disk('local')->put($contract->path, '%PDF-1.4 B-CONTRACT %%EOF');
         Storage::disk('public')->put('tenants/'.$club->id.'/site/hero.png', $this->png(40));
+        Storage::disk('local')->put($voice, 'B-VOICE');
         $this->document($club, $owner, $member, 'B-NEW');
 
         return [$club, $archive, $a, $this->state($club)];

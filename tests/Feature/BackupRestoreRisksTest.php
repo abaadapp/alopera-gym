@@ -515,7 +515,7 @@ class BackupRestoreRisksTest extends TestCase
     }
 
     /** Plan (phase 5): the club's chat files go into its archive (files/whatsapp/…) and come back with it. */
-    public function test_today_whatsapp_files_are_left_out_of_the_club_archive(): void
+    public function test_whatsapp_files_are_in_the_club_archive_beside_their_rows(): void
     {
         [$club] = $this->clubWithDocument();
         $path = 'whatsapp/'.$club->id.'/2026/11/'.'photo.jpg';
@@ -533,6 +533,6 @@ class BackupRestoreRisksTest extends TestCase
         $zip->close();
 
         $this->assertSame([$path], array_column($rows, 'path'), 'the row is in the archive');
-        $this->assertSame([], array_values(array_filter($this->inspect($file)['entries'], fn ($e) => str_contains($e, 'whatsapp'))), 'its file is not');
+        $this->assertSame(['files/private/'.$path], array_values(array_filter($this->inspect($file)['entries'], fn ($e) => str_contains($e, 'whatsapp'))), 'and so is its file (format 2)');
     }
 }

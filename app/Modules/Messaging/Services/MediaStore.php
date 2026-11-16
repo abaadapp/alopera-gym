@@ -27,7 +27,8 @@ final class MediaStore
         return Storage::disk($this->diskName());
     }
 
-    private function diskName(): string
+    /** The disk the chat files are on (services.whatsapp.media_disk): the club backup reads and restores them there. */
+    public function diskName(): string
     {
         return (string) config('services.whatsapp.media_disk', 'local');
     }

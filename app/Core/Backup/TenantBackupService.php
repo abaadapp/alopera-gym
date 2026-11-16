@@ -5,6 +5,7 @@ namespace App\Core\Backup;
 use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
 use App\Models\Tenant;
+use App\Modules\Messaging\Models\Attachment;
 use App\Modules\Messaging\Services\MediaStore;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\QueryException;
@@ -21,9 +22,17 @@ use ZipArchive;
  * Club-level backup and restore.
  *
  * A backup is a zip with manifest.json, data.json (every row of every table in {@see TenantTables}) and the club's
- * uploaded files (files/{private|public}/tenants/{id}/…). Format 1 since the start; newer archives add to the manifest
- * what lets them prove themselves whole (each file's size and SHA-256, data.json's SHA-256), which older code ignores
- * and older archives go without.
+ * uploaded files (files/{private|public}/tenants/{id}/…) and, from format 2, its WhatsApp chat files
+ * (files/private/whatsapp/{id}/…, read from and put back on the disk services.whatsapp.media_disk names). Format 1
+ * archives (no chat files) still restore, the chat files on disk then left as they are; code that knows only format 1
+ * refuses a format 2 archive before replacing anything. Newer archives add to the manifest what lets them prove
+ * themselves whole (each file's size and SHA-256, data.json's SHA-256), which older code ignores and older archives go
+ * without.
+ *
+ * An attachment recorded as stored whose file is not there makes the archive incomplete: it is still built and proven
+ * (the rest of the club can be recovered from it), but kept apart in incomplete/ (the newest two only), never listed or
+ * counted among the fourteen, recorded as backup.incomplete with the attachments' ids, and the backup reported as
+ * failed; no sound archive is removed for it.
  *
  * Creating one (create): the rows read in one consistent snapshot, written to data.json piece by piece; each file
  * added from its disk, never held in memory; the archive built under a name no listing shows (.building-…), then
@@ -39,7 +48,15 @@ use ZipArchive;
  */
 final class TenantBackupService
 {
-    public const FORMAT_VERSION = 1;
+    public const FORMAT_VERSION = 2;
+
+    /** The formats this code restores: 1 (no chat files) and 2. */
+    public const FORMATS = [1, 2];
+
+    /** Beside the kept archives: incomplete ones (an attachment's file missing), never listed, pruned or reused. */
+    public const INCOMPLETE = 'incomplete';
+
+    public const INCOMPLETE_KEEP = 2;
 
     public const KEEP = 14;
 
@@ -172,7 +189,7 @@ final class TenantBackupService
         $dataFile = (string) tempnam(sys_get_temp_dir(), 'gymrs');
         try {
             $manifest = json_decode((string) $zip->getFromName('manifest.json'), true);
-            if (! is_array($manifest) || ($manifest['format'] ?? null) !== self::FORMAT_VERSION) {
+            if (! is_array($manifest) || ! in_array($manifest['format'] ?? null, self::FORMATS, true)) {
                 throw new RuntimeException('manifest.json is missing or of another format');
             }
             $listed = is_array($manifest['files'] ?? null) ? $manifest['files'] : null;
@@ -236,7 +253,7 @@ final class TenantBackupService
             $this->disk()->makeDirectory($dir);
             $this->removeLeftovers($dir);
 
-            [$counts, $dataSha] = $this->writeRows($tenant, $dataFile);
+            [$counts, $dataSha, $stored] = $this->writeRows($tenant, $dataFile);
             // A file removed or changed while it is copied fails the check below: the files are listed again, once.
             for ($attempt = 1; ; $attempt++) {
                 $sources = $this->sources($tenant);
@@ -246,6 +263,7 @@ final class TenantBackupService
 
                     return $same;
                 }
+                $missing = $this->missingAttachments($tenant, $stored, $sources);
                 $bytes = filesize($dataFile) + array_sum(array_column($sources, 'size'));
                 $manifest = [
                     'format' => self::FORMAT_VERSION,
@@ -257,7 +275,7 @@ final class TenantBackupService
                     'data_sha256' => $dataSha,
                     'content_sha256' => $content,
                     'files' => array_combine(array_column($sources, 'entry'), array_map(fn ($s) => ['size' => $s['size'], 'sha256' => $s['sha256']], $sources)) ?: (object) [],
-                ];
+                ] + ($missing ? ['incomplete' => ['missing_attachments' => count($missing), 'attachment_ids' => array_slice($missing, 0, 200)]] : []);
                 $build = $this->buildPath($dir, $bytes);
                 try {
                     $this->buildZip($build['path'], $manifest, $dataFile, $sources);
@@ -273,9 +291,14 @@ final class TenantBackupService
                 }
             }
 
-            $name = $this->freeName($dir);
             $sha = (string) hash_file('sha256', $build['path']);
             $size = (int) filesize($build['path']);
+            if ($missing) {
+                [$incomplete, $build] = [$build, null];
+
+                return $this->keepIncomplete($tenant, $incomplete, $sha, $size, $missing, $reuseIdentical);
+            }
+            $name = $this->freeName($dir);
             $this->keep($build, $dir.'/'.$name, $sha, $size);
             $build = null;
 
@@ -287,6 +310,9 @@ final class TenantBackupService
         } catch (Throwable $e) {
             if ($build) {
                 $this->dropBuild($build);
+            }
+            if ($e instanceof BusinessRuleException && $e->rule === 'backup.incomplete') {
+                throw $e; // recorded as backup.incomplete already, its archive kept apart
             }
             report($e);
             try {
@@ -308,7 +334,8 @@ final class TenantBackupService
      * Every row of the club, in one snapshot (REPEATABLE READ, read only: what was committed when the backup started,
      * whatever is saved meanwhile), written to $file a table at a time, a thousand rows at a time.
      *
-     * @return array{0: array<string, int>, 1: string} rows per table, data.json's SHA-256
+     * @return array{0: array<string, int>, 1: string, 2: array<int, string>} rows per table, data.json's SHA-256, and the
+     *                                                                        path of each chat attachment recorded as stored
      */
     private function writeRows(Tenant $tenant, string $file): array
     {
@@ -322,14 +349,18 @@ final class TenantBackupService
             }
         };
         $counts = [];
+        $stored = [];
         // One row per line (ArchiveRows reads it a row at a time); still one JSON document, as older code reads it.
-        $read = function () use ($tenant, $put, &$counts): void {
+        $read = function () use ($tenant, $put, &$counts, &$stored): void {
             $put("{\n");
             foreach (TenantTables::ORDER as $i => $table) {
                 $put(($i ? "],\n" : '').json_encode($table).":[\n");
                 $n = 0;
                 foreach ($this->rowsOf($tenant, $table) as $row) {
                     $put(($n ? ",\n" : '').json_encode((array) $row, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
+                    if ($table === 'whatsapp_attachments' && ($row->status ?? null) === Attachment::STORED && filled($row->path ?? null)) {
+                        $stored[(int) $row->id] = (string) $row->path;
+                    }
                     $n++;
                 }
                 $put($n ? "\n" : '');
@@ -349,7 +380,7 @@ final class TenantBackupService
             }
         }
 
-        return [$counts, (string) hash_file('sha256', $file)];
+        return [$counts, (string) hash_file('sha256', $file), $stored];
     }
 
     /** @return iterable<object> */
@@ -389,7 +420,113 @@ final class TenantBackupService
             }
         }
 
+        return [...$sources, ...$this->chatSources($tenant)];
+    }
+
+    /**
+     * The club's chat files, on the disk services.whatsapp.media_disk names, as files/private/whatsapp/{id}/…. A
+     * symbolic link is never followed (a link in the club's folder could name another club's file or anything on the
+     * server): it is left out, and an attachment whose file it was counts as missing.
+     *
+     * @return list<array{entry: string, real: string, size: int, sha256: string}>
+     */
+    private function chatSources(Tenant $tenant): array
+    {
+        $disk = Storage::disk(app(MediaStore::class)->diskName());
+        if (! $disk->getAdapter() instanceof LocalFilesystemAdapter) {
+            throw new RuntimeException('قرص مرفقات واتساب ليس قرصًا محليًا على الخادم، فلا يمكن نسخ ملفاته');
+        }
+        $folder = 'whatsapp/'.$tenant->id;
+        $root = rtrim($disk->path(''), '/');
+        if (is_link($root.'/whatsapp') || is_link($root.'/'.$folder)) {
+            throw new RuntimeException('مجلد مرفقات واتساب للنادي رابط رمزي، فلم يُنسخ منه شيء');
+        }
+        if (! is_dir($root.'/'.$folder)) {
+            return [];
+        }
+        $sources = [];
+        $walk = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root.'/'.$folder, \FilesystemIterator::SKIP_DOTS | \FilesystemIterator::CURRENT_AS_PATHNAME));
+        foreach ($walk as $real) {
+            $relative = substr((string) $real, strlen($root) + 1);
+            if (is_link($real) || ! is_file($real) || ! MediaStore::insideClub($relative, $tenant->id)) {
+                continue; // a link (to a file; a link to a folder is never entered), or a name no chat file has
+            }
+            $sha = @hash_file('sha256', $real);
+            $size = @filesize($real);
+            if ($sha === false || $size === false) {
+                clearstatcache(true, $real);
+                if (! file_exists($real)) {
+                    continue;
+                }
+
+                throw new RuntimeException('ملف مرفق واتساب لا يمكن قراءته: '.$relative);
+            }
+            $sources[] = ['entry' => 'files/private/'.$relative, 'real' => $real, 'size' => (int) $size, 'sha256' => $sha];
+        }
+        usort($sources, fn ($a, $b) => strcmp($a['entry'], $b['entry']));
+
         return $sources;
+    }
+
+    /**
+     * The chat attachments recorded as stored (in the backup's snapshot) whose file is not in the archive, and still
+     * recorded so now (one removed since the snapshot is not missing).
+     *
+     * @param  array<int, string>  $stored  id => path
+     * @param  list<array{entry: string}>  $sources
+     * @return list<int>
+     */
+    private function missingAttachments(Tenant $tenant, array $stored, array $sources): array
+    {
+        $have = array_flip(array_column($sources, 'entry'));
+        $missing = array_keys(array_filter($stored, fn ($path) => ! isset($have['files/private/'.$path])));
+        $still = [];
+        foreach (array_chunk($missing, 1000) as $ids) {
+            $now = DB::table('whatsapp_attachments')->where('tenant_id', $tenant->id)->whereIn('id', $ids)->where('status', Attachment::STORED)->pluck('path', 'id');
+            foreach ($ids as $id) {
+                if (($now[$id] ?? null) === $stored[$id]) {
+                    $still[] = $id;
+                }
+            }
+        }
+
+        return $still;
+    }
+
+    /**
+     * An archive proven whole but missing attachments' files: kept in incomplete/ (the newest INCOMPLETE_KEEP only, so
+     * night after night of the same gap never fills the disk), recorded as backup.incomplete, never pruning a sound
+     * archive. The nightly or the panel's backup then fails, so the gap shows every night until the files are back or
+     * the attachments are no longer recorded as stored; a restore's safety copy goes on with it (the club as it is).
+     *
+     * @param  list<int>  $missing
+     */
+    private function keepIncomplete(Tenant $tenant, array $build, string $sha, int $size, array $missing, bool $safetyCopy): string
+    {
+        $dir = $this->directory($tenant).'/'.self::INCOMPLETE;
+        try {
+            $this->disk()->makeDirectory($dir);
+            $name = $this->freeName($dir);
+            $this->keep($build, $dir.'/'.$name, $sha, $size);
+        } catch (Throwable $e) {
+            $this->dropBuild($build);
+
+            throw $e;
+        }
+        $kept = collect($this->disk()->files($dir))->filter(fn ($f) => str_ends_with($f, '.zip'))->sort()->values();
+        $kept->slice(0, max(0, $kept->count() - self::INCOMPLETE_KEEP))->each(fn ($f) => $this->disk()->delete($f));
+        $this->audit->log('backup.incomplete', $tenant, [
+            'file' => self::INCOMPLETE.'/'.$name, 'size' => $size, 'sha256' => $sha,
+            'missing_attachments' => count($missing), 'attachment_ids' => array_slice($missing, 0, 50),
+        ], tenantId: $tenant->id);
+        if ($safetyCopy) {
+            return self::INCOMPLETE.'/'.$name;
+        }
+
+        throw new BusinessRuleException('backup.incomplete', sprintf(
+            'النسخة الاحتياطية ناقصة: %d من مرفقات واتساب مسجلة كمحفوظة وملفاتها غير موجودة (المعرفات: %s). حُفظت نسخة ناقصة منفصلة لا تُحسب ضمن النسخ السليمة، ولم يُحذف أي أرشيف سابق.',
+            count($missing), implode('، ', array_slice($missing, 0, 20)).(count($missing) > 20 ? '…' : ''),
+        ));
     }
 
     /** @param list<array{entry: string, real: string, size: int, sha256: string}> $sources */
@@ -588,7 +725,7 @@ final class TenantBackupService
 
         $manifest = json_decode((string) $zip->getFromName('manifest.json'), true);
         $index = $zip->locateName('data.json');
-        if (! is_array($manifest) || $index === false || ($manifest['format'] ?? null) !== self::FORMAT_VERSION) {
+        if (! is_array($manifest) || $index === false || ! in_array($manifest['format'] ?? null, self::FORMATS, true)) {
             $zip->close();
             throw new BusinessRuleException('backup.invalid', 'ملف النسخة الاحتياطية غير صالح أو بإصدار غير مدعوم.');
         }
@@ -636,7 +773,7 @@ final class TenantBackupService
         }
 
         // Every file too, before anything is replaced: a refused archive leaves the club's rows and files as they were.
-        $files = $this->archiveFiles($zip, $tenant);
+        $files = $this->archiveFiles($zip, $tenant, (int) $manifest['format']);
         $listed = is_array($manifest['files'] ?? null) ? $manifest['files'] : null;
         if ($listed !== null && count($listed) !== count($files)) {
             $zip->close();
@@ -836,6 +973,8 @@ final class TenantBackupService
         // The public disk is served as it is under /storage/ on the website's and the panel's domains: only an image
         // goes back there. Anything else from the public part is kept on the private disk, which is never served.
         $folder = 'tenants/'.$tenant->id.'/';
+        $chat = 'whatsapp/'.$tenant->id.'/';
+        $chatDisk = app(MediaStore::class)->diskName();
         $report = ['written' => 0, 'kept_private' => [], 'hidden_skipped' => []];
         $items = [];
         foreach ($files as [$index, $part, $path]) {
@@ -847,17 +986,21 @@ final class TenantBackupService
             $tmp = (string) tempnam(sys_get_temp_dir(), 'gymrs');
             try {
                 [, $sha] = $this->readEntry($zip, $index, $tmp);
-                $entry = 'files/'.$part.'/'.$folder.$path;
+                $entry = $part === 'whatsapp' ? 'files/private/'.$chat.$path : 'files/'.$part.'/'.$folder.$path;
                 if ($listed !== null && ($listed[$entry]['sha256'] ?? null) !== $sha) {
                     throw new BusinessRuleException('backup.invalid', 'ملف في النسخة لا يطابق بصمته المسجلة، ولم يُستبدل شيء: '.mb_scrub(mb_substr($path, 0, 120)));
                 }
-                if ($part === 'public' && ! self::isPublicImage($path, $tmp)) {
+                if ($part === 'whatsapp') {
+                    [$disk, $final] = [$chatDisk, $chat.$path];
+                    $report['written']++;
+                } elseif ($part === 'public' && ! self::isPublicImage($path, $tmp)) {
                     [$disk, $final] = ['local', $folder.self::ISOLATED.'/'.$path];
                     $report['kept_private'][] = $path;
                 } else {
                     [$disk, $final] = [$part === 'private' ? 'local' : 'public', $folder.$path];
                     $report['written']++;
                 }
+                $this->refuseLinks($disk, $final);
                 $n = count($items);
                 $stream = fopen($tmp, 'rb');
                 try {
@@ -910,7 +1053,7 @@ final class TenantBackupService
             is_resource($out) && fclose($out);
         }
         if (! $read || $size !== (int) $stat['size'] || hexdec(hash_final($crc)) !== ((int) $stat['crc'] & 0xFFFFFFFF)) {
-            throw new BusinessRuleException('backup.invalid', 'النسخة تحتوي على ملف تالف، ولم يُستبدل شيء: '.mb_scrub(mb_substr(preg_replace('#^files/(private|public)/tenants/\d+/#', '', $name), 0, 120)));
+            throw new BusinessRuleException('backup.invalid', 'النسخة تحتوي على ملف تالف، ولم يُستبدل شيء: '.mb_scrub(mb_substr(preg_replace('#^files/(private|public)/(tenants|whatsapp)/\d+/#', '', $name), 0, 120)));
         }
 
         return [$size, hash_final($sha)];
@@ -959,6 +1102,7 @@ final class TenantBackupService
      */
     private function place(string $dir, array $item): void
     {
+        $this->refuseLinks($item['disk'], $item['path']);
         if ($this->files->exists($item['disk'], $item['path']) && ! $this->files->exists('local', $dir.'/previous/'.$item['n'])) {
             if (! $this->files->exists('local', $dir.'/had/'.$item['n'])) {
                 $this->files->putString('local', $dir.'/had/'.$item['n'], '');
@@ -1012,13 +1156,15 @@ final class TenantBackupService
 
     /**
      * The archive's club files, read before anything is replaced. create() writes each one as
-     * files/{private|public}/tenants/{id}/…; an entry of another club or outside the club's folder, a path that
-     * climbs, has an empty part, a backslash or a control character, or a symbolic link refuses the whole archive.
+     * files/{private|public}/tenants/{id}/… and, from format 2, files/private/whatsapp/{id}/…; an entry of another
+     * club or outside the club's folders, a path that climbs, has an empty part, a backslash or a control character, or
+     * a symbolic link refuses the whole archive.
      *
-     * @return list<array{0: int, 1: string, 2: string}> entry index, private|public, path inside the club's folder
+     * @return list<array{0: int, 1: string, 2: string}> entry index, private|public|whatsapp, path inside the club's folder
      */
-    private function archiveFiles(ZipArchive $zip, Tenant $tenant): array
+    private function archiveFiles(ZipArchive $zip, Tenant $tenant, int $format): array
     {
+        $parts = $format >= 2 ? '(private|public)/tenants/'.$tenant->id.'|private/(whatsapp)/'.$tenant->id : '(private|public)/tenants/'.$tenant->id;
         $files = [];
         for ($i = 0; $i < $zip->numFiles; $i++) {
             $entry = (string) $zip->getNameIndex($i);
@@ -1028,7 +1174,7 @@ final class TenantBackupService
             $opsys = $attributes = 0;
             $zip->getExternalAttributesIndex($i, $opsys, $attributes);
             $link = $opsys === ZipArchive::OPSYS_UNIX && (($attributes >> 16) & 0170000) === 0120000;
-            if ($link || ! preg_match('#^files/(private|public)/tenants/'.$tenant->id.'/(.+)$#D', $entry, $m)
+            if ($link || ! preg_match('#^files/(?|'.$parts.')/(.+)$#D', $entry, $m)
                 || preg_match('#[\x00-\x1f\x7f\\\\]#', $m[2]) || array_intersect(explode('/', $m[2]), ['', '.', '..']) !== []) {
                 $zip->close();
                 $this->audit->log('backup.restore_refused', $tenant, ['reason' => 'unsafe_file', 'entry' => mb_scrub(mb_substr($entry, 0, 200))], tenantId: $tenant->id);
@@ -1038,6 +1184,25 @@ final class TenantBackupService
         }
 
         return $files;
+    }
+
+    /**
+     * Refuses a target where any folder below the disk's root, or the file itself, is a symbolic link: writing through
+     * it would put the file wherever the link points (another club's folder, anywhere on the server). Checked while
+     * staging, before anything is replaced, and again as each file is put in place.
+     */
+    private function refuseLinks(string $disk, string $path): void
+    {
+        $at = rtrim(Storage::disk($disk)->path(''), '/');
+        foreach (explode('/', $path) as $part) {
+            $at .= '/'.$part;
+            if (is_link($at)) {
+                throw new BusinessRuleException('backup.invalid', 'مكان أحد ملفات النسخة على القرص رابط رمزي إلى خارج مجلد النادي، ولم يُستبدل شيء.');
+            }
+            if (! file_exists($at)) {
+                return;
+            }
+        }
     }
 
     /** One extension (no "photo.php.png"), an image one, and bytes that really are that image. */
