@@ -20,6 +20,7 @@ use App\Modules\Gym\Models\MembershipEvent;
 use App\Modules\Gym\Models\PtSession;
 use App\Modules\Gym\Models\Trainer;
 use App\Modules\Inventory\Models\Product;
+use App\Modules\Inventory\Models\Sale;
 use App\Modules\Inventory\Models\SaleItem;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -226,7 +227,10 @@ final class ReportService
             $statement = app(FinanceReports::class)->incomeStatement($from->toDateString(), $to->toDateString(), $branch);
             // net of credit notes: what the invoices are worth after partial refunds and reductions
             $issued = (float) $this->in(Invoice::whereBetween('issue_date', [$from, $to])->where('status', '!=', Invoice::VOID), $branch)->sum(DB::raw('total - credited_total'));
-            $collectedOnIssued = (float) $this->in(Invoice::whereBetween('issue_date', [$from, $to])->where('status', '!=', Invoice::VOID), $branch)->sum('paid_total');
+            // «نسبة التحصيل حتى اليوم»: what the period's invoices have been paid until today (a later payment raises an
+            // old period's rate; it says so), each invoice at most its worth (a credit note without a refund leaves more
+            // paid than the invoice is now worth: never above 100%).
+            $collectedOnIssued = (float) $this->in(Invoice::whereBetween('issue_date', [$from, $to])->where('status', '!=', Invoice::VOID), $branch)->sum(DB::raw('least(paid_total, total - credited_total)'));
 
             $row += [
                 'revenue' => round($revenue, 3),
@@ -238,7 +242,7 @@ final class ReportService
                 'refunds' => round((float) $this->in(Payment::completed()->where('kind', Payment::KIND_REFUND)->whereBetween('paid_at', [$from, $end]), $branch)->sum('amount'), 3),
                 'credit_notes' => round((float) $this->in(CreditNote::whereBetween('created_at', [$from, $end]), $branch)->sum('amount'), 3),
                 'product_sales' => PermissionRegistry::moduleEnabled('sales')
-                    ? round((float) SaleItem::whereHas('sale', fn ($q) => $this->in($q->where('status', 'completed')->whereBetween('created_at', [$from, $end]), $branch))->sum('line_total'), 3)
+                    ? round((float) SaleItem::whereHas('sale', fn ($q) => $this->in($q->where('status', Sale::COMPLETED)->whereRaw(Sale::COMPLETED_AT.' between ? and ?', [$from, $end]), $branch))->sum('line_total'), 3)
                     : 0,
             ];
         }
@@ -447,7 +451,7 @@ final class ReportService
     /** @return list<array<string, mixed>> */
     private function productSales(CarbonImmutable $from, CarbonImmutable $to, ?int $branch = null): array
     {
-        return SaleItem::whereHas('sale', fn ($q) => $this->in($q->where('status', 'completed')->whereBetween('created_at', [$from, $to->endOfDay()]), $branch))
+        return SaleItem::whereHas('sale', fn ($q) => $this->in($q->where('status', Sale::COMPLETED)->whereRaw(Sale::COMPLETED_AT.' between ? and ?', [$from, $to->endOfDay()]), $branch))
             ->selectRaw('product_id, name, sum(quantity) as qty, sum(line_total) as revenue, sum(quantity * unit_cost + addons_cost) as cost')
             ->groupBy('product_id', 'name')->orderByDesc('revenue')->limit(20)->get()
             ->map(fn ($r) => [
