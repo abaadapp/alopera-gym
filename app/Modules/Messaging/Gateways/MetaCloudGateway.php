@@ -3,6 +3,7 @@
 namespace App\Modules\Messaging\Gateways;
 
 use App\Models\TenantIntegration;
+use GuzzleHttp\Exception\ConnectException as GuzzleConnectException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -253,12 +254,24 @@ final class MetaCloudGateway implements WhatsAppGateway
         try {
             $response = $this->client($integration)->timeout(15)->post($url, $payload);
         } catch (ConnectionException $e) {
-            return GatewayResult::failed('connection', Str::limit($e->getMessage(), 250), true);
+            // No connection was ever made (no address, refused, TLS failed): WhatsApp has nothing, so it is retried.
+            // Anything later (a timeout, a connection dropped while waiting) may have reached it: not retried (#203).
+            return $e->getPrevious() instanceof GuzzleConnectException
+                ? GatewayResult::failed('connection', Str::limit($e->getMessage(), 250), true)
+                : GatewayResult::uncertain('انقطع الاتصال بواتساب بعد إرسال الطلب: '.Str::limit($e->getMessage(), 200));
         }
 
         $id = $response->json('messages.0.id');
+        if ($response->successful()) {
+            return is_string($id) ? GatewayResult::sent($id) : GatewayResult::uncertain('قبل واتساب الطلب دون رقم للرسالة تُتابع به حالتها.');
+        }
+        // A server error that is not WhatsApp's own answer (a gateway in front of it gave up waiting) says nothing of
+        // whether the message got through: not retried. WhatsApp's own 429/5xx and throttling codes are (failure()).
+        if ($response->serverError() && $response->json('error.code') === null && $response->json('meta.http_code') === null) {
+            return GatewayResult::uncertain('لم يصل رد من واتساب (رمز '.$response->status().').');
+        }
 
-        return $response->successful() && is_string($id) ? GatewayResult::sent($id) : $this->failure($response);
+        return $this->failure($response);
     }
 
     private function failure(Response $response): GatewayResult

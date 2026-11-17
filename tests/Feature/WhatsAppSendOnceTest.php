@@ -21,6 +21,7 @@ use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
 
@@ -59,9 +60,10 @@ class WhatsAppSendOnceTest extends TestCase
         Queue::fake([SendWhatsAppMessage::class]); // the test is the worker, attempt by attempt
     }
 
+    /** WhatsApp took it, with an id of its own (never the same twice). */
     private function accepted(?string $id = null): mixed
     {
-        return Http::response(['messaging_product' => 'whatsapp', 'messages' => [['id' => $id ?? 'wamid.'.$this->calls]]], 200);
+        return Http::response(['messaging_product' => 'whatsapp', 'messages' => [['id' => $id ?? 'wamid.'.Str::random(12)]]], 200);
     }
 
     private function connected(): Tenant
@@ -159,7 +161,8 @@ class WhatsAppSendOnceTest extends TestCase
 
             $this->assertSame(1, $this->calls, $kind.': WhatsApp got it once');
             $message = $this->fresh($club, $message);
-            $this->assertSame([Message::SENT, 'wamid.1'], [$message->status, $message->provider_message_id], $kind.': its outcome is kept');
+            $this->assertSame(Message::SENT, $message->status, $kind.': its outcome is kept');
+            $this->assertStringStartsWith('wamid.', (string) $message->provider_message_id, $kind.': with WhatsApp\'s id');
         }
     }
 
@@ -171,8 +174,6 @@ class WhatsAppSendOnceTest extends TestCase
             $message = $this->queued($club, $kind);
             $this->savingTheOutcomeFails(100); // down for the rest of the attempt
             $this->assertNotNull($this->work($club, $message), $kind.': the attempt ends in an error');
-            $this->savingTheOutcomeFails(0);
-            Message::flushEventListeners();
 
             foreach ([2, 3, 4] as $attempt) {
                 $this->assertNull($this->work($club, $message, $attempt));

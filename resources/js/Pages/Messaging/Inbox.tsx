@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import {
-    AlertTriangle, ArrowRight, Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Info, Link2, Lock, MessageCircle, Mic, Paperclip,
+    AlertTriangle, ArrowRight, Check, CheckCheck, CircleHelp, Clock, Download, FileText, Image as ImageIcon, Info, Link2, Lock, MessageCircle, Mic, Paperclip,
     Search, Send, Smartphone, StickyNote, Unlink, UserRound, Users, Video, X, Zap,
 } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
@@ -494,7 +494,10 @@ function Ticks({ m }: { m: Msg }) {
     switch (m.status) {
         case 'queued':
         case 'scheduled':
+        case 'sending':
             return <Clock className="size-3.5" aria-label="قيد الإرسال" />;
+        case 'uncertain':
+            return <CircleHelp className="size-3.5 text-amber-600" aria-label="نتيجة الإرسال غير مؤكدة" />;
         case 'sent':
             return <Check className="size-3.5" aria-label="مرسلة" />;
         case 'delivered':
@@ -509,14 +512,14 @@ function Ticks({ m }: { m: Msg }) {
     }
 }
 
-const STATUS_WORD: Record<string, string> = { queued: 'قيد الإرسال', scheduled: 'مجدولة', sent: 'مرسلة', delivered: 'مستلمة', read: 'مقروءة', failed: 'فشلت', skipped: 'لم تُرسل' };
+const STATUS_WORD: Record<string, string> = { queued: 'قيد الإرسال', sending: 'قيد الإرسال', uncertain: 'نتيجة الإرسال غير مؤكدة', scheduled: 'مجدولة', sent: 'مرسلة', delivered: 'مستلمة', read: 'مقروءة', failed: 'فشلت', skipped: 'لم تُرسل' };
 
 function Bubble({ m }: { m: Msg }) {
     const out = m.direction === 'outbound';
     const who = out ? (m.source === 'platform' ? m.sender : SOURCE_LABEL[m.source]) : m.source === 'history' ? SOURCE_LABEL.history : null;
     return (
         <div className={cn('flex', out ? 'justify-end' : 'justify-start')}>
-            <div className={cn('max-w-[85%] rounded-[10px] px-2.5 pt-1.5 pb-1 text-[14px] leading-6 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] sm:max-w-[70%]', out ? 'bg-[#d9fdd3]' : 'bg-white', (m.status === 'failed' || m.status === 'skipped') && 'ring-1 ring-red-300')}>
+            <div className={cn('max-w-[85%] rounded-[10px] px-2.5 pt-1.5 pb-1 text-[14px] leading-6 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] sm:max-w-[70%]', out ? 'bg-[#d9fdd3]' : 'bg-white', (m.status === 'failed' || m.status === 'skipped') && 'ring-1 ring-red-300', m.status === 'uncertain' && 'ring-1 ring-amber-300')}>
                 {who && (
                     <div className={cn('mb-0.5 flex items-center gap-1 text-[11.5px] font-semibold', m.source === 'business_app' ? 'text-sky-700' : m.source === 'automation' ? 'text-violet-700' : 'text-emerald-800')}>
                         {m.source === 'business_app' && <Smartphone className="size-3" />}
@@ -527,7 +530,7 @@ function Bubble({ m }: { m: Msg }) {
                 {m.template && <div className="mb-0.5 text-[11px] text-muted">قالب: {m.template}</div>}
                 {m.attachments.map((a) => <FileBlock key={a.id} a={a} />)}
                 {m.body && <div className="whitespace-pre-wrap break-words" dir="auto">{m.body}</div>}
-                {m.error && <div className="mt-1 text-[12px] text-red-700">{m.error}</div>}
+                {m.error && <div className={cn('mt-1 text-[12px]', m.status === 'uncertain' ? 'text-amber-800' : 'text-red-700')}>{m.status === 'uncertain' && <b className="font-semibold">نتيجة الإرسال غير مؤكدة: </b>}{m.error}</div>}
                 <div className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-stone-500" title={STATUS_WORD[m.status] ?? m.status}>
                     {m.logged && <span className="text-violet-600">تجربة ·</span>}
                     <span className="num">{clock(m.at)}</span>
