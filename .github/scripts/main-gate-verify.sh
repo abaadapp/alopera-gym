@@ -44,11 +44,23 @@ number=$(jq -r '.number' <<<"$pr")
 head=$(jq -r '.head.sha' <<<"$pr")
 echo "pull request #${number}, head ${head}"
 
-# 2) Its successful CI runs (pull_request event), newest first.
-runs=$(gh api -X GET "repos/${GH_REPO}/actions/workflows/ci.yml/runs" \
-    -f event=pull_request -f head_sha="$head" -f status=success -f per_page=30 \
-    --jq '.workflow_runs | sort_by(.created_at) | reverse | .[] | select(.conclusion == "success") | .id') \
-    || refuse "cannot ask GitHub for the CI runs of #${number}"
+# 2) Its successful CI runs (pull_request event), newest first. Listed without GitHub's status filter: that filter is
+#    served from an index that can lag well behind a finished run (#188's run 44067580847, completed and successful,
+#    was missing from status=success for over half an hour, and the gate refused a tested tree). Each run listed is
+#    checked here instead: completed, successful, a pull_request run of this very head. None yet: GitHub is asked again
+#    a few times (a run not listed yet), and then refused; never deployed on less, nor when GitHub cannot be asked.
+runs=""
+for attempt in 1 2 3 4 5 6; do
+    runs=$(gh api -X GET "repos/${GH_REPO}/actions/workflows/ci.yml/runs" \
+        -f event=pull_request -f head_sha="$head" -f per_page=100 \
+        --jq ".workflow_runs | sort_by(.created_at) | reverse | .[]
+            | select(.status == \"completed\" and .conclusion == \"success\" and .event == \"pull_request\" and .head_sha == \"${head}\")
+            | .id") \
+        || refuse "cannot ask GitHub for the CI runs of #${number}"
+    [ -n "$runs" ] && break
+    echo "attempt ${attempt}: no completed successful CI run of ${head} listed yet"
+    sleep 10
+done
 [ -n "$runs" ] || refuse "no successful CI run for the head of #${number} (${head})"
 
 # 3) A run whose proof names this pull request, this head, this run, and main's tree.

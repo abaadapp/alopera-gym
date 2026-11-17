@@ -473,7 +473,9 @@ final class PaymentService
                 throw new BusinessRuleException('payment.refund_pending', 'على الفاتورة رد مبلغ بانتظار التنفيذ؛ أكّده أو ألغِ طلبه قبل إلغاء الدفعة.');
             }
             // Cash counted in a closed shift: its closing already put the drawer right (the difference is in the books).
-            $shift = $payment->cash_shift_id ? CashShift::find($payment->cash_shift_id) : null;
+            // Read under a share lock, after the invoice and the payment: a closing under way is waited for (and then
+            // refuses this), and a closing that comes after waits for this cancel, so its count leaves the payment out.
+            $shift = $payment->cash_shift_id ? CashShift::whereKey($payment->cash_shift_id)->sharedLock()->first() : null;
             if ($shift && ! $shift->isOpen() && (int) $payment->account_id === (int) $shift->account_id) {
                 throw new BusinessRuleException('payment.shift_closed', "دخلت هذه الدفعة النقدية في الوردية {$shift->number} وقد أُقفلت وحُسب فرقها؛ لا تُلغى. صحّح بقيد يومية أو بإشعار دائن.");
             }

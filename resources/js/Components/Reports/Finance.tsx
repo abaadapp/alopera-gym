@@ -33,7 +33,7 @@ export function FinanceBody({ report }: { report: PeriodReport }) {
                 <Kpi label="الإيراد المستحق" metric={m('earned')} format={f.money} metricKey="earned" hint="من الدفتر: الفواتير الصادرة بعد الإشعارات الدائنة" />
                 <Kpi label="المصروفات" metric={m('expenses')} format={f.money} metricKey="expenses" hint="من الدفتر: التشغيلية والرواتب والمشتريات" />
                 <Kpi label="صافي الربح" metric={m('net')} format={f.money} metricKey="net" hint="الإيراد المستحق ناقص المصروفات" />
-                <Kpi label="نسبة التحصيل" metric={m('collection_rate')} format={f.pct} metricKey="collection_rate" hint={`من فواتير بقيمة ${f.money(m('invoiced')?.current ?? 0)}`} />
+                <Kpi label="نسبة التحصيل حتى اليوم" metric={m('collection_rate')} format={f.pct} metricKey="collection_rate" hint={`ما دُفع حتى اليوم من فواتير الفترة (بقيمة ${f.money(m('invoiced')?.current ?? 0)})`} />
                 <Kpi label="المردودات" metric={m('refunds')} format={f.money} metricKey="refunds" />
                 <Kpi label="الإشعارات الدائنة" metric={m('credit_notes')} format={f.money} metricKey="credit_notes" />
                 {sales && <Kpi label="مبيعات المنتجات" metric={m('product_sales')} format={f.money} metricKey="product_sales" />}

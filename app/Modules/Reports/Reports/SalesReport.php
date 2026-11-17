@@ -15,9 +15,23 @@ use Illuminate\Support\Facades\DB;
  * تقرير المبيعات: completed sales (paid and handed over) from the point of sale and the website, day by day, by
  * product (with its add-ons), add-on, payment method, source and member of staff, with voided and cancelled ones
  * counted apart.
+ *
+ * Each sale is dated by what happened to it, in the club's time (Asia/Muscat):
+ * - a completed sale when it was completed: at the till, the moment of sale; a website order, when it was handed over
+ *   (delivered_at), not when it was placed nor when it was paid;
+ * - a cancelled order or a voided sale when it was cancelled or voided (cancelled_at, voided_at);
+ * - an order still waiting is no sale and in no figure.
+ * A sale's status is the one it has now: one voided since is a cancellation of the month it was voided, not a sale of
+ * the month it was made. This is the sales count, not the money collected (see the finance reports) nor revenue.
  */
 final class SalesReport extends Report
 {
+    /** When a completed sale was completed: handed over (a website order) or sold at the till (no handing over). */
+    private const DONE_AT = Sale::COMPLETED_AT;
+
+    /** When a voided sale or a cancelled order was voided or cancelled. */
+    private const ENDED_AT = 'coalesce(sales.voided_at, sales.cancelled_at, sales.created_at)';
+
     private const FIGURES = [
         'total' => ['إجمالي المبيعات', S::MONEY], 'count' => ['عدد العمليات', S::INT], 'average' => ['متوسط العملية', S::MONEY],
         'voided_total' => ['الملغاة والمستردة', S::MONEY], 'voided_count' => ['عدد الملغاة والمستردة', S::INT],
@@ -54,11 +68,19 @@ final class SalesReport extends Report
                 new S('حسب طريقة الدفع', [['طريقة الدفع', S::TEXT], ...$line], array_map(fn ($r) => [$r['label'], $r['count'], $r['total']], $this->grouped($f, 'payment_method', SalesController::METHOD_LABELS))),
                 new S('حسب المصدر', [['المصدر', S::TEXT], ...$line], array_map(fn ($r) => [$r['label'], $r['count'], $r['total']], $this->grouped($f, 'source', SalesController::SOURCE_LABELS))),
                 new S('حسب الموظف', [['الموظف', S::TEXT], ...$line], array_map(fn ($r) => [$r['name'], $r['count'], $r['total']], $this->staff($f))),
-                new S('العمليات', [['الرقم', S::TEXT], ['التاريخ', S::TEXT], ['المصدر', S::TEXT], ['العميل', S::TEXT], ['طريقة الدفع', S::TEXT], ['الخصم', S::MONEY], ['الإجمالي', S::MONEY], ['الحالة', S::TEXT], ['الموظف', S::TEXT]],
+                new S('العمليات', [['الرقم', S::TEXT], ['التاريخ', S::TEXT], ['المصدر', S::TEXT], ['العميل', S::TEXT], ['طريقة الدفع', S::TEXT], ['الخصم', S::MONEY], ['الإجمالي', S::MONEY], ['الحالة', S::TEXT], ['الموظف', S::TEXT], ['تاريخ الطلب', S::TEXT]],
                     (function () use ($f) {
-                        foreach ($this->sales($f)->with(['cashier:id,name', 'customer'])->whereBetween('sales.created_at', [$f->from, $f->to->endOfDay()])->orderBy('id')->lazy(500) as $s) {
-                            yield [$s->number, $s->created_at->format('Y-m-d H:i'), SalesController::SOURCE_LABELS[$s->source] ?? $s->source, $s->buyerName(),
-                                SalesController::METHOD_LABELS[$s->payment_method] ?? $s->payment_method, $s->discount, $s->total, SalesController::STATUS_LABELS[$s->status] ?? $s->status, $s->cashier?->name];
+                        // The sales the figures count (completed in the period) and the cancellations (in the period), each
+                        // dated as counted; an order still waiting is in neither.
+                        $rows = $this->sales($f)->with(['cashier:id,name', 'customer'])
+                            ->where(fn ($q) => $q->where(fn ($q) => $this->completedBetween($q, $f->from, $f->to))
+                                ->orWhere(fn ($q) => $this->endedBetween($q, $f->from, $f->to)))
+                            ->orderBy('id');
+                        foreach ($rows->lazy(500) as $s) {
+                            $at = $s->status === Sale::COMPLETED ? ($s->delivered_at ?? $s->created_at) : ($s->voided_at ?? $s->cancelled_at ?? $s->created_at);
+                            yield [$s->number, $at->format('Y-m-d H:i'), SalesController::SOURCE_LABELS[$s->source] ?? $s->source, $s->buyerName(),
+                                SalesController::METHOD_LABELS[$s->payment_method] ?? $s->payment_method, $s->discount, $s->total, SalesController::STATUS_LABELS[$s->status] ?? $s->status, $s->cashier?->name,
+                                $s->created_at->format('Y-m-d H:i')];
                         }
                     })()),
             ],
@@ -72,14 +94,26 @@ final class SalesReport extends Report
 
     private function done(ReportFilters $f, ?CarbonImmutable $from = null, ?CarbonImmutable $to = null): Builder
     {
-        return $this->sales($f)->where('sales.status', Sale::COMPLETED)->whereBetween('sales.created_at', [$from ?? $f->from, ($to ?? $f->to)->endOfDay()]);
+        return $this->completedBetween($this->sales($f), $from ?? $f->from, $to ?? $f->to);
+    }
+
+    /** Completed, and completed between the two days (whole days, Muscat time). */
+    private function completedBetween(Builder $query, CarbonImmutable $from, CarbonImmutable $to): Builder
+    {
+        return $query->where('sales.status', Sale::COMPLETED)->whereRaw(self::DONE_AT.' between ? and ?', [$from->startOfDay(), $to->endOfDay()]);
+    }
+
+    /** Voided or cancelled, and voided or cancelled between the two days. */
+    private function endedBetween(Builder $query, CarbonImmutable $from, CarbonImmutable $to): Builder
+    {
+        return $query->whereIn('sales.status', [Sale::VOIDED, Sale::CANCELLED])->whereRaw(self::ENDED_AT.' between ? and ?', [$from->startOfDay(), $to->endOfDay()]);
     }
 
     /** @return array<string, int|string> */
     private function headline(ReportFilters $f, CarbonImmutable $from, CarbonImmutable $to): array
     {
         $done = $this->done($f, $from, $to)->toBase()->selectRaw('count(*) as n, coalesce(sum(total), 0) as total')->first();
-        $voided = $this->sales($f)->whereIn('status', [Sale::VOIDED, Sale::CANCELLED])->whereBetween('created_at', [$from, $to->endOfDay()])
+        $voided = $this->endedBetween($this->sales($f), $from, $to)
             ->toBase()->selectRaw('count(*) as n, coalesce(sum(total), 0) as total')->first();
 
         return [
@@ -90,7 +124,7 @@ final class SalesReport extends Report
 
     private function days(ReportFilters $f): array
     {
-        return $this->done($f)->toBase()->selectRaw('date(created_at) as day, count(*) as n, sum(total) as total')->groupBy('day')->orderBy('day')->get()
+        return $this->done($f)->toBase()->selectRaw('date('.self::DONE_AT.') as day, count(*) as n, sum(total) as total')->groupBy('day')->orderBy('day')->get()
             ->map(fn ($r) => ['day' => (string) $r->day, 'count' => (int) $r->n, 'total' => $this->money($r->total)])->all();
     }
 
