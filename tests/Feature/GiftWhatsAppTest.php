@@ -412,38 +412,111 @@ class GiftWhatsAppTest extends TestCase
         $this->assertSame(self::RECIPIENT, $this->giftMessages($club)->sole()->to_phone);
     }
 
-    public function test_nothing_goes_while_the_notice_is_off_or_its_template_not_approved_and_the_nightly_run_sends_it_once_after(): void
+    public function test_nothing_goes_while_the_notice_is_off_and_switching_it_on_sends_no_backlog_staff_send_each(): void
     {
         $club = $this->club();
-        $this->connectWhatsApp($club, sendGifts: false, approved: false);
+        $this->connectWhatsApp($club, sendGifts: false);
         $this->assertFalse(WhatsAppAutomation::on($club->fresh(), 'gift_received'), 'off until the owner switches it on');
         $this->assertTrue(WhatsAppAutomation::on($club->fresh(), 'payment_received'), 'the other notices keep their default');
 
+        // Sold at the desk while it is off (the launch's first step): confirmed and paid, nothing goes.
+        $gifts = collect([1, 2, 3])->map(function ($i) use ($club) {
+            $gift = $this->deskGift($club, pay: false, phone: '9555123'.$i);
+            $this->recipientConfirms($club, $gift)->assertOk();
+            $this->asTenant($club, fn () => app(PaymentService::class)->record($gift->invoice, $gift->invoice->balance(), 'cash'));
+
+            return $gift->fresh();
+        });
+        $this->assertCount(0, $this->giftMessages($club));
+        $this->asTenant($club, function () use ($gifts) {
+            $d = app(GiftWhatsApp::class)->delivery($gifts[0]->fresh());
+            $this->assertSame(['waiting', false], [$d['state'], $d['can_send']]);
+            $this->assertStringContainsString('غير مفعّل', (string) $d['reason']);
+            // With the switch off, her confirmation got no answer either: nothing at all went out.
+            $this->assertSame(0, Message::where('direction', 'outbound')->count());
+        });
+
+        // Switched on from «الرسائل التلقائية»: the three that waited are not sent, at its hour or ever, by themselves.
+        $this->travelTo(now()->addHour());
+        $this->actingAs($this->owner($club))->put(route('club.automation.update'), ['on' => ['gift_received' => true], 'hour' => 10])->assertSessionHasNoErrors();
+        $club = $club->fresh();
+        $this->assertNotNull(WhatsAppAutomation::enabledSince($club, 'gift_received'));
+        $this->travelTo(now()->setTime(10, 5));
+        Artisan::call('gym:send-reminders', ['--due' => true]);
+        Artisan::call('gym:daily-memberships');
+        $this->assertCount(0, $this->giftMessages($club), 'no backlog goes out when the notice is switched on');
+        $this->asTenant($club, function () use ($gifts) {
+            $d = app(GiftWhatsApp::class)->delivery($gifts[0]->fresh());
+            $this->assertSame(['waiting', true], [$d['state'], $d['can_send']]);
+            $this->assertStringContainsString('دُفعت قبل تشغيل', (string) $d['reason']);
+        });
+
+        // Staff send one after checking: that one, once.
+        $this->actingAs($this->owner($club))->post(route('club.gifts.resend', $gifts[0]))->assertSessionHasNoErrors();
+        $this->assertCount(1, $this->giftMessages($club));
+
+        // A gift sold after the switch goes at once.
+        $this->deskGift($club, phone: '95551299');
+        $fresh = $this->asTenant($club, fn () => GiftMembership::latest('id')->first());
+        $this->recipientConfirms($club, $fresh)->assertOk();
+        $this->assertCount(2, $this->giftMessages($club));
+    }
+
+    public function test_a_gift_whose_template_waited_for_meta_goes_once_at_the_clubs_hour_not_at_midnight(): void
+    {
+        $club = $this->club();
+        $this->connectWhatsApp($club, approved: false);
         $gift = $this->deskGift($club, pay: false);
         $this->recipientConfirms($club, $gift)->assertOk();
         $this->asTenant($club, fn () => app(PaymentService::class)->record($gift->invoice, $gift->invoice->balance(), 'cash'));
+        $this->asTenant($club, fn () => $this->assertStringContainsString('لم يُعتمد', (string) app(GiftWhatsApp::class)->delivery($gift->fresh())['reason']));
+
+        $this->asTenant($club, fn () => MessageTemplate::where('key', 'gift_received')->update(['status' => 'approved']));
+        $this->asTenant($club, fn () => $this->assertStringContainsString('10:00', (string) app(GiftWhatsApp::class)->delivery($gift->fresh())['reason']));
+        // The 00:10 run and an hour that is not the club's send nothing.
+        $this->travelTo(now()->addDay()->setTime(0, 10));
+        Artisan::call('gym:daily-memberships');
+        $this->travelTo(now()->setTime(3, 0));
+        Artisan::call('gym:send-reminders', ['--due' => true]);
         $this->assertCount(0, $this->giftMessages($club));
+
+        $this->travelTo(now()->setTime(10, 0));
+        Artisan::call('gym:send-reminders', ['--due' => true]);
+        Artisan::call('gym:send-reminders', ['--due' => true]);
+        $this->assertCount(1, $this->giftMessages($club));
+    }
+
+    public function test_a_gift_message_in_flight_or_with_an_uncertain_outcome_is_shown_as_such_and_never_said_to_have_failed(): void
+    {
+        $club = $this->club();
+        $this->connectWhatsApp($club);
+        $gift = $this->deskGift($club);
+        $this->recipientConfirms($club, $gift)->assertOk();
+        $message = $this->asTenant($club, fn () => Message::findOrFail($gift->fresh()->whatsapp_message_id));
+        $owner = $this->owner($club);
+
+        // A worker is sending it now (#203: `sending`): on its way; not sent again.
+        $this->asTenant($club, fn () => $message->forceFill(['status' => 'sending'])->save());
+        $this->asTenant($club, fn () => $this->assertSame(['sending', 'قيد الإرسال', false], array_values(array_intersect_key(app(GiftWhatsApp::class)->delivery($gift->fresh()), array_flip(['state', 'label', 'can_send'])))));
+        $this->actingAs($owner)->post(route('club.gifts.resend', $gift))->assertSessionHasErrors();
+
+        // Its outcome is unknown (#203: `uncertain`): may have arrived. Staff hear of it as that, and may send again.
+        $this->asTenant($club, fn () => $message->forceFill(['status' => 'uncertain', 'error_code' => 'outcome_unknown', 'error_message' => null])->save());
         $this->asTenant($club, function () use ($gift) {
             $d = app(GiftWhatsApp::class)->delivery($gift->fresh());
-            $this->assertSame(['waiting', false], [$d['state'], $d['can_send']]);
-            $this->assertStringContainsString('غير مفعّل', (string) $d['reason']);
+            $this->assertSame(['uncertain', 'نتيجة الإرسال غير مؤكدة', true], [$d['state'], $d['label'], $d['can_send']]);
+            $this->assertStringContainsString('قد تكون وصلت', (string) $d['reason']);
+            $alert = StaffNotification::where('key', 'like', 'gift-whatsapp:'.$gift->id.':%')->sole();
+            $this->assertStringContainsString('غير مؤكدة', $alert->text);
+            $this->assertStringNotContainsString('لم تصل', $alert->text);
+            $this->assertSame(1, AuditLog::where('event', 'gift.whatsapp_uncertain')->count());
         });
-        // With the switch off, her confirmation got no answer either: nothing at all went out.
-        $this->asTenant($club, fn () => $this->assertSame(0, Message::where('direction', 'outbound')->count()));
+        $this->get(route('site.gift.show', ['club' => $club->slug, 'token' => $this->asTenant($club, fn () => $gift->fresh()->linkToken())]))->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('delivery', null));
 
-        // Switched on from «الرسائل التلقائية»; the template still waits for Meta.
-        $this->actingAs($this->owner($club))->put(route('club.automation.update'), ['on' => ['gift_received' => true], 'hour' => 10])->assertSessionHasNoErrors();
-        $club = $club->fresh();
-        $this->assertTrue(WhatsAppAutomation::on($club, 'gift_received'));
-        $this->asTenant($club, fn () => $this->assertStringContainsString('لم يُعتمد', (string) app(GiftWhatsApp::class)->delivery($gift->fresh())['reason']));
-        Artisan::call('gym:daily-memberships');
-        $this->assertCount(0, $this->giftMessages($club));
-
-        // Approved: the nightly run sends it, once.
-        $this->asTenant($club, fn () => MessageTemplate::where('key', 'gift_received')->update(['status' => 'approved']));
-        Artisan::call('gym:daily-memberships');
-        Artisan::call('gym:daily-memberships');
-        $this->assertCount(1, $this->giftMessages($club));
+        $this->actingAs($owner)->post(route('club.gifts.resend', $gift))->assertSessionHasNoErrors();
+        $this->assertCount(2, $this->giftMessages($club), 'sent again because staff chose to, once');
+        $this->asTenant($club, fn () => $this->assertSame(2, $gift->fresh()->whatsapp_attempts));
     }
 
     public function test_staff_permissions_and_club_isolation(): void
@@ -545,11 +618,11 @@ class GiftWhatsAppTest extends TestCase
     }
 
     /**
-     * The launch's one real test (docs/WHATSAPP.md): a hidden free plan, given at the desk to the owner's own number.
-     * No payment and no journal line at any point: the zero invoice is paid on issue, her confirmation sends the one
-     * template, and cancelling the gift afterwards moves nothing. The website never offers the plan.
+     * A free plan given as a gift: no payment and no journal line at any point. The zero invoice is paid on issue,
+     * her confirmation sends the one template, and cancelling the gift afterwards moves nothing. The website never
+     * offers a hidden plan. (Not a production test procedure: the launch uses no free plans or test invoices.)
      */
-    public function test_the_launch_test_gift_on_a_hidden_free_plan_sends_once_and_touches_no_account(): void
+    public function test_a_gift_of_a_hidden_free_plan_sends_once_and_posts_nothing(): void
     {
         config(['services.whatsapp.driver' => 'meta']);
         Http::fake(['https://graph.facebook.com/*' => fn (HttpRequest $r) => Http::response(['messaging_product' => 'whatsapp',

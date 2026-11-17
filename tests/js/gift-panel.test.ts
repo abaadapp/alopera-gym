@@ -39,7 +39,7 @@ describe('«هدايا الاشتراكات» in the panel (#192)', () => {
     });
 
     it('reads the history, the source and a voided invoice in words', () => {
-        expect(Object.keys(GIFT_EVENTS)).toHaveLength(14);
+        expect(Object.keys(GIFT_EVENTS)).toHaveLength(15);
         expect(GIFT_EVENTS['gift.unpaid']).toBe('أُلغيت دفعتها فعادت بانتظار الدفع');
         expect(GIFT_EVENTS['gift.link_rotated']).toBe('أُصدر لها رابط جديد');
         expect(giftCancelReason('invoice_voided')).toBe('أُلغيت فاتورتها');
@@ -62,9 +62,11 @@ describe('«هدايا الاشتراكات» in the panel (#192)', () => {
     });
 
     it('colours each delivery state, never «sent» as delivered, and names the WhatsApp events in the history', () => {
-        expect(Object.keys(GIFT_DELIVERY_TONE).sort()).toEqual(['closed', 'delivered', 'failed', 'not_due', 'read', 'sending', 'sent', 'waiting']);
+        expect(Object.keys(GIFT_DELIVERY_TONE).sort()).toEqual(['closed', 'delivered', 'failed', 'not_due', 'read', 'sending', 'sent', 'uncertain', 'waiting']);
         expect(GIFT_DELIVERY_TONE.sent).not.toBe(GIFT_DELIVERY_TONE.delivered);
         expect(GIFT_DELIVERY_TONE.failed).toBe('red');
-        for (const e of ['gift.phone_verified', 'gift.recipient_changed', 'gift.whatsapp_queued', 'gift.whatsapp_resent', 'gift.whatsapp_failed']) expect(GIFT_EVENTS[e]).toBeTruthy();
+        // #203/#204: may have arrived — never shown as a failure.
+        expect(GIFT_DELIVERY_TONE.uncertain).not.toBe('red');
+        for (const e of ['gift.phone_verified', 'gift.recipient_changed', 'gift.whatsapp_queued', 'gift.whatsapp_resent', 'gift.whatsapp_failed', 'gift.whatsapp_uncertain']) expect(GIFT_EVENTS[e]).toBeTruthy();
     });
 });

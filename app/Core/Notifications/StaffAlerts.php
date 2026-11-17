@@ -191,10 +191,13 @@ final class StaffAlerts
      * A gift's WhatsApp message did not reach its recipient (#192): whoever issues gifts or may correct the number and
      * send it again, in the gift's branch. Once per attempt; the paid gift itself is left as it is.
      */
-    public function giftUndelivered(GiftMembership $gift, string $reason): void
+    public function giftUndelivered(GiftMembership $gift, string $reason, bool $uncertain = false): void
     {
         $this->notifier->notify(['gifts.manage', 'gifts.create'], 'gift-whatsapp:'.$gift->id.':'.$gift->whatsapp_attempts, 'membership',
-            'لم تصل رسالة الهدية '.$gift->number.' إلى واتساب المستلمة'.($reason !== '' ? ': '.$reason : '.'),
+            $uncertain
+                // #203: it may have arrived; never said not to.
+                ? 'نتيجة إرسال رسالة الهدية '.$gift->number.' غير مؤكدة: قد تكون وصلت المستلمة. تأكد منها قبل إعادة الإرسال.'
+                : 'لم تصل رسالة الهدية '.$gift->number.' إلى واتساب المستلمة'.($reason !== '' ? ': '.$reason : '.'),
             route('club.gifts.show', $gift),
             fn (User $u) => $this->branches->allows($u, $gift->branch_id ? (int) $gift->branch_id : null));
     }

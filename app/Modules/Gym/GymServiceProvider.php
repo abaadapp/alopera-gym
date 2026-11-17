@@ -37,7 +37,7 @@ class GymServiceProvider extends ModuleServiceProvider
         Event::listen(InboundTextReceived::class, [GiftWhatsApp::class, 'confirmFromWhatsApp']);
         Message::saved(function (Message $message) {
             if ($message->related_type === (new GiftMembership)->getMorphClass()
-                && in_array($message->status, [Message::FAILED, Message::SKIPPED], true)
+                && in_array($message->status, [Message::FAILED, Message::SKIPPED, 'uncertain'], true) // 'uncertain': #203
                 && ($message->wasRecentlyCreated || $message->wasChanged('status'))) {
                 app(GiftWhatsApp::class)->messageFailed($message);
             }

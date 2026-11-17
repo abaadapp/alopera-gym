@@ -85,6 +85,13 @@ class TemplateController extends Controller
         // Off until switched on: kept on only when sent on now, or on before and not sent at all.
         $enabled = array_values(array_filter(WhatsAppAutomation::OFF_BY_DEFAULT, fn ($key) => array_key_exists($key, $data['on'] ?? [])
             ? (bool) $data['on'][$key] : WhatsAppAutomation::on($tenant, $key)));
+        // When each off-by-default notice was switched on: it sends nothing that waited while it was off.
+        $since = array_intersect_key((array) $tenant->setting('whatsapp_automation.enabled_since', []), array_flip($enabled));
+        foreach ($enabled as $key) {
+            if (! WhatsAppAutomation::on($tenant, $key) || ! isset($since[$key])) {
+                $since[$key] = now()->toIso8601String();
+            }
+        }
         $after = [
             'off' => $off,
             'enabled' => $enabled,
@@ -94,7 +101,7 @@ class TemplateController extends Controller
         ];
 
         $tenant->settings = array_replace($tenant->settings ?? [], [
-            'whatsapp_automation' => ['off' => $after['off'], 'enabled' => $after['enabled'], 'hour' => $after['hour']],
+            'whatsapp_automation' => ['off' => $after['off'], 'enabled' => $after['enabled'], 'enabled_since' => $since, 'hour' => $after['hour']],
             'expiry_reminder_days' => $after['expiry_reminder_days'],
             'expired_followup_days' => $after['expired_followup_days'],
         ]);

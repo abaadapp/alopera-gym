@@ -25,7 +25,10 @@ trait SendsGiftWhatsApp
     {
         config(['services.whatsapp.app_secret' => self::APP_SECRET]);
         if ($sendGifts) {
-            $club->forceFill(['settings' => array_replace_recursive($club->settings ?? [], ['whatsapp_automation' => ['enabled' => ['gift_received']]])])->save();
+            // As the panel saves it: on, and since when (what was paid before is not sent by the switch).
+            $club->forceFill(['settings' => array_replace_recursive($club->settings ?? [], ['whatsapp_automation' => [
+                'enabled' => ['gift_received'], 'enabled_since' => ['gift_received' => now()->subMinute()->toIso8601String()],
+            ]])])->save();
         }
 
         return $this->asTenant($club, function () use ($approved, $pnid) {

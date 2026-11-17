@@ -37,7 +37,7 @@ export interface GiftRow {
     delivery: { state: GiftDeliveryState; label: string };
 }
 
-export type GiftDeliveryState = 'not_due' | 'waiting' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed' | 'closed';
+export type GiftDeliveryState = 'not_due' | 'waiting' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed' | 'uncertain' | 'closed';
 
 /** The gift's page: the number's confirmation and the message's delivery, with what this user may do (GiftController). */
 export interface GiftWhatsAppPanel {
@@ -62,7 +62,7 @@ export interface GiftWhatsAppPanel {
 
 /** Each delivery state's badge colour. `sent` is WhatsApp having taken it, not the recipient having it. */
 export const GIFT_DELIVERY_TONE: Record<GiftDeliveryState, 'gray' | 'amber' | 'blue' | 'green' | 'red'> = {
-    not_due: 'gray', waiting: 'amber', sending: 'blue', sent: 'blue', delivered: 'green', read: 'green', failed: 'red', closed: 'gray',
+    not_due: 'gray', waiting: 'amber', sending: 'blue', sent: 'blue', delivered: 'green', read: 'green', failed: 'red', uncertain: 'amber', closed: 'gray',
 };
 
 /** The list's status tabs («الكل» comes first on its own), each with its badge's colour. */
@@ -110,6 +110,7 @@ export const GIFT_EVENTS: Record<string, string> = {
     'gift.whatsapp_queued': 'جُهّزت رسالة الهدية للإرسال عبر واتساب',
     'gift.whatsapp_resent': 'أُعيد إرسال رسالة الهدية',
     'gift.whatsapp_failed': 'فشل إرسال رسالة الهدية',
+    'gift.whatsapp_uncertain': 'نتيجة إرسال رسالة الهدية غير مؤكدة',
 };
 
 /** The codes the server writes as a cancellation's reason when the invoice did it (anything else is staff's text). */

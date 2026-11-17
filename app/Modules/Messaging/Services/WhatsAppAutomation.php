@@ -3,6 +3,7 @@
 namespace App\Modules\Messaging\Services;
 
 use App\Models\Tenant;
+use Carbon\CarbonImmutable;
 
 /**
  * The automatic WhatsApp notices tied to the gym's records, each switched on or off by the club, and when they go
@@ -44,6 +45,17 @@ final class WhatsAppAutomation
         }
 
         return ! in_array($event, (array) $tenant->setting('whatsapp_automation.off', []), true);
+    }
+
+    /**
+     * When an off-by-default notice was last switched on (null: off, or on without the panel recording it). What
+     * waited while it was off is not sent by the switch: the gift notice sends nothing paid before this.
+     */
+    public static function enabledSince(Tenant $tenant, string $event): ?CarbonImmutable
+    {
+        $at = $tenant->setting('whatsapp_automation.enabled_since.'.$event);
+
+        return self::on($tenant, $event) && is_string($at) && $at !== '' ? CarbonImmutable::parse($at) : null;
     }
 
     /** The hour of the day (club time) the daily reminders go out. */

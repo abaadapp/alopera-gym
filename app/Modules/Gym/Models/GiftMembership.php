@@ -76,7 +76,7 @@ class GiftMembership extends Model implements BranchOwned
         'sent' => 'أُرسلت إلى المزود',
         'delivered' => 'تم التسليم',
         'read' => 'تمت القراءة',
-        'failed' => 'فشل الإرسال',
+        'failed' => 'فشل الإرسال', 'uncertain' => 'نتيجة الإرسال غير مؤكدة',
         'closed' => 'لا إرسال',
     ];
 

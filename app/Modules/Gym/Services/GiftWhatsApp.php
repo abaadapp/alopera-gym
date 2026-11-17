@@ -57,7 +57,16 @@ final class GiftWhatsApp
         'template_missing' => 'قالب رسالة الهدية غير موجود في واتساب ← القوالب.',
         'template_not_approved' => 'قالب رسالة الهدية لم يُعتمد من Meta بعد.',
         'not_verified' => 'بانتظار تأكيد رقم المستلمة برسالة منها.',
+        'paid_before_on' => 'دُفعت قبل تشغيل إرسال الهدايا، فلا تُرسل وحدها. تأكد أن الرابط لم يصل المستلمة بطريقة أخرى، ثم أرسلها من «إرسال الآن».',
     ];
+
+    /**
+     * A message whose outcome is unknown (#203: `Message::UNCERTAIN`) and one a worker is sending now
+     * (`Message::SENDING`): spelled out so this works before and after that change reaches main.
+     */
+    private const MESSAGE_UNCERTAIN = 'uncertain';
+
+    private const MESSAGE_SENDING = 'sending';
 
     public function __construct(
         private readonly WhatsAppService $whatsapp,
@@ -252,7 +261,8 @@ final class GiftWhatsApp
         return DB::transaction(function () use ($gift) {
             $gift = GiftMembership::whereKey($gift->id)->lockForUpdate()->firstOrFail();
             $last = $gift->whatsapp_message_id ? Message::find($gift->whatsapp_message_id) : null;
-            if ($last && ! in_array($last->status, [Message::FAILED, Message::SKIPPED], true)) {
+            // Failed, or uncertain (it may have arrived: staff check with her first, the panel says so).
+            if ($last && ! in_array($last->status, [Message::FAILED, Message::SKIPPED, self::MESSAGE_UNCERTAIN], true)) {
                 throw new BusinessRuleException('gift.whatsapp_on_its_way', 'رسالة الهدية '.self::STATUS_WORDS[$last->status].'؛ لا تُعاد إلا إذا فشلت.');
             }
             if (! $gift->isRedeemable()) {
@@ -308,8 +318,14 @@ final class GiftWhatsApp
     /** The nightly run: paid, confirmed gifts whose message has not gone yet (the switch or the template came later). */
     public function sendPending(): int
     {
+        // Never what piled up while the notice was off: switching it on sends no backlog (staff send those one by one).
+        $since = WhatsAppAutomation::enabledSince($this->tenants->require(), self::TEMPLATE);
+        if ($since === null || $this->sendRefusal() !== null) {
+            return 0;
+        }
         $sent = 0;
         GiftMembership::where('status', GiftMembership::PAID)->whereNotNull('phone_verified_at')->whereNull('whatsapp_message_id')
+            ->where('paid_at', '>=', $since)
             ->where(fn ($q) => $q->whereNull('expires_on')->orWhere('expires_on', '>=', today()->toDateString()))
             ->eachById(function (GiftMembership $gift) use (&$sent) {
                 $sent += DB::transaction(function () use ($gift) {
@@ -320,6 +336,14 @@ final class GiftWhatsApp
             });
 
         return $sent;
+    }
+
+    /** Would the hourly run send it by itself: paid since the notice was last switched on (no backlog otherwise). */
+    private function sendsOnItsOwn(GiftMembership $gift): bool
+    {
+        $since = WhatsAppAutomation::enabledSince($this->tenants->require(), self::TEMPLATE);
+
+        return $since !== null && $gift->paid_at !== null && $gift->paid_at->greaterThanOrEqualTo($since);
     }
 
     /** The values the template is sent with: one line each (WhatsApp refuses a line break in a parameter). */
@@ -342,6 +366,7 @@ final class GiftWhatsApp
     private const STATUS_WORDS = [
         Message::SCHEDULED => 'قيد الإرسال', Message::QUEUED => 'قيد الإرسال', Message::SENT => 'أُرسلت إلى المزود',
         Message::DELIVERED => 'سُلّمت', Message::READ => 'قُرئت', Message::FAILED => 'فشلت', Message::SKIPPED => 'لم تُرسل',
+        self::MESSAGE_SENDING => 'قيد الإرسال', self::MESSAGE_UNCERTAIN => 'نتيجة إرسالها غير مؤكدة',
     ];
 
     /**
@@ -356,7 +381,12 @@ final class GiftWhatsApp
         $waitingFor = ! $gift->phoneVerified() ? 'not_verified' : $this->sendRefusal();
         $state = self::stateOf($gift, $message);
         $reason = match ($state) {
-            'waiting' => $waitingFor !== null ? self::REASONS[$waitingFor] : null,
+            'waiting' => match (true) {
+                $waitingFor !== null => self::REASONS[$waitingFor],
+                ! $this->sendsOnItsOwn($gift) => self::REASONS['paid_before_on'],
+                default => 'تُرسل وحدها في ساعة الرسائل التلقائية ('.sprintf('%02d:00', WhatsAppAutomation::hour($this->tenants->require())).')، أو الآن من «إرسال الآن».',
+            },
+            'uncertain' => $message->error_message ?: 'قد تكون وصلت: لم يصل من واتساب ما يؤكد إرسالها أو ينفيه. تأكد من المستلمة قبل إعادة الإرسال.',
             'not_due' => $gift->phoneVerified() ? null : self::REASONS['not_verified'],
             'failed' => $message->error_message ?: (Message::SKIP_REASONS[$message->error_code] ?? ($message->error_code ? 'رمز الخطأ '.$message->error_code : null)),
             default => null,
@@ -367,7 +397,7 @@ final class GiftWhatsApp
             'label' => GiftMembership::DELIVERY_LABELS[$state] ?? $state,
             'at' => ($message?->sent_at ?? $message?->created_at)?->toIso8601String(),
             'reason' => $reason,
-            'can_send' => in_array($state, ['waiting', 'failed'], true) && $gift->isRedeemable() && $waitingFor === null,
+            'can_send' => in_array($state, ['waiting', 'failed', 'uncertain'], true) && $gift->isRedeemable() && $waitingFor === null,
             'attempts' => (int) $gift->whatsapp_attempts,
         ];
     }
@@ -379,8 +409,9 @@ final class GiftWhatsApp
             $message === null && $gift->status === GiftMembership::PENDING => 'not_due',
             $message === null && ! $gift->isRedeemable() => 'closed',
             $message === null => 'waiting',
-            in_array($message->status, [Message::SCHEDULED, Message::QUEUED], true) => 'sending',
+            in_array($message->status, [Message::SCHEDULED, Message::QUEUED, self::MESSAGE_SENDING], true) => 'sending',
             in_array($message->status, [Message::FAILED, Message::SKIPPED], true) => 'failed',
+            $message->status === self::MESSAGE_UNCERTAIN => 'uncertain',
             in_array($message->status, [Message::SENT, Message::DELIVERED, Message::READ], true) => $message->status,
             default => 'sending',
         };
@@ -393,9 +424,10 @@ final class GiftWhatsApp
         if (! $gift) {
             return;
         }
-        $reason = $message->error_message ?: (Message::SKIP_REASONS[$message->error_code] ?? (string) $message->error_code);
-        $this->audit->log('gift.whatsapp_failed', $gift, ['number' => $gift->number, 'attempt' => $gift->whatsapp_attempts, 'code' => $message->error_code]);
-        rescue(fn () => app(StaffAlerts::class)->giftUndelivered($gift, $reason));
+        $uncertain = $message->status === self::MESSAGE_UNCERTAIN;
+        $reason = $uncertain ? '' : ($message->error_message ?: (Message::SKIP_REASONS[$message->error_code] ?? (string) $message->error_code));
+        $this->audit->log($uncertain ? 'gift.whatsapp_uncertain' : 'gift.whatsapp_failed', $gift, ['number' => $gift->number, 'attempt' => $gift->whatsapp_attempts, 'code' => $message->error_code]);
+        rescue(fn () => app(StaffAlerts::class)->giftUndelivered($gift, $reason, $uncertain));
     }
 
     // ---- Helpers ---------------------------------------------------------------------------------------------------

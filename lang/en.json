@@ -177,5 +177,7 @@
     "لا إرسال": "Not sent",
     "تؤكد المستلمة رقمها برسالة منها، ثم يتم الدفع، فتُرسل الهدية.": "The recipient confirms her number with a message from it, then the payment is made, and the gift is sent.",
     "لم تُرسل بعد؛ يمكنك مشاركة رابط الهدية بنفسك.": "Not sent yet; you can share the gift's link yourself.",
-    "تعذّر إرسال الهدية إلى واتساب المستلمة. شارك رابط الهدية بنفسك أو تواصل مع النادي.": "The gift could not be sent to the recipient's WhatsApp. Share the gift's link yourself or contact the club."
+    "تعذّر إرسال الهدية إلى واتساب المستلمة. شارك رابط الهدية بنفسك أو تواصل مع النادي.": "The gift could not be sent to the recipient's WhatsApp. Share the gift's link yourself or contact the club.",
+    "نتيجة الإرسال غير مؤكدة": "Delivery not confirmed",
+    "لم يصل ما يؤكد وصول رسالة الهدية أو عدمه. اسأل المستلمة، أو شارك رابط الهدية بنفسك.": "Nothing confirmed whether the gift message arrived. Ask the recipient, or share the gift's link yourself."
 }

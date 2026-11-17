@@ -307,10 +307,12 @@ function RecipientWhatsApp({ gift, panel }: { gift: GiftDetail; panel: GiftWhats
             {(panel.can_new_code || panel.can_change || panel.can_resend) && (
                 <div className="mt-3 flex flex-wrap gap-2">
                     {panel.can_resend && (
-                        <ConfirmAction url={route('club.gifts.resend', gift.id)} title={d.state === 'failed' ? 'إعادة إرسال الهدية' : 'إرسال الهدية'}
-                            message="تُجهَّز رسالة الهدية مرة واحدة إلى رقم المستلمة المؤكد. لا تُعاد ما دامت الرسالة السابقة في الطريق."
-                            confirmLabel="إرسال" tone="primary" size="sm" icon={<RefreshCw />}>
-                            {d.state === 'failed' ? 'إعادة الإرسال' : 'إرسال الآن'}
+                        <ConfirmAction url={route('club.gifts.resend', gift.id)} title={d.state === 'failed' || d.state === 'uncertain' ? 'إعادة إرسال الهدية' : 'إرسال الهدية'}
+                            message={d.state === 'uncertain'
+                                ? 'قد تكون الرسالة السابقة وصلت المستلمة: لم يصل من واتساب ما يؤكد ذلك أو ينفيه. أعدها فقط بعد أن تتأكد منها أنها لم تصلها، وإلا وصلتها مرتين.'
+                                : 'تُجهَّز رسالة الهدية مرة واحدة إلى رقم المستلمة المؤكد. لا تُعاد ما دامت الرسالة السابقة في الطريق.'}
+                            confirmLabel={d.state === 'uncertain' ? 'تأكدت؛ أعد الإرسال' : 'إرسال'} tone="primary" size="sm" icon={<RefreshCw />}>
+                            {d.state === 'failed' || d.state === 'uncertain' ? 'إعادة الإرسال' : 'إرسال الآن'}
                         </ConfirmAction>
                     )}
                     {panel.can_new_code && (
