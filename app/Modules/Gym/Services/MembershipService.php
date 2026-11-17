@@ -106,11 +106,18 @@ final class MembershipService
         ]);
     }
 
-    /** Value of the days not yet used, pro rata on what was paid for the plan (fees excluded). */
+    /**
+     * Value of the days not yet used, pro rata on what was paid for the plan (fees excluded). A period redeemed from a
+     * gift (#192) costs nothing on its own invoice: what was paid for it is the gift's price, paid once on the gift's
+     * invoice. The upgrade that spends this credit cancels the period when it is paid, so the value is used once.
+     */
     public function unusedValue(Membership $membership, ?CarbonImmutable $today = null): string
     {
         $today ??= CarbonImmutable::today();
-        $paidForPlan = Money::sub(Money::sub($membership->price, $membership->discount), $membership->credit_applied);
+        $gift = GiftMembership::where('membership_id', $membership->id)->first(['id', 'price']);
+        $paidForPlan = $gift
+            ? Money::normalize($gift->price)
+            : Money::sub(Money::sub($membership->price, $membership->discount), $membership->credit_applied);
         $paidForPlan = Money::max($paidForPlan, 0);
         $remaining = $membership->daysRemaining($today);
         $total = max(1, $membership->totalDays());

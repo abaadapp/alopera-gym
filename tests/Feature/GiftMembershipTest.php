@@ -330,4 +330,29 @@ class GiftMembershipTest extends TestCase
             $this->assertSame(Membership::ACTIVE, $m->fresh()->status);
         });
     }
+
+    public function test_upgrading_a_redeemed_gift_credits_the_unused_part_of_what_the_gift_cost_once(): void
+    {
+        $club = $this->club();
+        $plan = $this->plan($club, ['price' => 30, 'duration_value' => 30, 'duration_unit' => 'day']);
+        $better = $this->plan($club, ['name' => 'Gold', 'price' => 90, 'duration_value' => 30, 'duration_unit' => 'day']);
+        $gift = $this->paidGift($club, $plan);
+        $member = $this->member($club);
+
+        $this->asTenant($club, function () use ($gift, $member, $better) {
+            $membership = $this->gifts()->redeem($gift, $member, today()->toDateString(), 'link')->membership;
+            $this->travelTo(today()->addDays(10));
+
+            $svc = app(MembershipService::class);
+            $this->assertSame('20.000', $svc->unusedValue($membership->fresh()), '20 of 30 days left of a 30.000 gift.');
+
+            $upgrade = $svc->upgrade($membership->fresh(), $better);
+            $this->assertSame('20.000', $upgrade->credit_applied);
+            $this->assertSame('70.000', $upgrade->invoice->total);
+            app(PaymentService::class)->record($upgrade->invoice, '70.000', 'cash');
+            $this->assertSame(Membership::CANCELLED, $membership->fresh()->status, 'The gift period is replaced: its credit cannot be spent again.');
+            $this->expectException(BusinessRuleException::class);
+            $svc->upgrade($membership->fresh(), $better); // a replaced period gives no credit a second time
+        });
+    }
 }
