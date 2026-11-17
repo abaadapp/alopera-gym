@@ -54,7 +54,7 @@ class MembershipPlan extends Model
 
     protected $guarded = ['id', 'tenant_id'];
 
-    protected $attributes = ['type' => 'gym', 'is_active' => true, 'is_public' => true, 'is_featured' => false, 'freeze_allowed' => true, 'signup_fee' => 0, 'max_freeze_days' => 0, 'max_freezes' => 0, 'sort' => 0];
+    protected $attributes = ['type' => 'gym', 'is_active' => true, 'is_public' => true, 'is_featured' => false, 'giftable' => true, 'freeze_allowed' => true, 'signup_fee' => 0, 'max_freeze_days' => 0, 'max_freezes' => 0, 'sort' => 0];
 
     protected function casts(): array
     {
@@ -67,6 +67,7 @@ class MembershipPlan extends Model
             'is_public' => 'boolean',
             'is_featured' => 'boolean',
             'is_active' => 'boolean',
+            'giftable' => 'boolean',
         ];
     }
 
