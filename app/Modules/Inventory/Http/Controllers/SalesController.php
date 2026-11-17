@@ -9,6 +9,7 @@ use App\Core\Support\Period;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
+use App\Models\Branch;
 use App\Models\User;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\Member;
@@ -124,6 +125,11 @@ class SalesController extends Controller
         ], $rows());
 
         $meta = [['الفترة', $period->label()]];
+        // The branch the file covers, as filtered(): the user's own (or the one chosen in the top bar), else the one asked for.
+        $branch = app(BranchContext::class)->id($request->user()) ?? (is_numeric($request->query('branch')) ? (int) $request->query('branch') : null);
+        if ($branch && ($name = Branch::whereKey($branch)->value('name'))) {
+            $meta[] = ['الفرع', $name];
+        }
         foreach (['source' => self::SOURCE_LABELS, 'status' => self::STATES, 'method' => self::METHOD_LABELS] as $key => $labels) {
             if ($label = $labels[(string) $request->query($key)] ?? null) {
                 $meta[] = [['source' => 'المصدر', 'status' => 'الحالة', 'method' => 'طريقة الدفع'][$key], $label];

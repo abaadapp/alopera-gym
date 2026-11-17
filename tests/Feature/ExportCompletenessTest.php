@@ -10,6 +10,7 @@ use App\Modules\Inventory\Models\Product;
 use App\Modules\Reports\Support\ReportPdf;
 use App\Modules\Reports\Support\ReportSheet;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\Concerns\BuildsClubs;
@@ -189,6 +190,8 @@ class ExportCompletenessTest extends TestCase
         $this->assertEqualsCanonicalizing(['الرئيسي', 'الخوض', 'قديمة'], $buyers($owner, []));
         $this->assertSame(['الرئيسي'], $buyers($this->roleWith($club, ['sales.view', 'reports.export'], ['branch_id' => $main->id]), ['range' => 'month']));
         $this->assertSame(['الخوض'], $buyers($owner, ['range' => 'month', 'branch' => $khoud->id]));
+        // The file says which branch it covers.
+        $this->assertStringContainsString('الفرع,"فرع الخوض"', $this->actingAs($owner)->get(route('club.sales.export', ['range' => 'month', 'branch' => $khoud->id, 'format' => 'csv']))->streamedContent());
 
         // A period with nothing in it: a file of headings, said to be empty.
         $empty = $this->actingAs($owner)->get(route('club.sales.export', ['format' => 'csv', 'from' => '2020-01-01', 'to' => '2020-01-31']));
@@ -197,6 +200,49 @@ class ExportCompletenessTest extends TestCase
 
         // The sales page without the export permission: no file.
         $this->actingAs($this->roleWith($club, ['sales.view']))->get(route('club.sales.export', ['format' => 'csv']))->assertForbidden();
+    }
+
+    public function test_a_file_read_in_pieces_holds_each_row_once_even_when_many_share_a_date(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $branch = $this->asTenant($club, fn () => Branch::query()->value('id'));
+        $rows = [];
+        // 1,203 expenses on one date: more than two pieces of 500, all equal in the order the file is written in.
+        for ($i = 1; $i <= 1203; $i++) {
+            $rows[] = ['tenant_id' => $club->id, 'branch_id' => $branch, 'number' => sprintf('EXP-%05d', $i), 'description' => 'مصروف '.$i, 'amount' => '1.250', 'expense_date' => today()->toDateString(), 'payment_method' => 'cash', 'created_at' => now(), 'updated_at' => now()];
+        }
+        foreach (array_chunk($rows, 500) as $chunk) {
+            DB::table('expenses')->insert($chunk);
+        }
+
+        $numbers = array_column($this->csv($this->actingAs($owner)->get(route('club.expenses.export', ['format' => 'csv'])), 'الرقم'), 0);
+        $this->assertCount(1203, $numbers);
+        $this->assertCount(1203, array_unique($numbers), 'no expense twice, none left out');
+
+        $report = $this->csv($this->actingAs($owner)->get(route('club.reports.export', ['report' => 'finance', 'format' => 'csv', 'range' => 'today'])), 'الرقم');
+        $this->assertCount(1203, array_unique(array_column($report, 0)));
+        $this->assertCount(1203, $report);
+    }
+
+    public function test_a_list_excel_file_keeps_three_decimals_and_keeps_text_as_text(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $member = $this->member($club, ['full_name' => 'سلمى الفريدة']);
+        $this->activeMembership($club, $member, $this->plan($club, ['price' => 25.5]));
+
+        $response = $this->actingAs($owner)->get(route('club.memberships.index', ['format' => 'xlsx']))->assertOk();
+        $path = tempnam(sys_get_temp_dir(), 'xlsx');
+        file_put_contents($path, $response->streamedContent());
+        $sheet = IOFactory::load($path)->getActiveSheet();
+        unlink($path);
+
+        $this->assertSame('الإجمالي', $sheet->getCell('I1')->getValue());
+        $this->assertSame('25.500', $sheet->getCell('I2')->getFormattedValue(), 'an amount in rials shows its three decimals');
+        $this->assertIsNumeric($sheet->getCell('I2')->getValue(), 'and stays a number Excel can add up');
+        $this->assertSame('s', $sheet->getCell('C2')->getDataType(), 'a phone number stays text');
+        $this->assertSame($member->phone, $sheet->getCell('C2')->getValue());
     }
 
     public function test_a_pdf_too_long_for_one_file_says_so_before_its_table(): void
