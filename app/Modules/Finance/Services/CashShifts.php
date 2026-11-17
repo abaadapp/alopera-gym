@@ -190,7 +190,10 @@ final class CashShifts
 
     public function close(CashShift $shift, string|float $counted, ?string $note, User $user): CashShift
     {
-        return DB::transaction(function () use ($shift, $counted, $note, $user) {
+        // The drawer is held first, as everything paying out of it holds it (an expense, a refund, a transfer, a salary,
+        // a supplier paid, cash taken to the bank), then the shift, as move() takes them: money leaving it by another
+        // door at this moment is in the count (its entry is committed first), and nothing leaves it until it is closed.
+        return app(AccountFunds::class)->exclusive(Account::find($shift->account_id), fn () => DB::transaction(function () use ($shift, $counted, $note, $user) {
             $shift = CashShift::whereKey($shift->id)->lockForUpdate()->firstOrFail();
             if (! $shift->isOpen()) {
                 throw new BusinessRuleException('shift.closed', 'هذه الوردية مقفلة مسبقًا.');
@@ -224,6 +227,6 @@ final class CashShifts
             $this->audit->log('cash_shift.closed', $shift, ['expected' => $summary['expected'], 'counted' => $shift->counted_cash, 'difference' => $difference, 'note' => $note]);
 
             return $shift;
-        });
+        }));
     }
 }
