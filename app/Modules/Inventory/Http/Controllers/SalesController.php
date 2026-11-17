@@ -96,10 +96,7 @@ class SalesController extends Controller
         abort_unless($request->user()->can('reports.export'), 403);
         $format = $request->string('format')->toString() === 'xlsx' ? 'xlsx' : 'csv';
         $period = Period::fromRequest($request);
-        // At most the newest export_limit sales in one file (held in memory with their lines); more is said, never dropped unsaid.
-        $limit = max(1, (int) config('sales.export_limit', 20000));
-        $all = $this->filtered($request, $period)->count();
-        $rows = $this->filtered($request, $period)->with(['cashier:id,name', 'branch:id,name', 'items', 'customer'])->latest('id')->limit($limit)->get();
+        $rows = $this->filtered($request, $period)->with(['cashier:id,name', 'branch:id,name', 'items', 'customer'])->latest('id')->limit(20000)->get();
 
         $sheet = new ReportSheet('عمليات البيع', [
             ['الرقم', ReportSheet::TEXT], ['التاريخ', ReportSheet::TEXT], ['العميل', ReportSheet::TEXT], ['الهاتف', ReportSheet::TEXT], ['المنتجات', ReportSheet::TEXT],
@@ -122,19 +119,10 @@ class SalesController extends Controller
             $meta[] = ['البحث', $q];
         }
         $meta[] = ['تاريخ الإصدار', now()->format('Y-m-d H:i')];
-        $truncated = $all > $rows->count();
-        if ($truncated) {
-            $meta[] = ['ملاحظة', "الملف يحتوي أحدث {$rows->count()} عملية من {$all}؛ ضيّق الفترة أو الفلاتر لتصدير البقية."];
-        }
         $slug = 'sales-'.($period->bounded() ? ($period->from?->toDateString() ?? 'start').'_'.($period->to?->toDateString() ?? today()->toDateString()) : 'all');
-        $audit->log('sales.exported', null, ['format' => $format, 'rows' => $rows->count(), 'of' => $all] + $period->toArray());
+        $audit->log('sales.exported', null, ['format' => $format] + $period->toArray());
 
-        $response = (new ReportDocument($slug, 'عمليات البيع', $meta, [$sheet], $rows->isEmpty(), $tenants->require()->currency ?? 'OMR'))->download($format);
-        if ($truncated) {
-            $response->headers->set('x-export-truncated', '1');
-        }
-
-        return $response;
+        return (new ReportDocument($slug, 'عمليات البيع', $meta, [$sheet], $rows->isEmpty(), $tenants->require()->currency ?? 'OMR'))->download($format);
     }
 
     /** One sale: its lines, the buyer, the money, and what may be done with it from here. */

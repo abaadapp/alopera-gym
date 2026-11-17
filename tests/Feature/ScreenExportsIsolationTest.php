@@ -18,7 +18,7 @@ use Tests\TestCase;
 
 /**
  * The screens' own files (members, expenses, sales, a backup archive): each carries its club only, the user's branch
- * only when tied to one, refuses whoever lacks the permission, and never leaves rows out without saying so.
+ * only when tied to one, and refuses whoever lacks the permission.
  */
 class ScreenExportsIsolationTest extends TestCase
 {
@@ -102,18 +102,5 @@ class ScreenExportsIsolationTest extends TestCase
         $this->actingAs($ownerA)->get(route('club.backups.download', $theirs))->assertNotFound();
         $ours = app(TenantBackupService::class)->create($a);
         $this->actingAs($ownerA)->get(route('club.backups.download', $ours))->assertOk();
-    }
-
-    public function test_a_sales_file_cut_at_its_limit_says_so(): void
-    {
-        [$club, $owner] = $this->marked('ألف');
-        config(['sales.export_limit' => 3]);
-        $this->sell($club, $owner, 'ألف', 4);
-
-        $response = $this->actingAs($owner)->get(route('club.sales.export', ['format' => 'csv']))->assertOk();
-        $csv = $response->streamedContent();
-        $this->assertSame(3, substr_count($csv, 'منتج ألف'), 'the newest three');
-        $this->assertStringContainsString('أحدث 3 عملية من 4', $csv, 'and the file says some are left out');
-        $response->assertHeader('x-export-truncated', '1');
     }
 }
