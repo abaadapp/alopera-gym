@@ -14,14 +14,19 @@ use App\Modules\Messaging\Services\CampaignService;
 use App\Modules\Messaging\Services\InboxPresenter;
 use App\Modules\Messaging\Services\TemplateCatalog;
 use App\Modules\Messaging\Services\WhatsAppService;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Exception\ConnectTimeoutException;
 use GuzzleHttp\Exception\NetworkTimeoutException;
 use GuzzleHttp\Promise\Create;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Symfony\Component\Process\Process;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
 
@@ -331,5 +336,212 @@ class WhatsAppSendOnceTest extends TestCase
             $this->assertSame([0, 0, 1], [$campaign->sent_count, $campaign->failed_count, $campaign->uncertainCount()]);
             $this->assertSame(Campaign::COMPLETED, $campaign->status, 'nothing is left to send');
         });
+    }
+
+    // ---- cURL's own errors (#204 review) ----------------------------------------------------------------------------
+
+    /** @var list<Process> */
+    private array $servers = [];
+
+    protected function tearDown(): void
+    {
+        foreach ($this->servers as $server) {
+            $server->stop(0);
+        }
+        parent::tearDown();
+    }
+
+    /** The stand-in for WhatsApp's API on 127.0.0.1 (tests/Support/local-whatsapp-api.php): where it is and its log. */
+    private function localWhatsApp(string $mode): string
+    {
+        $log = (string) tempnam(sys_get_temp_dir(), 'wa-api-');
+        $server = new Process([PHP_BINARY, base_path('tests/Support/local-whatsapp-api.php'), $mode, $log]);
+        $server->start();
+        $server->waitUntil(fn ($type, $output) => str_contains($output, '127.0.0.1:'));
+        $this->servers[] = $server;
+        $this->pointAt('http://'.trim($server->getOutput()));
+
+        return $log;
+    }
+
+    private function pointAt(string $url): void
+    {
+        config(['services.whatsapp.graph_url' => $url]);
+        Http::allowStrayRequests([$url.'/*']);
+    }
+
+    /** @return list<array{line: string, body: string}> the requests that reached the stand-in */
+    private function arrived(string $log): array
+    {
+        return array_map(fn ($l) => json_decode($l, true), array_values(array_filter(explode("\n", (string) @file_get_contents($log)))));
+    }
+
+    private function runUntilSettled(Tenant $club, Message $message): Message
+    {
+        $attempt = 1;
+        while ($this->work($club, $message, $attempt) !== null && $attempt < 4) {
+            $attempt++;
+        }
+
+        return $this->fresh($club, $message);
+    }
+
+    public function test_real_curl_6_and_7_never_reached_whatsapp_so_they_are_retried_and_the_message_then_sent_once(): void
+    {
+        $club = $this->connected();
+        // cURL 6: the name does not resolve (.invalid never does).
+        $this->pointAt('http://whatsapp-send-once.invalid');
+        $message = $this->queued($club, 'reminder');
+        $this->assertNotNull($this->work($club, $message), 'retried');
+        $this->assertSame([Message::QUEUED, 'connection'], [$this->fresh($club, $message)->status, $this->fresh($club, $message)->error_code]);
+        $this->assertStringContainsString('cURL error 6', (string) $this->fresh($club, $message)->error_message);
+
+        // cURL 7: nothing listens on the port.
+        $socket = stream_socket_server('tcp://127.0.0.1:0');
+        $closed = stream_socket_get_name($socket, false);
+        fclose($socket);
+        $this->pointAt('http://'.$closed);
+        $this->assertNotNull($this->work($club, $message, 2), 'retried');
+        $this->assertSame(Message::QUEUED, $this->fresh($club, $message)->status);
+        $this->assertStringContainsString('cURL error 7', (string) $this->fresh($club, $message)->error_message);
+
+        // Then WhatsApp answers: sent, once.
+        $log = $this->localWhatsApp('ok');
+        $this->assertNull($this->work($club, $message, 3));
+        $this->assertCount(1, $this->arrived($log));
+        $this->assertSame(Message::SENT, $this->fresh($club, $message)->status);
+    }
+
+    public function test_real_curl_28_after_the_request_reached_the_provider_is_uncertain_and_never_sent_again(): void
+    {
+        $club = $this->connected();
+        $log = $this->localWhatsApp('silent'); // takes the request, never answers: the 15-second timeout runs out
+        $message = $this->queued($club, 'reply');
+
+        $message = $this->runUntilSettled($club, $message);
+
+        $this->assertCount(1, $this->arrived($log), 'the request reached the provider once');
+        $this->assertStringContainsString('"to"', $this->arrived($log)[0]['body']);
+        $this->assertSame(Message::UNCERTAIN, $message->status, 'cURL 28 after the request left: not retried');
+        $this->assertStringContainsString('cURL error 28', (string) $message->error_message);
+    }
+
+    public function test_real_curl_52_an_empty_reply_after_the_request_arrived_is_uncertain(): void
+    {
+        $club = $this->connected();
+        $log = $this->localWhatsApp('close');
+        $message = $this->runUntilSettled($club, $this->queued($club, 'campaign'));
+
+        $this->assertCount(1, $this->arrived($log));
+        $this->assertSame(Message::UNCERTAIN, $message->status);
+        $this->assertStringContainsString('cURL error 52', (string) $message->error_message);
+    }
+
+    /**
+     * The exception's class is not the proof: Guzzle 7 (Laravel accepts ^7.8.2 || ^8.0) reports every cURL timeout and
+     * an empty reply as a ConnectException, and a handler may name a broken connection that way too. Only cURL's own
+     * error says the request never left: 5, 6, 7, 35, 60, or 28 while resolving or connecting.
+     */
+    public function test_only_curls_own_before_connection_errors_are_retried_whatever_the_exception_class(): void
+    {
+        $club = $this->connected();
+        $cases = [
+            // [the error, as the handler raised it] => retried?
+            'cURL 6' => [fn ($psr) => new ConnectException('cURL error 6: Could not resolve host: graph.facebook.com (see https://curl.se/libcurl/c/libcurl-errors.html) for https://graph.facebook.com/v21.0/PNID-1/messages', $psr), true],
+            'cURL 7' => [fn ($psr) => new ConnectException('cURL error 7: Failed to connect to graph.facebook.com port 443 after 3 ms: Could not connect to server (see https://curl.se/libcurl/c/libcurl-errors.html)', $psr), true],
+            'cURL 28 connecting' => [fn ($psr) => new ConnectTimeoutException('cURL error 28: Connection timed out after 10002 milliseconds (see https://curl.se/libcurl/c/libcurl-errors.html)', $psr), true],
+            'cURL 28 resolving' => [fn ($psr) => new ConnectTimeoutException('cURL error 28: Resolving timed out after 10001 milliseconds (see https://curl.se/libcurl/c/libcurl-errors.html)', $psr), true],
+            // Guzzle 7's shape for a timeout after the request was sent.
+            'cURL 28 after the request (Guzzle 7)' => [fn ($psr) => new ConnectException('cURL error 28: Operation timed out after 15001 milliseconds with 0 bytes received (see https://curl.se/libcurl/c/libcurl-errors.html)', $psr), false],
+            // Guzzle 7's shape for an empty reply after the request was sent.
+            'cURL 52 (Guzzle 7)' => [fn ($psr) => new ConnectException('cURL error 52: Empty reply from server (see https://curl.se/libcurl/c/libcurl-errors.html)', $psr), false],
+            // No cURL error at all (another handler): nothing says it did not leave.
+            'no cURL error' => [fn ($psr) => new ConnectException('fread(): SSL: Connection reset by peer', $psr), false],
+        ];
+        foreach ($cases as $case => [$error, $retried]) {
+            $this->calls = 0;
+            $this->answer = fn (HttpRequest $r) => $this->calls === 1 ? Create::rejectionFor($error($r->toPsrRequest())) : $this->accepted();
+            $message = $this->runUntilSettled($club, $this->queued($club, 'reminder'));
+
+            if ($retried) {
+                $this->assertSame([2, Message::SENT], [$this->calls, $message->status], $case.': never left, so retried and sent once');
+            } else {
+                $this->assertSame([1, Message::UNCERTAIN], [$this->calls, $message->status], $case.': may have reached WhatsApp, so not sent again');
+            }
+        }
+    }
+
+    // ---- Settling a claim never overwrites an outcome (#204 review) -----------------------------------------------
+
+    /**
+     * Right after the read that decides (the sweep's list of claims, or the job's look at its message), `$meanwhile`
+     * runs: what another worker did in between. A locked re-read (`for update`) is not that read.
+     */
+    private function between(string $read, \Closure $meanwhile): void
+    {
+        $done = false;
+        DB::listen(function (QueryExecuted $q) use (&$done, $read, $meanwhile) {
+            $plain = str_starts_with($q->sql, 'select') && str_contains($q->sql, 'from "messages"') && ! str_contains($q->sql, 'for update');
+            $isIt = $read === 'sweep' ? in_array(Message::SENDING, $q->bindings, true) : str_contains($q->sql, '"messages"."id" = ?');
+            if (! $done && $plain && $isIt) {
+                $done = true;
+                $meanwhile();
+            }
+        });
+    }
+
+    public function test_the_sweep_never_turns_a_message_a_worker_settled_meanwhile_into_uncertain(): void
+    {
+        $club = $this->connected();
+        $outcomes = [
+            'sent' => ['status' => Message::SENT, 'provider_message_id' => 'wamid.LATE-SENT', 'sent_at' => now()],
+            'delivered' => ['status' => Message::DELIVERED, 'provider_message_id' => 'wamid.LATE-DELIVERED', 'sent_at' => now(), 'delivered_at' => now()],
+            'failed' => ['status' => Message::FAILED, 'error_code' => '131026'],
+            'claimed afresh' => ['status' => Message::SENDING, 'updated_at' => now()],
+        ];
+        foreach ($outcomes as $case => $meanwhile) {
+            $message = $this->queued($club, 'campaign');
+            $this->asTenant($club, fn () => Message::whereKey($message->id)->update(['status' => Message::SENDING, 'updated_at' => now()->subMinutes(20)]));
+            // A slow worker (or one paused for minutes) saves its outcome between the sweep's read and its write.
+            $this->between('sweep', fn () => DB::table('messages')->where('id', $message->id)->update($meanwhile));
+
+            Artisan::call('messaging:dispatch-scheduled');
+
+            $this->assertSame($meanwhile['status'], $this->fresh($club, $message)->status, $case.': kept, never turned into uncertain');
+            $this->asTenant($club, fn () => Message::whereKey($message->id)->update(['status' => Message::SKIPPED])); // out of the next round's way
+        }
+    }
+
+    public function test_a_retry_never_turns_the_outcome_its_paused_attempt_saved_meanwhile_into_uncertain(): void
+    {
+        $club = $this->connected();
+        foreach (self::KINDS as $kind) {
+            $message = $this->queued($club, $kind);
+            $this->asTenant($club, fn () => Message::whereKey($message->id)->update(['status' => Message::SENDING]));
+            // The first attempt was paused, not dead: the queue handed the job back, and attempt 1 saves "sent" while
+            // attempt 2 is deciding.
+            $this->between('job', fn () => DB::table('messages')->where('id', $message->id)->update(['status' => Message::SENT, 'provider_message_id' => 'wamid.PAUSED-'.$kind, 'sent_at' => now()]));
+
+            $this->assertNull($this->work($club, $message, 2));
+
+            $this->assertSame(Message::SENT, $this->fresh($club, $message)->status, $kind.': the saved outcome stands');
+        }
+    }
+
+    public function test_a_claim_still_standing_is_settled_as_uncertain_once_and_its_campaign_counted(): void
+    {
+        $club = $this->connected();
+        $message = $this->queued($club, 'campaign');
+        $this->asTenant($club, fn () => Message::whereKey($message->id)->update(['status' => Message::SENDING, 'updated_at' => now()->subMinutes(20)]));
+
+        Artisan::call('messaging:dispatch-scheduled');
+        Artisan::call('messaging:dispatch-scheduled');
+
+        $this->asTenant($club, function () use ($message) {
+            $this->assertSame(Message::UNCERTAIN, $message->fresh()->status);
+            $campaign = Campaign::findOrFail($message->campaign_id);
+            $this->assertSame([0, 1], [$campaign->failed_count, $campaign->uncertainCount()]);
+        });
+        $this->assertSame(0, $this->calls);
     }
 }
