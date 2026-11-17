@@ -30,6 +30,12 @@ final class BackupHealth
     /** @return array{kind: string, last_sound_at: ?string, hours: ?int, missing_attachments: ?int, message: string}|null */
     public function alert(Tenant $tenant): ?array
     {
+        // The folder there but closed to this process (the panel's user): reading it would fail or look empty, and an
+        // empty look is not «no backup» — the nightly may be making them all along.
+        if ($this->backups->folderUnreadable($tenant)) {
+            return ['kind' => 'unreadable', 'last_sound_at' => null, 'hours' => null, 'missing_attachments' => null,
+                'message' => 'لا تستطيع لوحة التحكم قراءة مجلد النسخ الاحتياطية على الخادم (صلاحيات المجلد): لا يمكن عرض النسخ ولا إنشاء نسخة يدوية من اللوحة حتى يُصلَح.'];
+        }
         $dir = $this->backups->directory($tenant);
         $sound = $this->newest($this->backups->disk()->files($dir));
         $incomplete = $this->newest($this->backups->disk()->files($dir.'/'.TenantBackupService::INCOMPLETE));

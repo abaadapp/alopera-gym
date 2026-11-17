@@ -17,7 +17,7 @@ function size(bytes: number) {
     return `${number(bytes / 1024, 0)} KB`;
 }
 
-export default function Backups({ backups, interrupted = 0 }: { backups: Backup[]; interrupted?: number }) {
+export default function Backups({ backups, interrupted = 0, folderUnreadable = false }: { backups: Backup[]; interrupted?: number; folderUnreadable?: boolean }) {
     const { tenant } = useShared();
     const [creating, setCreating] = useState(false);
     const form = useForm<{ archive: File | null; confirm: string }>({ archive: null, confirm: '' });
@@ -43,12 +43,19 @@ export default function Backups({ backups, interrupted = 0 }: { backups: Backup[
                 </div>
             )}
 
+            {folderUnreadable && (
+                <div className="mb-6 flex items-start gap-3 rounded-xl border border-[#fecaca] bg-[#fef2f2] p-4 text-[13px] text-[#991b1b]">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    <p>لا تستطيع لوحة التحكم قراءة مجلد النسخ الاحتياطية على الخادم (صلاحيات المجلد)، فقد تبدو القائمة فارغة مع وجود نسخ محفوظة. النسخ الليلية لا تتأثر، ويُصلَح ذلك تلقائيًا بعد أول نسخة ليلية.</p>
+                </div>
+            )}
+
             <div className="grid gap-6 lg:grid-cols-3">
                 <Card padded={false} className="lg:col-span-2">
                     <div className="p-5 pb-0">
                         <CardHeader title="النسخ المحفوظة" subtitle="تتضمن كل بيانات النادي والملفات المرفوعة" />
                     </div>
-                    {backups.length === 0 ? (
+                    {backups.length === 0 && !folderUnreadable ? (
                         <EmptyState icon={<Database className="size-6" />} title="لا توجد نسخ بعد" action={<Button size="sm" onClick={create} loading={creating}>إنشاء أول نسخة</Button>} />
                     ) : (
                         <div className="overflow-x-auto">
