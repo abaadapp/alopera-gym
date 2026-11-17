@@ -12,7 +12,7 @@ use Mpdf\Mpdf;
 /**
  * A report as a PDF: the same lines (period, branch, filters, when it was made) and the same tables as its Excel file,
  * right to left, in the papers' Arabic font. Wide tables are printed on a landscape page. A very long table is cut at
- * MAX_ROWS with a line saying so (the Excel file holds it all). The document papers keep their own engine.
+ * MAX_ROWS with a line above it saying how much it holds (CSV holds it all). The document papers keep their own engine.
  */
 final class ReportPdf
 {
@@ -88,11 +88,11 @@ final class ReportPdf
                 $out .= '<h2>'.e($sheet->title).'</h2>';
             }
             $numeric = array_map(fn ($c) => $c[1] !== ReportSheet::TEXT, $sheet->columns);
-            $out .= '<table class="data"><thead><tr>';
+            $table = '<table class="data"><thead><tr>';
             foreach ($sheet->columns as $i => [$label, $kind]) {
-                $out .= '<th style="text-align:'.($numeric[$i] ? 'left' : 'right').'">'.e($this->heading($label, $kind)).'</th>';
+                $table .= '<th style="text-align:'.($numeric[$i] ? 'left' : 'right').'">'.e($this->heading($label, $kind)).'</th>';
             }
-            $out .= '</tr></thead><tbody>';
+            $table .= '</tr></thead><tbody>';
             $n = 0;
             $total = 0;
             foreach ($sheet->rows as $row) {
@@ -101,22 +101,24 @@ final class ReportPdf
                     continue;
                 }
                 $n++;
-                $out .= '<tr>';
+                $table .= '<tr>';
                 foreach (array_values($row) as $i => $cell) {
                     $kind = $sheet->columns[$i][1] ?? ReportSheet::TEXT;
                     [$value, $kind] = is_array($cell) && array_key_exists('__kind', $cell) ? [$cell['value'], $cell['__kind']] : [$cell, $kind];
                     $text = $this->format($value, $kind);
-                    $out .= $kind === ReportSheet::TEXT || ! is_numeric($value) ? $this->cell($text) : '<td style="text-align:left" dir="ltr">'.e($text).'</td>';
+                    $table .= $kind === ReportSheet::TEXT || ! is_numeric($value) ? $this->cell($text) : '<td style="text-align:left" dir="ltr">'.e($text).'</td>';
                 }
-                $out .= '</tr>';
+                $table .= '</tr>';
             }
             if ($total === 0) {
-                $out .= '<tr><td colspan="'.max(1, count($sheet->columns)).'" style="color:#6b7280">لا توجد بيانات.</td></tr>';
+                $table .= '<tr><td colspan="'.max(1, count($sheet->columns)).'" style="color:#6b7280">لا توجد بيانات.</td></tr>';
             }
-            $out .= '</tbody></table>';
+            $table .= '</tbody></table>';
+            // Said above the table, where it is read first, not after thousands of rows: how much of it this PDF holds.
             if ($total > self::MAX_ROWS) {
-                $out .= '<div class="note">الجدول أطول من '.self::MAX_ROWS.' صف؛ عُرض أولها هنا، والجدول كاملًا في ملف Excel.</div>';
+                $out .= '<div class="note">هذا الملف لا يحمل الجدول كاملًا: عُرض هنا أول '.self::MAX_ROWS.' صف من '.$total.'. البيانات كاملة في ملف CSV (أو Excel إن اتسع لها).</div>';
             }
+            $out .= $table;
         }
 
         return $out.'</body></html>';

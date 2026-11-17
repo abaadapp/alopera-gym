@@ -29,6 +29,7 @@ use App\Modules\Gym\Services\MemberService;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Models\MessageTemplate;
 use App\Modules\Payments\Services\OnlinePaymentService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -46,9 +47,24 @@ class MemberController extends Controller
 
     public function index(Request $request): Response
     {
+        $members = $this->listed($request, ['currentMembership', 'upcomingMembership'])
+            ->paginate(in_array($request->integer('per_page'), [25, 50, 100], true) ? $request->integer('per_page') : 25)->withQueryString()
+            ->through(fn (Member $m) => GymPresenter::memberRow($m));
+
+        return Inertia::render('Gym/Members/Index', ['members' => $members, 'filters' => $request->only('q', 'membership', 'status', 'sort', 'dir', 'per_page')]);
+    }
+
+    /**
+     * The members the list shows for these filters (search, membership, the member's status), in its order, in the
+     * branch the user sees. The list pages it; the export takes every one of them, so the file holds what was asked for.
+     *
+     * @param  list<string>  $with
+     */
+    private function listed(Request $request, array $with): Builder
+    {
         $status = $request->string('membership')->toString();
 
-        $members = BranchContext::scope(Member::with(['currentMembership', 'upcomingMembership']))
+        return BranchContext::scope(Member::with($with))
             ->search($request->string('q')->toString())
             ->when($status === 'active', fn ($q) => $q->whereHas('memberships', fn ($m) => $m->where('status', Membership::ACTIVE)))
             ->when($status === 'frozen', fn ($q) => $q->whereHas('memberships', fn ($m) => $m->where('status', Membership::FROZEN)))
@@ -66,11 +82,7 @@ class MemberController extends Controller
                         ->whereIn('status', [Membership::ACTIVE, Membership::FROZEN, Membership::SCHEDULED, Membership::PENDING])->orderByDesc('ends_on')->limit(1), $dir),
                     default => $q->latest('id'),
                 };
-            })
-            ->paginate(in_array($request->integer('per_page'), [25, 50, 100], true) ? $request->integer('per_page') : 25)->withQueryString()
-            ->through(fn (Member $m) => GymPresenter::memberRow($m));
-
-        return Inertia::render('Gym/Members/Index', ['members' => $members, 'filters' => $request->only('q', 'membership', 'status', 'sort', 'dir', 'per_page')]);
+            });
     }
 
     /** Quick lookup for reception, POS and pickers. */
@@ -259,9 +271,11 @@ class MemberController extends Controller
 
     public function export(Request $request): StreamedResponse
     {
-        $rows = function () {
-            // The branch the list shows (a user tied to a branch: theirs), as the list itself.
-            foreach (BranchContext::scope(Member::with('currentMembership'))->orderBy('id')->lazy(500) as $m) {
+        // The list's own members for the filters on screen, every page of them, in its order; the id last, so that reading
+        // in pieces of 500 neither repeats nor skips a member whose name (or date) another shares.
+        $query = $this->listed($request, ['currentMembership'])->orderBy('gym_members.id');
+        $rows = function () use ($query) {
+            foreach ($query->lazy(500) as $m) {
                 $ms = $m->currentMembership;
                 yield [$m->member_no, $m->full_name, $m->phone, $m->email, Member::STATUS_LABELS[$m->status] ?? $m->status, $m->joined_on?->toDateString(),
                     $ms?->plan_snapshot['name'] ?? '', $ms ? (Membership::STATUS_LABELS[$ms->status] ?? $ms->status) : '', $ms?->ends_on?->toDateString() ?? '',

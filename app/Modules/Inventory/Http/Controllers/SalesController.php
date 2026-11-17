@@ -18,6 +18,7 @@ use App\Modules\Inventory\Services\PosDevices;
 use App\Modules\Reports\Support\ReportDocument;
 use App\Modules\Reports\Support\ReportSheet;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -91,23 +92,36 @@ class SalesController extends Controller
     }
 
     /** The list as a spreadsheet: the same period, search and filters as the screen, every row (not one page). */
-    public function export(Request $request, AuditLogger $audit, TenantContext $tenants): StreamedResponse
+    public function export(Request $request, AuditLogger $audit, TenantContext $tenants): StreamedResponse|JsonResponse
     {
         abort_unless($request->user()->can('reports.export'), 403);
         $format = $request->string('format')->toString() === 'xlsx' ? 'xlsx' : 'csv';
         $period = Period::fromRequest($request);
-        $rows = $this->filtered($request, $period)->with(['cashier:id,name', 'branch:id,name', 'items', 'customer'])->latest('id')->limit(20000)->get();
+        $query = $this->filtered($request, $period);
+        $count = (clone $query)->count();
+
+        // Every sale the list shows, never the first N of them: CSV is written row by row and holds them all; Excel is
+        // built whole in memory, so a list longer than it may hold is refused with a reason, not cut short in silence.
+        $limit = (int) config('gym.exports.xlsx_max_rows', 5000);
+        if ($format === 'xlsx' && $count > $limit) {
+            return response()->json(['message' => 'عدد العمليات في هذه الفترة والفلاتر ('.number_format($count).') أكبر من الحد الذي يتسع له ملف Excel ('.number_format($limit).'). صدّرها بصيغة CSV، فهو يحملها كلها، أو اختر فترة أقصر.'], 422);
+        }
+
+        $rows = function () use ($query) {
+            // Newest first, read in pieces by id: a steady order, and memory that does not grow with the list.
+            foreach ($query->with(['cashier:id,name', 'branch:id,name', 'items', 'customer'])->lazyByIdDesc(500, 'sales.id', 'id') as $s) {
+                $r = self::row($s);
+
+                yield [$r['number'], $r['at'], $r['buyer'], $r['phone'] ?? '', $s->items->map(fn (SaleItem $i) => $i->name.' × '.(float) $i->quantity)->implode('، '),
+                    $r['source_label'], $r['cashier'] ?? '', $r['branch'] ?? '', $r['method_label'], $r['discount'], $r['total'], $r['state_label']];
+            }
+        };
 
         $sheet = new ReportSheet('عمليات البيع', [
             ['الرقم', ReportSheet::TEXT], ['التاريخ', ReportSheet::TEXT], ['العميل', ReportSheet::TEXT], ['الهاتف', ReportSheet::TEXT], ['المنتجات', ReportSheet::TEXT],
             ['المصدر', ReportSheet::TEXT], ['الموظف', ReportSheet::TEXT], ['الفرع', ReportSheet::TEXT], ['طريقة الدفع', ReportSheet::TEXT],
             ['الخصم', ReportSheet::MONEY], ['الإجمالي', ReportSheet::MONEY], ['الحالة', ReportSheet::TEXT],
-        ], $rows->map(function (Sale $s) {
-            $r = self::row($s);
-
-            return [$r['number'], $r['at'], $r['buyer'], $r['phone'] ?? '', $s->items->map(fn (SaleItem $i) => $i->name.' × '.(float) $i->quantity)->implode('، '),
-                $r['source_label'], $r['cashier'] ?? '', $r['branch'] ?? '', $r['method_label'], $r['discount'], $r['total'], $r['state_label']];
-        })->all());
+        ], $rows());
 
         $meta = [['الفترة', $period->label()]];
         foreach (['source' => self::SOURCE_LABELS, 'status' => self::STATES, 'method' => self::METHOD_LABELS] as $key => $labels) {
@@ -120,9 +134,9 @@ class SalesController extends Controller
         }
         $meta[] = ['تاريخ الإصدار', now()->format('Y-m-d H:i')];
         $slug = 'sales-'.($period->bounded() ? ($period->from?->toDateString() ?? 'start').'_'.($period->to?->toDateString() ?? today()->toDateString()) : 'all');
-        $audit->log('sales.exported', null, ['format' => $format] + $period->toArray());
+        $audit->log('sales.exported', null, ['format' => $format, 'rows' => $count] + $period->toArray());
 
-        return (new ReportDocument($slug, 'عمليات البيع', $meta, [$sheet], $rows->isEmpty(), $tenants->require()->currency ?? 'OMR'))->download($format);
+        return (new ReportDocument($slug, 'عمليات البيع', $meta, [$sheet], $count === 0, $tenants->require()->currency ?? 'OMR'))->download($format);
     }
 
     /** One sale: its lines, the buyer, the money, and what may be done with it from here. */
