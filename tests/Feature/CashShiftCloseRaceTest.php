@@ -80,6 +80,12 @@ class CashShiftCloseRaceTest extends TestCase
         return $this->send($owner, 'post', route('club.cash-shifts.close', $shift), ['counted_cash' => '65', 'close_note' => 'عدّ الدرج', 'client_key' => $this->key()]);
     }
 
+    /** Refused because its shift closed (the closing put the drawer right): the rule, said to the user. */
+    private static function refused(array $result): bool
+    {
+        return str_contains((string) ($result['value']['exception'] ?? ''), 'أُقفلت') || str_contains(json_encode($result['value']['errors'] ?? [], JSON_UNESCAPED_UNICODE), 'أُقفلت');
+    }
+
     private function assertCountUnchanged($club, CashShift $shift, array $results): void
     {
         $this->asTenant($club, function () use ($shift, $results) {
@@ -88,8 +94,10 @@ class CashShiftCloseRaceTest extends TestCase
             $records = 'payments '.Payment::orderBy('id')->pluck('status')->implode(',').', expenses '.Expense::pluck('amount')->implode(',').' — '.json_encode($results, JSON_UNESCAPED_UNICODE);
             $this->assertSame(CashShift::CLOSED, $shift->status, $records);
             $this->assertSame($shift->expected_cash, $now, "closed expecting {$shift->expected_cash}, its records now say {$now}: {$records}");
+            // Each request went through, or was refused because the shift had closed: nothing else.
             foreach ($results as $result) {
-                $this->assertNull($result['value']['exception'] ?? null, $records);
+                $this->assertTrue($result['ok'], $records);
+                $this->assertTrue(self::refused($result) || $result['value']['exception'] === null, $records);
             }
         });
     }
@@ -132,7 +140,8 @@ class CashShiftCloseRaceTest extends TestCase
 
         $results = $this->concurrently([
             function (string $dir) use ($owner, $expense) {
-                self::pauseAfter(self::SHIFT_READ, $dir, 1.5);
+                // Slowed down once the new amount is written, before it commits: the closing runs in that moment.
+                self::pauseAfter('update "expenses" set', $dir, 1.5);
 
                 return $this->send($owner, 'put', route('club.expenses.update', $expense), [
                     'description' => 'ماء', 'amount' => '8', 'expense_date' => today()->toDateString(), 'payment_method' => 'cash',
@@ -165,7 +174,7 @@ class CashShiftCloseRaceTest extends TestCase
 
         $dump = json_encode([$closing, $cancel], JSON_UNESCAPED_UNICODE);
         $this->assertTrue($closing['value']['cancel_waited'] ?? false, 'the cancel waited for the closing: '.$dump);
-        $this->assertStringContainsString('أُقفلت', json_encode($cancel['value']['errors'] ?? [], JSON_UNESCAPED_UNICODE), 'then was refused: '.$dump);
+        $this->assertTrue(self::refused($cancel), 'then was refused: '.$dump);
         $this->assertSame(Payment::COMPLETED, $this->asTenant($club, fn () => $payment->fresh()->status), $dump);
         $this->assertCountUnchanged($club, $shift, [$closing]);
     }
