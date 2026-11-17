@@ -16,6 +16,7 @@ use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Messaging\Models\Conversation;
@@ -171,6 +172,7 @@ final class StaffAlerts
             $record instanceof Payment => ['payment', 'الدفعة '.($record->receipt_number ?? '#'.$record->id)],
             $record instanceof CreditNote => ['credit_note', 'الإشعار الدائن '.$record->number],
             $record instanceof Expense => ['expense', 'المصروف '.$record->number],
+            $record instanceof GiftMembership => ['gift', 'الهدية '.$record->number],
             default => [null, null],
         };
         if (! $type) {

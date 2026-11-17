@@ -10,6 +10,7 @@ use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Gym\Models\GiftMembership;
 
 class AccountingServiceProvider extends ModuleServiceProvider
 {
@@ -26,7 +27,7 @@ class AccountingServiceProvider extends ModuleServiceProvider
 
     protected function bootModule(): void
     {
-        foreach ([Invoice::class, Payment::class, CreditNote::class, Expense::class] as $model) {
+        foreach ([Invoice::class, Payment::class, CreditNote::class, Expense::class, GiftMembership::class] as $model) {
             $model::observe(PostToLedger::class);
         }
 

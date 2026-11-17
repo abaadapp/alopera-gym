@@ -13,10 +13,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * A plan bought for someone else (#192). Lifecycle:
  *
  *   pending ──invoice paid (InvoicePaid)──▶ paid ──redeemed once──▶ redeemed
- *      │                                     │
- *      └── invoice voided ──▶ cancelled ◀────┴── cancelled by staff (before redemption)
+ *      │                                     │ │
+ *      │                                     │ └── window passed (gym:expire-gifts) ──▶ expired
+ *      └── invoice voided ──▶ cancelled ◀────┤
+ *                                            └── credit note on its invoice ──▶ refunded
  *
- * «Expired» is a paid gift whose redemption window (expires_on) has passed: read from the dates, never stored.
+ * A paid gift past expires_on is treated as expired at once (isExpired), before the nightly job stores it.
  * Only a fully paid invoice moves a gift out of `pending`; a bank transfer awaiting confirmation does not.
  */
 class GiftMembership extends Model
@@ -31,17 +33,20 @@ class GiftMembership extends Model
 
     public const CANCELLED = 'cancelled';
 
-    /** Shown status (EXPIRED is computed). */
     public const EXPIRED = 'expired';
+
+    public const REFUNDED = 'refunded';
+
+    public const STATUSES = [self::PENDING, self::PAID, self::REDEEMED, self::EXPIRED, self::CANCELLED, self::REFUNDED];
 
     public const STATUS_LABELS = [
         self::PENDING => 'بانتظار الدفع', self::PAID => 'مدفوعة — لم تُستخدم', self::REDEEMED => 'مستخدمة',
-        self::EXPIRED => 'منتهية الصلاحية', self::CANCELLED => 'ملغاة',
+        self::EXPIRED => 'منتهية الصلاحية', self::CANCELLED => 'ملغاة', self::REFUNDED => 'مستردة ماليًا',
     ];
 
     public const STATUS_LABELS_EN = [
         self::PENDING => 'Awaiting payment', self::PAID => 'Paid — not used', self::REDEEMED => 'Used',
-        self::EXPIRED => 'Expired', self::CANCELLED => 'Cancelled',
+        self::EXPIRED => 'Expired', self::CANCELLED => 'Cancelled', self::REFUNDED => 'Refunded',
     ];
 
     public const DEFAULT_REDEEM_DAYS = 90;
@@ -63,6 +68,8 @@ class GiftMembership extends Model
             'expires_on' => 'immutable_date',
             'redeemed_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'expired_at' => 'datetime',
+            'refunded_at' => 'datetime',
         ];
     }
 
@@ -90,7 +97,8 @@ class GiftMembership extends Model
     {
         $today ??= CarbonImmutable::today();
 
-        return $this->status === self::PAID && $this->expires_on !== null && $this->expires_on->lt($today);
+        return $this->status === self::EXPIRED
+            || ($this->status === self::PAID && $this->expires_on !== null && $this->expires_on->lt($today));
     }
 
     public function isRedeemable(?CarbonImmutable $today = null): bool

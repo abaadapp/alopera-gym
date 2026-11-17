@@ -40,6 +40,11 @@ return new class extends Migration
             $table->foreignId('membership_id')->nullable()->unique()->constrained('gym_memberships')->restrictOnDelete();
             $table->string('redeemed_via', 10)->nullable(); // link | staff
             $table->foreignId('redeemed_by')->nullable()->constrained('users')->nullOnDelete();
+            // Expired: its window passed unredeemed (gym:expire-gifts). Refunded: finance credited its invoice
+            // (refund_note_id), so it can no longer be used. Both close the gift in the books (LedgerProjector::gift).
+            $table->timestamp('expired_at')->nullable();
+            $table->timestamp('refunded_at')->nullable();
+            $table->foreignId('refund_note_id')->nullable()->constrained('credit_notes')->nullOnDelete();
             $table->timestamp('cancelled_at')->nullable();
             $table->string('cancel_reason', 250)->nullable();
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();

@@ -29,7 +29,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 final class InvoicePaper extends PaperBuilder
 {
-    public const TYPES = ['membership' => 'عضوية', 'pt' => 'تدريب شخصي', 'pos' => 'مبيعات المنتجات', 'other' => 'خدمات أخرى'];
+    public const TYPES = ['membership' => 'عضوية', 'pt' => 'تدريب شخصي', 'pos' => 'مبيعات المنتجات', 'gift' => 'هدية اشتراك', 'other' => 'خدمات أخرى'];
 
     public static function find(int $id): ?Model
     {

@@ -7,6 +7,7 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Core\Tenancy\TenantContext;
+use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Gym\Models\GiftMembership;
@@ -163,6 +164,8 @@ final class GiftService
         match (true) {
             $gift->status === GiftMembership::REDEEMED => throw new BusinessRuleException('gift.redeemed', 'استُخدمت هذه الهدية من قبل.'),
             $gift->status === GiftMembership::CANCELLED => throw new BusinessRuleException('gift.cancelled', 'هذه الهدية ملغاة.'),
+            $gift->status === GiftMembership::REFUNDED => throw new BusinessRuleException('gift.refunded', 'رُدّ مبلغ هذه الهدية، فلا يمكن استخدامها.'),
+            $gift->status === GiftMembership::EXPIRED => throw new BusinessRuleException('gift.expired', 'انتهت مهلة استرداد هذه الهدية في '.$gift->expires_on?->format('Y-m-d').'.'),
             $gift->status !== GiftMembership::PAID => throw new BusinessRuleException('gift.unpaid', 'لم يكتمل دفع هذه الهدية بعد.'),
             // Refunded (fully or partly) in finance after it was paid: what was given back is not given again.
             ! $invoice || $invoice->status !== Invoice::PAID => throw new BusinessRuleException('gift.refunded', 'رُدّ مبلغ هذه الهدية، فلا يمكن استخدامها.'),
@@ -197,6 +200,49 @@ final class GiftService
 
             return $gift;
         });
+    }
+
+    /**
+     * A credit note on a gift's invoice once it was paid (CreditNote created, inside CreditNoteService::issue, under the
+     * invoice's lock): the money, or part of it, goes back, so the gift can no longer be used. A note while the gift
+     * still waits for its money (an agreed discount that settles the rest) changes nothing here: InvoicePaid follows.
+     * A redeemed gift stays redeemed: what is credited then comes out of the membership's revenue.
+     */
+    public function refundedBy(CreditNote $note): void
+    {
+        $gift = GiftMembership::where('invoice_id', $note->invoice_id)->lockForUpdate()->first();
+        if (! $gift || ! in_array($gift->status, [GiftMembership::PAID, GiftMembership::CANCELLED], true) || $gift->paid_at === null) {
+            return;
+        }
+
+        $gift->forceFill(['status' => GiftMembership::REFUNDED, 'refunded_at' => now(), 'refund_note_id' => $note->id])->save();
+        $this->audit->log('gift.refunded', $gift, ['number' => $gift->number, 'credit_note' => $note->number, 'amount' => $note->amount]);
+    }
+
+    /**
+     * gym:expire-gifts: paid gifts whose window passed unredeemed are stored as expired (and leave the books' liability).
+     * Each under its invoice's lock then its own, the order redemption takes, so a redemption in flight wins or waits.
+     */
+    public function expireDue(?CarbonImmutable $today = null): int
+    {
+        $today ??= CarbonImmutable::today();
+        $count = 0;
+        GiftMembership::where('status', GiftMembership::PAID)->where('expires_on', '<', $today->toDateString())
+            ->eachById(function (GiftMembership $gift) use ($today, &$count) {
+                $count += DB::transaction(function () use ($gift, $today) {
+                    $gift->invoice_id && Invoice::whereKey($gift->invoice_id)->lockForUpdate()->first();
+                    $gift = GiftMembership::whereKey($gift->id)->lockForUpdate()->first();
+                    if (! $gift || $gift->status !== GiftMembership::PAID || ! $gift->expires_on?->lt($today)) {
+                        return 0;
+                    }
+                    $gift->forceFill(['status' => GiftMembership::EXPIRED, 'expired_at' => now()])->save();
+                    $this->audit->log('gift.expired', $gift, ['number' => $gift->number, 'expires_on' => $gift->expires_on->toDateString()]);
+
+                    return 1;
+                });
+            });
+
+        return $count;
     }
 
     /** InvoiceVoided: a gift still waiting for its money is withdrawn with its invoice. */

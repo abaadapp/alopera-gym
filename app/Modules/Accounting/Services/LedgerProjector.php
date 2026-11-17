@@ -12,6 +12,7 @@ use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Gym\Models\GiftMembership;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -27,6 +28,10 @@ use Throwable;
  *   payment cancelled    the receipt entry is reversed (in an open period)
  *   refund paid          Dr receivable (customer credits if from credit) Cr the money account it left from
  *   credit note          Dr returns & allowances, Dr VAT payable    Cr receivable
+ *                        (on a gift still owed: Dr gifts not yet used instead of returns)
+ *   gift invoice         Dr receivable   Cr gifts not yet used (a liability: deferred revenue), Cr VAT payable
+ *   gift redeemed        Dr gifts not yet used                     Cr membership revenue (what is left of it)
+ *   gift closed unused   Dr gifts not yet used                     Cr expired gifts revenue (expired, or refunded in part)
  *   expense              Dr the category's account                  Cr the cash or bank account that paid it (edits and deletes reverse)
  *
  * The money account is the one kept with the payment or expense; older records without one take the account the
@@ -44,6 +49,7 @@ final class LedgerProjector
                 $record instanceof Payment => $this->payment($record),
                 $record instanceof CreditNote => $this->creditNote($record),
                 $record instanceof Expense => $this->expense($record, $deleted || $record->trashed()),
+                $record instanceof GiftMembership => $this->gift($record),
                 default => null,
             };
         });
@@ -146,7 +152,7 @@ final class LedgerProjector
                 'branch_id' => $note->branch_id,
                 ...$this->key('credit_note', $note->id, 'issue'),
             ], array_values(array_filter([
-                ['account' => $this->chart->account('sales_returns'), 'debit' => Money::sub($note->amount, $tax)],
+                ['account' => $this->chart->account($this->giftOwedAt($note) ? 'gift_liability' : 'sales_returns'), 'debit' => Money::sub($note->amount, $tax)],
                 Money::isZero($tax) ? null : ['account' => $vat, 'debit' => $tax],
                 ['account' => $this->chart->account('receivable'), 'credit' => $note->amount],
             ])));
@@ -229,7 +235,7 @@ final class LedgerProjector
     public function syncClub(?callable $failed = null): array
     {
         $this->chart->ensure();
-        $counts = ['invoices' => 0, 'payments' => 0, 'credit_notes' => 0, 'expenses' => 0, 'skipped_closed' => 0, 'failed' => 0];
+        $counts = ['invoices' => 0, 'payments' => 0, 'credit_notes' => 0, 'expenses' => 0, 'gifts' => 0, 'skipped_closed' => 0, 'failed' => 0];
         $before = JournalEntry::count();
         $each = function (Model $record, callable $post) use (&$counts, $failed) {
             try {
@@ -266,8 +272,76 @@ final class LedgerProjector
             $each($e, fn () => $this->expense($e, $e->trashed()));
             $counts['expenses']++;
         });
+        // After the invoices and credit notes whose amounts they move out of the gifts' liability.
+        GiftMembership::query()->whereIn('status', [GiftMembership::REDEEMED, GiftMembership::EXPIRED, GiftMembership::REFUNDED])
+            ->orderBy('id')->each(function (GiftMembership $g) use (&$counts, $each) {
+                $each($g, fn () => $this->gift($g));
+                $counts['gifts']++;
+            });
 
         return $counts + ['entries_added' => JournalEntry::count() - $before];
+    }
+
+    /**
+     * A gift leaves the liability once (#192): redeemed, it becomes membership revenue; closed unused (its window
+     * passed, or finance refunded it in part), what is left of it is income. The amount is what its invoice put there
+     * (net of tax) less the credit notes issued while it was still owed; what is credited later comes out of revenue.
+     * VAT was charged on the gift's invoice when it was sold, so neither move carries tax.
+     */
+    public function gift(GiftMembership $gift): void
+    {
+        [$event, $at, $to, $label] = match ($gift->status) {
+            GiftMembership::REDEEMED => ['redeem', $gift->redeemed_at, 'revenue_membership', 'استخدام الهدية'],
+            GiftMembership::EXPIRED => ['expire', $gift->expired_at, 'revenue_gift_breakage', 'انتهاء مهلة الهدية'],
+            GiftMembership::REFUNDED => ['close', $gift->refunded_at, 'revenue_gift_breakage', 'ما بقي من الهدية بعد ردّ مبلغها'],
+            default => [null, null, null, null],
+        };
+        if (! $event || ! $at || ! $gift->invoice_id || $this->entry('gift', $gift->id, $event)) {
+            return;
+        }
+        $invoice = Invoice::find($gift->invoice_id);
+        if (! $invoice || $invoice->status === Invoice::VOID) {
+            return;
+        }
+
+        $owed = Money::sub($invoice->total, $invoice->tax_total);
+        CreditNote::where('invoice_id', $invoice->id)->get()->filter(fn (CreditNote $n) => $this->giftOwedAt($n, $gift))
+            ->each(function (CreditNote $n) use (&$owed) {
+                $owed = Money::sub($owed, Money::sub($n->amount, $n->tax_amount ?? 0));
+            });
+        if (Money::cmp($owed, 0) <= 0) {
+            return;
+        }
+
+        $this->ledger->post([
+            'date' => app(AccountingPeriods::class)->postingDate($at),
+            'description' => "{$label} {$gift->number} — الفاتورة {$invoice->number}",
+            'branch_id' => $gift->branch_id ?? $invoice->branch_id,
+            ...$this->key('gift', $gift->id, $event),
+        ], [
+            ['account' => $this->chart->account('gift_liability'), 'debit' => $owed],
+            ['account' => $this->chart->account($to), 'credit' => $owed],
+        ]);
+    }
+
+    /**
+     * Was the gift on this note's invoice still owed when the note was issued (so the note takes back the liability,
+     * not revenue)? A gift is owed until it is redeemed or expires, and up to and including the note that refunded it.
+     */
+    private function giftOwedAt(CreditNote $note, ?GiftMembership $gift = null): bool
+    {
+        $gift ??= GiftMembership::where('invoice_id', $note->invoice_id)->first();
+        if (! $gift) {
+            return false;
+        }
+        $at = $note->created_at;
+
+        return match (true) {
+            $gift->refund_note_id !== null && $note->id > $gift->refund_note_id => false,
+            $gift->redeemed_at !== null && $at !== null && $gift->redeemed_at->lt($at) => false,
+            $gift->expired_at !== null && $at !== null && $gift->expired_at->lt($at) => false,
+            default => true,
+        };
     }
 
     private function entry(string $type, int $id, string $event): ?JournalEntry
