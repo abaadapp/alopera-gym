@@ -44,6 +44,7 @@ export const NAV: NavGroup[] = [
                 icon: Ticket,
                 tabs: [
                     { label: 'العضويات', route: 'club.memberships.index', permission: 'memberships.view', match: 'club.memberships.*' },
+                    { label: 'هدايا الاشتراكات', route: 'club.gifts.index', permission: 'gifts.view', match: 'club.gifts.*' },
                     { label: 'الباقات والأسعار', route: 'club.plans.index', permission: 'plans.manage', match: 'club.plans.*' },
                     { label: 'الخصومات والعروض', route: 'club.coupons.index', permission: 'plans.manage', match: 'club.coupons.*' },
                 ],

@@ -14,6 +14,7 @@ use App\Modules\Gym\Events\MembershipCreated;
 use App\Modules\Gym\Events\MembershipExpired;
 use App\Modules\Gym\Events\MembershipFrozen;
 use App\Modules\Gym\Events\MembershipResumed;
+use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\MembershipPlan;
@@ -105,11 +106,18 @@ final class MembershipService
         ]);
     }
 
-    /** Value of the days not yet used, pro rata on what was paid for the plan (fees excluded). */
+    /**
+     * Value of the days not yet used, pro rata on what was paid for the plan (fees excluded). A period redeemed from a
+     * gift (#192) costs nothing on its own invoice: what was paid for it is the gift's price, paid once on the gift's
+     * invoice. The upgrade that spends this credit cancels the period when it is paid, so the value is used once.
+     */
     public function unusedValue(Membership $membership, ?CarbonImmutable $today = null): string
     {
         $today ??= CarbonImmutable::today();
-        $paidForPlan = Money::sub(Money::sub($membership->price, $membership->discount), $membership->credit_applied);
+        $gift = GiftMembership::where('membership_id', $membership->id)->first(['id', 'price']);
+        $paidForPlan = $gift
+            ? Money::normalize($gift->price)
+            : Money::sub(Money::sub($membership->price, $membership->discount), $membership->credit_applied);
         $paidForPlan = Money::max($paidForPlan, 0);
         $remaining = $membership->daysRemaining($today);
         $total = max(1, $membership->totalDays());
@@ -120,7 +128,8 @@ final class MembershipService
     /** @param array<string, mixed> $options */
     private function create(Member $member, MembershipPlan $plan, string $kind, array $options): Membership
     {
-        if (! $plan->is_active) {
+        // A paid gift (#192) is redeemed into the plan it was bought for, even if that plan is no longer sold.
+        if (! isset($options['gift']) && ! $plan->is_active) {
             throw new BusinessRuleException('membership.plan_inactive', 'هذه الباقة غير متاحة للبيع.', 'membership_plan_id');
         }
 
@@ -129,6 +138,8 @@ final class MembershipService
         }
 
         return DB::transaction(function () use ($member, $plan, $kind, $options) {
+            /** @var GiftMembership|null $gift redeemed by GiftService::redeem(), which holds its lock */
+            $gift = $options['gift'] ?? null;
             // One sale awaiting payment per member: a second one (a renewal on top, another upgrade carrying the same
             // credit) would overlap periods or spend the credit twice once both are paid. The portal already refused it.
             Member::whereKey($member->id)->lockForUpdate()->first();
@@ -137,15 +148,16 @@ final class MembershipService
                 throw new BusinessRuleException('membership.pending', 'للعضو اشتراك بانتظار الدفع'.($waiting->invoice ? ' (الفاتورة '.$waiting->invoice->number.')' : '').'. أكمل دفعه أو ألغِه قبل بيع اشتراك آخر.', 'membership_plan_id');
             }
             $start = CarbonImmutable::parse($options['starts_on'] ?? today())->startOfDay();
-            $end = $plan->endDateFrom($start);
+            $end = ($gift ? $gift->durationPlan() : $plan)->endDateFrom($start);
             // An upgrade replaces the period it starts in, and moves the ones after it, when it is paid (activate()).
             if ($kind !== Membership::KIND_UPGRADE) {
                 $this->assertNoOverlap($member, $start, $end, isset($options['starts_on']) ? 'starts_on' : 'membership_plan_id');
             }
 
             $isFirst = ! $member->memberships()->whereNot('status', Membership::CANCELLED)->exists();
-            $signupFee = $kind === Membership::KIND_NEW && $isFirst ? Money::normalize($plan->signup_fee) : '0.000';
-            $price = Money::normalize($plan->price);
+            $signupFee = $kind === Membership::KIND_NEW && $isFirst && ! $gift ? Money::normalize($plan->signup_fee) : '0.000';
+            // A gift was paid on its own invoice: the recipient's period costs nothing, so the money is counted once.
+            $price = $gift ? '0.000' : Money::normalize($plan->price);
 
             $credit = Money::normalize($options['credit'] ?? 0);
             if (Money::cmp($credit, $price) > 0) {
@@ -182,9 +194,10 @@ final class MembershipService
                 'discount' => $discount,
                 'credit_applied' => $credit,
                 'total' => Money::sub(Money::add($price, $signupFee), Money::add($discount, $credit)),
-                'sessions_total' => $plan->sessions_limit,
-                'plan_snapshot' => $plan->snapshot(),
-                'notes' => $options['notes'] ?? null,
+                'sessions_total' => $gift ? ($gift->plan_snapshot['sessions_limit'] ?? null) : $plan->sessions_limit,
+                // A gift keeps the terms it was bought with.
+                'plan_snapshot' => $gift ? array_diff_key($gift->plan_snapshot, array_flip(['name_en', 'duration_label'])) : $plan->snapshot(),
+                'notes' => $gift ? 'هدية '.$gift->number : ($options['notes'] ?? null),
                 'created_by' => Auth::guard('web')->id(),
             ]);
 
@@ -196,7 +209,8 @@ final class MembershipService
 
             $kindLabel = ['new' => 'اشتراك', 'renewal' => 'تجديد', 'upgrade' => 'ترقية'][$kind];
             $lines = [[
-                'description' => $kindLabel.' — '.$plan->name.' (من '.$start->format('Y-m-d').' إلى '.$end->format('Y-m-d').')',
+                'description' => ($gift ? 'هدية '.$gift->number.' — '.($gift->plan_snapshot['name'] ?? $plan->name) : $kindLabel.' — '.$plan->name)
+                    .' (من '.$start->format('Y-m-d').' إلى '.$end->format('Y-m-d').')',
                 'unit_price' => $price,
                 'discount' => Money::add($discount, $credit),
                 'itemable' => $membership,
@@ -208,7 +222,11 @@ final class MembershipService
             $invoice = $this->invoices->issue($member, $lines, [
                 'type' => 'membership',
                 'branch_id' => $membership->branch_id,
-                'notes' => Money::isZero($credit) ? null : 'رصيد مستخدم من العضوية السابقة: '.$credit,
+                'notes' => match (true) {
+                    $gift !== null => 'مدفوعة بهدية: الفاتورة '.($gift->invoice?->number ?? '').'. لا مبلغ على المستلم.',
+                    Money::isZero($credit) => null,
+                    default => 'رصيد مستخدم من العضوية السابقة: '.$credit,
+                },
             ]);
 
             $membership->forceFill(['invoice_id' => $invoice->id])->save();

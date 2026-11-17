@@ -147,6 +147,8 @@ export interface PlanFeed {
     allows_classes?: boolean;
     sessions_limit?: number | null;
     join_url: string;
+    /** «إهداء هذه الباقة» (#192): the gift page, only on a plan the club offers as a gift. */
+    gift_url?: string | null;
 }
 
 export interface TrainerFeed {

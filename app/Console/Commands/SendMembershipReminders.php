@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Tenant;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Services\GiftWhatsApp;
 use App\Modules\Messaging\Services\MemberNotifier;
 use App\Modules\Messaging\Services\WhatsAppAutomation;
 use Carbon\CarbonImmutable;
@@ -66,6 +67,10 @@ class SendMembershipReminders extends ForEachTenant
                 });
         }
 
-        return "reminders_queued={$sent}";
+        // Paid, confirmed gifts whose WhatsApp message waited (the template approved later): at this hour, once each,
+        // and only those paid since the gift notice was switched on (GiftWhatsApp::sendPending).
+        $gifts = app(GiftWhatsApp::class)->sendPending();
+
+        return "reminders_queued={$sent} gifts_sent={$gifts}";
     }
 }

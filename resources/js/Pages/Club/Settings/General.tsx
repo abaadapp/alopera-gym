@@ -43,6 +43,8 @@ type Rules = {
     bank_iban: string | null;
     invoice_footer: string | null;
     invoice_due_days: number;
+    /** Days a paid gift membership can be redeemed in (#192). */
+    gift_redeem_days: number;
     allow_pay_at_reception: boolean;
     member_signup_enabled: boolean;
 };
@@ -102,6 +104,7 @@ export default function GeneralSettings({ club, rules, governorates, currencies 
             bank_iban: rules.bank_iban ?? '',
             invoice_footer: rules.invoice_footer ?? '',
             invoice_due_days: Number(rules.invoice_due_days),
+            gift_redeem_days: Number(rules.gift_redeem_days ?? 90),
             allow_pay_at_reception: Boolean(rules.allow_pay_at_reception),
             member_signup_enabled: Boolean(rules.member_signup_enabled),
         },
@@ -249,9 +252,10 @@ export default function GeneralSettings({ club, rules, governorates, currencies 
                         </div>
                     </SettingsSection>
 
-                    <SettingsSection icon={Printer} title="الفواتير والطباعة" description="مهلة السداد وتذييل الفاتورة، والقوالب والطابعات في صفحاتها">
+                    <SettingsSection icon={Printer} title="الفواتير والطباعة" description="مهلة السداد ومهلة استرداد الهدايا وتذييل الفاتورة، والقوالب والطابعات في صفحاتها">
                         <div className="grid gap-4 sm:grid-cols-2">
                             <NumberField label="مهلة السداد (أيام)" value={form.data.rules.invoice_due_days} onChange={(v) => setRule('invoice_due_days', v)} error={errors['rules.invoice_due_days']} min={0} max={90} hint="تحدد تاريخ استحقاق الفاتورة" />
+                            <NumberField label="مهلة استرداد الهدايا (أيام)" value={form.data.rules.gift_redeem_days} onChange={(v) => setRule('gift_redeem_days', v)} error={errors['rules.gift_redeem_days']} min={1} max={365} hint="من يوم اكتمال دفع الهدية. الافتراضي 90 يومًا." />
                             <Field label="تذييل الفاتورة" hint="يُطبع أسفل فاتورة العميل ما لم يُكتب تذييل آخر في «قوالب الأوراق»" error={errors['rules.invoice_footer']} className="sm:col-span-2">
                                 <Textarea rows={2} value={form.data.rules.invoice_footer ?? ''} onChange={(e) => setRule('invoice_footer', e.target.value)} maxLength={500} placeholder="شكرًا لاختيارك ناديّنا. المبالغ المدفوعة غير مستردة بعد تفعيل العضوية." />
                             </Field>

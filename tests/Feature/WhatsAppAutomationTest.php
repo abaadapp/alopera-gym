@@ -116,7 +116,9 @@ class WhatsAppAutomationTest extends TestCase
         $this->assertSame([], (array) $club->fresh()->setting('whatsapp_automation.off', []));
 
         $page = $this->actingAs($this->staff($club, SystemRoles::MANAGER))->get(route('club.automation.index'))->assertOk()->viewData('page')['props'];
-        $this->assertSame(['member_welcome', 'membership_activated', 'membership_expiring', 'membership_expires_today', 'membership_expired', 'membership_followup', 'membership_renewed', 'payment_received'],
+        $this->assertSame(['member_welcome', 'membership_activated', 'membership_expiring', 'membership_expires_today', 'membership_expired', 'membership_followup', 'membership_renewed', 'payment_received', 'gift_received'],
             collect($page['events'])->pluck('key')->all());
+        // The gift notice (#192) goes to someone who is not a member: off until the owner switches it on; the rest on.
+        $this->assertSame(['gift_received'], collect($page['events'])->where('on', false)->pluck('key')->values()->all());
     }
 }

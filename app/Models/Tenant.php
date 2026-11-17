@@ -51,6 +51,8 @@ class Tenant extends Model
         'bank_iban' => null,
         'invoice_footer' => null,
         'invoice_due_days' => 0,
+        // Days a paid gift membership can be redeemed in (#192).
+        'gift_redeem_days' => 90,
         'allow_pay_at_reception' => true,
         'member_signup_enabled' => true,
     ];

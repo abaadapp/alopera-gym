@@ -7,6 +7,7 @@ use App\Core\Notifications\StaffAlerts;
 use App\Core\Support\Phone;
 use App\Core\Tenancy\TenantContext;
 use App\Models\TenantIntegration;
+use App\Modules\Messaging\Events\InboundTextReceived;
 use App\Modules\Messaging\Jobs\FetchWhatsAppMedia;
 use App\Modules\Messaging\Models\Attachment;
 use App\Modules\Messaging\Models\AutoReply;
@@ -17,6 +18,7 @@ use App\Modules\Messaging\Models\WhatsAppContact;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 
 /**
  * Processes a verified WhatsApp webhook body (Cloud API format, from Meta or 360dialog). Each change says what it is:
@@ -149,6 +151,10 @@ final class InboundProcessor
                 return;
             }
             $text = (string) $message->body;
+            // A message another part of the system was waiting for (a gift's confirmation code) is answered there.
+            if (Event::until(new InboundTextReceived($conversation, $message)) === true) {
+                return;
+            }
             // A chat opened before she joined is not linked to her: the one member with this number is still who said it.
             $member = $conversation->member ?? $this->conversations->matchMember($conversation->phone);
             if ($member && in_array(mb_strtolower(trim($text)), self::STOP_WORDS, true)) {

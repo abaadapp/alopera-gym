@@ -114,5 +114,15 @@
     "حضر": "Attended",
     "غاب": "No-show",
     "ملغى": "Cancelled",
-    "غير مشمولة": "Not included"
+    "غير مشمولة": "Not included",
+    "استلام الهدية": "Redeem the gift",
+    "اختاري تاريخ بدء الاشتراك": "Choose the membership start date",
+    "اشتراككِ الحالي يغطي حتى :date، فاختاري يومًا بعده.": "Your current membership covers you until :date, so choose a day after it.",
+    "من :min حتى :max": "From :min to :max",
+    "مراجعة": "Review",
+    "تاريخ البدء": "Start date",
+    "دون أي مبلغ إضافي": "No extra charge",
+    "جارٍ التأكيد…": "Confirming…",
+    "تأكيد استلام الهدية": "Confirm the gift",
+    "هذه الهدية مخصصة لرقم جوال آخر. استلميها بالحساب المسجّل برقم المستلمة، أو اطلبي تفعيلها من استقبال النادي.": "This gift is meant for another mobile number. Redeem it with the account registered with the recipient's number, or ask the club's reception to activate it."
 }

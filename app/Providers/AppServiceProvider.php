@@ -19,6 +19,7 @@ use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\ClassSession;
+use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\PtSession;
@@ -92,6 +93,7 @@ class AppServiceProvider extends ServiceProvider
             'user' => User::class,
             'member' => Member::class,
             'membership' => Membership::class,
+            'gift_membership' => GiftMembership::class,
             'pt_subscription' => PtSubscription::class,
             'pt_session' => PtSession::class,
             'booking' => Booking::class,

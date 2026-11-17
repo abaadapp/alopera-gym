@@ -11,6 +11,16 @@ export const membershipStatus: Record<string, [string, Tone]> = {
     cancelled: ['ملغاة', 'red'],
 };
 
+/** «هدايا الاشتراكات» (#192): the server's display status (a paid gift past its date reads as expired). */
+export const giftStatus: Record<string, [string, Tone]> = {
+    pending: ['بانتظار الدفع', 'amber'],
+    paid: ['مدفوعة — لم تُستخدم', 'green'],
+    redeemed: ['مستخدمة', 'blue'],
+    expired: ['منتهية الصلاحية', 'gray'],
+    cancelled: ['ملغاة', 'red'],
+    refunded: ['أُلغيت بإشعار دائن', 'violet'],
+};
+
 export const membershipKind: Record<string, string> = { new: 'جديد', renewal: 'تجديد', upgrade: 'تغيير باقة' };
 
 export const invoiceStatus: Record<string, [string, Tone]> = {
@@ -22,7 +32,7 @@ export const invoiceStatus: Record<string, [string, Tone]> = {
     credited: ['ملغاة بإشعار دائن', 'gray'],
 };
 
-export const invoiceType: Record<string, string> = { membership: 'عضوية', pt: 'تدريب شخصي', pos: 'مبيعات المنتجات', other: 'أخرى' };
+export const invoiceType: Record<string, string> = { membership: 'عضوية', pt: 'تدريب شخصي', pos: 'مبيعات المنتجات', gift: 'هدية اشتراك', other: 'أخرى' };
 
 export const paymentStatus: Record<string, [string, Tone]> = {
     pending: ['بانتظار التأكيد', 'amber'],

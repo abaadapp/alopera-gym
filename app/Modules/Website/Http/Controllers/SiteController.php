@@ -18,6 +18,7 @@ use App\Modules\Website\Http\RendersSite;
 use App\Modules\Website\Models\ContactMessage;
 use App\Modules\Website\Models\SitePost;
 use App\Modules\Website\Models\SiteSetting;
+use App\Modules\Website\Support\GiftLinks;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -54,10 +55,11 @@ class SiteController extends Controller
     public function plans(): Response
     {
         $plans = MembershipPlan::public()->with('programs:id,name,name_en')->orderBy('sort')->get();
+        $giftsOnline = app(GiftLinks::class)->siteSells();
 
         return $this->sitePage('plans', 'Site/Plans', [
             // A plan without classes lists no programs, even one linked before its classes were taken off.
-            'plans' => $plans->map(fn ($p) => GymPresenter::sitePlan($p) + ['programs' => $p->allowsClasses()
+            'plans' => $plans->map(fn ($p) => GymPresenter::sitePlan($p, $giftsOnline) + ['programs' => $p->allowsClasses()
                 ? $p->programs->map(fn ($g) => SiteLanguage::pick($g->name, $g->name_en))->values() : []]),
             'ptPackages' => PtPackage::where('is_active', true)->where('is_public', true)->orderBy('price')->get(['id', 'name', 'name_en', 'description', 'description_en', 'sessions_count', 'session_minutes', 'price', 'validity_days'])
                 ->map(fn (PtPackage $p) => ['name' => SiteLanguage::pick($p->name, $p->name_en), 'description' => SiteLanguage::pick($p->description, $p->description_en)] + $p->only('id', 'sessions_count', 'session_minutes', 'price', 'validity_days')),

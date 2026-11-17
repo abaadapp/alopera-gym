@@ -195,6 +195,7 @@ export function Trainers({ section, joined }: SectionProps) {
 export function PlansGrid({ plans, currency, featuredLabel, buttonLabel }: { plans: PlanFeed[]; currency: string; featuredLabel: string; buttonLabel: string }) {
     const t = useT();
     const english = useLocale() === 'en';
+    const giftable = plans.some((p) => p.gift_url);
     return (
         <div className={cn('grid items-stretch gap-5', plans.length > 1 && 'md:grid-cols-2', plans.length > 2 && 'lg:grid-cols-3', plans.length === 1 && 'max-w-md')}>
             {plans.map((p) => {
@@ -224,9 +225,21 @@ export function PlansGrid({ plans, currency, featuredLabel, buttonLabel }: { pla
                                 <li key={i} className="flex gap-2.5 text-[15px] font-medium"><Diamond />{f}</li>
                             ))}
                         </ul>
-                        <a href={p.join_url} className={cn('mt-2 inline-flex h-[52px] items-center justify-center rounded-full border text-[15px] font-semibold transition-colors', featured ? 'border-[var(--site-gold)] bg-[var(--site-gold)] text-[var(--site-ink)] hover:border-[#DDB85C] hover:bg-[#DDB85C]' : 'border-[rgba(26,22,18,0.2)] bg-white text-[var(--site-ink)] hover:border-[var(--site-ink)] hover:bg-[var(--site-ink)] hover:text-white')}>
-                            {buttonLabel || t('اختاري الباقة')}
-                        </a>
+                        <div className="mt-2 flex flex-col gap-3">
+                            <a href={p.join_url} className={cn('inline-flex h-[52px] items-center justify-center rounded-full border text-[15px] font-semibold transition-colors', featured ? 'border-[var(--site-gold)] bg-[var(--site-gold)] text-[var(--site-ink)] hover:border-[#DDB85C] hover:bg-[#DDB85C]' : 'border-[rgba(26,22,18,0.2)] bg-white text-[var(--site-ink)] hover:border-[var(--site-ink)] hover:bg-[var(--site-ink)] hover:text-white')}>
+                                {buttonLabel || t('اختاري الباقة')}
+                            </a>
+                            {/* «إهداء هذه الباقة» (#192); the same empty row on the others, so the cards stay alike. */}
+                            {giftable && (
+                                <div className="flex h-7 items-center justify-center">
+                                    {p.gift_url && (
+                                        <a href={p.gift_url} className={cn('inline-flex items-center gap-1.5 border-b pb-0.5 text-[13px] font-medium transition-colors', featured ? 'border-[var(--site-gold)]/60 text-[var(--site-gold)] hover:border-[#DDB85C] hover:text-[#DDB85C]' : 'border-[var(--site-ink)]/25 text-[var(--site-ink)] hover:border-[var(--site-accent)] hover:text-[var(--site-accent)]')}>
+                                            <span aria-hidden>🎁</span> {t('إهداء هذه الباقة')}
+                                        </a>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </article>
                 );
             })}

@@ -31,6 +31,31 @@ final class Phone
         return $digits;
     }
 
+    /**
+     * Whether a normalized number has the shape of a mobile WhatsApp can reach: an Omani mobile (968, then 7 or 9 and
+     * seven more digits; typed as 9XXXXXXX, +968…, 00968… or with Arabic digits) or another country's number in
+     * international form (8 to 15 digits). The shape only: it says nothing about an account on WhatsApp, which only
+     * a message from the number proves (GiftWhatsApp).
+     */
+    public static function isMobile(string $normalized): bool
+    {
+        if (str_starts_with($normalized, self::DEFAULT_COUNTRY_CODE)) {
+            return (bool) preg_match('/^968[79]\d{7}$/', $normalized);
+        }
+
+        return (bool) preg_match('/^[1-9]\d{7,14}$/', $normalized);
+    }
+
+    /** A validation rule for a WhatsApp number typed in a form, with the message to show (Arabic, the caller translates). */
+    public static function mobileRule(string $message): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($message) {
+            if (! is_string($value) || mb_strlen($value) > 32 || ! self::isMobile(self::normalize($value))) {
+                $fail($message);
+            }
+        };
+    }
+
     public static function display(?string $phone): string
     {
         $digits = (string) $phone;
