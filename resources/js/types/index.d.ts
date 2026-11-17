@@ -40,6 +40,14 @@ export interface TenantInfo {
     phone: string | null;
 }
 
+export interface BackupAlert {
+    kind: 'incomplete' | 'stale' | 'none';
+    last_sound_at: string | null;
+    hours: number | null;
+    missing_attachments: number | null;
+    message: string;
+}
+
 export interface SharedProps {
     appName: string;
     locale: string;
@@ -53,6 +61,8 @@ export interface SharedProps {
     member: { id: number; name: string; member_no: string } | null;
     /** The club panel's bell; null outside the club panel. */
     notifications: { unread: number; items: StaffNotification[] } | null;
+    /** Backups that cannot be relied on (App\Core\Backup\BackupHealth), for whoever manages them; null otherwise. */
+    backupAlert?: BackupAlert | null;
     flash: { success: string | null; error: string | null; token: string | null; password?: string | null; webhook_token?: string | null; id: string | null };
     errors: Record<string, string>;
     [key: string]: unknown;

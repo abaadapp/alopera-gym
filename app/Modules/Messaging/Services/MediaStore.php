@@ -27,7 +27,8 @@ final class MediaStore
         return Storage::disk($this->diskName());
     }
 
-    private function diskName(): string
+    /** The disk the chat files are on (services.whatsapp.media_disk): the club backup reads and restores them there. */
+    public function diskName(): string
     {
         return (string) config('services.whatsapp.media_disk', 'local');
     }
@@ -46,9 +47,26 @@ final class MediaStore
         return SafeFiles::putBytes($bytes, $this->folder($tenantId).'/'.Str::uuid().'.'.(self::EXTENSIONS[$mime] ?? 'bin'), 'file', $this->diskName());
     }
 
+    /**
+     * The file of an attachment, only from its own club's folder: a path that names another club's chat files, an
+     * archive, or anything else on the disk (a row restored from a tampered archive) is treated as no file at all.
+     */
     public function absolutePath(Attachment $attachment): ?string
     {
-        return $attachment->path && $this->disk()->exists($attachment->path) ? $this->disk()->path($attachment->path) : null;
+        if (! $attachment->path || ! self::insideClub((string) $attachment->path, (int) $attachment->tenant_id)) {
+            return null;
+        }
+
+        return $this->disk()->exists($attachment->path) ? $this->disk()->path($attachment->path) : null;
+    }
+
+    /** Whether $path is a file inside the club's chat folder (whatsapp/{tenantId}/…), with no part that climbs or hides. */
+    public static function insideClub(string $path, int $tenantId): bool
+    {
+        return $tenantId > 0
+            && preg_match('#^whatsapp/'.$tenantId.'/(.+)$#D', $path, $m) === 1
+            && preg_match('#[\x00-\x1f\x7f\\\\]#', $m[1]) === 0
+            && array_intersect(explode('/', $m[1]), ['', '.', '..']) === [];
     }
 
     private function folder(int $tenantId): string

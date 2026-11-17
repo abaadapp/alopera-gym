@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Head } from '@inertiajs/react';
 import PanelShell from '@/Components/PanelShell';
 import Topbar from '@/Components/Topbar';
+import BackupAlertBar from '@/Components/BackupAlertBar';
 import { useShared } from '@/hooks/useShared';
 import { useNavigation } from '@/lib/nav';
 
@@ -18,6 +19,7 @@ export default function ClubLayout({ title, children, fullBleed = false }: { tit
                 topbar={(openMenu) => <Topbar onMenu={openMenu} />}
                 fullBleed={fullBleed}
             >
+                <BackupAlertBar />
                 {children}
             </PanelShell>
         </>

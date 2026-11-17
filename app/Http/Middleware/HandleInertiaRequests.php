@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Core\Auth\PermissionRegistry;
+use App\Core\Backup\BackupHealth;
 use App\Core\Branding\OfficialLogo;
 use App\Core\Support\Images\SpacesOriginals;
 use App\Core\Support\ImageStore;
@@ -16,6 +17,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Middleware;
+use Throwable;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -68,6 +70,8 @@ class HandleInertiaRequests extends Middleware
                     'items' => StaffNotification::for($request->user('web'))->latest('id')->limit(8)->get()->map(fn (StaffNotification $n) => NotificationController::row($n))->all(),
                 ]
                 : null,
+            // Backups that cannot be relied on (incomplete, or none sound in 26 hours), for whoever manages them.
+            'backupAlert' => fn () => $this->backupAlert($request),
             'flash' => fn () => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
@@ -80,6 +84,23 @@ class HandleInertiaRequests extends Middleware
                 'id' => $request->session()->hasAny(['success', 'error']) ? (string) Str::ulid() : null,
             ],
         ];
+    }
+
+    /** @return array<string, mixed>|null */
+    private function backupAlert(Request $request): ?array
+    {
+        $user = $request->user('web');
+        $tenant = app(TenantContext::class)->get();
+        if (! $request->routeIs('club.*') || ! $user instanceof User || ! $tenant || $tenant->id !== $user->tenant_id || ! $user->hasPermission('backups.manage')) {
+            return null;
+        }
+        try {
+            return app(BackupHealth::class)->alert($tenant);
+        } catch (Throwable $e) {
+            report($e); // the backup disk unreadable: never a broken page for it
+
+            return null;
+        }
     }
 
     /** @return array<string, mixed>|null */
