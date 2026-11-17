@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Club;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Backup\BackupDailyReport;
 use App\Core\Backup\TenantBackupService;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -25,6 +26,11 @@ class BackupController extends Controller
             'backups' => $this->backups->list($tenant),
             // A restore stopped half-way (the server stopped mid-restore): finished by the next backup or restore.
             'interrupted' => $this->backups->interruptedRuns($tenant),
+            // The folder there but closed to this process: the list would look empty while archives are kept in it.
+            'folderUnreadable' => $this->backups->folderUnreadable($tenant),
+            // The nightly's latest result (succeeded / failed / missing) and how many sound archives are kept of how many.
+            'daily' => app(BackupDailyReport::class)->last($tenant),
+            'keep' => TenantBackupService::KEEP,
         ]);
     }
 
