@@ -37,6 +37,12 @@ class Sale extends Model implements BranchOwned
     /** Website order steps, in order. */
     public const FULFILLMENT = ['new', 'preparing', 'ready', 'delivered'];
 
+    /**
+     * When a completed sale was completed, as SQL: a website order when it was handed over, a till sale when it was
+     * made (it has no handing over). What every report dates a sale by (تقرير المبيعات, مبيعات المنتجات).
+     */
+    public const COMPLETED_AT = 'coalesce(sales.delivered_at, sales.created_at)';
+
     protected $guarded = ['id', 'tenant_id'];
 
     protected function casts(): array
