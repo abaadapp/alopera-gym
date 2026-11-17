@@ -11,6 +11,7 @@ use App\Modules\Reports\Services\ReportCatalog;
 use App\Modules\Reports\Support\ReportDocument;
 use App\Modules\Reports\Support\ReportFilters;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -63,7 +64,7 @@ class ReportController extends Controller
     }
 
     /** One report as Excel, CSV or PDF, for the same filters as its page, for those who may export it. */
-    public function export(Request $request, string $report, AuditLogger $audit, TenantContext $tenants): StreamedResponse
+    public function export(Request $request, string $report, AuditLogger $audit, TenantContext $tenants): StreamedResponse|JsonResponse
     {
         $entry = $this->authorizeReport($request, $report);
         abort_unless($this->catalog->canExport($request->user(), $report), 403);

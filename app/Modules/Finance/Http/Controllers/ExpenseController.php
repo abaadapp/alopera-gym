@@ -3,6 +3,7 @@
 namespace App\Modules\Finance\Http\Controllers;
 
 use App\Core\Auth\PermissionRegistry;
+use App\Core\Export\ExcelLimit;
 use App\Core\Export\TableExporter;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Files\SafeFiles;
@@ -26,6 +27,7 @@ use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\CashShifts;
 use App\Modules\Inventory\Models\Supplier;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -139,16 +141,22 @@ class ExpenseController extends Controller
         return Storage::disk('local')->download($expense->attachment_path);
     }
 
-    public function export(Request $request): StreamedResponse
+    public function export(Request $request): StreamedResponse|JsonResponse
     {
-        $query = $this->filtered($request)->with('category:id,name')->orderBy('expense_date');
+        // The id after the date: read in pieces of 500, rows of one date would otherwise come back in another order
+        // each time, one twice and another not at all.
+        $query = $this->filtered($request)->with('category:id,name')->orderBy('expense_date')->orderBy('expenses.id');
+        $format = $request->string('format')->toString() === 'xlsx' ? 'xlsx' : 'csv';
+        if ($format === 'xlsx' && ($refusal = ExcelLimit::check((clone $query)->count()))) {
+            return $refusal;
+        }
         $rows = function () use ($query) {
             foreach ($query->lazy(500) as $e) {
                 yield [$e->number, $e->expense_date->toDateString(), $e->category?->name, $e->description, $e->amount, Payment::METHOD_LABELS[$e->payment_method] ?? $e->payment_method, $e->payee, $e->reference];
             }
         };
 
-        return TableExporter::download('expenses', ['الرقم', 'التاريخ', 'التصنيف', 'الوصف', 'المبلغ', 'طريقة الدفع', 'المستفيد', 'المرجع'], $rows(), $request->string('format')->toString() === 'xlsx' ? 'xlsx' : 'csv');
+        return TableExporter::download('expenses', ['الرقم', 'التاريخ', 'التصنيف', 'الوصف', 'المبلغ', 'طريقة الدفع', 'المستفيد', 'المرجع'], $rows(), $format, [4 => TableExporter::MONEY]);
     }
 
     private function filtered(Request $request)

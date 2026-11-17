@@ -2,6 +2,8 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Audit\AuditLogger;
+use App\Core\Export\ExcelLimit;
 use App\Core\Export\TableExporter;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
@@ -16,6 +18,7 @@ use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Services\CouponService;
 use App\Modules\Gym\Services\MembershipService;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -28,13 +31,63 @@ class MembershipController extends Controller
 {
     public function __construct(private readonly MembershipService $service) {}
 
-    public function index(Request $request): Response|StreamedResponse
+    public function index(Request $request): Response|RedirectResponse
     {
-        // Every membership unless a status is asked for (the dashboard and the alerts link to theirs).
+        // An older address with ?format= (the list exported itself): the export's own address, its permission, its
+        // rate limit and its record, with the same filters.
+        if ($request->string('format')->toString()) {
+            return redirect()->route('club.memberships.export', $request->query());
+        }
+        $filter = $request->string('filter')->toString() ?: 'all';
+        $query = $this->listed($request);
+
+        return Inertia::render('Gym/Memberships/Index', [
+            'memberships' => $query->paginate(in_array($request->integer('per_page'), [25, 50, 100], true) ? $request->integer('per_page') : 25)->withQueryString()->through(fn (Membership $m) => GymPresenter::membership($m) + [
+                'member' => $m->member?->only('id', 'full_name', 'member_no', 'phone'),
+            ]),
+            'counts' => BranchContext::scope(Membership::selectRaw('status, count(*) as how_many'))->groupBy('status')->pluck('how_many', 'status')
+                ->put('expiring', BranchContext::scope(Membership::expiringWithin(7))->count()),
+            'plans' => MembershipPlan::orderBy('sort')->get(['id', 'name']),
+            'filters' => $request->only('filter', 'plan_id', 'kind', 'q', 'sort', 'dir', 'per_page'),
+        ]);
+    }
+
+    /**
+     * The list's memberships for its filters, every page of them, in its order (the id last, so that reading in
+     * pieces neither repeats nor skips memberships that end on the same day). Excel only while it fits (ExcelLimit).
+     */
+    public function export(Request $request, AuditLogger $audit): StreamedResponse|JsonResponse
+    {
+        $filter = $request->string('filter')->toString() ?: 'all';
+        $format = $request->string('format')->toString() === 'xlsx' ? 'xlsx' : 'csv';
+        $query = $this->listed($request)->orderBy('gym_memberships.id');
+        $count = (clone $query)->count();
+        if ($format === 'xlsx' && ($refusal = ExcelLimit::check($count))) {
+            return $refusal;
+        }
+        $rows = function () use ($query) {
+            foreach ($query->lazy(500) as $m) {
+                yield [$m->member?->member_no, $m->member?->full_name, $m->member?->phone, $m->plan_snapshot['name'] ?? '',
+                    Membership::KIND_LABELS[$m->kind] ?? $m->kind, Membership::STATUS_LABELS[$m->status] ?? $m->status,
+                    $m->starts_on->toDateString(), $m->ends_on->toDateString(), $m->total, $m->sessions_total, $m->sessions_used];
+            }
+        };
+        // Who took the file, when, in what form, of which list and how many rows: the filters by name, never the words
+        // searched for (they may be a member's name or phone).
+        $audit->log('memberships.exported', null, ['format' => $format, 'rows' => $count, 'filter' => $filter,
+            'plan_id' => $request->integer('plan_id') ?: null, 'kind' => $request->string('kind')->toString() ?: null, 'searched' => $request->filled('q')]);
+
+        return TableExporter::download('memberships-'.$filter, ['رقم العضوية', 'الاسم', 'الهاتف', 'الباقة', 'النوع', 'الحالة', 'من', 'إلى', 'الإجمالي', 'الحصص', 'المستخدم'], $rows(), $format,
+            [8 => TableExporter::MONEY, 9 => TableExporter::INT, 10 => TableExporter::INT]);
+    }
+
+    /** Every membership unless a status is asked for (the dashboard and the alerts link to theirs), in the list's order. */
+    private function listed(Request $request): Builder
+    {
         $filter = $request->string('filter')->toString() ?: 'all';
         $dir = $request->string('dir')->toString() === 'desc' ? 'desc' : 'asc';
 
-        $query = BranchContext::scope(Membership::with('member:id,full_name,member_no,phone'))
+        return BranchContext::scope(Membership::with('member:id,full_name,member_no,phone'))
             ->when($filter === 'expiring', fn ($q) => $q->expiringWithin((int) ($request->integer('days') ?: 7)))
             ->when(in_array($filter, ['active', 'frozen', 'pending', 'scheduled', 'expired', 'cancelled'], true), fn ($q) => $q->where('status', $filter))
             ->when($request->integer('plan_id'), fn ($q, $id) => $q->where('membership_plan_id', $id))
@@ -46,28 +99,6 @@ class MembershipController extends Controller
                 'total' => $q->orderBy('total', $dir),
                 default => $filter === 'expiring' ? $q->orderBy('ends_on') : $q->latest('id'),
             });
-
-        if ($request->string('format')->toString() && $request->user()->can('members.export')) {
-            $rows = function () use ($query) {
-                foreach ($query->lazy(500) as $m) {
-                    yield [$m->member?->member_no, $m->member?->full_name, $m->member?->phone, $m->plan_snapshot['name'] ?? '',
-                        Membership::KIND_LABELS[$m->kind] ?? $m->kind, Membership::STATUS_LABELS[$m->status] ?? $m->status,
-                        $m->starts_on->toDateString(), $m->ends_on->toDateString(), $m->total, $m->sessions_total, $m->sessions_used];
-                }
-            };
-
-            return TableExporter::download('memberships-'.$filter, ['رقم العضوية', 'الاسم', 'الهاتف', 'الباقة', 'النوع', 'الحالة', 'من', 'إلى', 'الإجمالي', 'الحصص', 'المستخدم'], $rows(), $request->string('format')->toString());
-        }
-
-        return Inertia::render('Gym/Memberships/Index', [
-            'memberships' => $query->paginate(in_array($request->integer('per_page'), [25, 50, 100], true) ? $request->integer('per_page') : 25)->withQueryString()->through(fn (Membership $m) => GymPresenter::membership($m) + [
-                'member' => $m->member?->only('id', 'full_name', 'member_no', 'phone'),
-            ]),
-            'counts' => BranchContext::scope(Membership::selectRaw('status, count(*) as how_many'))->groupBy('status')->pluck('how_many', 'status')
-                ->put('expiring', BranchContext::scope(Membership::expiringWithin(7))->count()),
-            'plans' => MembershipPlan::orderBy('sort')->get(['id', 'name']),
-            'filters' => $request->only('filter', 'plan_id', 'kind', 'q', 'sort', 'dir', 'per_page'),
-        ]);
     }
 
     /** Price preview for the sell form (coupon + signup fee + upgrade credit). */

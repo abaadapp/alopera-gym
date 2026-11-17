@@ -7,6 +7,7 @@ use App\Core\Papers\PaperSize;
 use App\Core\Tenancy\TenantContext;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
+use Mpdf\HTMLParserMode;
 use Mpdf\Mpdf;
 
 /**
@@ -17,6 +18,9 @@ use Mpdf\Mpdf;
 final class ReportPdf
 {
     public const MAX_ROWS = 3000;
+
+    /** Rows in one block of HTML handed to the engine (about 100 KB for twelve columns). */
+    private const BLOCK_ROWS = 200;
 
     private const CURRENCIES = ['OMR' => 'ر.ع', 'SAR' => 'ر.س', 'AED' => 'د.إ', 'KWD' => 'د.ك', 'QAR' => 'ر.ق', 'BHD' => 'د.ب'];
 
@@ -56,7 +60,13 @@ final class ReportPdf
             $mpdf->SetCreator((string) $this->club);
             $mpdf->SetHTMLFooter('<table width="100%" style="font-size:8pt;color:#6b7280"><tr><td style="text-align:right">'.e((string) $this->club).' · '.e($this->title).'</td>'
                 .'<td style="text-align:left" dir="ltr">{PAGENO} / {nbpg}</td></tr></table>');
-            $mpdf->WriteHTML($this->html());
+            // In parts: the engine refuses one piece of HTML longer than pcre.backtrack_limit (1 MB), which a table of a
+            // couple of thousand rows passes; the style once, then the page in blocks of whole tables.
+            [$css, $body] = $this->parts();
+            $mpdf->WriteHTML($css, HTMLParserMode::HEADER_CSS);
+            foreach ($body as $part) {
+                $mpdf->WriteHTML($part, HTMLParserMode::HTML_BODY);
+            }
 
             return $mpdf->Output('', 'S');
         } finally {
@@ -64,14 +74,30 @@ final class ReportPdf
         }
     }
 
+    /** The whole page as one document (what the parts make together). */
     public function html(): string
+    {
+        [$css, $body] = $this->parts();
+
+        return '<html dir="rtl"><head><style>'.$css.'</style></head><body>'.implode('', $body).'</body></html>';
+    }
+
+    /**
+     * The style, and the page in parts none of them long: the heading and its lines, then each table in blocks of
+     * BLOCK_ROWS rows, every block a whole table with its headings (one table to the eye, the headings again where a
+     * block starts).
+     *
+     * @return array{0: string, 1: list<string>}
+     */
+    private function parts(): array
     {
         $css = 'body{font-family:ibmplexsansarabic;font-size:9pt;color:#111}h1{font-size:15pt;margin:0 0 2pt}h2{font-size:11pt;margin:12pt 0 4pt}'
             .'.club{color:#6b7280;font-size:9pt}table.top{width:100%;margin-bottom:6pt}table.top td{vertical-align:top;padding:0}'
             .'table.meta td{padding:1pt 6pt 1pt 0;font-size:8.5pt;vertical-align:top}table.meta td.k{color:#6b7280}'
             .'table.data{width:100%;border-collapse:collapse;margin-top:4pt}table.data th{background:#f2f2f0;font-weight:bold;text-align:right;padding:4pt;border-bottom:0.6pt solid #d4d4d4;font-size:8.5pt}'
             .'table.data td{padding:3pt 4pt;border-bottom:0.3pt solid #ececec;font-size:8.5pt}.note{color:#92400e;font-size:8pt;margin-top:3pt}';
-        $out = '<html dir="rtl"><head><style>'.$css.'</style></head><body>';
+        $parts = [];
+        $out = '';
         // In the page, not a running header: once, at the head of the first page.
         $tenant = app(TenantContext::class)->get();
         $box = OfficialLogo::box(PaperSize::A5, $tenant);
@@ -88,17 +114,23 @@ final class ReportPdf
                 $out .= '<h2>'.e($sheet->title).'</h2>';
             }
             $numeric = array_map(fn ($c) => $c[1] !== ReportSheet::TEXT, $sheet->columns);
-            $table = '<table class="data"><thead><tr>';
+            $open = '<table class="data"><thead><tr>';
             foreach ($sheet->columns as $i => [$label, $kind]) {
-                $table .= '<th style="text-align:'.($numeric[$i] ? 'left' : 'right').'">'.e($this->heading($label, $kind)).'</th>';
+                $open .= '<th style="text-align:'.($numeric[$i] ? 'left' : 'right').'">'.e($this->heading($label, $kind)).'</th>';
             }
-            $table .= '</tr></thead><tbody>';
+            $open .= '</tr></thead><tbody>';
+            $blocks = [];
+            $table = $open;
             $n = 0;
             $total = 0;
             foreach ($sheet->rows as $row) {
                 $total++;
                 if ($n >= self::MAX_ROWS) {
                     continue;
+                }
+                if ($n > 0 && $n % self::BLOCK_ROWS === 0) {
+                    $blocks[] = $table.'</tbody></table>';
+                    $table = $open;
                 }
                 $n++;
                 $table .= '<tr>';
@@ -113,15 +145,20 @@ final class ReportPdf
             if ($total === 0) {
                 $table .= '<tr><td colspan="'.max(1, count($sheet->columns)).'" style="color:#6b7280">لا توجد بيانات.</td></tr>';
             }
-            $table .= '</tbody></table>';
+            $blocks[] = $table.'</tbody></table>';
             // Said above the table, where it is read first, not after thousands of rows: how much of it this PDF holds.
             if ($total > self::MAX_ROWS) {
                 $out .= '<div class="note">هذا الملف لا يحمل الجدول كاملًا: عُرض هنا أول '.self::MAX_ROWS.' صف من '.$total.'. البيانات كاملة في ملف CSV (أو Excel إن اتسع لها).</div>';
             }
-            $out .= $table;
+            $parts[] = $out;
+            array_push($parts, ...$blocks);
+            $out = '';
+        }
+        if ($out !== '') {
+            $parts[] = $out;
         }
 
-        return $out.'</body></html>';
+        return [$css, $parts];
     }
 
     /**

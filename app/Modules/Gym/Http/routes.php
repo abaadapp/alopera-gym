@@ -56,6 +56,7 @@ Route::delete('/credentials/{credential}', [MemberCredentialController::class, '
 
 // ─── Memberships ───────────────────────────────────────────────────────
 Route::get('/memberships', [MembershipController::class, 'index'])->middleware('can:memberships.view')->name('memberships.index');
+Route::get('/memberships/export', [MembershipController::class, 'export'])->middleware(['can:memberships.view', 'can:members.export', 'throttle:exports'])->name('memberships.export');
 Route::get('/memberships/quote', [MembershipController::class, 'quote'])->middleware('can:memberships.sell')->name('memberships.quote');
 Route::post('/members/{member}/memberships', [MembershipController::class, 'store'])->middleware('can:memberships.sell')->name('memberships.store');
 Route::post('/memberships/{membership}/freeze', [MembershipController::class, 'freeze'])->middleware('can:memberships.freeze')->name('memberships.freeze');

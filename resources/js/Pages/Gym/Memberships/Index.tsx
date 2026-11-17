@@ -84,7 +84,7 @@ export default function MembershipsIndex({ memberships, counts, plans, filters }
             <PageHeader
                 title="العضويات"
                 subtitle="متابعة الاشتراكات حسب الحالة: النشطة، القريبة من الانتهاء، المنتظرة للدفع، المجمّدة والمنتهية"
-                actions={<ExportMenu href={can('members.export') ? route('club.memberships.index') : null} params={exportParams} title="العضويات" formats={['xlsx', 'csv']} />}
+                actions={<ExportMenu href={can('members.export') ? route('club.memberships.export') : null} params={exportParams} title="العضويات" formats={['xlsx', 'csv']} />}
             />
 
             <DataTable

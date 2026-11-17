@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Export\ExcelLimit;
 use App\Core\Papers\Papers;
 use App\Core\Support\Money;
 use App\Core\Support\Period;
@@ -102,10 +103,9 @@ class SalesController extends Controller
         $count = (clone $query)->count();
 
         // Every sale the list shows, never the first N of them: CSV is written row by row and holds them all; Excel is
-        // built whole in memory, so a list longer than it may hold is refused with a reason, not cut short in silence.
-        $limit = (int) config('gym.exports.xlsx_max_rows', 5000);
-        if ($format === 'xlsx' && $count > $limit) {
-            return response()->json(['message' => 'عدد العمليات في هذه الفترة والفلاتر ('.number_format($count).') أكبر من الحد الذي يتسع له ملف Excel ('.number_format($limit).'). صدّرها بصيغة CSV، فهو يحملها كلها، أو اختر فترة أقصر.'], 422);
+        // built whole in memory, so a list longer than it may hold is refused with a reason (ExcelLimit), not cut short.
+        if ($format === 'xlsx' && ($refusal = ExcelLimit::check($count))) {
+            return $refusal;
         }
 
         $rows = function () use ($query) {

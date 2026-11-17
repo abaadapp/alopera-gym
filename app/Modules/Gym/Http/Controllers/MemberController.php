@@ -3,6 +3,7 @@
 namespace App\Modules\Gym\Http\Controllers;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Export\ExcelLimit;
 use App\Core\Export\TableExporter;
 use App\Core\Support\Images\ImageRule;
 use App\Core\Support\Images\ImageUpload;
@@ -269,11 +270,20 @@ class MemberController extends Controller
         return back()->with('success', 'تم إصدار رمز QR جديد؛ الرمز القديم لم يعد صالحًا.');
     }
 
-    public function export(Request $request): StreamedResponse
+    public function export(Request $request, AuditLogger $audit): StreamedResponse|JsonResponse
     {
         // The list's own members for the filters on screen, every page of them, in its order; the id last, so that reading
         // in pieces of 500 neither repeats nor skips a member whose name (or date) another shares.
         $query = $this->listed($request, ['currentMembership'])->orderBy('gym_members.id');
+        $format = $request->string('format')->toString() === 'xlsx' ? 'xlsx' : 'csv';
+        $count = (clone $query)->count();
+        if ($format === 'xlsx' && ($refusal = ExcelLimit::check($count))) {
+            return $refusal;
+        }
+        // The file holds phones and e-mails: who took it, when, in what form, how many rows and with which filters (by
+        // name, never the words searched for, which may themselves be a name or a phone).
+        $audit->log('members.exported', null, ['format' => $format, 'rows' => $count, 'membership' => $request->string('membership')->toString() ?: null,
+            'status' => $request->string('status')->toString() ?: null, 'searched' => $request->filled('q')]);
         $rows = function () use ($query) {
             foreach ($query->lazy(500) as $m) {
                 $ms = $m->currentMembership;
@@ -283,7 +293,7 @@ class MemberController extends Controller
             }
         };
 
-        return TableExporter::download('members', ['رقم العضوية', 'الاسم', 'الهاتف', 'البريد', 'الحالة', 'تاريخ الانضمام', 'الباقة الحالية', 'حالة العضوية', 'تنتهي في', 'موافقة تسويق', 'آخر دخول'], $rows(), $request->string('format')->toString() === 'xlsx' ? 'xlsx' : 'csv');
+        return TableExporter::download('members', ['رقم العضوية', 'الاسم', 'الهاتف', 'البريد', 'الحالة', 'تاريخ الانضمام', 'الباقة الحالية', 'حالة العضوية', 'تنتهي في', 'موافقة تسويق', 'آخر دخول'], $rows(), $format);
     }
 
     /** @return array<string, mixed> */

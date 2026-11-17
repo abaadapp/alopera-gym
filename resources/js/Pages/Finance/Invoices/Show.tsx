@@ -271,7 +271,7 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                                 return (
                                     <div key={p.id} className="border-t border-line py-2 text-[13px]">
                                         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                                            {p.status === 'completed'
+                                            {p.status === 'completed' && mayPrint
                                                 ? <PrintLink url={route('club.payments.receipt', p.id)} title={String(title)} className="min-w-0 truncate text-[#1d4ed8] hover:underline">{title}</PrintLink>
                                                 : <span className="min-w-0 truncate">{title}</span>}
                                             <span dir="ltr" className="text-[#6b7280] num">{p.paid_at ?? '—'}</span>
