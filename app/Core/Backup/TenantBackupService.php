@@ -94,6 +94,85 @@ final class TenantBackupService
     }
 
     /**
+     * The backup folders' mode: owner and group in full, others nothing, the group passed on (setgid). The nightly run
+     * (cron, the deploy user) and the panel (PHP-FPM, the web user) are two users sharing the storage folder's group;
+     * a folder made with Laravel's default (0700) shuts the other one out: the panel then lists nothing and cannot build.
+     */
+    public const FOLDER_MODE = 02770;
+
+    /**
+     * Makes the club's backup folder (and incomplete/ when asked), each level open to the group, and proves this process
+     * can enter it and write in it. A level this process owns that is shut to the group (made before this, 0700) is
+     * opened; one it cannot open or enter fails here with a plain message, the details only in the server's log.
+     *
+     * @throws BusinessRuleException backup.folder
+     */
+    private function prepareFolder(string $dir): void
+    {
+        if (! $this->disk()->getAdapter() instanceof LocalFilesystemAdapter) {
+            $this->disk()->makeDirectory($dir);
+
+            return;
+        }
+        // Made only when missing: Flysystem's createDirectory on a folder that is there sets it back to its default
+        // (0700), which every nightly run did to the club's folder.
+        if (! is_dir($this->disk()->path($dir))) {
+            $this->disk()->makeDirectory($dir);
+        }
+        $level = '';
+        foreach (explode('/', trim($dir, '/')) as $part) {
+            $level = ltrim($level.'/'.$part, '/');
+            $path = $this->disk()->path($level);
+            clearstatcache(true, $path);
+            $mode = @fileperms($path);
+            if ($mode !== false && ($mode & 0070) !== 0070 && @fileowner($path) === self::processUser()) {
+                @chmod($path, ($mode & 07777) | self::FOLDER_MODE);
+                clearstatcache(true, $path);
+                if ((@fileperms($path) & 02000) === 0) {
+                    // The kernel drops setgid when this user is not in the folder's group: folders made in it later
+                    // would take this user's own group, which the other user may not share (deploy must be in www-data).
+                    Log::warning('backup folder opened without setgid: this process is not in its group', ['path' => $path, 'group' => @filegroup($path), 'process_user' => self::processUser()]);
+                }
+            }
+        }
+        $path = $this->disk()->path($dir);
+        if (! is_dir($path) || ! is_executable($path) || ! is_writable($path)) {
+            Log::error('backup folder unreachable', ['path' => $path, 'mode' => is_dir($path) ? sprintf('%o', fileperms($path) & 07777) : 'missing', 'owner' => @fileowner($path), 'process_user' => self::processUser()]);
+
+            throw new BusinessRuleException('backup.folder', 'تعذر إنشاء النسخة الاحتياطية: لا يستطيع النظام الوصول إلى مجلد النسخ الاحتياطية (صلاحيات المجلد على الخادم). لم يُحذف أي أرشيف سابق.');
+        }
+    }
+
+    /**
+     * Whether this process cannot read the club's backup folder although it is there: the list would look empty while
+     * archives are kept in it (the panel says so instead of «no backups»).
+     */
+    public function folderUnreadable(Tenant $tenant): bool
+    {
+        if (! $this->disk()->getAdapter() instanceof LocalFilesystemAdapter) {
+            return false;
+        }
+        $level = '';
+        foreach (explode('/', $this->directory($tenant)) as $part) {
+            $level = ltrim($level.'/'.$part, '/');
+            $path = $this->disk()->path($level);
+            if (! file_exists($path)) {
+                return false; // not made yet: nothing hidden
+            }
+            if (! is_executable($path) || ! is_readable($path)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function processUser(): int
+    {
+        return function_exists('posix_geteuid') ? posix_geteuid() : (int) getmyuid();
+    }
+
+    /**
      * Creates the club's archive and proves it whole before saying so.
      *
      * @return string the stored file name
@@ -131,6 +210,10 @@ final class TenantBackupService
     /** @return list<array{name: string, size: int, created_at: string}> */
     public function list(Tenant $tenant): array
     {
+        if ($this->folderUnreadable($tenant)) {
+            return []; // the page says why (folderUnreadable), instead of failing
+        }
+
         return collect($this->disk()->files($this->directory($tenant)))
             ->filter(fn ($f) => str_ends_with($f, '.zip'))
             ->map(fn ($f) => [
@@ -250,7 +333,7 @@ final class TenantBackupService
             if ($recover) {
                 $this->recoverInterrupted($tenant);
             }
-            $this->disk()->makeDirectory($dir);
+            $this->prepareFolder($dir);
             $this->removeLeftovers($dir);
 
             [$counts, $dataSha, $stored] = $this->writeRows($tenant, $dataFile);
@@ -320,7 +403,7 @@ final class TenantBackupService
             } catch (Throwable) {
                 Log::error('backup failed and could not be recorded', ['tenant' => $tenant->id, 'error' => $e->getMessage()]);
             }
-            if ($e instanceof BusinessRuleException && in_array($e->rule, ['backup.no_space', 'backup.busy', 'backup.restore_interrupted'], true)) {
+            if ($e instanceof BusinessRuleException && in_array($e->rule, ['backup.no_space', 'backup.busy', 'backup.restore_interrupted', 'backup.folder'], true)) {
                 throw $e;
             }
 
@@ -505,7 +588,7 @@ final class TenantBackupService
     {
         $dir = $this->directory($tenant).'/'.self::INCOMPLETE;
         try {
-            $this->disk()->makeDirectory($dir);
+            $this->prepareFolder($dir);
             $name = $this->freeName($dir);
             $this->keep($build, $dir.'/'.$name, $sha, $size);
         } catch (Throwable $e) {
@@ -550,8 +633,11 @@ final class TenantBackupService
     private function buildZip(string $path, array $manifest, string $dataFile, array $sources): void
     {
         $zip = new ZipArchive;
-        if ($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-            throw new RuntimeException('the archive could not be started');
+        if (($opened = $zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE)) !== true) {
+            // libzip's code says why (5: the folder cannot be read or entered); the path goes to the log only.
+            Log::error('backup archive could not be started', ['path' => $path, 'zip_error' => $opened, 'process_user' => self::processUser()]);
+
+            throw new RuntimeException('the archive could not be started (zip error '.var_export($opened, true).')');
         }
         $ok = $zip->addFromString('manifest.json', (string) json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE))
             && $zip->addFile($dataFile, 'data.json');

@@ -20,7 +20,7 @@ export interface BranchState {
 /** One notification of the bell / the notifications page (App\Http\Controllers\Club\NotificationController::row). */
 export interface StaffNotification {
     id: number;
-    kind: 'document' | 'order' | 'payment' | 'membership' | 'integration' | 'contact' | 'inbox' | 'ledger';
+    kind: 'document' | 'order' | 'payment' | 'membership' | 'integration' | 'contact' | 'inbox' | 'ledger' | 'backup';
     kind_label: string;
     text: string;
     read: boolean;
@@ -41,7 +41,7 @@ export interface TenantInfo {
 }
 
 export interface BackupAlert {
-    kind: 'incomplete' | 'stale' | 'none';
+    kind: 'incomplete' | 'stale' | 'none' | 'unreadable';
     last_sound_at: string | null;
     hours: number | null;
     missing_attachments: number | null;
