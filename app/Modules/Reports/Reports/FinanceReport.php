@@ -20,7 +20,7 @@ final class FinanceReport extends Report
 
     private const FIGURES = [
         'revenue' => ['صافي التحصيل', S::MONEY], 'earned' => ['الإيراد المستحق (من الدفتر)', S::MONEY], 'expenses' => ['المصروفات (من الدفتر)', S::MONEY], 'net' => ['صافي الربح (من الدفتر)', S::MONEY],
-        'invoiced' => ['قيمة الفواتير الصادرة', S::MONEY], 'collection_rate' => ['نسبة التحصيل', S::PERCENT], 'refunds' => ['المردودات', S::MONEY],
+        'invoiced' => ['قيمة الفواتير الصادرة', S::MONEY], 'collection_rate' => ['نسبة التحصيل حتى اليوم', S::PERCENT], 'refunds' => ['المردودات', S::MONEY],
         'credit_notes' => ['الإشعارات الدائنة', S::MONEY], 'product_sales' => ['مبيعات المنتجات', S::MONEY],
     ];
 

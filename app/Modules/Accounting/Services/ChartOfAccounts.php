@@ -48,6 +48,10 @@ final class ChartOfAccounts
         'suppliers_payable' => ['2103', 'الموردون (ذمم دائنة)', 'liability', 'credit', 'liabilities', false, null],
         // Money received and not applied to its invoice: owed to the customer until applied to another invoice or paid back.
         'customer_credits' => ['2104', 'أرصدة العملاء الدائنة', 'liability', 'credit', 'liabilities', false, null],
+        // Gift memberships sold and not yet used (#192): owed as a service until redeemed, expired or refunded.
+        'gift_liability' => ['2105', 'هدايا اشتراكات غير مستخدمة (إيراد مؤجل)', 'liability', 'credit', 'liabilities', false, null],
+        // What is left of a gift that closed unused: its window passed, or finance refunded only part of it.
+        'revenue_gift_breakage' => ['4105', 'إيرادات هدايا منتهية', 'revenue', 'credit', 'revenues', false, null],
         // A cash drawer counted short (debit) or over (credit) when its shift closes.
         'cash_over_short' => ['5298', 'فروقات الصندوق', 'expense', 'debit', 'operating_expenses', false, null],
         'cost_of_goods' => ['53', 'تكلفة البضاعة', 'expense', 'debit', 'expenses', true, null],
@@ -123,13 +127,14 @@ final class ChartOfAccounts
         ]);
     }
 
-    /** Revenue account of an invoice type. */
+    /** Revenue account of an invoice type; a gift's invoice is not revenue yet, but a service owed (deferred). */
     public function forInvoiceType(string $type): Account
     {
         return $this->account(match ($type) {
             'membership' => 'revenue_membership',
             'pt' => 'revenue_pt',
             'pos' => 'revenue_pos',
+            'gift' => 'gift_liability',
             default => 'revenue_other',
         });
     }

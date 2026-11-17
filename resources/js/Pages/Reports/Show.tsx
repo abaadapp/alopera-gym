@@ -89,7 +89,7 @@ export default function ReportShow({ kind, title, description, mode, compare, fi
         ? `الوضع اليوم، ${date(isoDate())}`
         : kind === 'statements' && (data as unknown as Statements).view === 'trial'
             ? `الأرصدة حتى ${date(filters.to)}`
-            : `من ${date(filters.from)} إلى ${date(filters.to)}${compare ? ` · مقارنة بـ ${date(filters.previous_from)} – ${date(filters.previous_to)}` : ''}`;
+            : `${filters.preset === 'all' ? '«الكل» في التقارير: آخر سنتين، ' : ''}من ${date(filters.from)} إلى ${date(filters.to)}${compare ? ` · مقارنة بـ ${date(filters.previous_from)} – ${date(filters.previous_to)}` : ''}`;
 
     return (
         <ClubLayout title={title}>

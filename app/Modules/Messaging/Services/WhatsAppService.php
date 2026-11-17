@@ -173,6 +173,66 @@ final class WhatsAppService
     }
 
     /**
+     * Queue an approved template to a number that need not be a member's (a gift's recipient, #192): no member is made
+     * or linked for it. The caller holds the consent (a gift: the recipient's own message from the number). It shows in
+     * that number's chat when there is one. `$shown` are the values the stored body is written with, for whoever reads
+     * the log or the chat, when a real value must not be kept there (a gift's secret link); the real ones are sent.
+     * Null when WhatsApp is off for the club or this dedupe key was already used.
+     *
+     * @param  array<string, string>  $values
+     * @param  array<string, string>  $shown
+     */
+    public function queuePhoneTemplate(string $phone, string $key, array $values, Model $related, string $dedupeKey, array $shown = []): ?Message
+    {
+        if (! $this->enabled() || Message::where('dedupe_key', $dedupeKey)->exists()) {
+            return null;
+        }
+
+        $template = MessageTemplate::where('key', $key)->first();
+        $phone = Phone::normalize($phone);
+        $skip = match (true) {
+            ! $template => 'template_missing',
+            ! $template->isUsable() => 'template_not_approved',
+            $phone === '' => 'no_phone',
+            default => null,
+        };
+        $params = $template ? array_map(fn ($name) => (string) ($values[$name] ?? ''), $template->variables ?? []) : [];
+        $display = $template ? array_map(fn ($name) => (string) ($shown[$name] ?? $values[$name] ?? ''), $template->variables ?? []) : [];
+        $conversation = $phone !== '' ? Conversation::where('phone', $phone)->first() : null;
+
+        try {
+            $message = DB::transaction(fn () => Message::create([
+                'conversation_id' => $conversation?->id,
+                'direction' => 'outbound',
+                'source' => Auth::guard('web')->check() ? Message::SOURCE_PLATFORM : Message::SOURCE_AUTOMATION,
+                'type' => 'template',
+                'to_phone' => $phone ?: null,
+                'template_key' => $key,
+                'template_name' => $template?->name,
+                'template_params' => $params,
+                'body' => $template?->render($display),
+                'status' => $skip ? Message::SKIPPED : Message::QUEUED,
+                'error_code' => $skip,
+                'dedupe_key' => $dedupeKey,
+                'related_type' => $related->getMorphClass(),
+                'related_id' => $related->getKey(),
+                'sent_by' => Auth::guard('web')->id(),
+            ]));
+        } catch (UniqueConstraintViolationException) {
+            return null;
+        }
+
+        if ($conversation && ! $skip) {
+            $this->conversations->recorded($conversation, $message);
+        }
+        if (! $skip) {
+            self::queueAfterCommit($message);
+        }
+
+        return $message;
+    }
+
+    /**
      * Queue a template message to a staff member (an internal alert such as a document about to expire). Only
      * an approved template is sent; a staff member without a phone is skipped. Returns null when WhatsApp is
      * off for the club or the alert was already sent (dedupe key).
@@ -323,7 +383,64 @@ final class WhatsAppService
         }
     }
 
-    /** Called by the queue worker. */
+    /**
+     * The worker takes the message for itself before its request goes to WhatsApp (#203): committed at once, so a
+     * worker that dies mid-request, an error after WhatsApp answered, or a second worker handed the same message leaves
+     * it `sending` — and nothing sends a message that is not `queued`. False when someone else has it, or it is no
+     * longer waiting.
+     */
+    public function claim(Message $message): bool
+    {
+        if (Message::whereKey($message->id)->where('status', Message::QUEUED)->update(['status' => Message::SENDING, 'updated_at' => now()]) !== 1) {
+            return false;
+        }
+        $message->forceFill(['status' => Message::SENDING])->syncOriginalAttribute('status');
+
+        return true;
+    }
+
+    /**
+     * A claimed message whose outcome was never recorded: WhatsApp may have it, so it is not sent again and not said
+     * to have failed. Staff see «نتيجة الإرسال غير مؤكدة» with what to do.
+     */
+    public function markUncertain(Message $message, ?string $why = null, ?\DateTimeInterface $claimedBefore = null): bool
+    {
+        // Only a claim still standing, read again under its row lock: an outcome a worker saved meanwhile (sent,
+        // delivered, failed, back in the queue) or a fresh claim (`$claimedBefore`) is never overwritten.
+        $settled = DB::transaction(function () use ($message, $why, $claimedBefore) {
+            $current = Message::whereKey($message->id)->lockForUpdate()->first();
+            if ($current?->status !== Message::SENDING || ($claimedBefore !== null && ! $current->updated_at?->lessThan($claimedBefore))) {
+                return null;
+            }
+            $current->forceFill(['status' => Message::UNCERTAIN, 'error_code' => 'outcome_unknown', 'error_message' => mb_substr($why ?? Message::UNCERTAIN_TEXT, 0, 250)])->save();
+
+            return $current;
+        });
+        if ($settled === null) {
+            return false;
+        }
+        $message->setRawAttributes($settled->getAttributes(), true);
+        if ($message->campaign_id) {
+            CampaignService::refreshCounts($message->campaign_id);
+        }
+
+        return true;
+    }
+
+    /** Claims with no worker behind them any more (a job lost after its claim): their outcome is unknown. */
+    public function settleAbandonedClaims(): int
+    {
+        $count = 0;
+        $before = now()->subMinutes(Message::SENDING_STALE_MINUTES);
+        Message::where('status', Message::SENDING)->where('updated_at', '<', $before)
+            ->eachById(function (Message $message) use (&$count, $before) {
+                $count += $this->markUncertain($message, null, $before) ? 1 : 0;
+            });
+
+        return $count;
+    }
+
+    /** Called by the queue worker, for a message it has claimed. */
     public function deliver(Message $message): GatewayResult
     {
         $integration = $this->integration();
@@ -347,20 +464,28 @@ final class WhatsAppService
 
         $this->recordHealth($integration, $result);
 
-        DB::transaction(function () use ($message, $result) {
-            $message->forceFill([
-                'attempts' => $message->attempts + 1,
-                'status' => $result->ok ? Message::SENT : ($result->retryable ? $message->status : Message::FAILED),
-                'provider_message_id' => $result->messageId ?? $message->provider_message_id,
-                'error_code' => $result->ok ? null : $result->errorCode,
-                'error_message' => $result->ok ? null : $result->errorMessage,
-                'sent_at' => $result->ok ? now() : $message->sent_at,
-            ])->save();
+        // What WhatsApp answered, kept even through a moment's database trouble: losing it after WhatsApp took the
+        // message is what would send it twice. Still not saved, the claim stays and the next attempt marks it uncertain.
+        $outcome = [
+            'attempts' => $message->attempts + 1,
+            'status' => match (true) {
+                $result->ok => Message::SENT,
+                $result->uncertain => Message::UNCERTAIN,
+                $result->retryable => Message::QUEUED, // known not to have reached WhatsApp: waiting for the retry
+                default => Message::FAILED,
+            },
+            'provider_message_id' => $result->messageId ?? $message->provider_message_id,
+            'error_code' => $result->ok ? null : $result->errorCode,
+            'error_message' => $result->ok ? null : ($result->uncertain ? mb_substr(Message::UNCERTAIN_TEXT.' ('.$result->errorMessage.')', 0, 250) : $result->errorMessage),
+            'sent_at' => $result->ok ? now() : $message->sent_at,
+        ];
+        retry(3, fn () => DB::transaction(function () use ($message, $outcome) {
+            $message->forceFill($outcome)->save();
 
             if ($message->campaign_id) {
                 CampaignService::refreshCounts($message->campaign_id);
             }
-        });
+        }), 100);
 
         // A status that came before WhatsApp's answer to the send waited for this id.
         if ($result->ok && $message->provider_message_id) {

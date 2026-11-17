@@ -30,6 +30,8 @@ export interface PlanData {
     color: string | null;
     is_featured: boolean;
     programs?: string[];
+    /** «إهداء هذه الباقة» (#192): the gift page, only on a plan the club offers as a gift. */
+    gift_url?: string | null;
 }
 
 interface PtPackage {
@@ -49,12 +51,18 @@ export function PlanCard({
     selected,
     onSelect,
     cta,
+    gift,
 }: {
     plan: PlanData;
     currency: string;
     selected?: boolean;
     onSelect?: (id: number) => void;
     cta?: { label: string; href: string };
+    /**
+     * «إهداء هذه الباقة» under the button. null keeps the same empty row (a grid where only some plans are offered
+     * as a gift keeps its cards alike); left out, the card has no such row (sign-up, the portal's renewal).
+     */
+    gift?: { label: string; href: string } | null;
 }) {
     const featured = plan.is_featured;
     const t = useT();
@@ -132,6 +140,15 @@ export function PlanCard({
                     {cta.label}
                 </Link>
             )}
+            {gift !== undefined && (
+                <div className="mt-3 flex h-7 items-center justify-center">
+                    {gift && (
+                        <Link href={gift.href} className="inline-flex items-center gap-1.5 border-b border-[var(--site-ink)]/25 pb-0.5 text-[13px] font-medium text-[var(--site-ink)] transition-colors hover:border-[var(--site-accent)] hover:text-[var(--site-accent)]">
+                            <span aria-hidden>🎁</span> {gift.label}
+                        </Link>
+                    )}
+                </div>
+            )}
         </>
     );
 
@@ -189,6 +206,7 @@ export default function Plans({ site, seo, plans, ptPackages }: { site: SiteInfo
     const text = usePageText('plans');
     const t = useT();
     const en = useLocale() === 'en';
+    const giftable = plans.some((p) => p.gift_url);
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
@@ -200,7 +218,13 @@ export default function Plans({ site, seo, plans, ptPackages }: { site: SiteInfo
                 ) : (
                     <div className="grid gap-6 pt-3 sm:grid-cols-2 lg:grid-cols-3">
                         {plans.map((plan) => (
-                            <PlanCard key={plan.id} plan={plan} currency={currency} cta={site.signup_enabled ? { label: t('اشترك في هذه الباقة'), href: route('site.join', { plan: plan.id }) } : undefined} />
+                            <PlanCard
+                                key={plan.id}
+                                plan={plan}
+                                currency={currency}
+                                cta={site.signup_enabled ? { label: t('اشترك في هذه الباقة'), href: route('site.join', { plan: plan.id }) } : undefined}
+                                gift={plan.gift_url ? { label: t('إهداء هذه الباقة'), href: plan.gift_url } : giftable ? null : undefined}
+                            />
                         ))}
                     </div>
                 )}

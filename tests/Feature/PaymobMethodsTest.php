@@ -95,31 +95,33 @@ class PaymobMethodsTest extends TestCase
         $owner = $this->owner($club);
         $put = fn (array $data) => $this->actingAs($owner)->put(route('club.integrations.paymob.methods'), $data);
 
-        $put(['card' => '111', 'omannet' => '333', 'apple_pay' => '555'])->assertSessionHasNoErrors()->assertSessionHas('success');
-        $this->assertSame(['card' => 111, 'omannet' => 333, 'apple_pay' => 555], PaymobClient::methodIds($this->row($club)));
+        $put(['card' => '7011101', 'omannet' => '7033303', 'apple_pay' => '7055505'])->assertSessionHasNoErrors()->assertSessionHas('success');
+        $this->assertSame(['card' => 7011101, 'omannet' => 7033303, 'apple_pay' => 7055505], PaymobClient::methodIds($this->row($club)));
 
         // Blank keeps every number; the keys are untouched; «clear» removes one.
         $put(['card' => '', 'omannet' => '', 'apple_pay' => ''])->assertSessionHasNoErrors();
         $put(['clear' => ['apple_pay']])->assertSessionHasNoErrors();
         $row = $this->row($club);
-        $this->assertSame(['card' => 111, 'omannet' => 333, 'apple_pay' => null], PaymobClient::methodIds($row));
+        $this->assertSame(['card' => 7011101, 'omannet' => 7033303, 'apple_pay' => null], PaymobClient::methodIds($row));
         $this->assertSame(['sk_test', 'pk_test', self::HMAC], [$row->credential('secret_key'), $row->credential('public_key'), $row->credential('hmac_secret')]);
 
         // Refused: letters, zero, one number for two methods — nothing saved.
         $put(['card' => '12a'])->assertSessionHasErrors('card');
         $put(['omannet' => '0'])->assertSessionHasErrors('omannet');
-        $put(['apple_pay' => '111'])->assertSessionHas('error');
-        $this->assertSame(['card' => 111, 'omannet' => 333, 'apple_pay' => null], PaymobClient::methodIds($this->row($club)));
+        $put(['apple_pay' => '7011101'])->assertSessionHas('error');
+        $this->assertSame(['card' => 7011101, 'omannet' => 7033303, 'apple_pay' => null], PaymobClient::methodIds($this->row($club)));
 
         // At rest: encrypted with the keys; on the screen: states and «saved», never a number.
         $raw = DB::table('tenant_integrations')->where('id', $row->id)->first();
         $this->assertStringNotContainsString('method_card', (string) $raw->credentials);
-        $this->assertStringNotContainsString('333', (string) $raw->settings);
+        $this->assertStringNotContainsString('7033303', (string) $raw->settings);
         $html = $this->actingAs($owner)->get(route('club.integrations.paymob'))->assertOk()
             ->assertInertia(fn ($page) => $page->has('methods', 3)->where('methods.0.saved', true)->where('methods.1.saved', true)->where('methods.2.saved', false)->missing('methods.0.id'))
             ->getContent();
-        $this->assertStringNotContainsString('111', $html);
-        $this->assertStringNotContainsString('333', $html);
+        $this->assertStringNotContainsString('7011101', $html);
+        $this->assertStringNotContainsString('7033303', $html);
+        // (Seven digits: a three-digit number can be any record's id on the page, and was, once earlier tests had
+        // created enough rows.)
     }
 
     public function test_the_page_after_a_reload_shows_what_was_saved_and_a_blank_save_keeps_it(): void

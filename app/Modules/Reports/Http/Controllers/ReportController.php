@@ -74,7 +74,7 @@ class ReportController extends Controller
 
         $period = $entry['mode'] === 'snapshot'
             ? [['الوضع في', today()->toDateString()]]
-            : [['الفترة', 'من '.$filters->from->toDateString().' إلى '.$filters->to->toDateString()], ...($entry['compare'] ? [['فترة المقارنة', 'من '.$filters->prevFrom->toDateString().' إلى '.$filters->prevTo->toDateString()]] : [])];
+            : [['الفترة', ($filters->preset === 'all' ? '«الكل»: آخر سنتين، ' : '').'من '.$filters->from->toDateString().' إلى '.$filters->to->toDateString()], ...($entry['compare'] ? [['فترة المقارنة', 'من '.$filters->prevFrom->toDateString().' إلى '.$filters->prevTo->toDateString()]] : [])];
         $meta = [
             ...$period,
             ...($entry['branch'] ? [['الفرع', $filters->branchName()]] : []),

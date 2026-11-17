@@ -65,9 +65,11 @@ class MoneyAccountController extends Controller
             'iban' => ['nullable', 'string', 'max:34'],
             'opening_balance' => ['nullable', 'numeric', 'min:0', 'max:999999999'],
             'opening_date' => ['nullable', 'date', 'before_or_equal:today'],
+            'client_key' => SubmittedOnce::RULE,
         ], [], ['name' => 'اسم الحساب', 'opening_balance' => 'الرصيد الافتتاحي']);
 
-        $account = DB::transaction(function () use ($data) {
+        // One form, one account: the same form sent twice never opens a second account with a second opening balance.
+        $id = SubmittedOnce::run($data['client_key'] ?? null, 'money-account', fn () => DB::transaction(function () use ($data, $audit) {
             $parent = $this->chart->account('cash_and_banks');
             $code = 1105;
             while (Account::where('code', (string) $code)->exists()) {
@@ -81,10 +83,11 @@ class MoneyAccountController extends Controller
             if (! empty($data['opening_balance']) && Money::cmp($data['opening_balance'], 0) > 0) {
                 $this->postOpening($account, $data['opening_balance'], $data['opening_date'] ?? today()->toDateString());
             }
+            $audit->log('accounting.account_created', $account, ['name' => $account->name, 'kind' => $account->kind]);
 
-            return $account;
-        });
-        $audit->log('accounting.account_created', $account, ['name' => $account->name, 'kind' => $account->kind]);
+            return $account->id;
+        }));
+        $account = Account::findOrFail($id);
 
         return back()->with('success', "أُضيف الحساب «{$account->name}».");
     }

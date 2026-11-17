@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from '@inertiajs/react';
-import { CheckCircle2, Clock, Loader2, RefreshCw, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, Gift, Loader2, RefreshCw, XCircle } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
 import { useShared } from '@/hooks/useShared';
 import { useCart } from '@/lib/cart';
@@ -19,6 +19,8 @@ interface Props {
     invoice: { number?: string; token?: string | null };
     /** The link of the website order this payment is for, if any. */
     order?: string | null;
+    /** The link of the gift membership this payment is for (#192), if any: its card shows whether it is usable. */
+    gift?: string | null;
 }
 
 const POLL_MS = 3000;
@@ -28,7 +30,7 @@ const MAX_POLLS = 40; // ~2 minutes
  * Landing page after the payment gateway. The query string from the gateway is
  * ignored on purpose: only the status recorded by the verified webhook is shown.
  */
-export default function PaymentReturn({ site, seo, reference, status: initial, held: heldAtFirst = false, amount, currency, invoice, order }: Props) {
+export default function PaymentReturn({ site, seo, reference, status: initial, held: heldAtFirst = false, amount, currency, invoice, order, gift }: Props) {
     const { member } = useShared();
     const t = useT();
     const cart = useCart();
@@ -80,7 +82,7 @@ export default function PaymentReturn({ site, seo, reference, status: initial, h
             return {
                 icon: <CheckCircle2 className="size-14 text-amber-500" />,
                 title: t('تم استلام تأكيد الدفع'),
-                text: t('لكن الاشتراك أو الطلب قيد المراجعة لدى النادي، وسيتواصل معك. لا داعي للدفع مرة أخرى.'),
+                text: gift ? t('لكن الهدية قيد المراجعة لدى النادي. لا داعي للدفع مرة أخرى.') : t('لكن الاشتراك أو الطلب قيد المراجعة لدى النادي، وسيتواصل معك. لا داعي للدفع مرة أخرى.'),
                 tone: 'bg-amber-50',
             };
         }
@@ -88,7 +90,7 @@ export default function PaymentReturn({ site, seo, reference, status: initial, h
             return {
                 icon: <CheckCircle2 className="size-14 text-emerald-500" />,
                 title: t('تم الدفع بنجاح'),
-                text: t('استلمنا دفعتك وتم تحديث فاتورتك. ستصلك رسالة تأكيد على واتساب.'),
+                text: gift ? t('استلمنا دفعتك. يمكنك الآن عرض بطاقة الهدية ومشاركتها.') : t('استلمنا دفعتك وتم تحديث فاتورتك. ستصلك رسالة تأكيد على واتساب.'),
                 tone: 'bg-emerald-50',
             };
         }
@@ -104,14 +106,18 @@ export default function PaymentReturn({ site, seo, reference, status: initial, h
             return {
                 icon: <Clock className="size-14 text-amber-500" />,
                 title: t('جاري تأكيد الدفع'),
-                text: t('لم يصلنا تأكيد البنك بعد. لا داعي للدفع مرة أخرى — سنفعّل اشتراكك تلقائيًا فور وصول التأكيد وستصلك رسالة على واتساب.'),
+                text: gift
+                    ? t('لم يصلنا تأكيد البنك بعد. لا داعي للدفع مرة أخرى. تظهر بطاقة الهدية صالحة حين يصل تأكيد الدفع.')
+                    : t('لم يصلنا تأكيد البنك بعد. لا داعي للدفع مرة أخرى — سنفعّل اشتراكك تلقائيًا فور وصول التأكيد وستصلك رسالة على واتساب.'),
                 tone: 'bg-amber-50',
             };
         }
         return {
             icon: <Loader2 className="size-14 animate-spin text-brand" />,
             title: t('نتحقق من الدفع…'),
-            text: t('ننتظر تأكيد البنك الآمن. قد يستغرق ذلك لحظات، يُرجى عدم إغلاق الصفحة.'),
+            text: gift
+                ? t('ننتظر تأكيد البنك الآمن. تظهر بطاقة الهدية صالحة حين يصل تأكيد الدفع.')
+                : t('ننتظر تأكيد البنك الآمن. قد يستغرق ذلك لحظات، يُرجى عدم إغلاق الصفحة.'),
             tone: 'bg-brand-50',
         };
     })();
@@ -131,6 +137,12 @@ export default function PaymentReturn({ site, seo, reference, status: initial, h
                     </dl>
 
                     <div className="mt-6 flex flex-col gap-2">
+                        {/* The gift's card shows it usable only once the gateway's signed confirmation paid it: this return proves nothing. */}
+                        {gift && (
+                            <Link href={route('site.gift.show', { token: gift })} className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-sm font-medium text-white hover:bg-brand-600">
+                                <Gift className="size-4" /> {t('عرض بطاقة الهدية')}
+                            </Link>
+                        )}
                         {order && (
                             <Link href={route('site.shop.order', { token: order })} className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-sm font-medium text-white hover:bg-brand-600">
                                 {t('عرض الطلب وحالته')}

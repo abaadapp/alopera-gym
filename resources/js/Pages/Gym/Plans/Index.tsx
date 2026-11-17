@@ -33,6 +33,8 @@ interface Plan {
     is_public: boolean;
     is_featured: boolean;
     is_active: boolean;
+    /** «متاحة للإهداء» (#192): it can be issued as a gift in the panel, and offered as one on the website when public. */
+    giftable: boolean;
     sort: number;
     program_ids: number[];
     /** «صلاحيات الباقة»: what a sale of it gives now. */
@@ -83,6 +85,7 @@ export default function PlansIndex({ plans, programs }: { plans: Plan[]; program
                                 {p.freeze_allowed ? <Badge tone="violet">تجميد {p.max_freeze_days > 0 ? `حتى ${dayCount(p.max_freeze_days)}` : 'مفتوح'}</Badge> : <Badge tone="gray">بدون تجميد</Badge>}
                                 {!p.is_public && <Badge tone="amber">غير ظاهرة بالموقع</Badge>}
                                 {!p.is_active && <Badge tone="red">موقوفة</Badge>}
+                                {!p.giftable && <Badge tone="gray">غير متاحة للإهداء</Badge>}
                             </div>
                             {p.features && p.features.length > 0 && (
                                 <ul className="mt-3 space-y-1 text-sm text-ink/80">
@@ -131,6 +134,7 @@ function PlanModal({ open, plan, programs, onClose }: { open: boolean; plan: Pla
         is_public: plan?.is_public ?? true,
         is_featured: plan?.is_featured ?? false,
         is_active: plan?.is_active ?? true,
+        giftable: plan?.giftable ?? true,
         sort: String(plan?.sort ?? 0),
         program_ids: plan?.program_ids ?? [],
     });
@@ -285,6 +289,8 @@ function PlanModal({ open, plan, programs, onClose }: { open: boolean; plan: Pla
                         <Checkbox label="تظهر في الموقع" checked={form.data.is_public} onChange={(e) => form.setData('is_public', e.target.checked)} />
                         <Checkbox label="مميزة" checked={form.data.is_featured} onChange={(e) => form.setData('is_featured', e.target.checked)} />
                     </div>
+                    <Toggle checked={form.data.giftable} onChange={(v) => form.setData('giftable', v)} label="متاحة للإهداء" hint="يظهر خيار «إهداء هذه الباقة» في الموقع إذا كانت الباقة ظاهرة فيه، ويمكن إصدارها هدية من اللوحة." />
+                    {err.giftable && <p className="text-xs text-red-600">{err.giftable}</p>}
                 </div>
             </form>
         </Modal>

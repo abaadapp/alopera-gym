@@ -33,6 +33,7 @@ final class NumberSequence
         'payroll_run' => ['prefix' => 'PR-', 'pad' => 5, 'yearly' => false],
         'payroll_payout' => ['prefix' => 'SP-', 'pad' => 5, 'yearly' => true],
         'cash_shift' => ['prefix' => 'SH-', 'pad' => 5, 'yearly' => true],
+        'gift' => ['prefix' => 'GF-', 'pad' => 5, 'yearly' => true],
     ];
 
     public static function next(string $key, ?int $tenantId = null): string

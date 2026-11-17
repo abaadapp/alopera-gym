@@ -12,6 +12,7 @@ use App\Models\TenantIntegration;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\PaymentService;
+use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Inventory\Models\Sale;
@@ -123,6 +124,12 @@ final class OnlinePaymentService
             // customer would pay twice.
             if (Payment::where('invoice_id', $invoice->id)->gatewayCreditLeft()->exists()) {
                 throw new BusinessRuleException('paymob.held', 'وصلنا تأكيد دفعة إلكترونية لهذه الفاتورة وهي قيد المراجعة لدى النادي؛ لا حاجة للدفع مرة أخرى.');
+            }
+            // A gift bought on the website is paid only once its recipient confirmed her WhatsApp number with a message
+            // from it (#192), whichever page the checkout is asked from (the gift's page or the invoice's pay link).
+            $gift = $invoice->type === 'gift' ? GiftMembership::where('invoice_id', $invoice->id)->first() : null;
+            if ($gift && $gift->source === 'site' && ! $gift->phoneVerified()) {
+                throw new BusinessRuleException('gift.phone_unverified', 'أكّد رقم واتساب المستلمة أولًا، ثم ادفع قيمة الهدية.');
             }
 
             // A website order holds its stock only until reserved_until: its checkout must not outlive the hold, or the
@@ -473,7 +480,7 @@ final class OnlinePaymentService
             return 'order_closed';
         }
 
-        $items = $invoice->items()->whereIn('itemable_type', ['membership', 'pt_subscription'])->get(['itemable_type', 'itemable_id']);
+        $items = $invoice->items()->whereIn('itemable_type', ['membership', 'pt_subscription', 'gift_membership'])->get(['itemable_type', 'itemable_id']);
         $today = CarbonImmutable::today();
         $memberships = Membership::whereIn('id', $items->where('itemable_type', 'membership')->pluck('itemable_id')->unique())->orderBy('id')->lockForUpdate()->get();
         foreach ($memberships as $membership) {
@@ -503,6 +510,15 @@ final class OnlinePaymentService
         foreach ($subscriptions as $subscription) {
             if ($subscription->status !== PtSubscription::PENDING) {
                 return 'pt_not_pending';
+            }
+        }
+        // A gift (#192) cancelled while its invoice was still open (a desk payment on part of it kept the invoice from
+        // being voided): the money is held for review, not applied to a gift nobody can use. Invoice then gift, the
+        // order GiftService takes.
+        $gifts = GiftMembership::whereIn('id', $items->where('itemable_type', 'gift_membership')->pluck('itemable_id')->unique())->orderBy('id')->lockForUpdate()->get();
+        foreach ($gifts as $gift) {
+            if ($gift->status !== GiftMembership::PENDING) {
+                return 'gift_not_pending';
             }
         }
 

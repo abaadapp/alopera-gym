@@ -5,9 +5,12 @@ namespace App\Modules\Gym\Http;
 use App\Core\Support\Phone;
 use App\Core\Support\SiteLanguage;
 use App\Modules\Gym\Models\ClassSession;
+use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\MembershipPlan;
+use App\Modules\Gym\Services\GiftWhatsApp;
+use App\Modules\Website\Support\GiftLinks;
 
 /** Shapes gym models into the arrays the pages receive. */
 final class GymPresenter
@@ -69,7 +72,7 @@ final class GymPresenter
     public static function plan(MembershipPlan $p): array
     {
         return $p->only('id', 'name', 'name_en', 'type', 'description', 'description_en', 'duration_value', 'duration_unit', 'price', 'signup_fee', 'sessions_limit',
-            'freeze_allowed', 'max_freeze_days', 'max_freezes', 'features', 'features_en', 'color', 'is_public', 'is_featured', 'is_active', 'sort') + [
+            'freeze_allowed', 'max_freeze_days', 'max_freezes', 'features', 'features_en', 'color', 'is_public', 'is_featured', 'is_active', 'giftable', 'sort') + [
                 'duration_label' => $p->durationLabel(),
                 'type_label' => MembershipPlan::TYPES[$p->type] ?? $p->type,
                 // What a sale of it gives now (the panel's switches, the website's and portal's lists).
@@ -79,8 +82,62 @@ final class GymPresenter
             ];
     }
 
+    /** A gift membership (#192) as the panel lists and shows it: its own terms, never the link's token. @return array<string, mixed> */
+    public static function gift(GiftMembership $g): array
+    {
+        $status = $g->displayStatus();
+        $snapshot = $g->plan_snapshot ?? [];
+        $invoice = $g->relationLoaded('invoice') ? $g->invoice : null;
+
+        return [
+            'id' => $g->id,
+            'number' => $g->number,
+            'status' => $status,
+            'status_label' => GiftMembership::STATUS_LABELS[$status] ?? $status,
+            'status_label_en' => GiftMembership::STATUS_LABELS_EN[$status] ?? $status,
+            'source' => $g->source,
+            'giver_name' => $g->giver_name,
+            'giver_phone' => $g->giver_phone,
+            'giver_email' => $g->giver_email,
+            'recipient_name' => $g->recipient_name,
+            'recipient_phone' => $g->recipient_phone,
+            'message' => $g->message,
+            'plan' => [
+                'id' => $g->membership_plan_id,
+                'name' => $snapshot['name'] ?? '',
+                'name_en' => $snapshot['name_en'] ?? null,
+                'duration_label' => $snapshot['duration_label'] ?? null,
+            ],
+            'price' => $g->price,
+            'invoice' => $invoice ? [
+                'id' => $invoice->id, 'number' => $invoice->number, 'status' => $invoice->status,
+                'total' => $invoice->total, 'paid_total' => $invoice->paid_total, 'balance' => $invoice->balance(),
+            ] : null,
+            'paid_at' => $g->paid_at?->toIso8601String(),
+            'expires_on' => $g->expires_on?->toDateString(),
+            'redeemed_at' => $g->redeemed_at?->toIso8601String(),
+            'redeemed_via' => $g->redeemed_via,
+            'member' => $g->relationLoaded('member') && $g->member ? $g->member->only('id', 'full_name', 'member_no') : null,
+            'membership_id' => $g->membership_id,
+            'cancelled_at' => $g->cancelled_at?->toIso8601String(),
+            'cancel_reason' => $g->cancel_reason,
+            'refunded_at' => $g->refunded_at?->toIso8601String(),
+            // Withdrawn by a credit note: whether the money is actually back with the buyer (not the note itself).
+            'refund' => $g->refundState(),
+            // The recipient's WhatsApp: confirmed by her message, and where the gift's message is (#192).
+            'phone_verified_at' => $g->phone_verified_at?->toIso8601String(),
+            'delivery' => (function () use ($g) {
+                $state = GiftWhatsApp::stateOf($g, $g->relationLoaded('whatsappMessage') ? $g->whatsappMessage : $g->whatsappMessage()->first());
+
+                return ['state' => $state, 'label' => GiftMembership::DELIVERY_LABELS[$state] ?? $state];
+            })(),
+            'expired_at' => $g->expired_at?->toIso8601String(),
+            'created_at' => $g->created_at?->toIso8601String(),
+        ];
+    }
+
     /** A plan as the website and portal show it, in the page's language (the English words when written). @return array<string, mixed> */
-    public static function sitePlan(MembershipPlan $p): array
+    public static function sitePlan(MembershipPlan $p, ?bool $siteSellsGifts = null): array
     {
         return [
             'name' => SiteLanguage::pick($p->name, $p->name_en),
@@ -88,6 +145,8 @@ final class GymPresenter
             'features' => SiteLanguage::pickList($p->features, $p->features_en),
             'duration_label' => $p->siteDurationLabel(),
             'type_label' => SiteLanguage::word(MembershipPlan::TYPES[$p->type] ?? $p->type),
+            // «إهداء هذه الباقة» (#192): only on a plan the club offers as a gift, while the website can sell one.
+            'gift_url' => app(GiftLinks::class)->buy($p, $siteSellsGifts),
         ] + self::plan($p);
     }
 

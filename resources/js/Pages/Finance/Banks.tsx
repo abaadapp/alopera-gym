@@ -97,11 +97,18 @@ export default function FinanceBanks({ accounts, totals, kinds, canManage }: Pro
 }
 
 function AccountForm({ account, onClose }: { account: Account | null; onClose: () => void }) {
+    // One key per new account: a double click or a retry opens it, and its opening balance, once.
+    const key = useRef(clientKey());
     const form = useForm({ name: account?.name ?? '', kind: account?.kind ?? 'bank', bank_name: account?.bank_name ?? '', account_number: '', iban: '', opening_balance: '', opening_date: today(), is_active: account?.is_active ?? true });
     const submit = (e: FormEvent) => {
         e.preventDefault();
         const opts = { preserveScroll: true, onSuccess: onClose };
-        account ? form.put(route('club.finance.banks.update', account.id), opts) : form.post(route('club.finance.banks.store'), opts);
+        if (account) {
+            form.put(route('club.finance.banks.update', account.id), opts);
+        } else {
+            form.transform((x) => ({ ...x, client_key: key.current }));
+            form.post(route('club.finance.banks.store'), opts);
+        }
     };
     const isMoneyBox = form.data.kind === 'cash';
 

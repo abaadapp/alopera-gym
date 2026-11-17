@@ -32,6 +32,8 @@ final class TenantTables
         'pos_devices', 'pos_peripherals', 'pos_print_logs', 'pos_checkout_keys', 'submitted_once_keys',
         'sales', 'sale_items', 'sale_item_addons', 'stock_movements',
         'message_templates', 'conversations', 'campaigns', 'messages', 'auto_replies',
+        // After the invoices, members, memberships and WhatsApp messages a gift points at (#192).
+        'gym_gift_memberships',
         'whatsapp_attachments', 'conversation_events', 'whatsapp_contacts',
         'payment_intents',
         'gym_journal_entries', 'gym_journal_lines', 'gym_accounting_periods',

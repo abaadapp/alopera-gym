@@ -34,6 +34,7 @@ class JournalEntry extends Model
         'payment_allocation' => 'تخصيص رصيد عميل',
         'cash_shift' => 'فرق إقفال وردية',
         'cash_shift_movement' => 'نقل نقد من الدرج أو إليه',
+        'gift' => 'هدية اشتراك',
     ];
 
     protected function casts(): array
