@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import { Check, Eye, EyeOff, KeyRound, Plus, Search, ShieldCheck, Sparkles, Trash2, UserRound, Wallet } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Button, Field, Input, Modal, PageHeader, Select, Textarea, BackLink } from '@/Components/ui';
 import { FormSection, Initials } from '@/Components/Payroll/parts';
 import { cn } from '@/lib/cn';
+import { clientKey } from '@/Components/Inventory/parts';
 import PermissionPicker, { type PermissionGroup } from '@/Components/Permissions/PermissionPicker';
 import type { Allowance, Can, EmployeeRow } from './Employees';
 
@@ -31,6 +32,8 @@ interface Props {
 /** Adding or editing a staff file, section by section; each section is shown to whoever may write it. */
 export default function EmployeeForm({ employee, jobTitles, branches, trainers, statuses, access, can, confidential }: Props) {
     const editing = employee !== null;
+    // One key per new employee: a double click or a retry adds the file (and its salary) once.
+    const key = useRef(clientKey());
     const form = useForm({
         name: employee?.name ?? '',
         phone: employee?.phone ?? '',
@@ -76,8 +79,12 @@ export default function EmployeeForm({ employee, jobTitles, branches, trainers, 
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        if (editing) form.put(route('club.employees.update', employee.id));
-        else form.post(route('club.employees.store'));
+        if (editing) {
+            form.put(route('club.employees.update', employee.id));
+        } else {
+            form.transform((d) => ({ ...d, client_key: key.current }));
+            form.post(route('club.employees.store'));
+        }
     };
 
     return (

@@ -9,6 +9,7 @@ use App\Core\Auth\PermissionRegistry;
 use App\Core\Auth\SystemRoles;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
+use App\Core\Support\SubmittedOnce;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Core\Tenancy\TenantRule;
@@ -182,20 +183,22 @@ class EmployeeController extends Controller
         $account = $this->accountRequest($request, null);
         $this->guardSelf($request, null, $data, $account);
 
-        $employee = DB::transaction(function () use ($data, $account, $request) {
-            $employee = Employee::create(Arr::except($data, ['user_id']) + ['user_id' => $account && $account['mode'] === 'link' ? $account['user_id'] : null]);
+        // One form, one file: the same form sent twice never adds the employee (and their salary) twice.
+        $request->validate(['client_key' => SubmittedOnce::RULE]);
+        $id = SubmittedOnce::run($request->input('client_key'), 'employee-create', fn () => DB::transaction(function () use ($data, $account, $request, $audit) {
+            $employee = Employee::create(Arr::except($data, ['user_id', 'client_key']) + ['user_id' => $account && $account['mode'] === 'link' ? $account['user_id'] : null]);
             if ($account && $account['mode'] === 'new') {
                 $this->createAccount($request, $employee, $account);
             }
             if ($account && $account['mode'] === 'link') {
                 $this->applyOwnList($request, User::ofTenant($this->tenants->id())->findOrFail($account['user_id']), $account);
             }
+            $audit->log('employee.created', $employee, ['name' => $employee->name]);
 
-            return $employee;
-        });
-        $audit->log('employee.created', $employee, ['name' => $employee->name]);
+            return $employee->id;
+        }));
 
-        return to_route('club.employees.show', $employee)->with('success', 'أُضيف ملف الموظف.');
+        return to_route('club.employees.show', $id)->with('success', 'أُضيف ملف الموظف.');
     }
 
     public function update(Request $request, Employee $employee, AuditLogger $audit): RedirectResponse

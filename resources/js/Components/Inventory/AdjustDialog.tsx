@@ -1,10 +1,10 @@
-import { type FormEvent } from 'react';
+import { useRef, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import { Button, Field, Input, Modal, Select } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money } from '@/lib/format';
-import type { BranchFilterState } from './parts';
+import { clientKey, type BranchFilterState } from './parts';
 
 const OUT_ONLY = ['damaged', 'lost', 'expired', 'internal'];
 
@@ -14,6 +14,8 @@ const OUT_ONLY = ['damaged', 'lost', 'expired', 'internal'];
  */
 export default function AdjustDialog({ products, branch, reasons, onClose }: { products: { id: number; name: string; cost: string }[]; branch: BranchFilterState; reasons: Record<string, string>; onClose: () => void }) {
     const currency = useCurrency();
+    // One key per adjustment: a double click or a retry takes the stock once.
+    const key = useRef(clientKey());
     const form = useForm({ product_id: '', branch_id: branch.value !== 'all' ? branch.value : String(branch.options[0]?.id ?? ''), direction: 'out', quantity: '', reason: 'damaged', note: '' });
     const outOnly = OUT_ONLY.includes(form.data.reason);
     const product = products.find((p) => String(p.id) === form.data.product_id);
@@ -21,7 +23,7 @@ export default function AdjustDialog({ products, branch, reasons, onClose }: { p
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        form.transform((d) => ({ ...d, direction: outOnly ? 'out' : d.direction }));
+        form.transform((d) => ({ ...d, direction: outOnly ? 'out' : d.direction, client_key: key.current }));
         form.post(route('club.inventory.adjust'), { preserveScroll: true, onSuccess: onClose });
     };
 

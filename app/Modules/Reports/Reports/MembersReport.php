@@ -37,7 +37,8 @@ final class MembersReport extends Report
                 array_map(fn ($p) => [$p['plan'], $p['sold'], $p['renewals'], ...($financial ? [$p['revenue']] : [])], $r['plans'])),
             new S('العضويات المسجلة', [['رقم العضوية', S::TEXT], ['العضو', S::TEXT], ['الباقة', S::TEXT], ['النوع', S::TEXT], ['الحالة', S::TEXT], ['من', S::TEXT], ['إلى', S::TEXT], ...($financial ? [['الإجمالي', S::MONEY]] : []), ['تاريخ التفعيل', S::TEXT]],
                 (function () use ($f, $financial) {
-                    foreach ($this->in(Membership::with('member:id,full_name,member_no')->whereBetween('created_at', [$f->from, $f->to->endOfDay()]), $f)->orderBy('id')->lazy(500) as $m) {
+                    // The memberships the figures and «الباقات المباعة» count: activated (paid and started) in the period.
+                    foreach ($this->in(Membership::with('member:id,full_name,member_no')->whereBetween('activated_at', [$f->from, $f->to->endOfDay()]), $f)->orderBy('id')->lazy(500) as $m) {
                         yield [$m->member?->member_no, $m->member?->full_name, $m->plan_snapshot['name'] ?? '', Membership::KIND_LABELS[$m->kind] ?? $m->kind, Membership::STATUS_LABELS[$m->status] ?? $m->status,
                             $m->starts_on->toDateString(), $m->ends_on->toDateString(), ...($financial ? [$m->total] : []), $m->activated_at?->format('Y-m-d H:i')];
                     }
