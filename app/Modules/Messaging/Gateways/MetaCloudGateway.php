@@ -3,7 +3,6 @@
 namespace App\Modules\Messaging\Gateways;
 
 use App\Models\TenantIntegration;
-use GuzzleHttp\Exception\ConnectException as GuzzleConnectException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -254,9 +253,8 @@ final class MetaCloudGateway implements WhatsAppGateway
         try {
             $response = $this->client($integration)->timeout(15)->post($url, $payload);
         } catch (ConnectionException $e) {
-            // No connection was ever made (no address, refused, TLS failed): WhatsApp has nothing, so it is retried.
-            // Anything later (a timeout, a connection dropped while waiting) may have reached it: not retried (#203).
-            return $e->getPrevious() instanceof GuzzleConnectException
+            // Never left: WhatsApp has nothing, so it is retried. Anything else may have reached it: not retried (#203).
+            return self::neverLeft($e)
                 ? GatewayResult::failed('connection', Str::limit($e->getMessage(), 250), true)
                 : GatewayResult::uncertain('انقطع الاتصال بواتساب بعد إرسال الطلب: '.Str::limit($e->getMessage(), 200));
         }
@@ -272,6 +270,23 @@ final class MetaCloudGateway implements WhatsAppGateway
         }
 
         return $this->failure($response);
+    }
+
+    /**
+     * Did cURL fail before any connection to WhatsApp existed: the name did not resolve (6, 5 for a proxy), nothing
+     * answered on the port (7), the TLS handshake failed (35, 60), or the time ran out while resolving or connecting
+     * (28 with cURL's own "Resolving/Connection timed out after", "Connection timeout after"). Decided from cURL's
+     * error, not the exception's class: Guzzle 7 (Laravel accepts ^7.8.2 || ^8.0) reports every timeout and an empty
+     * reply as a ConnectException. No cURL error at all (another handler) proves nothing either.
+     */
+    private static function neverLeft(ConnectionException $e): bool
+    {
+        if (preg_match('/^cURL error (\d+): (.*)$/s', $e->getMessage(), $m) !== 1) {
+            return false;
+        }
+
+        return in_array((int) $m[1], [5, 6, 7, 35, 60], true)
+            || ((int) $m[1] === 28 && preg_match('/^(Resolving timed out after|Connection timed out after|Connection timeout after) /', $m[2]) === 1);
     }
 
     private function failure(Response $response): GatewayResult

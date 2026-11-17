@@ -343,22 +343,38 @@ final class WhatsAppService
      * A claimed message whose outcome was never recorded: WhatsApp may have it, so it is not sent again and not said
      * to have failed. Staff see «نتيجة الإرسال غير مؤكدة» with what to do.
      */
-    public function markUncertain(Message $message, ?string $why = null): void
+    public function markUncertain(Message $message, ?string $why = null, ?\DateTimeInterface $claimedBefore = null): bool
     {
-        $message->forceFill(['status' => Message::UNCERTAIN, 'error_code' => 'outcome_unknown', 'error_message' => mb_substr($why ?? Message::UNCERTAIN_TEXT, 0, 250)])->save();
+        // Only a claim still standing, read again under its row lock: an outcome a worker saved meanwhile (sent,
+        // delivered, failed, back in the queue) or a fresh claim (`$claimedBefore`) is never overwritten.
+        $settled = DB::transaction(function () use ($message, $why, $claimedBefore) {
+            $current = Message::whereKey($message->id)->lockForUpdate()->first();
+            if ($current?->status !== Message::SENDING || ($claimedBefore !== null && ! $current->updated_at?->lessThan($claimedBefore))) {
+                return null;
+            }
+            $current->forceFill(['status' => Message::UNCERTAIN, 'error_code' => 'outcome_unknown', 'error_message' => mb_substr($why ?? Message::UNCERTAIN_TEXT, 0, 250)])->save();
+
+            return $current;
+        });
+        if ($settled === null) {
+            return false;
+        }
+        $message->setRawAttributes($settled->getAttributes(), true);
         if ($message->campaign_id) {
             CampaignService::refreshCounts($message->campaign_id);
         }
+
+        return true;
     }
 
     /** Claims with no worker behind them any more (a job lost after its claim): their outcome is unknown. */
     public function settleAbandonedClaims(): int
     {
         $count = 0;
-        Message::where('status', Message::SENDING)->where('updated_at', '<', now()->subMinutes(Message::SENDING_STALE_MINUTES))
-            ->eachById(function (Message $message) use (&$count) {
-                $this->markUncertain($message);
-                $count++;
+        $before = now()->subMinutes(Message::SENDING_STALE_MINUTES);
+        Message::where('status', Message::SENDING)->where('updated_at', '<', $before)
+            ->eachById(function (Message $message) use (&$count, $before) {
+                $count += $this->markUncertain($message, null, $before) ? 1 : 0;
             });
 
         return $count;
