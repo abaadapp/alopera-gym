@@ -110,7 +110,8 @@ final class GiftController extends Controller
         $gift->load(['invoice', 'member:id,full_name,member_no']);
         $user = $request->user();
         $people = User::whereIn('id', array_filter([$gift->created_by, $gift->redeemed_by]))->pluck('name', 'id');
-        $linkReady = $gift->paid_at !== null && $gift->invoice_id !== null;
+        // The link and its share card while the gift is usable, and for reference once used; not on a closed one.
+        $linkReady = in_array($gift->displayStatus(), [GiftMembership::PAID, GiftMembership::REDEEMED], true);
         $online = app(OnlinePaymentService::class);
 
         return Inertia::render('Gym/Gifts/Show', [
@@ -129,7 +130,7 @@ final class GiftController extends Controller
             'events' => AuditLog::where('tenant_id', $gift->tenant_id)->where('subject_type', $gift->getMorphClass())->where('subject_id', $gift->id)
                 ->where('event', 'like', 'gift.%')->latest('id')->limit(30)->get(['id', 'event', 'actor_name', 'created_at'])
                 ->map(fn (AuditLog $a) => ['id' => $a->id, 'event' => $a->event, 'by' => $a->actor_name, 'at' => $a->created_at?->toIso8601String()]),
-            'methods' => $user->can('payments.record') && $gift->status === GiftMembership::PENDING ? self::METHODS : [],
+            'methods' => $user->can('payments.record') && $user->can('gifts.create') && $gift->status === GiftMembership::PENDING ? self::METHODS : [],
             'redeem' => [
                 'min' => today()->toDateString(),
                 'max' => today()->addDays(GiftService::MAX_START_DAYS)->toDateString(),

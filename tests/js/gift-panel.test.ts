@@ -1,0 +1,40 @@
+import { describe, expect, it } from 'vitest';
+import { GIFT_EVENTS, GIFT_FILTERS, defaultGiftPayment, giftCancelReason, giftPaymentChoices, giftSource, redeemErrorStep, redeemGeneralErrors } from '@/lib/gifts';
+import { giftStatus, invoiceType, label } from '@/lib/labels';
+
+const STATUSES = ['pending', 'paid', 'redeemed', 'expired', 'cancelled', 'refunded'];
+
+describe('«هدايا الاشتراكات» in the panel (#192)', () => {
+    it('names and colours each of the six statuses, and has a tab for each', () => {
+        expect(Object.keys(giftStatus).sort()).toEqual([...STATUSES].sort());
+        expect(GIFT_FILTERS.map((f) => f.value).sort()).toEqual([...STATUSES].sort());
+        expect(label(giftStatus, 'paid')).toEqual(['مدفوعة — لم تُستخدم', 'green']);
+        expect(label(giftStatus, 'refunded')).toEqual(['مستردة ماليًا', 'violet']);
+        expect(invoiceType.gift).toBe('هدية اشتراك');
+    });
+
+    it('always offers «لاحقًا», then only the methods the server allows; cash first when allowed', () => {
+        expect(giftPaymentChoices([])).toEqual(['later']);
+        expect(defaultGiftPayment([])).toBe('later');
+        expect(giftPaymentChoices(['cash', 'card', 'bank_transfer', 'other'])).toEqual(['later', 'cash', 'card', 'bank_transfer', 'other']);
+        expect(defaultGiftPayment(['card', 'cash'])).toBe('cash');
+        expect(defaultGiftPayment(['card'])).toBe('later');
+        expect(giftPaymentChoices(['paymob', 'cash'])).toEqual(['later', 'cash']);
+    });
+
+    it('brings the redeem dialog back to the step whose field failed; other errors stay on top', () => {
+        expect(redeemErrorStep({ starts_on: 'تداخل' })).toBe('date');
+        expect(redeemErrorStep({ phone: 'مطلوب', starts_on: 'تداخل' })).toBe('who');
+        expect(redeemErrorStep({ error: 'استُخدمت هذه الهدية من قبل.' })).toBeNull();
+        expect(redeemGeneralErrors({ error: 'أ', membership_plan_id: 'ب', phone: 'ج', starts_on: undefined })).toEqual(['أ', 'ب']);
+    });
+
+    it('reads the history, the source and a voided invoice in words', () => {
+        expect(Object.keys(GIFT_EVENTS)).toHaveLength(6);
+        expect(giftCancelReason('invoice_voided')).toBe('أُلغيت فاتورتها');
+        expect(giftCancelReason('طلب المُهدي')).toBe('طلب المُهدي');
+        expect(giftCancelReason(null)).toBeNull();
+        expect(giftSource('site')).toBe('الموقع');
+        expect(giftSource('staff')).toBe('الموظف');
+    });
+});

@@ -153,5 +153,7 @@
     "انتهت مهلة استرداد هذه الهدية.": "The time to claim this gift has passed.",
     "لم يكتمل دفع هذه الهدية بعد.": "This gift has not been fully paid yet.",
     "اختر تاريخ بداية من اليوم وحتى 90 يومًا بعده.": "Choose a start date from today up to 90 days ahead.",
-    "هذه الباقة غير متاحة للإهداء.": "This plan cannot be given as a gift."
+    "هذه الباقة غير متاحة للإهداء.": "This plan cannot be given as a gift.",
+    "يوجد اشتراك آخر يغطي هذه الأيام. اختر تاريخ بداية بعد نهايته.": "Another membership covers these days. Choose a start date after it ends.",
+    "يوجد اشتراك بانتظار الدفع على هذا الحساب. أكمل دفعه أو ألغِه قبل استلام الهدية.": "A membership on this account is awaiting payment. Pay or cancel it before claiming the gift."
 }

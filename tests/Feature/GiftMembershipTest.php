@@ -190,7 +190,8 @@ class GiftMembershipTest extends TestCase
                 $this->gifts()->redeem($gift, $member, today()->addDays(3)->toDateString(), 'link');
                 $this->fail('An overlapping period was sold.');
             } catch (BusinessRuleException $e) {
-                $this->assertStringContainsString('تغطي هذه الأيام', $e->getMessage());
+                $this->assertSame('membership.overlap', $e->rule);
+                $this->assertSame('starts_on', $e->field);
             }
             $this->assertSame(GiftMembership::PAID, $gift->fresh()->status);
             $this->assertSame(1, Membership::count());

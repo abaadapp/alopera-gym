@@ -15,11 +15,12 @@ export interface MemberHit {
 }
 
 /**
- * Search members by name, phone or number (uses club.members.search). The hits open under the field as the reference's
+ * Search members by name, phone or number (club.members.search, or `url` when given: a screen whose own search answers
+ * the same rows, such as a gift's redeem dialog — club.gifts.members). The hits open under the field as the reference's
  * customer picker: a 10px-rounded white list with a soft shadow, scrolling past 256px; it closes when the field loses
  * the focus or with Escape, and opens again on coming back to it, clicking it or typing.
  */
-export default function MemberPicker({ onSelect, autoFocus, placeholder = 'ابحث بالاسم أو الهاتف أو رقم العضوية…' }: { onSelect: (m: MemberHit) => void; autoFocus?: boolean; placeholder?: string }) {
+export default function MemberPicker({ onSelect, autoFocus, placeholder = 'ابحث بالاسم أو الهاتف أو رقم العضوية…', url }: { onSelect: (m: MemberHit) => void; autoFocus?: boolean; placeholder?: string; url?: string }) {
     const [q, setQ] = useState('');
     const [hits, setHits] = useState<MemberHit[]>([]);
     const [loading, setLoading] = useState(false);
@@ -36,7 +37,7 @@ export default function MemberPicker({ onSelect, autoFocus, placeholder = 'اب�
         const id = setTimeout(async () => {
             setLoading(true);
             try {
-                const res = await fetch(route('club.members.search', { q }), { headers: { Accept: 'application/json' }, signal: controller.signal });
+                const res = await fetch(searchUrl(url, q), { headers: { Accept: 'application/json' }, signal: controller.signal });
                 if (res.ok) {
                     setHits(await res.json());
                     setSearched(q);
@@ -51,7 +52,7 @@ export default function MemberPicker({ onSelect, autoFocus, placeholder = 'اب�
             clearTimeout(id);
             controller.abort();
         };
-    }, [q]);
+    }, [q, url]);
 
     return (
         <div className="relative">
@@ -102,4 +103,12 @@ export default function MemberPicker({ onSelect, autoFocus, placeholder = 'اب�
             )}
         </div>
     );
+}
+
+/** The address a search goes to: `url` with `q` set (whatever query it already has kept), or the members search. */
+export function searchUrl(url: string | undefined, q: string): string {
+    if (!url) return route('club.members.search', { q });
+    const address = new URL(url, window.location.origin);
+    address.searchParams.set('q', q);
+    return address.toString();
 }

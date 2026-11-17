@@ -138,11 +138,20 @@ final class GiftService
             $this->assertRedeemable($gift, $invoice, $today);
 
             $plan = MembershipPlan::withTrashed()->findOrFail($gift->membership_plan_id);
-            $membership = $this->memberships->sell($member, $plan, [
-                'starts_on' => $start->toDateString(),
-                'gift' => $gift,
-                'branch_id' => $gift->branch_id ?? $member->branch_id,
-            ]);
+            try {
+                $membership = $this->memberships->sell($member, $plan, [
+                    'starts_on' => $start->toDateString(),
+                    'gift' => $gift,
+                    'branch_id' => $gift->branch_id ?? $member->branch_id,
+                ]);
+            } catch (BusinessRuleException $e) {
+                // The sale's own words speak of renewals and upgrades, which a gift's redemption does not offer.
+                throw match ($e->rule) {
+                    'membership.overlap' => new BusinessRuleException('membership.overlap', 'يوجد اشتراك آخر يغطي هذه الأيام. اختر تاريخ بداية بعد نهايته.', 'starts_on'),
+                    'membership.pending' => new BusinessRuleException('membership.pending', 'يوجد اشتراك بانتظار الدفع على هذا الحساب. أكمل دفعه أو ألغِه قبل استلام الهدية.'),
+                    default => $e,
+                };
+            }
 
             $gift->forceFill([
                 'status' => GiftMembership::REDEEMED,
