@@ -10,6 +10,7 @@ use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Services\GiftWhatsApp;
+use App\Modules\Website\Support\GiftLinks;
 
 /** Shapes gym models into the arrays the pages receive. */
 final class GymPresenter
@@ -136,7 +137,7 @@ final class GymPresenter
     }
 
     /** A plan as the website and portal show it, in the page's language (the English words when written). @return array<string, mixed> */
-    public static function sitePlan(MembershipPlan $p): array
+    public static function sitePlan(MembershipPlan $p, ?bool $siteSellsGifts = null): array
     {
         return [
             'name' => SiteLanguage::pick($p->name, $p->name_en),
@@ -144,8 +145,8 @@ final class GymPresenter
             'features' => SiteLanguage::pickList($p->features, $p->features_en),
             'duration_label' => $p->siteDurationLabel(),
             'type_label' => SiteLanguage::word(MembershipPlan::TYPES[$p->type] ?? $p->type),
-            // «إهداء هذه الباقة» (#192): only on a plan the club offers as a gift.
-            'gift_url' => $p->giftable ? route('site.gift.create', ['plan' => $p->id]) : null,
+            // «إهداء هذه الباقة» (#192): only on a plan the club offers as a gift, while the website can sell one.
+            'gift_url' => app(GiftLinks::class)->buy($p, $siteSellsGifts),
         ] + self::plan($p);
     }
 

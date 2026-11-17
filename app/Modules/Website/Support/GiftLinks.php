@@ -4,6 +4,9 @@ namespace App\Modules\Website\Support;
 
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Gym\Models\GiftMembership;
+use App\Modules\Gym\Models\MembershipPlan;
+use App\Modules\Gym\Services\GiftWhatsApp;
+use App\Modules\Payments\Services\OnlinePaymentService;
 
 /**
  * The gift's public link (#192) and the WhatsApp message that shares it. Built on the server, for staff allowed to see
@@ -13,6 +16,21 @@ use App\Modules\Gym\Models\GiftMembership;
 final class GiftLinks
 {
     public function __construct(private readonly TenantContext $tenants) {}
+
+    /**
+     * «إهداء هذه الباقة» on the website: only while the website can sell a gift — online payment taken and the
+     * recipient's number confirmable on the club's WhatsApp. Otherwise no button: the desk sells gifts (the launch's
+     * first step), and nobody fills the form to learn at the end that it cannot be paid.
+     */
+    public function buy(MembershipPlan $plan, ?bool $siteSells = null): ?string
+    {
+        return $plan->giftable && ($siteSells ?? $this->siteSells()) ? route('site.gift.create', ['plan' => $plan->id]) : null;
+    }
+
+    public function siteSells(): bool
+    {
+        return app(OnlinePaymentService::class)->available() && app(GiftWhatsApp::class)->verificationRefusal() === null;
+    }
 
     public function card(GiftMembership $gift): string
     {

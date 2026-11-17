@@ -14,6 +14,7 @@ use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Services\ShopSettings;
 use App\Modules\Website\Models\SiteMedia;
 use App\Modules\Website\Models\SitePost;
+use App\Modules\Website\Support\GiftLinks;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Storage;
 
@@ -314,13 +315,16 @@ final class SiteRenderer
     /** @return list<array<string, mixed>> */
     private function plans(int $limit): array
     {
+        $gifts = app(GiftLinks::class);
+        $giftsOnline = $gifts->siteSells();
+
         return MembershipPlan::public()->orderByDesc('is_featured')->orderBy('sort')->limit($limit)->get()->map(fn (MembershipPlan $p) => [
             'id' => $p->id, 'name' => SiteLanguage::pick($p->name, $p->name_en), 'description' => SiteLanguage::pick($p->description, $p->description_en), 'price' => (string) $p->price,
             'signup_fee' => $p->signup_fee !== null ? (string) $p->signup_fee : null, 'duration_label' => $p->siteDurationLabel(),
             'type_label' => SiteLanguage::word(MembershipPlan::TYPES[$p->type] ?? $p->type), 'features' => SiteLanguage::pickList($p->features, $p->features_en), 'is_featured' => (bool) $p->is_featured,
             'allows_gym' => $p->allowsGym(), 'allows_classes' => $p->allowsClasses(), 'sessions_limit' => $p->sessions_limit,
             'join_url' => route('site.join', ['plan' => $p->id]),
-            'gift_url' => $p->giftable ? route('site.gift.create', ['plan' => $p->id]) : null,
+            'gift_url' => $gifts->buy($p, $giftsOnline),
         ])->all();
     }
 

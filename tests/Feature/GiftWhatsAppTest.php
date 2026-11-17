@@ -9,6 +9,7 @@ use App\Models\StaffNotification;
 use App\Models\Tenant;
 use App\Models\TenantIntegration;
 use App\Models\User;
+use App\Modules\Accounting\Models\JournalLine;
 use App\Modules\Finance\Events\InvoicePaid;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
@@ -541,6 +542,53 @@ class GiftWhatsAppTest extends TestCase
         });
         $this->whatsappStatus('wamid.REAL-1', 'delivered')->assertOk();
         $this->asTenant($club, fn () => $this->assertSame('delivered', app(GiftWhatsApp::class)->delivery($gift->fresh())['state']));
+    }
+
+    /**
+     * The launch's one real test (docs/WHATSAPP.md): a hidden free plan, given at the desk to the owner's own number.
+     * No payment and no journal line at any point: the zero invoice is paid on issue, her confirmation sends the one
+     * template, and cancelling the gift afterwards moves nothing. The website never offers the plan.
+     */
+    public function test_the_launch_test_gift_on_a_hidden_free_plan_sends_once_and_touches_no_account(): void
+    {
+        config(['services.whatsapp.driver' => 'meta']);
+        Http::fake(['https://graph.facebook.com/*' => fn (HttpRequest $r) => Http::response(['messaging_product' => 'whatsapp',
+            'messages' => [['id' => ($r->data()['type'] ?? '') === 'template' ? 'wamid.LAUNCH-1' : 'wamid.TEXT-'.Str::random(6)]]], 200)]);
+        $club = $this->club();
+        $this->connectWhatsApp($club);
+        $plan = $this->plan($club, ['price' => 0, 'name' => 'اختبار داخلي', 'is_public' => false]);
+        $this->get(route('site.gift.create', ['club' => $club->slug, 'plan' => $plan->id]))->assertNotFound();
+
+        $gift = $this->asTenant($club, fn () => app(GiftService::class)->issue($plan, ['giver_name' => 'Owner', 'recipient_name' => 'Owner',
+            'recipient_phone' => '95551234'], 'staff'));
+        $this->asTenant($club, function () use ($gift) {
+            $this->assertSame([GiftMembership::PAID, Invoice::PAID, '0.000'], [$gift->fresh()->status, $gift->invoice->fresh()->status, $gift->invoice->fresh()->total]);
+            $this->assertSame(0, Payment::count());
+            $this->assertSame(0, JournalLine::count());
+        });
+        $this->assertCount(0, Http::recorded(), 'nothing is sent before her own number confirms');
+
+        $confirmation = $this->asTenant($club, fn () => app(GiftWhatsApp::class)->verification($gift->fresh())['text']);
+        $this->whatsappText(self::RECIPIENT, $confirmation, 'wamid.launch-confirm')->assertOk();
+        $templates = Http::recorded(fn (HttpRequest $r) => ($r->data()['type'] ?? null) === 'template');
+        $this->assertCount(1, $templates);
+        $this->assertSame([self::RECIPIENT, 'alopera_gift_received'], [$templates->first()[0]->data()['to'], $templates->first()[0]->data()['template']['name']]);
+        $this->whatsappStatus('wamid.LAUNCH-1', 'delivered')->assertOk();
+        $this->whatsappStatus('wamid.LAUNCH-1', 'read')->assertOk();
+        // The nightly run and a repeated webhook add nothing.
+        Artisan::call('gym:daily-memberships');
+        $this->whatsappText(self::RECIPIENT, $confirmation, 'wamid.launch-confirm')->assertOk();
+        $this->whatsappText(self::RECIPIENT, $confirmation, 'wamid.launch-confirm-again')->assertOk();
+        $this->assertCount(1, Http::recorded(fn (HttpRequest $r) => ($r->data()['type'] ?? null) === 'template'));
+
+        $this->asTenant($club, function () use ($gift) {
+            $this->assertSame('read', app(GiftWhatsApp::class)->delivery($gift->fresh())['state']);
+            app(GiftService::class)->cancel($gift->fresh(), 'اختبار الإطلاق');
+            $this->assertSame(GiftMembership::CANCELLED, $gift->fresh()->status);
+            $this->assertSame(0, Payment::count());
+            $this->assertSame(0, JournalLine::count(), 'the test gift left nothing in the accounts');
+            $this->assertSame([0, 0], [Member::count(), Membership::count()]);
+        });
     }
 
     public function test_a_number_meta_refuses_fails_once_without_retries_and_the_gift_stands(): void
