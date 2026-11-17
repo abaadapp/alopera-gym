@@ -132,8 +132,15 @@ class LogTwoUsersTest extends TestCase
         $this->assertSame([0660, self::DEPLOY, 'www-data'], [$cli['mode'], $cli['owner'], $cli['group']]);
         $this->assertStringContainsString('web line', $cli['text']);
 
+        // Made by root (php artisan run as root): still the two users' file, through the folder's group.
+        $this->assertSame('ok', $this->log('root', 'root-made.log', 'root line', $permission));
+        $this->assertSame('ok', $this->log('www-data', 'root-made.log', 'web line', $permission));
+        $this->assertSame('ok', $this->log(self::DEPLOY, 'root-made.log', 'nightly line', $permission));
+        $root = $this->file('root-made.log');
+        $this->assertSame([0660, 'root', 'www-data'], [$root['mode'], $root['owner'], $root['group']]);
+
         // Nobody outside the two.
-        foreach (['laravel.log', 'laravel-2026-11-18.log'] as $file) {
+        foreach (['laravel.log', 'laravel-2026-11-18.log', 'root-made.log'] as $file) {
             $this->assertSame('no', trim((string) shell_exec('sudo -n -u nobody test -r '.escapeshellarg($this->root.'/'.$file).' && echo yes || echo no')), $file);
         }
     }

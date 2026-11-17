@@ -79,6 +79,21 @@ class LogFilePermissionsTest extends TestCase
         $this->assertStringContainsString('next line', file_get_contents($path));
     }
 
+    public function test_a_file_laravel_s_emergency_logger_makes_is_put_right_by_the_next_ordinary_line(): void
+    {
+        // Laravel's emergency logger (a channel that cannot be made) takes no permission: the creator's umask.
+        $path = $this->dir.'/laravel.log';
+        config(['logging.channels.emergency.path' => $path, 'logging.channels.broken' => ['driver' => 'monolog', 'handler' => 'App\\NoSuchHandler']]);
+        Log::channel('broken')->error('during a broken log configuration');
+        $this->assertStringContainsString('Unable to create configured logger', file_get_contents($path));
+        $this->assertSame(0644, $this->mode($path));
+
+        $this->channel('single')->error('the next ordinary line');
+
+        $this->assertSame(0660, $this->mode($path));
+        $this->assertStringContainsString('during a broken log configuration', file_get_contents($path), 'nothing lost');
+    }
+
     public function test_the_cause_a_log_file_this_user_cannot_write_throws_instead_of_logging(): void
     {
         if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
