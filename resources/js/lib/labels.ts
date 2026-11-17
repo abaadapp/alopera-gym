@@ -18,7 +18,7 @@ export const giftStatus: Record<string, [string, Tone]> = {
     redeemed: ['مستخدمة', 'blue'],
     expired: ['منتهية الصلاحية', 'gray'],
     cancelled: ['ملغاة', 'red'],
-    refunded: ['مستردة ماليًا', 'violet'],
+    refunded: ['أُلغيت بإشعار دائن', 'violet'],
 };
 
 export const membershipKind: Record<string, string> = { new: 'جديد', renewal: 'تجديد', upgrade: 'تغيير باقة' };

@@ -183,11 +183,11 @@ final class GiftService
         match (true) {
             $gift->status === GiftMembership::REDEEMED => throw new BusinessRuleException('gift.redeemed', 'استُخدمت هذه الهدية من قبل.'),
             $gift->status === GiftMembership::CANCELLED => throw new BusinessRuleException('gift.cancelled', 'هذه الهدية ملغاة.'),
-            $gift->status === GiftMembership::REFUNDED => throw new BusinessRuleException('gift.refunded', 'رُدّ مبلغ هذه الهدية، فلا يمكن استخدامها.'),
+            $gift->status === GiftMembership::REFUNDED => throw new BusinessRuleException('gift.refunded', 'أُلغيت هذه الهدية بإشعار دائن، فلا يمكن استخدامها. للاستفسار عن مبلغها تواصل مع النادي.'),
             $gift->status === GiftMembership::EXPIRED => throw new BusinessRuleException('gift.expired', 'انتهت مهلة استرداد هذه الهدية.'),
             $gift->status !== GiftMembership::PAID => throw new BusinessRuleException('gift.unpaid', 'لم يكتمل دفع هذه الهدية بعد.'),
             // Refunded (fully or partly) in finance after it was paid: what was given back is not given again.
-            ! $invoice || $invoice->status !== Invoice::PAID => throw new BusinessRuleException('gift.refunded', 'رُدّ مبلغ هذه الهدية، فلا يمكن استخدامها.'),
+            ! $invoice || $invoice->status !== Invoice::PAID => throw new BusinessRuleException('gift.refunded', 'أُلغيت هذه الهدية بإشعار دائن، فلا يمكن استخدامها. للاستفسار عن مبلغها تواصل مع النادي.'),
             $gift->isExpired($today) => throw new BusinessRuleException('gift.expired', 'انتهت مهلة استرداد هذه الهدية.'),
             default => null,
         };

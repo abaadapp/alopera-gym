@@ -27,6 +27,8 @@ export interface GiftRow {
     cancelled_at: string | null;
     cancel_reason: string | null;
     refunded_at: string | null;
+    /** Withdrawn by a credit note: where the money is. `due`: not paid back yet; `pending`: a refund awaits confirmation. */
+    refund: { state: 'due' | 'pending' | 'done' | 'none'; label: string; due: string; pending: string; refunded: string; credit_note: string | null } | null;
     expired_at: string | null;
     created_at: string | null;
 }
@@ -38,7 +40,7 @@ export const GIFT_FILTERS = [
     { value: 'redeemed', label: 'مستخدمة', dot: '#2563eb' },
     { value: 'expired', label: 'منتهية الصلاحية', dot: '#9ca3af' },
     { value: 'cancelled', label: 'ملغاة', dot: '#dc2626' },
-    { value: 'refunded', label: 'مستردة ماليًا', dot: '#7c3aed' },
+    { value: 'refunded', label: 'أُلغيت بإشعار دائن', dot: '#7c3aed' },
 ] as const;
 
 /** How the desk collects a gift; «لاحقًا» leaves its invoice open. */
@@ -67,7 +69,7 @@ export const GIFT_EVENTS: Record<string, string> = {
     'gift.redeemed': 'استُخدمت',
     'gift.cancelled': 'أُلغيت',
     'gift.expired': 'انتهت مهلتها',
-    'gift.refunded': 'رُدّ مبلغها',
+    'gift.refunded': 'أُلغيت بإشعار دائن',
     'gift.unpaid': 'أُلغيت دفعتها فعادت بانتظار الدفع',
     'gift.link_rotated': 'أُصدر لها رابط جديد',
 };

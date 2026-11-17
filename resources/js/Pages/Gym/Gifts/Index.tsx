@@ -19,11 +19,14 @@ export interface GiftPlan {
 }
 
 /** A gift's status in Arabic, with the English words under it (the owner reads both). */
-export function GiftStatusBadge({ gift, inline = false }: { gift: Pick<GiftRow, 'status' | 'status_label' | 'status_label_en'>; inline?: boolean }) {
+export function GiftStatusBadge({ gift, inline = false }: { gift: Pick<GiftRow, 'status' | 'status_label' | 'status_label_en'> & { refund?: GiftRow['refund'] }; inline?: boolean }) {
     const [, tone] = label(giftStatus, gift.status);
+    // A credit note withdraws the gift; the money is back only once finance records (and, where it waits, confirms) it.
+    const open = gift.refund && (gift.refund.state === 'due' || gift.refund.state === 'pending') ? gift.refund : null;
     return (
         <span className={inline ? 'inline-flex flex-wrap items-center gap-x-2 gap-y-0.5' : 'inline-flex flex-col items-start gap-0.5'}>
             <Badge tone={tone}>{gift.status_label}</Badge>
+            {open && <Badge tone="amber">{open.label}</Badge>}
             <span lang="en" dir="ltr" className="text-[11px] text-[#9ca3af]">{gift.status_label_en}</span>
         </span>
     );
@@ -177,7 +180,7 @@ function IssueGiftModal({ open, onClose, plans, methods, redeemDays }: { open: b
                     <Field label="هاتف المُهدي" error={err.giver_phone}>
                         <Input dir="ltr" type="tel" value={form.data.giver_phone} onChange={(e) => form.setData('giver_phone', e.target.value)} placeholder="9XXXXXXX" />
                     </Field>
-                    <Field label="رقم جوال المستلمة (اختياري)" error={err.recipient_phone} hint="إن أُدخل فلا تُستلم الهدية من الرابط إلا بحساب هذا الرقم؛ ويستطيع الموظف تفعيلها لغيره.">
+                    <Field label="رقم جوال المستلمة (اختياري)" error={err.recipient_phone} hint="إن أُدخل فلا تُستلم الهدية من الرابط إلا بحساب هذا الرقم؛ ويستطيع الموظف تفعيلها لغيره. لا يُرسل رمز تحقق، فالرقم لا يثبت الملكية: سرية الرابط هي الحماية.">
                         <Input dir="ltr" type="tel" value={form.data.recipient_phone} onChange={(e) => form.setData('recipient_phone', e.target.value)} placeholder="9XXXXXXX" maxLength={32} />
                     </Field>
                     <Field label="بريد المُهدي" error={err.giver_email}>

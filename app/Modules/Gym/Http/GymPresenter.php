@@ -120,6 +120,8 @@ final class GymPresenter
             'cancelled_at' => $g->cancelled_at?->toIso8601String(),
             'cancel_reason' => $g->cancel_reason,
             'refunded_at' => $g->refunded_at?->toIso8601String(),
+            // Withdrawn by a credit note: whether the money is actually back with the buyer (not the note itself).
+            'refund' => $g->refundState(),
             'expired_at' => $g->expired_at?->toIso8601String(),
             'created_at' => $g->created_at?->toIso8601String(),
         ];

@@ -3,10 +3,13 @@
 namespace App\Modules\Gym\Models;
 
 use App\Core\Audit\Auditable;
+use App\Core\Support\Money;
 use App\Core\Tenancy\BelongsToTenant;
 use App\Core\Tenancy\BranchOwned;
 use App\Core\Tenancy\OwnedByBranch;
+use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
+use App\Modules\Finance\Models\Payment;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,6 +22,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *      │                                     │ └── window passed (gym:expire-gifts) ──▶ expired
  *      └── invoice voided ──▶ cancelled ◀────┤
  *                                            └── credit note on its invoice ──▶ refunded
+ *
+ * `refunded` says the gift was withdrawn by a credit note, not that the money is back with the buyer: issuing the note
+ * and paying the money back are separate steps (CreditNoteService, PaymentService::refund), and a refund by bank
+ * transfer or Paymob waits for confirmation. refundState() says where the money is.
  *
  * A paid gift past expires_on is treated as expired at once (isExpired), before the nightly job stores it.
  * Only a fully paid invoice moves a gift out of `pending`; a bank transfer awaiting confirmation does not.
@@ -43,12 +50,12 @@ class GiftMembership extends Model implements BranchOwned
 
     public const STATUS_LABELS = [
         self::PENDING => 'بانتظار الدفع', self::PAID => 'مدفوعة — لم تُستخدم', self::REDEEMED => 'مستخدمة',
-        self::EXPIRED => 'منتهية الصلاحية', self::CANCELLED => 'ملغاة', self::REFUNDED => 'مستردة ماليًا',
+        self::EXPIRED => 'منتهية الصلاحية', self::CANCELLED => 'ملغاة', self::REFUNDED => 'أُلغيت بإشعار دائن',
     ];
 
     public const STATUS_LABELS_EN = [
         self::PENDING => 'Awaiting payment', self::PAID => 'Paid — not used', self::REDEEMED => 'Used',
-        self::EXPIRED => 'Expired', self::CANCELLED => 'Cancelled', self::REFUNDED => 'Refunded',
+        self::EXPIRED => 'Expired', self::CANCELLED => 'Cancelled', self::REFUNDED => 'Withdrawn by credit note',
     ];
 
     public const DEFAULT_REDEEM_DAYS = 90;
@@ -111,6 +118,40 @@ class GiftMembership extends Model implements BranchOwned
     public function displayStatus(?CarbonImmutable $today = null): string
     {
         return $this->isExpired($today) ? self::EXPIRED : $this->status;
+    }
+
+    /** The money-back states of a gift withdrawn by a credit note (refundState). */
+    public const REFUND_STATE_LABELS = [
+        'due' => 'المبلغ لم يُرد بعد', 'pending' => 'الرد بانتظار التأكيد', 'done' => 'رُدّ المبلغ', 'none' => 'لا مبلغ مدفوع ليُرد',
+    ];
+
+    /**
+     * Where the money of a gift withdrawn by a credit note is: `due` (nothing recorded as paid back yet: finance still
+     * owes the buyer), `pending` (a refund by bank transfer or Paymob awaits confirmation), `done` (paid back), or
+     * `none` (nothing was paid). Null for a gift that is not `refunded`. Read from the note's refund payments, so it
+     * never says the money went back before finance recorded (and, where it waits, confirmed) it.
+     *
+     * @return array{state: string, label: string, due: string, pending: string, refunded: string, credit_note: string|null}|null
+     */
+    public function refundState(): ?array
+    {
+        if ($this->status !== self::REFUNDED) {
+            return null;
+        }
+        $note = $this->refund_note_id ? CreditNote::find($this->refund_note_id) : null;
+        $invoice = $this->invoice_id ? Invoice::find($this->invoice_id) : null;
+        $pending = $note ? Money::normalize((string) Payment::where('credit_note_id', $note->id)->where('kind', Payment::KIND_REFUND)->where('status', Payment::PENDING)->sum('amount')) : '0.000';
+        $left = $note && $invoice ? Money::min($note->refundable(), $invoice->refundDue()) : '0.000';
+        $due = Money::max('0', Money::sub($left, $pending));
+        $refunded = $note ? Money::normalize($note->refunded_total) : '0.000';
+        $state = match (true) {
+            Money::cmp($due, 0) > 0 => 'due',
+            Money::cmp($pending, 0) > 0 => 'pending',
+            Money::cmp($refunded, 0) > 0 => 'done',
+            default => 'none',
+        };
+
+        return ['state' => $state, 'label' => self::REFUND_STATE_LABELS[$state], 'due' => $due, 'pending' => $pending, 'refunded' => $refunded, 'credit_note' => $note?->number];
     }
 
     /** The plan's length as it was bought, for working out the redeemed period's end date. */

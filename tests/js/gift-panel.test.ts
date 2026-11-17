@@ -9,8 +9,17 @@ describe('«هدايا الاشتراكات» in the panel (#192)', () => {
         expect(Object.keys(giftStatus).sort()).toEqual([...STATUSES].sort());
         expect(GIFT_FILTERS.map((f) => f.value).sort()).toEqual([...STATUSES].sort());
         expect(label(giftStatus, 'paid')).toEqual(['مدفوعة — لم تُستخدم', 'green']);
-        expect(label(giftStatus, 'refunded')).toEqual(['مستردة ماليًا', 'violet']);
+        expect(label(giftStatus, 'refunded')).toEqual(['أُلغيت بإشعار دائن', 'violet']);
         expect(invoiceType.gift).toBe('هدية اشتراك');
+    });
+
+    it('never says a credit-note withdrawal paid the money back: the refund has its own state from the server', () => {
+        const refunded = GIFT_FILTERS.find((f) => f.value === 'refunded');
+        expect(refunded?.label).toBe('أُلغيت بإشعار دائن');
+        expect(GIFT_EVENTS['gift.refunded']).toBe('أُلغيت بإشعار دائن');
+        for (const words of [refunded?.label, GIFT_EVENTS['gift.refunded'], label(giftStatus, 'refunded')[0]]) {
+            expect(words).not.toMatch(/مسترد|رُدّ/);
+        }
     });
 
     it('always offers «لاحقًا», then only the methods the server allows; cash first when allowed', () => {

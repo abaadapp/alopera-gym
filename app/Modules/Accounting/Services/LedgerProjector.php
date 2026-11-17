@@ -290,18 +290,54 @@ final class LedgerProjector
      */
     public function gift(GiftMembership $gift): void
     {
+        $move = $this->giftMove($gift);
+        if (! $move || $this->entry('gift', $gift->id, $move['event'])) {
+            return;
+        }
+
+        $this->ledger->post([
+            'date' => app(AccountingPeriods::class)->postingDate($move['at']),
+            'description' => "{$move['label']} {$gift->number} — الفاتورة {$move['invoice']->number}",
+            'branch_id' => $gift->branch_id ?? $move['invoice']->branch_id,
+            ...$this->key('gift', $gift->id, $move['event']),
+        ], [
+            ['account' => $this->chart->account('gift_liability'), 'debit' => $move['amount']],
+            ['account' => $this->chart->account($move['to']), 'credit' => $move['amount']],
+        ]);
+    }
+
+    /**
+     * Has the gift a move out of the liability that the books do not have (its live posting failed, or has not run)?
+     * The period's checks ask this, so a month does not close without the gifts redeemed, expired or closed in it.
+     */
+    public function giftUnposted(GiftMembership $gift): bool
+    {
+        $move = $this->giftMove($gift);
+
+        return $move !== null && ! $this->entry('gift', $gift->id, $move['event']);
+    }
+
+    /**
+     * What the gift's state moves out of the liability, if anything: the event, when it happened, the account it goes
+     * to and the amount. Null when the state moves nothing (not redeemed, expired or closed; no invoice; its invoice
+     * voided; or nothing left of it after the credit notes).
+     *
+     * @return array{event: string, at: \DateTimeInterface, to: string, label: string, amount: string, invoice: Invoice}|null
+     */
+    private function giftMove(GiftMembership $gift): ?array
+    {
         [$event, $at, $to, $label] = match ($gift->status) {
             GiftMembership::REDEEMED => ['redeem', $gift->redeemed_at, 'revenue_membership', 'استخدام الهدية'],
             GiftMembership::EXPIRED => ['expire', $gift->expired_at, 'revenue_gift_breakage', 'انتهاء مهلة الهدية'],
             GiftMembership::REFUNDED => ['close', $gift->refunded_at, 'revenue_gift_breakage', 'ما بقي من الهدية بعد ردّ مبلغها'],
             default => [null, null, null, null],
         };
-        if (! $event || ! $at || ! $gift->invoice_id || $this->entry('gift', $gift->id, $event)) {
-            return;
+        if (! $event || ! $at || ! $gift->invoice_id) {
+            return null;
         }
         $invoice = Invoice::find($gift->invoice_id);
         if (! $invoice || $invoice->status === Invoice::VOID) {
-            return;
+            return null;
         }
 
         $owed = Money::sub($invoice->total, $invoice->tax_total);
@@ -309,19 +345,8 @@ final class LedgerProjector
             ->each(function (CreditNote $n) use (&$owed) {
                 $owed = Money::sub($owed, Money::sub($n->amount, $n->tax_amount ?? 0));
             });
-        if (Money::cmp($owed, 0) <= 0) {
-            return;
-        }
 
-        $this->ledger->post([
-            'date' => app(AccountingPeriods::class)->postingDate($at),
-            'description' => "{$label} {$gift->number} — الفاتورة {$invoice->number}",
-            'branch_id' => $gift->branch_id ?? $invoice->branch_id,
-            ...$this->key('gift', $gift->id, $event),
-        ], [
-            ['account' => $this->chart->account('gift_liability'), 'debit' => $owed],
-            ['account' => $this->chart->account($to), 'credit' => $owed],
-        ]);
+        return Money::cmp($owed, 0) > 0 ? ['event' => $event, 'at' => $at, 'to' => $to, 'label' => $label, 'amount' => $owed, 'invoice' => $invoice] : null;
     }
 
     /**

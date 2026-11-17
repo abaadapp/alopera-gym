@@ -267,7 +267,7 @@
     "استُخدمت هذه الهدية.": "This gift has been used.",
     "انتهت مهلة استرداد هذه الهدية.": "The time to redeem this gift has ended.",
     "هذه الهدية ملغاة.": "This gift has been cancelled.",
-    "رُدّ مبلغ هذه الهدية، فلا يمكن استخدامها.": "This gift was refunded, so it can no longer be used.",
+    "أُلغيت هذه الهدية بإشعار دائن، فلا يمكن استخدامها. للاستفسار عن مبلغها تواصل مع النادي.": "This gift was withdrawn by a credit note, so it can no longer be used. For its amount, contact the club.",
     "تُستلم الهدية خلال :days من تاريخ الدفع.": "The gift can be redeemed within :days of payment.",
     "يبدأ الاشتراك في يوم تختاره المستلمة، حتى :max بعد استلام الهدية.": "The membership starts on a day the recipient chooses, up to :max after redeeming the gift.",
     "تُستخدم الهدية مرة واحدة.": "The gift can be used once.",

@@ -15,6 +15,7 @@ use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Inventory\Models\SupplierBill;
 use App\Modules\Payroll\Models\PayrollRun;
 use Carbon\CarbonImmutable;
@@ -24,7 +25,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Closed accounting periods. A month is closed once it is over, in order (every month before it closed first), after
- * its checks: every entry balanced and every invoice, payment, credit note and expense of the month in the books.
+ * its checks: every entry balanced and every invoice, payment, credit note and expense of the month in the books, and
+ * every gift redeemed, expired or closed in it moved out of the gifts' liability (#192).
  * From then on nothing is posted with a date on or before the last closed day (Ledger::post refuses it, and the
  * screens that take a date say so first); a correction is posted in an open period. Reopening takes its own
  * permission and a reason, latest month first, and is written to the audit trail like the closing.
@@ -204,13 +206,35 @@ final class AccountingPeriods
                 ->whereNotExists(fn (Builder $q) => $this->entryOf($q, 'credit_note', 'credit_notes.id', ['issue']))->pluck('number')),
             $this->listed('مصروفات', Expense::query()->whereBetween('expense_date', [$from, $to])
                 ->whereNotExists(fn (Builder $q) => $this->entryOf($q, 'expense', 'expenses.id', ['record'])->whereNull('reversed_at'))->pluck('number')),
+            // A gift redeemed, expired or withdrawn in the month whose move out of the liability is not in the books
+            // (the live posting failed, or has not run): the month's revenue would be short of it.
+            $this->listed('هدايا لم يُقيَّد استخدامها أو انتهاؤها أو إغلاقها', $this->giftMoves($start, $end)
+                ->filter(fn (GiftMembership $g) => app(LedgerProjector::class)->giftUnposted($g))->pluck('number')),
         ]));
+
+        // A paid gift whose window ended before the month's last day is expired by the daily run on that day at the
+        // latest, and what is left of it becomes income then. Still `paid`, the run did not happen: its income is not
+        // in the month, and closing would move it to a later one. Not posted by the closing (it is the gift's own
+        // state, not a missing entry), so it stops the closing until the daily run expires it.
+        $stale = GiftMembership::query()->where('status', GiftMembership::PAID)->where('expires_on', '<', $to)->orderBy('id')->pluck('number');
+        if ($stale->isNotEmpty()) {
+            $errors[] = 'هدايا انتهت مهلتها ولم تُسجَّل منتهية بعد، فلم يُقيَّد ما بقي منها إيرادًا ('.$stale->count().'): '.$stale->take(8)->implode('، ')
+                .($stale->count() > 8 ? '…' : '').'. يسجّلها التشغيل اليومي (gym:daily-memberships)؛ أقفل الشهر بعده.';
+        }
 
         $warnings = array_values(array_filter([
             $this->counted('تحويلات بنكية بانتظار التأكيد؛ تُقيَّد بتاريخ تأكيدها', Payment::query()->where('status', Payment::PENDING)->whereBetween('paid_at', [$start, $end->endOfDay()])->count()),
             $this->counted('مسودات فواتير بتاريخ في هذا الشهر؛ لن تُصدر بهذا التاريخ بعد الإقفال', Invoice::query()->where('status', Invoice::DRAFT)->whereBetween('issue_date', [$from, $to])->count()),
             $this->counted('سندات موردين بانتظار الاعتماد بتاريخ في هذا الشهر', SupplierBill::query()->where('status', SupplierBill::PENDING)->whereBetween('issue_date', [$from, $to])->count()),
             PayrollRun::query()->where('status', PayrollRun::DRAFT)->whereDate('period', $from)->exists() ? 'مسيرة رواتب هذا الشهر ما زالت مسودة؛ لن تُعتمد بتاريخه بعد الإقفال.' : null,
+            // Paid but not marked so (InvoicePaid did not reach it; the nightly reconcile does it). No entry waits on
+            // it — the sale is in the liability — but its window has not started.
+            $this->counted('هدايا دُفعت فواتيرها ولم تُعلَّم مدفوعة بعد؛ يصلحها التشغيل الليلي ولا تغيّر قيود الشهر', GiftMembership::query()->where('status', GiftMembership::PENDING)
+                ->whereIn('invoice_id', Invoice::query()->where('status', Invoice::PAID)->where('paid_at', '<=', $end->endOfDay())->select('id'))->count()),
+            // Withdrawn by a credit note (in the books) while the buyer's money is not back yet, or waits for confirmation.
+            $this->listed('هدايا أُلغيت بإشعار دائن ولم يكتمل ردّ مبلغها للمشتري؛ يُقيَّد الرد بتاريخه', GiftMembership::query()->where('status', GiftMembership::REFUNDED)
+                ->where('refunded_at', '<=', $end->endOfDay())->orderBy('id')->get()
+                ->filter(fn (GiftMembership $g) => in_array($g->refundState()['state'] ?? null, ['due', 'pending'], true))->pluck('number')),
         ]));
 
         return ['month' => $start->format('Y-m'), 'label' => $start->locale('ar')->translatedFormat('F Y'), 'errors' => $errors, 'warnings' => $warnings, 'pending' => $pending, 'summary' => $this->summary($from, $to)];
@@ -391,6 +415,18 @@ final class AccountingPeriods
         }
 
         return $out;
+    }
+
+    /** The gifts redeemed, expired or withdrawn by a credit note in the month (each by the date of that event). */
+    private function giftMoves(CarbonImmutable $start, CarbonImmutable $end)
+    {
+        $within = [$start, $end->endOfDay()];
+
+        return GiftMembership::query()->where(fn ($q) => $q
+            ->where(fn ($q) => $q->where('status', GiftMembership::REDEEMED)->whereBetween('redeemed_at', $within))
+            ->orWhere(fn ($q) => $q->where('status', GiftMembership::EXPIRED)->whereBetween('expired_at', $within))
+            ->orWhere(fn ($q) => $q->where('status', GiftMembership::REFUNDED)->whereBetween('refunded_at', $within)))
+            ->orderBy('id')->get();
     }
 
     private function entryOf(Builder $q, string $type, string $column, array $events): Builder

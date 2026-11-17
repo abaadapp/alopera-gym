@@ -39,7 +39,7 @@ export function giftStatusText(status: string, t: ReturnType<typeof useT>): stri
         case 'redeemed': return t('استُخدمت هذه الهدية.');
         case 'expired': return t('انتهت مهلة استرداد هذه الهدية.');
         case 'cancelled': return t('هذه الهدية ملغاة.');
-        case 'refunded': return t('رُدّ مبلغ هذه الهدية، فلا يمكن استخدامها.');
+        case 'refunded': return t('أُلغيت هذه الهدية بإشعار دائن، فلا يمكن استخدامها. للاستفسار عن مبلغها تواصل مع النادي.');
         default: return null;
     }
 }

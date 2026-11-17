@@ -143,8 +143,20 @@ export default function GiftShow({ gift, link, whatsapp, pay_link, pending_trans
             )}
 
             {gift.status === 'refunded' && (
-                <Notice tone="gray" className="mb-6">
-                    رُدّ مبلغ الهدية في <span className="num">{when(gift.refunded_at)}</span>، فلا يمكن استخدامها.{reason ? ` ${reason}` : ''}
+                <Notice tone={gift.refund?.state === 'due' || gift.refund?.state === 'pending' ? 'amber' : 'gray'} className="mb-6">
+                    <p className="font-semibold">
+                        أُلغيت الهدية بالإشعار الدائن{gift.refund?.credit_note ? <> <span className="num">{gift.refund.credit_note}</span></> : null} في <span className="num">{when(gift.refunded_at)}</span>، فلا يمكن استخدامها.{reason ? ` ${reason}` : ''}
+                    </p>
+                    {gift.refund?.state === 'due' && (
+                        <p>
+                            الإشعار الدائن لا يعني أن المبلغ رُدّ: لم يُسجَّل ردّ <span className="font-semibold num">{money(gift.refund.due, currency)}</span> للمشتري بعد.
+                            {gift.invoice && can('invoices.view') && <> سجّل الرد من <Link href={route('club.invoices.show', gift.invoice.id)} className="font-medium underline-offset-2 hover:underline">فاتورة الهدية</Link>.</>}
+                        </p>
+                    )}
+                    {gift.refund?.state === 'pending' && (
+                        <p>ردّ <span className="font-semibold num">{money(gift.refund.pending, currency)}</span> بانتظار تأكيد المالية؛ لا يُعدّ مردودًا حتى يُؤكَّد.</p>
+                    )}
+                    {gift.refund?.state === 'done' && <p>رُدّ للمشتري <span className="font-semibold num">{money(gift.refund.refunded, currency)}</span>.</p>}
                 </Notice>
             )}
 
