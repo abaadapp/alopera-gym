@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, router } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
-import { Bell, Blocks, BriefcaseBusiness, Building2, Check, CheckCheck, ChevronDown, Clock, CreditCard, FileText, FolderOpen, Globe, LayoutGrid, LoaderCircle, Lock, Mail, Menu, MessageCircle, Package, PlusCircle, Search, ShoppingBag, Store, Ticket, Users, Wallet } from 'lucide-react';
+import { Bell, Blocks, BriefcaseBusiness, Building2, DatabaseBackup, Check, CheckCheck, ChevronDown, Clock, CreditCard, FileText, FolderOpen, Globe, LayoutGrid, LoaderCircle, Lock, Mail, Menu, MessageCircle, Package, PlusCircle, Search, ShoppingBag, Store, Ticket, Users, Wallet } from 'lucide-react';
 import { Dropdown, DropdownAction, DropdownItem, DropdownLabel, DropdownSeparator } from '@/Components/ui/Dropdown';
 import { useCan, useShared } from '@/hooks/useShared';
 import { NAV } from '@/lib/nav';
@@ -15,7 +15,7 @@ const iconButton = 'relative grid size-10 shrink-0 place-items-center rounded-[1
 const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'accounting.manage', 'documents.manage'];
 
 export const NOTIFICATION_ICONS: Record<StaffNotification['kind'], LucideIcon> = {
-    document: FileText, order: ShoppingBag, payment: CreditCard, membership: Ticket, integration: Blocks, contact: Mail, inbox: MessageCircle, ledger: Wallet,
+    document: FileText, order: ShoppingBag, payment: CreditCard, membership: Ticket, integration: Blocks, contact: Mail, inbox: MessageCircle, ledger: Wallet, backup: DatabaseBackup,
 };
 
 function initials(name?: string | null): string {

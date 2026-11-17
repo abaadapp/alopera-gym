@@ -17,7 +17,15 @@ function size(bytes: number) {
     return `${number(bytes / 1024, 0)} KB`;
 }
 
-export default function Backups({ backups, interrupted = 0 }: { backups: Backup[]; interrupted?: number }) {
+type Daily = { result: 'succeeded' | 'failed' | 'missing'; at: string; file: string | null; reason: string | null } | null;
+
+const DAILY: Record<string, { label: string; tone: string }> = {
+    succeeded: { label: 'ناجحة', tone: 'bg-[#ecfdf5] text-[#047857]' },
+    failed: { label: 'فاشلة', tone: 'bg-[#fef2f2] text-[#b91c1c]' },
+    missing: { label: 'لم تعمل', tone: 'bg-[#fffbeb] text-[#b45309]' },
+};
+
+export default function Backups({ backups, interrupted = 0, folderUnreadable = false, daily = null, keep = 14 }: { backups: Backup[]; interrupted?: number; folderUnreadable?: boolean; daily?: Daily; keep?: number }) {
     const { tenant } = useShared();
     const [creating, setCreating] = useState(false);
     const form = useForm<{ archive: File | null; confirm: string }>({ archive: null, confirm: '' });
@@ -43,12 +51,40 @@ export default function Backups({ backups, interrupted = 0 }: { backups: Backup[
                 </div>
             )}
 
+            {folderUnreadable && (
+                <div className="mb-6 flex items-start gap-3 rounded-xl border border-[#fecaca] bg-[#fef2f2] p-4 text-[13px] text-[#991b1b]">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    <p>لا تستطيع لوحة التحكم قراءة مجلد النسخ الاحتياطية على الخادم (صلاحيات المجلد)، فقد تبدو القائمة فارغة مع وجود نسخ محفوظة. النسخ الليلية لا تتأثر، ويُصلَح ذلك تلقائيًا بعد أول نسخة ليلية.</p>
+                </div>
+            )}
+
+            <div className="mb-6 grid gap-3 rounded-xl border border-[#ececec] bg-white p-4 text-[13px] sm:grid-cols-3">
+                <div>
+                    <p className="text-[#6b7280]">آخر نسخة سليمة</p>
+                    <p className="mt-1 font-semibold text-[#111]">{backups[0] ? backups[0].created_at : (folderUnreadable ? 'غير معروفة' : 'لا توجد')}</p>
+                </div>
+                <div>
+                    <p className="text-[#6b7280]">آخر محاولة يومية (3 فجرًا)</p>
+                    {daily ? (
+                        <p className="mt-1 flex flex-wrap items-center gap-2">
+                            <span className={`rounded-full px-2 py-0.5 text-[12px] font-semibold ${DAILY[daily.result]?.tone ?? ''}`}>{DAILY[daily.result]?.label ?? daily.result}</span>
+                            <span className="text-[#4b4b4b]">{daily.at}</span>
+                        </p>
+                    ) : <p className="mt-1 text-[#4b4b4b]">لم تُسجَّل محاولة بعد</p>}
+                    {daily?.result !== 'succeeded' && daily?.reason && <p className="mt-1 text-[12px] text-[#991b1b]">{daily.reason}</p>}
+                </div>
+                <div>
+                    <p className="text-[#6b7280]">النسخ المحفوظة</p>
+                    <p className="mt-1 font-semibold text-[#111]">{number(backups.length)} من {number(keep)}</p>
+                </div>
+            </div>
+
             <div className="grid gap-6 lg:grid-cols-3">
                 <Card padded={false} className="lg:col-span-2">
                     <div className="p-5 pb-0">
                         <CardHeader title="النسخ المحفوظة" subtitle="تتضمن كل بيانات النادي والملفات المرفوعة" />
                     </div>
-                    {backups.length === 0 ? (
+                    {backups.length === 0 && !folderUnreadable ? (
                         <EmptyState icon={<Database className="size-6" />} title="لا توجد نسخ بعد" action={<Button size="sm" onClick={create} loading={creating}>إنشاء أول نسخة</Button>} />
                     ) : (
                         <div className="overflow-x-auto">

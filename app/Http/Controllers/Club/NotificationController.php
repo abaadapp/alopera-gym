@@ -18,7 +18,7 @@ class NotificationController extends Controller
 {
     public const KIND_LABELS = [
         'document' => 'المستندات', 'order' => 'طلبات الموقع', 'payment' => 'المدفوعات', 'membership' => 'العضويات',
-        'integration' => 'التطبيقات التكاملية', 'contact' => 'رسائل التواصل', 'inbox' => 'واتساب', 'ledger' => 'الدفاتر',
+        'integration' => 'التطبيقات التكاملية', 'contact' => 'رسائل التواصل', 'inbox' => 'واتساب', 'ledger' => 'الدفاتر', 'backup' => 'النسخ الاحتياطي',
     ];
 
     public function index(Request $request): Response
