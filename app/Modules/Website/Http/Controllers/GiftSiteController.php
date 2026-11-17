@@ -180,6 +180,25 @@ class GiftSiteController extends Controller
         }
     }
 
+    /**
+     * Where the gift's message is, as its buyer reads it: the state in the page's language and, when it did not go or
+     * waits, what to do. No provider error and no number: those stay with staff.
+     *
+     * @return array{state: string, label: string, note: string|null}
+     */
+    private function buyerDelivery(GiftMembership $gift): array
+    {
+        $state = app(GiftWhatsApp::class)->delivery($gift)['state'];
+        $note = match ($state) {
+            'not_due' => $gift->phoneVerified() ? null : 'تؤكد المستلمة رقمها برسالة منها، ثم يتم الدفع، فتُرسل الهدية.',
+            'waiting' => 'لم تُرسل بعد؛ يمكنك مشاركة رابط الهدية بنفسك.',
+            'failed' => 'تعذّر إرسال الهدية إلى واتساب المستلمة. شارك رابط الهدية بنفسك أو تواصل مع النادي.',
+            default => null,
+        };
+
+        return ['state' => $state, 'label' => SiteLanguage::word(GiftMembership::DELIVERY_LABELS[$state] ?? $state), 'note' => $note !== null ? SiteLanguage::word($note) : null];
+    }
+
     private function isBuyer(Request $request, GiftMembership $gift): bool
     {
         return in_array($gift->id, (array) $request->session()->get(self::BOUGHT, []), true);
@@ -218,6 +237,8 @@ class GiftSiteController extends Controller
             'pay_url' => $buyer && $gift->status === GiftMembership::PENDING && $gift->invoice?->isOpen() && $online->available()
                 ? ($gift->phoneVerified() ? route('site.pay.show', ['token' => $gift->invoice->public_token]) : route('site.gift.verify', ['token' => $token])) : null,
             'is_buyer' => $buyer,
+            // The buyer's own view of where the gift's WhatsApp message is; nobody else holding the link sees it.
+            'delivery' => $buyer ? $this->buyerDelivery($gift) : null,
             'terms' => $this->terms(),
         ], __('هدية لـ :name', ['name' => $gift->recipient_name]));
     }

@@ -345,5 +345,6 @@
     "تم تأكيد الرقم برسالة من المستلمة. بعد تأكيد الدفع نرسل لها الهدية على واتساب.": "The number was confirmed by a message from the recipient. Once the payment is confirmed, we send her the gift on WhatsApp.",
     "جارٍ التحويل إلى الدفع…": "Taking you to payment…",
     "ادفع :amount وأهدِ الآن": "Pay :amount and send the gift",
-    "يظهر الدفع بعد تأكيد رقم المستلمة.": "Payment appears once the recipient's number is confirmed."
+    "يظهر الدفع بعد تأكيد رقم المستلمة.": "Payment appears once the recipient's number is confirmed.",
+    "رسالة الهدية على واتساب المستلمة:": "The gift's message on the recipient's WhatsApp:"
 }

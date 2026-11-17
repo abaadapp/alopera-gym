@@ -166,5 +166,16 @@
     "هذا هو رقم المستلمة الحالي.": "This is already the recipient's number.",
     "تأكيد رقم المستلمة": "Confirm the recipient's number",
     "واتساب النادي غير مربوط بالنظام أو غير مفعّل.": "The club's WhatsApp is not connected or not enabled.",
-    "رقم واتساب النادي غير مسجّل في إعدادات واتساب.": "The club's WhatsApp number is not set in the WhatsApp settings."
+    "رقم واتساب النادي غير مسجّل في إعدادات واتساب.": "The club's WhatsApp number is not set in the WhatsApp settings.",
+    "تُرسل بعد اكتمال الدفع": "Sent once the payment is complete",
+    "بانتظار الإرسال": "Waiting to be sent",
+    "قيد الإرسال": "Being sent",
+    "أُرسلت إلى المزود": "Handed to WhatsApp",
+    "تم التسليم": "Delivered",
+    "تمت القراءة": "Read",
+    "فشل الإرسال": "Sending failed",
+    "لا إرسال": "Not sent",
+    "تؤكد المستلمة رقمها برسالة منها، ثم يتم الدفع، فتُرسل الهدية.": "The recipient confirms her number with a message from it, then the payment is made, and the gift is sent.",
+    "لم تُرسل بعد؛ يمكنك مشاركة رابط الهدية بنفسك.": "Not sent yet; you can share the gift's link yourself.",
+    "تعذّر إرسال الهدية إلى واتساب المستلمة. شارك رابط الهدية بنفسك أو تواصل مع النادي.": "The gift could not be sent to the recipient's WhatsApp. Share the gift's link yourself or contact the club."
 }

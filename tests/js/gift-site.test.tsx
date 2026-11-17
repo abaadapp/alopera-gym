@@ -76,7 +76,7 @@ describe('«إهداء هذه الباقة» on a plan card', () => {
 describe('the gift card at its link', () => {
     it('offers to claim a paid gift, with the official logo as it is', () => {
         const { container } = render(
-            <GiftCard site={site} seo={{ title: 'هدية' }} gift={card('paid')} token={'a'.repeat(48)} link="https://club.om/gift/x" whatsapp="https://wa.me/?text=x" claim_url="/gift/x/claim" pay_url={null} is_buyer={false} terms={terms} />,
+            <GiftCard site={site} seo={{ title: 'هدية' }} gift={card('paid')} token={'a'.repeat(48)} link="https://club.om/gift/x" whatsapp="https://wa.me/?text=x" claim_url="/gift/x/claim" pay_url={null} is_buyer={false} delivery={null} terms={terms} />,
         );
         expect(screen.getByText('استلمي هديتك').closest('a')?.getAttribute('href')).toBe('/gift/x/claim');
         expect(screen.getByText('نسخ رابط الهدية')).toBeTruthy();
@@ -92,7 +92,7 @@ describe('the gift card at its link', () => {
 
     it('says a redeemed gift was used and offers nothing to claim', () => {
         const { container } = render(
-            <GiftCard site={site} seo={{ title: 'هدية' }} gift={card('redeemed')} token={'a'.repeat(48)} link="https://club.om/gift/x" whatsapp={null} claim_url={null} pay_url={null} is_buyer={false} terms={terms} />,
+            <GiftCard site={site} seo={{ title: 'هدية' }} gift={card('redeemed')} token={'a'.repeat(48)} link="https://club.om/gift/x" whatsapp={null} claim_url={null} pay_url={null} is_buyer={false} delivery={null} terms={terms} />,
         );
         expect(screen.queryByText('استلمي هديتك')).toBeNull();
         expect(screen.queryByText('مشاركة عبر واتساب')).toBeNull();
@@ -166,7 +166,7 @@ describe('buying a gift: the policy before payment (#192)', () => {
 
 describe('a gift tied to the recipient\'s number (#192)', () => {
     const show = (forNumber: boolean) => render(
-        <GiftCard site={site} seo={{ title: 'هدية' }} gift={card('paid', forNumber)} token={'a'.repeat(48)} link="https://club.om/gift/x" whatsapp="https://wa.me/?text=x" claim_url="/gift/x/claim" pay_url={null} is_buyer={false} terms={terms} />,
+        <GiftCard site={site} seo={{ title: 'هدية' }} gift={card('paid', forNumber)} token={'a'.repeat(48)} link="https://club.om/gift/x" whatsapp="https://wa.me/?text=x" claim_url="/gift/x/claim" pay_url={null} is_buyer={false} delivery={null} terms={terms} />,
     );
 
     it('says so on the card only when it is, never with a number', () => {
@@ -262,3 +262,22 @@ describe('the recipient\'s WhatsApp number (#192)', () => {
             'صحة شكل الرقم لا تعني أن له حسابًا على واتساب: يتأكد ذلك فقط عندما تصلنا رسالة من الرقم نفسه.']) expect(hasEnglish(text), text).toBe(true);
     });
 });
+
+describe('the buyer\'s view of the gift\'s WhatsApp message (#192)', () => {
+    const view = (delivery: { state: string; label: string; note: string | null } | null) => render(
+        <GiftCard site={site} seo={{ title: 'هدية' }} gift={card('paid')} token={'a'.repeat(48)} link="https://club.om/gift/x" whatsapp={null} claim_url={null} pay_url={null} is_buyer={!!delivery} delivery={delivery} terms={terms} />,
+    );
+
+    it('shows the buyer where it is, and what to do when it failed, without the provider\'s error', () => {
+        view({ state: 'failed', label: 'فشل الإرسال', note: 'تعذّر إرسال الهدية إلى واتساب المستلمة. شارك رابط الهدية بنفسك أو تواصل مع النادي.' });
+        expect(screen.getByText('فشل الإرسال')).toBeTruthy();
+        expect(screen.getByText('تعذّر إرسال الهدية إلى واتساب المستلمة. شارك رابط الهدية بنفسك أو تواصل مع النادي.')).toBeTruthy();
+        expect(hasEnglish('رسالة الهدية على واتساب المستلمة:')).toBe(true);
+    });
+
+    it('shows nothing about it to anyone else with the link', () => {
+        const { container } = view(null);
+        expect(container.textContent).not.toContain('رسالة الهدية على واتساب المستلمة');
+    });
+});
+

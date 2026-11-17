@@ -19,6 +19,8 @@ interface Props {
     /** The buyer, back before the payment was confirmed: finish paying. */
     pay_url: string | null;
     is_buyer: boolean;
+    /** The buyer's own view of the gift's WhatsApp message (null for anyone else with the link). */
+    delivery: { state: string; label: string; note: string | null } | null;
     terms: GiftTermsData;
 }
 
@@ -26,7 +28,7 @@ interface Props {
  * The gift at its secret link (never indexed). It is shown usable only once the gateway's signed confirmation paid
  * it: the server decides, this page only shows what it says.
  */
-export default function GiftCard({ site, seo, gift, link, whatsapp, claim_url, pay_url, terms }: Props) {
+export default function GiftCard({ site, seo, gift, link, whatsapp, claim_url, pay_url, delivery, terms }: Props) {
     const t = useT();
     const [copied, setCopied] = useState(false);
     const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -64,6 +66,16 @@ export default function GiftCard({ site, seo, gift, link, whatsapp, claim_url, p
                         <div role="status" className="flex items-start gap-3 rounded-2xl bg-white px-5 py-4 text-[15px] leading-7 ring-1 ring-[rgba(26,22,18,0.08)]">
                             <Info className="mt-1 size-5 shrink-0 text-[#8A6A1F]" />
                             <p className="m-0">{note}</p>
+                        </div>
+                    )}
+
+                    {delivery && (
+                        <div role="status" className={`flex items-start gap-3 rounded-2xl px-5 py-4 text-[15px] leading-7 ring-1 ${delivery.state === 'failed' ? 'bg-[#FBEDEA] text-[#7A2A18] ring-[#A33A22]/30' : 'bg-white ring-[rgba(26,22,18,0.08)]'}`}>
+                            <MessageCircle className="mt-1 size-5 shrink-0 text-[#1F7A4D]" />
+                            <div className="min-w-0">
+                                <p className="m-0"><span className="text-[#7A7060]">{t('رسالة الهدية على واتساب المستلمة:')}</span> <b>{delivery.label}</b></p>
+                                {delivery.note && <p className="m-0 text-[14px]">{delivery.note}</p>}
+                            </div>
                         </div>
                     )}
 

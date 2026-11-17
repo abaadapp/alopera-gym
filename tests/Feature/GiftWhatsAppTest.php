@@ -15,16 +15,19 @@ use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Gym\Models\Member;
+use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Services\GiftService;
 use App\Modules\Gym\Services\GiftWhatsApp;
 use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Models\MessageTemplate;
+use App\Modules\Messaging\Models\WebhookEvent;
 use App\Modules\Messaging\Services\WhatsAppAutomation;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Paymob\PaymobSignature;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
@@ -92,10 +95,10 @@ class GiftWhatsAppTest extends TestCase
         ]));
     }
 
-    private function paidBy(PaymentIntent $intent, int $cents)
+    private function paidBy(PaymentIntent $intent, int $cents, bool $success = true)
     {
         $obj = [
-            'id' => 555001, 'pending' => false, 'amount_cents' => $cents, 'success' => true, 'is_auth' => false, 'is_capture' => false,
+            'id' => $success ? 555001 : 555002, 'pending' => false, 'amount_cents' => $cents, 'success' => $success, 'is_auth' => false, 'is_capture' => false,
             'is_standalone_payment' => true, 'is_voided' => false, 'is_refunded' => false, 'is_3d_secure' => true, 'integration_id' => 111,
             'has_parent_transaction' => false, 'order' => ['id' => 9911, 'merchant_order_id' => $intent->reference],
             'created_at' => '2026-10-28T10:00:00', 'currency' => 'OMR', 'error_occured' => false, 'owner' => 1,
@@ -465,5 +468,160 @@ class GiftWhatsAppTest extends TestCase
         $this->asTenant($club, fn () => $this->assertFalse($gift->fresh()->phoneVerified()));
         $this->asTenant($other, fn () => $this->assertSame(0, GiftMembership::count()));
         $this->actingAs($this->owner($other))->post(route('club.gifts.resend', $gift), ['client_key' => (string) Str::uuid()])->assertNotFound();
+    }
+
+    public function test_a_forged_unsigned_or_wrongly_tokened_webhook_and_a_wrong_code_confirm_nothing(): void
+    {
+        $club = $this->club();
+        $this->connectWhatsApp($club);
+        $gift = $this->deskGift($club, pay: false);
+        $text = $this->asTenant($club, fn () => app(GiftWhatsApp::class)->verification($gift)['text']);
+        $body = json_encode($this->whatsappChange([
+            'contacts' => [['wa_id' => self::RECIPIENT, 'profile' => ['name' => 'Noor']]],
+            'messages' => [['from' => self::RECIPIENT, 'id' => 'wamid.forged', 'timestamp' => (string) now()->timestamp, 'type' => 'text', 'text' => ['body' => $text]]],
+        ]));
+
+        // Signed with another secret, or not signed at all: refused before anything is written.
+        $this->call('POST', route('webhooks.whatsapp'), [], [], [], ['HTTP_X_HUB_SIGNATURE_256' => 'sha256='.hash_hmac('sha256', $body, 'not-the-secret'), 'CONTENT_TYPE' => 'application/json'], $body)->assertStatus(401);
+        $this->call('POST', route('webhooks.whatsapp'), [], [], [], ['CONTENT_TYPE' => 'application/json'], $body)->assertStatus(401);
+        // The 360dialog door with a wrong club token: refused too.
+        $this->call('POST', route('webhooks.whatsapp.d360'), [], [], [], ['HTTP_X_ALOPERA_WEBHOOK_TOKEN' => 'guess', 'CONTENT_TYPE' => 'application/json'], $body)->assertStatus(401);
+        $this->assertSame(0, WebhookEvent::count());
+        $this->asTenant($club, fn () => $this->assertFalse($gift->fresh()->phoneVerified()));
+
+        // A code of the right shape that is not this gift's, from her own number: a chat message, nothing confirmed.
+        $this->whatsappText(self::RECIPIENT, 'رمز التأكيد: ABCD-EFGH', 'wamid.wrong-code')->assertOk();
+        $this->asTenant($club, function () use ($gift) {
+            $this->assertFalse($gift->fresh()->phoneVerified());
+            $this->assertSame(1, Message::where('provider_message_id', 'wamid.wrong-code')->count(), 'kept as an ordinary chat message');
+            $this->assertSame(0, AuditLog::where('event', 'gift.phone_verified')->count());
+        });
+    }
+
+    public function test_the_real_meta_request_carries_the_approved_template_and_the_four_values_and_nothing_else(): void
+    {
+        config(['services.whatsapp.driver' => 'meta']);
+        // Meta answers each send with its own id: the gift's template gets wamid.REAL-1.
+        Http::fake(['https://graph.facebook.com/*' => fn (HttpRequest $r) => Http::response(['messaging_product' => 'whatsapp',
+            'messages' => [['id' => ($r->data()['type'] ?? '') === 'template' ? 'wamid.REAL-1' : 'wamid.TEXT-'.Str::random(6)]]], 200)]);
+        $club = $this->club();
+        $this->connectWhatsApp($club);
+        $gift = $this->deskGift($club, pay: false);
+        $this->recipientConfirms($club, $gift)->assertOk();
+        // Her confirmation got a short answer in the chat she opened (the notice is on): that one text, nothing else yet.
+        $this->assertCount(1, Http::recorded(fn (HttpRequest $r) => ($r->data()['type'] ?? null) === 'text'));
+        $this->assertCount(0, Http::recorded(fn (HttpRequest $r) => ($r->data()['type'] ?? null) === 'template'));
+        $invoice = $this->asTenant($club, fn () => $gift->invoice->number);
+
+        $this->asTenant($club, fn () => app(PaymentService::class)->record($gift->invoice, $gift->invoice->balance(), 'cash'));
+
+        $sent = Http::recorded(fn (HttpRequest $r) => str_ends_with($r->url(), '/PNID-GIFT/messages') && ($r->data()['type'] ?? null) === 'template');
+        $this->assertCount(1, $sent, 'one template request to Meta');
+        [$request] = $sent->first();
+        $this->assertSame('https://graph.facebook.com/'.config('services.whatsapp.graph_version').'/PNID-GIFT/messages', $request->url());
+        $this->assertTrue($request->hasHeader('Authorization'));
+        $data = $request->data();
+        $this->assertSame([self::RECIPIENT, 'alopera_gift_received', 'ar'], [$data['to'], $data['template']['name'], $data['template']['language']['code']]);
+        $values = array_column($data['template']['components'][0]['parameters'], 'text');
+        $token = $this->asTenant($club, fn () => $gift->fresh()->linkToken());
+        $this->assertSame(['Sara', 'Gold', '«Happy birthday»'], array_slice($values, 0, 3));
+        $this->assertStringContainsString('/gift/'.$token, $values[3]);
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE);
+        foreach (['30.000', $invoice, 'OMR', 'ر.ع'] as $secret) {
+            $this->assertStringNotContainsString($secret, $json);
+        }
+
+        // The message keeps WhatsApp's id; its statuses come back by it. Nobody became a member, no period started.
+        $this->asTenant($club, function () use ($gift) {
+            $message = Message::whereKey($gift->fresh()->whatsapp_message_id)->sole();
+            $this->assertSame(['wamid.REAL-1', Message::SENT], [$message->provider_message_id, $message->status]);
+            $this->assertSame(0, Member::count());
+            $this->assertSame(0, Membership::count());
+            $this->assertNull($gift->fresh()->membership_id);
+        });
+        $this->whatsappStatus('wamid.REAL-1', 'delivered')->assertOk();
+        $this->asTenant($club, fn () => $this->assertSame('delivered', app(GiftWhatsApp::class)->delivery($gift->fresh())['state']));
+    }
+
+    public function test_a_number_meta_refuses_fails_once_without_retries_and_the_gift_stands(): void
+    {
+        config(['services.whatsapp.driver' => 'meta']);
+        Http::fake(['https://graph.facebook.com/*' => Http::response(['error' => ['code' => 131026, 'message' => 'Message undeliverable',
+            'error_data' => ['details' => 'Receiver is incapable of receiving this message']]], 400)]);
+        $club = $this->club();
+        $this->connectWhatsApp($club, sendGifts: false); // no answer to her confirmation: only the gift's request is counted
+        $club->forceFill(['settings' => array_replace_recursive($club->fresh()->settings ?? [], ['whatsapp_automation' => ['enabled' => []]])])->save();
+        $gift = $this->deskGift($club, pay: false);
+        $this->recipientConfirms($club, $gift)->assertOk();
+        $club->forceFill(['settings' => array_replace_recursive($club->fresh()->settings ?? [], ['whatsapp_automation' => ['enabled' => ['gift_received']]])])->save();
+        $club = $club->fresh();
+
+        $this->asTenant($club, fn () => app(PaymentService::class)->record($gift->invoice, $gift->invoice->balance(), 'cash'));
+        Artisan::call('gym:daily-memberships');
+
+        $this->assertCount(1, Http::recorded(fn (HttpRequest $r) => str_ends_with($r->url(), '/messages')), 'refused once, not retried');
+        $this->asTenant($club, function () use ($gift) {
+            $d = app(GiftWhatsApp::class)->delivery($gift->fresh());
+            $this->assertSame(['failed', true], [$d['state'], $d['can_send']]);
+            $this->assertStringContainsString('incapable', (string) $d['reason']);
+            $this->assertSame(GiftMembership::PAID, $gift->fresh()->status);
+            $this->assertSame(1, AuditLog::where('event', 'gift.whatsapp_failed')->count());
+        });
+    }
+
+    public function test_nothing_goes_while_the_payment_waits_for_confirmation_or_the_gateway_reports_a_failure(): void
+    {
+        $club = $this->club();
+        $this->configurePaymob($club);
+        $this->connectWhatsApp($club);
+
+        // At the desk: a bank transfer waiting for finance.
+        $desk = $this->deskGift($club, pay: false);
+        $this->recipientConfirms($club, $desk)->assertOk();
+        $this->asTenant($club, fn () => app(PaymentService::class)->record($desk->invoice, $desk->invoice->balance(), 'bank_transfer'));
+        $this->asTenant($club, fn () => $this->assertSame(GiftMembership::PENDING, $desk->fresh()->status));
+        $this->assertCount(0, $this->giftMessages($club));
+
+        // Online: the gateway says the payment failed.
+        $this->post(route('site.gift.store', ['club' => $club->slug, 'plan' => $this->plan($club, ['price' => 30])->id]), $this->buyer(['recipient_phone' => '95559999']));
+        $site = $this->asTenant($club, fn () => GiftMembership::where('source', 'site')->sole());
+        $this->recipientConfirms($club, $site)->assertOk();
+        $this->post(route('site.gift.pay', ['club' => $club->slug, 'token' => $this->asTenant($club, fn () => $site->linkToken())]))->assertRedirectContains('unifiedcheckout');
+        $this->paidBy($this->asTenant($club, fn () => PaymentIntent::sole()), 30000, success: false)->assertOk();
+        $this->asTenant($club, fn () => $this->assertSame(GiftMembership::PENDING, $site->fresh()->status));
+        Artisan::call('gym:daily-memberships');
+        $this->assertCount(0, $this->giftMessages($club));
+    }
+
+    public function test_the_buyer_sees_where_the_gift_message_is_in_their_language_and_nobody_else_does(): void
+    {
+        $club = $this->club();
+        $this->configurePaymob($club);
+        $this->connectWhatsApp($club);
+        $this->post(route('site.gift.store', ['club' => $club->slug, 'plan' => $this->plan($club, ['price' => 30])->id]), $this->buyer());
+        $gift = $this->asTenant($club, fn () => GiftMembership::sole());
+        $token = $this->asTenant($club, fn () => $gift->linkToken());
+
+        // English confirmation page: the message she sends is in English too.
+        $this->get('/c/'.$club->slug.'/en/gift/'.$token.'/verify')->assertOk()->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('locale', 'en')->where('verification.text', fn ($t) => str_starts_with((string) $t, 'I agree to receive messages from')));
+
+        $this->recipientConfirms($club, $gift)->assertOk();
+        $this->post(route('site.gift.pay', ['club' => $club->slug, 'token' => $token]));
+        $this->paidBy($this->asTenant($club, fn () => PaymentIntent::sole()), 30000)->assertOk();
+
+        $this->get(route('site.gift.show', ['club' => $club->slug, 'token' => $token]))->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('delivery.state', 'sent')->where('delivery.label', 'أُرسلت إلى المزود'));
+        $this->get('/c/'.$club->slug.'/en/gift/'.$token)->assertInertia(fn (AssertableInertia $page) => $page->where('delivery.label', 'Handed to WhatsApp'));
+
+        // Failed: the buyer is told to share the link or contact the club, without the provider's error.
+        $id = $this->giftMessages($club)->sole()->provider_message_id;
+        $this->whatsappStatus($id, 'failed', ['code' => 131026, 'title' => 'Message undeliverable'])->assertOk();
+        $this->get(route('site.gift.show', ['club' => $club->slug, 'token' => $token]))->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('delivery.state', 'failed')->where('delivery.note', fn ($n) => str_contains((string) $n, 'تواصل مع النادي') && ! str_contains((string) $n, '131026')));
+
+        // Anyone else with the link: no delivery details.
+        $this->flushSession();
+        $this->get(route('site.gift.show', ['club' => $club->slug, 'token' => $token]))->assertInertia(fn (AssertableInertia $page) => $page->where('delivery', null));
     }
 }
