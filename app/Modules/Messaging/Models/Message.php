@@ -18,6 +18,21 @@ class Message extends Model
 
     public const QUEUED = 'queued';
 
+    /** Claimed by a worker, its request to WhatsApp on the way (#203): nothing sends a claimed message again. */
+    public const SENDING = 'sending';
+
+    /**
+     * «نتيجة الإرسال غير مؤكدة» (#203): the request may have reached WhatsApp but its outcome was never recorded (an
+     * error after WhatsApp answered, a worker that died mid-request, a connection broken after the request left). It
+     * is not sent again on its own, and it is not «فشلت»: staff check with the customer before sending anything again.
+     */
+    public const UNCERTAIN = 'uncertain';
+
+    public const UNCERTAIN_TEXT = 'قد تكون وصلت: لم يصل من واتساب ما يؤكد إرسالها أو ينفيه، فلم تُرسل مرة أخرى تلقائيًا. تأكد من العميل قبل أن ترسلها مجددًا.';
+
+    /** A claim older than this has no worker behind it (a request lasts 15 seconds, a lost job is handed back in 90). */
+    public const SENDING_STALE_MINUTES = 10;
+
     public const SENT = 'sent';
 
     public const DELIVERED = 'delivered';
@@ -43,7 +58,7 @@ class Message extends Model
     public const SOURCE_CUSTOMER = 'customer';
 
     /** How far a sent message has got: a later status never takes it back. */
-    public const PROGRESS = [self::QUEUED => 0, self::SENT => 1, self::DELIVERED => 2, self::READ => 3];
+    public const PROGRESS = [self::QUEUED => 0, self::SENDING => 0, self::UNCERTAIN => 0, self::SENT => 1, self::DELIVERED => 2, self::READ => 3];
 
     /** Why a message was skipped, as staff are told. */
     public const SKIP_REASONS = [

@@ -114,7 +114,11 @@ final class InboxPresenter
             'type' => $m->type,
             'body' => $m->body,
             'status' => $m->status,
-            'error' => $m->status === Message::FAILED || $m->status === Message::SKIPPED ? ($m->error_message ?: (Message::SKIP_REASONS[$m->error_code] ?? $m->error_code)) : null,
+            'error' => match ($m->status) {
+                Message::FAILED, Message::SKIPPED => $m->error_message ?: (Message::SKIP_REASONS[$m->error_code] ?? $m->error_code),
+                Message::UNCERTAIN => $m->error_message ?: Message::UNCERTAIN_TEXT,
+                default => null,
+            },
             'template' => $m->template_key ? (TemplateCatalog::EVENTS[$m->template_key]['label'] ?? $m->template_name) : null,
             'sender' => $m->sender?->name,
             'at' => $m->happenedAt()->format(DATE_ATOM),

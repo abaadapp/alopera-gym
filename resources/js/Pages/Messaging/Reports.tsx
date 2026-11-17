@@ -11,7 +11,7 @@ interface Figures {
     conversations: { new: number; open_now: number; closed: number; unassigned: number; by_status: { key: string; label: string; count: number }[] };
     messages: { inbound: number; outbound: number; by_source: { direction: string; source: string; count: number }[] };
     first_response: { conversations: number; seconds: number | null };
-    automatic: { succeeded: number; failed: number; skipped: number; waiting: number };
+    automatic: { succeeded: number; failed: number; skipped: number; waiting: number; uncertain: number };
     staff: { id: number; name: string; open: number; replies: number }[];
     days: { day: string; inbound: number; outbound: number }[];
 }
@@ -71,6 +71,7 @@ export default function Reports({ filters, figures }: { filters: { from: string;
                         <div className="rounded-xl bg-red-50 p-3"><dt className="text-red-800">فشلت</dt><dd className="text-xl font-semibold num">{number(figures.automatic.failed)}</dd></div>
                         <div className="rounded-xl bg-amber-50 p-3"><dt className="text-amber-800">لم تُرسل (قالب أو موافقة)</dt><dd className="text-xl font-semibold num">{number(figures.automatic.skipped)}</dd></div>
                         <div className="rounded-xl bg-stone-50 p-3"><dt className="text-stone-700">في الانتظار</dt><dd className="text-xl font-semibold num">{number(figures.automatic.waiting)}</dd></div>
+                        {figures.automatic.uncertain > 0 && <div className="col-span-2 rounded-xl bg-amber-50 p-3"><dt className="text-amber-800">نتيجة الإرسال غير مؤكدة (قد تكون وصلت؛ لم تُعد تلقائيًا)</dt><dd className="text-xl font-semibold num">{number(figures.automatic.uncertain)}</dd></div>}
                     </dl>
                 </Card>
             </div>

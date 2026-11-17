@@ -45,4 +45,10 @@ class Campaign extends Model
     {
         return $this->hasMany(Message::class);
     }
+
+    /** Messages whose outcome is unknown (#203): counted apart, neither sent nor failed. */
+    public function uncertainCount(): int
+    {
+        return $this->messages()->where('status', Message::UNCERTAIN)->count();
+    }
 }

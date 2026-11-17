@@ -1,5 +1,5 @@
 import { Link, router } from '@inertiajs/react';
-import { CheckCheck, Eye, MailCheck, ScrollText, Send, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { CheckCheck, CircleHelp, Eye, MailCheck, ScrollText, Send, TriangleAlert, type LucideIcon } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Card, EmptyState, PageHeader, Pagination, Select, StatCard, StatGrid } from '@/Components/ui';
 import { number } from '@/lib/format';
@@ -43,11 +43,13 @@ const skipReasons: Record<string, string> = {
     campaign_cancelled: 'أُلغيت الحملة',
 };
 
-const STATUS_TILES: { status: string; icon: LucideIcon; tone: 'brand' | 'green' | 'blue' | 'red' }[] = [
+const STATUS_TILES: { status: string; icon: LucideIcon; tone: 'brand' | 'green' | 'blue' | 'red' | 'amber' }[] = [
     { status: 'sent', icon: Send, tone: 'brand' },
     { status: 'delivered', icon: MailCheck, tone: 'green' },
     { status: 'read', icon: Eye, tone: 'blue' },
     { status: 'failed', icon: TriangleAlert, tone: 'red' },
+    // #203: may have arrived; not sent again on its own.
+    { status: 'uncertain', icon: CircleHelp, tone: 'amber' },
 ];
 
 /** The filters without the empty ones, for a link. */

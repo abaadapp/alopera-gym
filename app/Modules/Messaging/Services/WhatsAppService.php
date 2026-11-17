@@ -383,7 +383,64 @@ final class WhatsAppService
         }
     }
 
-    /** Called by the queue worker. */
+    /**
+     * The worker takes the message for itself before its request goes to WhatsApp (#203): committed at once, so a
+     * worker that dies mid-request, an error after WhatsApp answered, or a second worker handed the same message leaves
+     * it `sending` — and nothing sends a message that is not `queued`. False when someone else has it, or it is no
+     * longer waiting.
+     */
+    public function claim(Message $message): bool
+    {
+        if (Message::whereKey($message->id)->where('status', Message::QUEUED)->update(['status' => Message::SENDING, 'updated_at' => now()]) !== 1) {
+            return false;
+        }
+        $message->forceFill(['status' => Message::SENDING])->syncOriginalAttribute('status');
+
+        return true;
+    }
+
+    /**
+     * A claimed message whose outcome was never recorded: WhatsApp may have it, so it is not sent again and not said
+     * to have failed. Staff see «نتيجة الإرسال غير مؤكدة» with what to do.
+     */
+    public function markUncertain(Message $message, ?string $why = null, ?\DateTimeInterface $claimedBefore = null): bool
+    {
+        // Only a claim still standing, read again under its row lock: an outcome a worker saved meanwhile (sent,
+        // delivered, failed, back in the queue) or a fresh claim (`$claimedBefore`) is never overwritten.
+        $settled = DB::transaction(function () use ($message, $why, $claimedBefore) {
+            $current = Message::whereKey($message->id)->lockForUpdate()->first();
+            if ($current?->status !== Message::SENDING || ($claimedBefore !== null && ! $current->updated_at?->lessThan($claimedBefore))) {
+                return null;
+            }
+            $current->forceFill(['status' => Message::UNCERTAIN, 'error_code' => 'outcome_unknown', 'error_message' => mb_substr($why ?? Message::UNCERTAIN_TEXT, 0, 250)])->save();
+
+            return $current;
+        });
+        if ($settled === null) {
+            return false;
+        }
+        $message->setRawAttributes($settled->getAttributes(), true);
+        if ($message->campaign_id) {
+            CampaignService::refreshCounts($message->campaign_id);
+        }
+
+        return true;
+    }
+
+    /** Claims with no worker behind them any more (a job lost after its claim): their outcome is unknown. */
+    public function settleAbandonedClaims(): int
+    {
+        $count = 0;
+        $before = now()->subMinutes(Message::SENDING_STALE_MINUTES);
+        Message::where('status', Message::SENDING)->where('updated_at', '<', $before)
+            ->eachById(function (Message $message) use (&$count, $before) {
+                $count += $this->markUncertain($message, null, $before) ? 1 : 0;
+            });
+
+        return $count;
+    }
+
+    /** Called by the queue worker, for a message it has claimed. */
     public function deliver(Message $message): GatewayResult
     {
         $integration = $this->integration();
@@ -407,20 +464,28 @@ final class WhatsAppService
 
         $this->recordHealth($integration, $result);
 
-        DB::transaction(function () use ($message, $result) {
-            $message->forceFill([
-                'attempts' => $message->attempts + 1,
-                'status' => $result->ok ? Message::SENT : ($result->retryable ? $message->status : Message::FAILED),
-                'provider_message_id' => $result->messageId ?? $message->provider_message_id,
-                'error_code' => $result->ok ? null : $result->errorCode,
-                'error_message' => $result->ok ? null : $result->errorMessage,
-                'sent_at' => $result->ok ? now() : $message->sent_at,
-            ])->save();
+        // What WhatsApp answered, kept even through a moment's database trouble: losing it after WhatsApp took the
+        // message is what would send it twice. Still not saved, the claim stays and the next attempt marks it uncertain.
+        $outcome = [
+            'attempts' => $message->attempts + 1,
+            'status' => match (true) {
+                $result->ok => Message::SENT,
+                $result->uncertain => Message::UNCERTAIN,
+                $result->retryable => Message::QUEUED, // known not to have reached WhatsApp: waiting for the retry
+                default => Message::FAILED,
+            },
+            'provider_message_id' => $result->messageId ?? $message->provider_message_id,
+            'error_code' => $result->ok ? null : $result->errorCode,
+            'error_message' => $result->ok ? null : ($result->uncertain ? mb_substr(Message::UNCERTAIN_TEXT.' ('.$result->errorMessage.')', 0, 250) : $result->errorMessage),
+            'sent_at' => $result->ok ? now() : $message->sent_at,
+        ];
+        retry(3, fn () => DB::transaction(function () use ($message, $outcome) {
+            $message->forceFill($outcome)->save();
 
             if ($message->campaign_id) {
                 CampaignService::refreshCounts($message->campaign_id);
             }
-        });
+        }), 100);
 
         // A status that came before WhatsApp's answer to the send waited for this id.
         if ($result->ok && $message->provider_message_id) {
