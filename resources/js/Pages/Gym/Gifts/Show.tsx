@@ -8,7 +8,7 @@ import { clientKey } from '@/Components/Inventory/parts';
 import { BackLink, Badge, Button, Card, ChoiceCard, ConfirmAction, Field, Input, MemberPicker, Modal, Notice, PageHeader, type MemberHit } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, isoDate, money, phone, time } from '@/lib/format';
-import { GIFT_EVENTS, GIFT_PAYMENT, giftCancelReason, giftForAnotherNumber, giftSource, redeemErrorStep, redeemGeneralErrors, type GiftRow, type RedeemStep } from '@/lib/gifts';
+import { GIFT_DELIVERY_TONE, GIFT_EVENTS, GIFT_PAYMENT, giftCancelReason, giftForAnotherNumber, giftSource, redeemErrorStep, redeemGeneralErrors, type GiftRow, type GiftWhatsAppPanel, type RedeemStep } from '@/lib/gifts';
 import { invoiceStatus, label, membershipStatus } from '@/lib/labels';
 import { GiftStatusBadge } from './Index';
 
@@ -34,6 +34,7 @@ interface Props {
     events: GiftEvent[];
     methods: string[];
     redeem: { min: string; max: string; can_search: boolean };
+    delivery_panel: GiftWhatsAppPanel;
 }
 
 /** A moment as the server sent it (ISO, the club's time): the day and the hour. */
@@ -54,7 +55,7 @@ async function copy(text: string) {
  * One gift (#192): its card as the recipient sees it, its terms and invoice, the link to share once it is paid, its
  * collection while it waits, «تفعيل الهدية» for a member, the cancellation and its history.
  */
-export default function GiftShow({ gift, link, whatsapp, pay_link, pending_transfer, events, methods, redeem }: Props) {
+export default function GiftShow({ gift, link, whatsapp, pay_link, pending_transfer, events, methods, redeem, delivery_panel }: Props) {
     const can = useCan();
     const currency = useCurrency();
     const [payOpen, setPayOpen] = useState(false);
@@ -170,6 +171,8 @@ export default function GiftShow({ gift, link, whatsapp, pay_link, pending_trans
                 <div className="min-w-0 space-y-4 xl:order-2 xl:col-span-2">
                     <GiftCardPreview gift={gift} />
 
+                    <RecipientWhatsApp gift={gift} panel={delivery_panel} />
+
                     {link && (
                         <Card className="p-4">
                             <h2 className="mb-3 font-bold text-ink">مشاركة الهدية</h2>
@@ -220,7 +223,7 @@ export default function GiftShow({ gift, link, whatsapp, pay_link, pending_trans
                         gift.expires_on ? { label: 'صالحة للاستلام حتى', value: <span className="num">{date(gift.expires_on)}</span> } : null,
                         gift.giver_phone ? { label: 'هاتف المُهدي', value: gift.giver_phone, ltr: true } : null,
                         gift.giver_email ? { label: 'بريد المُهدي', value: gift.giver_email, ltr: true } : null,
-                        gift.recipient_phone ? { label: 'جوال المستلمة', value: phone(gift.recipient_phone), ltr: true } : null,
+                        gift.recipient_phone ? { label: 'واتساب المستلمة', value: phone(gift.recipient_phone), ltr: true } : null,
                     ]} />
 
                     <Card className="p-4">
@@ -247,6 +250,112 @@ export default function GiftShow({ gift, link, whatsapp, pay_link, pending_trans
             {mayCollect && <PayGiftModal open={payOpen} onClose={() => setPayOpen(false)} gift={gift} methods={methods} />}
             {mayRedeem && <RedeemGiftModal key={redeemOpen ? 'open' : 'closed'} open={redeemOpen} onClose={() => setRedeemOpen(false)} gift={gift} redeem={redeem} />}
         </ClubLayout>
+    );
+}
+
+/**
+ * «واتساب المستلمة»: her number and whether she confirmed it (a message from it, never a send WhatsApp accepted), where
+ * the gift's message is (from WhatsApp's status webhooks: «أُرسلت إلى المزود» is not «تم التسليم»), when it was last
+ * tried and why it failed or waits; the confirmation to pass on, a new code, a corrected number and a new attempt for
+ * whoever may (the server checks each again).
+ */
+function RecipientWhatsApp({ gift, panel }: { gift: GiftDetail; panel: GiftWhatsAppPanel }) {
+    const [changeOpen, setChangeOpen] = useState(false);
+    const { verification: v, delivery: d } = panel;
+    const verifyLabel = { verified: 'مؤكَّد برسالة منها', waiting: 'بانتظار تأكيدها', expired: 'انتهى رمز التأكيد', unavailable: 'التأكيد غير متاح' }[v.state];
+    const verifyTone = v.state === 'verified' ? 'green' : v.state === 'unavailable' ? 'red' : 'amber';
+
+    return (
+        <Card className="p-4">
+            <h2 className="mb-3 flex items-center gap-2 font-bold text-ink"><MessageCircle className="size-4 text-[#16a34a]" /> واتساب المستلمة</h2>
+            <dl className="space-y-2 text-[13px]">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <dt className="text-[#6b7280]">الرقم</dt>
+                    <dd dir="ltr" className="font-medium num">{phone(gift.recipient_phone)}</dd>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <dt className="text-[#6b7280]">التحقق</dt>
+                    <dd><Badge tone={verifyTone}>{verifyLabel}</Badge>{v.verified_at && <span className="ms-2 text-[12px] text-[#9ca3af] num">{when(v.verified_at)}</span>}</dd>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <dt className="text-[#6b7280]">التوصيل</dt>
+                    <dd><Badge tone={GIFT_DELIVERY_TONE[d.state]}>{d.label}</Badge></dd>
+                </div>
+                {d.at && (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <dt className="text-[#6b7280]">آخر محاولة إرسال</dt>
+                        <dd className="num">{when(d.at)}{d.attempts > 1 && <span className="ms-1 text-[12px] text-[#9ca3af]">(المحاولة {d.attempts})</span>}</dd>
+                    </div>
+                )}
+            </dl>
+            {d.reason && <p className={`mt-3 rounded-lg px-3 py-2 text-[12px] leading-5 ${d.state === 'failed' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{d.state === 'failed' ? 'سبب الفشل: ' : ''}{d.reason}</p>}
+            {v.state === 'unavailable' && v.refusal_text && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-[12px] leading-5 text-red-700">{v.refusal_text}</p>}
+
+            {v.state === 'waiting' && v.link && (
+                <div className="mt-3 space-y-2 rounded-lg bg-[#f9fafb] p-3 text-[12px] leading-5">
+                    <p className="text-[#4b5563]">تؤكد المستلمة رقمها بإرسال هذه الرسالة من واتساب رقمها إلى رقم النادي (لا تذكر الهدية ولا سعرها):</p>
+                    <p className="font-medium text-ink">{v.text}</p>
+                    <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" onClick={() => copy(v.link!)} icon={<Copy />}>نسخ رابط التأكيد</Button>
+                        <Button size="sm" href={v.link} external icon={<MessageCircle />}>فتح واتساب</Button>
+                    </div>
+                    {v.expires_at && <p className="text-[#9ca3af]">الرمز صالح حتى <span className="num">{when(v.expires_at)}</span>.</p>}
+                </div>
+            )}
+            <p className="mt-3 text-[11px] leading-5 text-[#9ca3af]">صحة شكل الرقم لا تعني وجود حساب واتساب؛ يتأكد ذلك برسالة من الرقم نفسه فقط. تُرسل الهدية بعد اكتمال الدفع وتأكيد الرقم.</p>
+
+            {(panel.can_new_code || panel.can_change || panel.can_resend) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                    {panel.can_resend && (
+                        <ConfirmAction url={route('club.gifts.resend', gift.id)} title={d.state === 'failed' ? 'إعادة إرسال الهدية' : 'إرسال الهدية'}
+                            message="تُجهَّز رسالة الهدية مرة واحدة إلى رقم المستلمة المؤكد. لا تُعاد ما دامت الرسالة السابقة في الطريق."
+                            confirmLabel="إرسال" tone="primary" size="sm" icon={<RefreshCw />}>
+                            {d.state === 'failed' ? 'إعادة الإرسال' : 'إرسال الآن'}
+                        </ConfirmAction>
+                    )}
+                    {panel.can_new_code && (
+                        <ConfirmAction url={route('club.gifts.code', gift.id)} title="رمز تأكيد جديد" message="يتوقف الرمز الحالي، ويصدر رمز جديد صالح 24 ساعة. لا يُرسل شيء."
+                            confirmLabel="رمز جديد" tone="primary" size="sm" icon={<RefreshCw />}>
+                            رمز جديد
+                        </ConfirmAction>
+                    )}
+                    {panel.can_change && <Button size="sm" variant="outline" onClick={() => setChangeOpen(true)} icon={<Smartphone />}>تغيير الرقم</Button>}
+                </div>
+            )}
+            {panel.can_change && <ChangeRecipientModal open={changeOpen} onClose={() => setChangeOpen(false)} gift={gift} />}
+        </Card>
+    );
+}
+
+function ChangeRecipientModal({ open, onClose, gift }: { open: boolean; onClose: () => void; gift: GiftDetail }) {
+    const form = useForm({ recipient_phone: '' });
+    const submit = (e: FormEvent) => {
+        e.preventDefault();
+        form.post(route('club.gifts.recipient', gift.id), { preserveScroll: true, onSuccess: () => { form.reset(); onClose(); } });
+    };
+
+    return (
+        <Modal
+            open={open}
+            onClose={onClose}
+            title="تغيير رقم واتساب المستلمة"
+            footer={
+                <>
+                    <Button variant="outline" onClick={onClose}>إلغاء</Button>
+                    <Button type="submit" form="change-recipient" loading={form.processing}>حفظ الرقم</Button>
+                </>
+            }
+        >
+            <form id="change-recipient" onSubmit={submit} className="space-y-4">
+                <Notice tone="amber">
+                    يُلغى تأكيد الرقم الحالي، ويؤكد الرقم الجديد برسالة منه قبل الإرسال.
+                    {(gift.paid_at || gift.delivery.state !== 'not_due') && <> ولأن رابط الهدية ربما وصل إلى الرقم السابق، يُصدر رابط جديد ويتوقف القديم.</>}
+                </Notice>
+                <Field label="الرقم الجديد" error={form.errors.recipient_phone} required hint="رقم عماني مثل 9XXXXXXX، أو رقم دولي يبدأ بـ +">
+                    <Input dir="ltr" type="tel" value={form.data.recipient_phone} onChange={(e) => form.setData('recipient_phone', e.target.value)} placeholder="9XXXXXXX" maxLength={32} autoFocus />
+                </Field>
+            </form>
+        </Modal>
     );
 }
 

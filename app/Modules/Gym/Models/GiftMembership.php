@@ -10,6 +10,7 @@ use App\Core\Tenancy\OwnedByBranch;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Messaging\Models\Message;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -64,8 +65,24 @@ class GiftMembership extends Model implements BranchOwned
 
     protected $guarded = ['id', 'tenant_id'];
 
-    /** Never in an array or JSON: the link is shown only through linkToken(), to staff allowed to share it. */
-    protected $hidden = ['token', 'token_hash'];
+    /**
+     * Where the gift's WhatsApp message is (GiftWhatsApp::delivery), as the panel shows it. `sent` is WhatsApp having
+     * accepted it, not the recipient having it: only a `delivered` (or `read`) status from the webhook says that.
+     */
+    public const DELIVERY_LABELS = [
+        'not_due' => 'تُرسل بعد اكتمال الدفع',
+        'waiting' => 'بانتظار الإرسال',
+        'sending' => 'قيد الإرسال',
+        'sent' => 'أُرسلت إلى المزود',
+        'delivered' => 'تم التسليم',
+        'read' => 'تمت القراءة',
+        'failed' => 'فشل الإرسال',
+        'closed' => 'لا إرسال',
+    ];
+
+    /** Never in an array or JSON: the link is shown only through linkToken(), to staff allowed to share it; the
+     *  number's confirmation code only to whoever may share it (GiftWhatsApp::verification). */
+    protected $hidden = ['token', 'token_hash', 'phone_verify_code', 'phone_verify_hash'];
 
     protected function casts(): array
     {
@@ -79,6 +96,9 @@ class GiftMembership extends Model implements BranchOwned
             'cancelled_at' => 'datetime',
             'expired_at' => 'datetime',
             'refunded_at' => 'datetime',
+            'phone_verify_code' => 'encrypted',
+            'phone_verify_expires_at' => 'datetime',
+            'phone_verified_at' => 'datetime',
         ];
     }
 
@@ -181,5 +201,16 @@ class GiftMembership extends Model implements BranchOwned
     public function membership(): BelongsTo
     {
         return $this->belongsTo(Membership::class);
+    }
+
+    /** The recipient's number was confirmed by a message she sent from it (not by a send WhatsApp accepted). */
+    public function phoneVerified(): bool
+    {
+        return $this->phone_verified_at !== null;
+    }
+
+    public function whatsappMessage(): BelongsTo
+    {
+        return $this->belongsTo(Message::class, 'whatsapp_message_id');
     }
 }

@@ -53,6 +53,9 @@ class Message extends Model
 
     protected $guarded = ['id', 'tenant_id'];
 
+    /** What a template was sent with stays on the server: a gift's message carries its secret link there (#192). */
+    protected $hidden = ['template_params'];
+
     protected $attributes = ['attempts' => 0, 'channel' => 'whatsapp'];
 
     protected function casts(): array

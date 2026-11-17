@@ -62,7 +62,7 @@ class GiftBackupTest extends TestCase
                 $this->assertSame([$redeemed->id, $refunded->id, $waiting->id][$i], GiftMembership::findByToken($token)?->id, 'The link works after the restore.');
             }
             // Numbering continues after the restore.
-            $this->assertNotSame($waiting->number, app(GiftService::class)->issue(MembershipPlan::first(), ['giver_name' => 'A', 'recipient_name' => 'B'], 'staff')->number);
+            $this->assertNotSame($waiting->number, app(GiftService::class)->issue(MembershipPlan::first(), ['giver_name' => 'A', 'recipient_name' => 'B', 'recipient_phone' => '91234567'], 'staff')->number);
         });
     }
 }

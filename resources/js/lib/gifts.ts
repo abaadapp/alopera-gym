@@ -31,7 +31,39 @@ export interface GiftRow {
     refund: { state: 'due' | 'pending' | 'done' | 'none'; label: string; due: string; pending: string; refunded: string; credit_note: string | null } | null;
     expired_at: string | null;
     created_at: string | null;
+    /** Confirmed by a message the recipient sent from the number (never by a send WhatsApp accepted). */
+    phone_verified_at: string | null;
+    /** Where the gift's WhatsApp message is (GiftWhatsApp::stateOf). */
+    delivery: { state: GiftDeliveryState; label: string };
 }
+
+export type GiftDeliveryState = 'not_due' | 'waiting' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed' | 'closed';
+
+/** The gift's page: the number's confirmation and the message's delivery, with what this user may do (GiftController). */
+export interface GiftWhatsAppPanel {
+    verification: {
+        state: 'waiting' | 'expired' | 'verified' | 'unavailable';
+        phone: string;
+        verified_at: string | null;
+        expires_at: string | null;
+        /** Only for whoever issues gifts (to pass on). */
+        code: string | null;
+        text: string | null;
+        link: string | null;
+        club_number: string | null;
+        refusal: string | null;
+        refusal_text: string | null;
+    };
+    delivery: { state: GiftDeliveryState; label: string; at: string | null; reason: string | null; can_send: boolean; attempts: number };
+    can_new_code: boolean;
+    can_change: boolean;
+    can_resend: boolean;
+}
+
+/** Each delivery state's badge colour. `sent` is WhatsApp having taken it, not the recipient having it. */
+export const GIFT_DELIVERY_TONE: Record<GiftDeliveryState, 'gray' | 'amber' | 'blue' | 'green' | 'red'> = {
+    not_due: 'gray', waiting: 'amber', sending: 'blue', sent: 'blue', delivered: 'green', read: 'green', failed: 'red', closed: 'gray',
+};
 
 /** The list's status tabs («الكل» comes first on its own), each with its badge's colour. */
 export const GIFT_FILTERS = [
@@ -72,6 +104,12 @@ export const GIFT_EVENTS: Record<string, string> = {
     'gift.refunded': 'أُلغيت بإشعار دائن',
     'gift.unpaid': 'أُلغيت دفعتها فعادت بانتظار الدفع',
     'gift.link_rotated': 'أُصدر لها رابط جديد',
+    'gift.phone_verified': 'أكدت المستلمة رقم واتساب برسالة منه',
+    'gift.phone_verify_refused': 'وصل رمز تأكيد لم يُقبل (من رقم آخر أو بعد انتهائه)',
+    'gift.recipient_changed': 'غُيّر رقم واتساب المستلمة',
+    'gift.whatsapp_queued': 'جُهّزت رسالة الهدية للإرسال عبر واتساب',
+    'gift.whatsapp_resent': 'أُعيد إرسال رسالة الهدية',
+    'gift.whatsapp_failed': 'فشل إرسال رسالة الهدية',
 };
 
 /** The codes the server writes as a cancellation's reason when the invoice did it (anything else is staff's text). */

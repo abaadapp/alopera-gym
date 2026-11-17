@@ -1,8 +1,8 @@
 import type { FormEvent, ReactNode } from 'react';
 import { useForm } from '@inertiajs/react';
-import { AlertCircle, Gift, Lock, ShieldCheck, Store } from 'lucide-react';
+import { AlertCircle, Gift, Lock, MessageCircle, ShieldCheck, Store } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
-import { GiftTermsList, type GiftTermsData } from '@/Components/Site/Gift';
+import { GiftTermsList, displayPhone, isWhatsAppNumber, normalizePhone, type GiftTermsData } from '@/Components/Site/Gift';
 import { phrase } from '@/Components/Site/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
@@ -19,6 +19,8 @@ interface Props {
     /** The total as the gift's invoice will be issued: the plan's price and its tax, nothing else. */
     summary: { price: string; tax: string; tax_rate: number; total: string };
     onlinePayments: boolean;
+    /** The recipient confirms her WhatsApp number before payment: not possible while the club's WhatsApp is not connected. */
+    whatsapp: { available: boolean; refusal: string | null };
     terms: GiftTermsData;
 }
 
@@ -46,11 +48,12 @@ export function GiftAlert({ children }: { children: ReactNode }) {
 }
 
 /**
- * «إهداء هذه الباقة»: the giver's details, the recipient's name (and, optionally, her number) and a message, the gift's
- * conditions, its expiry and no-refund policy to agree to, and the total, then the gateway. No account is needed. The
- * gift is usable only once the gateway's signed confirmation paid it.
+ * «إهداء هذه الباقة»: the giver's details, the recipient's name and WhatsApp number (required: the gift is sent there)
+ * and a message, the gift's conditions, its expiry and no-refund policy to agree to, and the total. Next comes the
+ * recipient's confirmation of her number (GiftVerify), then the gateway. No account is needed. The gift is usable —
+ * and sent — only once the gateway's signed confirmation paid it.
  */
-export default function GiftBuy({ site, seo, plan, summary, onlinePayments, terms }: Props) {
+export default function GiftBuy({ site, seo, plan, summary, onlinePayments, whatsapp, terms }: Props) {
     const currency = useCurrency();
     const t = useT();
     const english = useLocale() === 'en';
@@ -71,9 +74,14 @@ export default function GiftBuy({ site, seo, plan, summary, onlinePayments, term
     const errors = form.errors as Record<string, string | undefined>;
     const access = planAccess(plan);
 
+    const ready = onlinePayments && whatsapp.available;
+    // The number as it will be used, shown back to check it; its shape only (never proof of a WhatsApp account).
+    const typed = normalizePhone(form.data.recipient_phone);
+    const shapeOk = isWhatsAppNumber(typed);
+
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        if (!onlinePayments) return;
+        if (!ready) return;
         form.post(route('site.gift.store', { plan: plan.id }), { preserveScroll: true });
     };
 
@@ -88,7 +96,7 @@ export default function GiftBuy({ site, seo, plan, summary, onlinePayments, term
                     <header className="flex flex-col gap-1.5">
                         <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--site-accent)]"><Gift className="size-4" /> {t('إهداء باقة')}</span>
                         <h1 className="m-0 text-[clamp(26px,6vw,36px)] leading-tight font-bold">{t('إهداء :plan', { plan: plan.name })}</h1>
-                        <p className="m-0 text-[15px] text-[#5E5648]">{t('بعد تأكيد الدفع يظهر رابط بطاقة الهدية لمشاركته مع المستلمة، وتختار المستلمة يوم بدء اشتراكها.')}</p>
+                        <p className="m-0 text-[15px] text-[#5E5648]">{t('تؤكد المستلمة رقم واتسابها برسالة منها، ثم يتم الدفع، ونرسل لها الهدية على واتساب بعد تأكيد الدفع، وتختار يوم بدء اشتراكها.')}</p>
                     </header>
 
                     {/* The plan, as it will be given. */}
@@ -102,6 +110,13 @@ export default function GiftBuy({ site, seo, plan, summary, onlinePayments, term
                         {access.included.length > 0 && <span className="text-sm text-[#E9DFC8]">{access.included.map((x) => say(x, t, english)).join(' · ')}</span>}
                         {access.notes.map((x, i) => <span key={i} className="text-[13px] text-[#9A9284]">{say(x, t, english)}</span>)}
                     </section>
+
+                    {onlinePayments && !whatsapp.available && (
+                        <div role="status" className="flex items-start gap-3 rounded-2xl bg-white px-5 py-4 text-[15px] leading-7 ring-1 ring-[rgba(26,22,18,0.08)]">
+                            <MessageCircle className="mt-1 size-5 shrink-0 text-[#8A6A1F]" />
+                            <p className="m-0">{whatsapp.refusal ?? t('تأكيد رقم واتساب المستلمة غير متاح حاليًا، فلا يمكن شراء الهدية من الموقع الآن. يمكن شراؤها من استقبال النادي.')}</p>
+                        </div>
+                    )}
 
                     {!onlinePayments && (
                         <div role="status" className="flex items-start gap-3 rounded-2xl bg-white px-5 py-4 text-[15px] leading-7 ring-1 ring-[rgba(26,22,18,0.08)]">
@@ -124,12 +139,20 @@ export default function GiftBuy({ site, seo, plan, summary, onlinePayments, term
                             <input className={giftInput} value={form.data.recipient_name} onChange={(e) => form.setData('recipient_name', e.target.value)} maxLength={120} autoComplete="off" aria-invalid={!!errors.recipient_name} required />
                         </GiftField>
                         <GiftField
-                            label={t('رقم جوال المستلمة (اختياري)')}
-                            error={errors.recipient_phone}
-                            hint={t('إذا أدخلته فلا يستلم الهدية من الرابط إلا حساب بهذا الرقم. لا يظهر الرقم في بطاقة الهدية.')}
+                            label={t('رقم واتساب المستلمة')}
+                            required
                             className="sm:col-span-2"
+                            error={errors.recipient_phone}
+                            hint={
+                                form.data.recipient_phone.trim() === '' ? t('نرسل الهدية إلى واتساب هذا الرقم. قبل الدفع تؤكد المستلمة الرقم برسالة منها.')
+                                    : shapeOk ? phrase(t('سنرسل إلى: :number. تأكد أنه رقم واتساب المستلمة.'), { number: <bdi dir="ltr" className="font-semibold num">{displayPhone(typed)}</bdi> })
+                                    : t('اكتب رقمًا عمانيًا يبدأ بـ 9 أو 7 (8 أرقام)، أو رقمًا دوليًا يبدأ بـ +.')
+                            }
                         >
-                            <input className={cn(giftInput, 'text-start')} type="tel" inputMode="tel" dir="ltr" value={form.data.recipient_phone} onChange={(e) => form.setData('recipient_phone', e.target.value)} maxLength={32} autoComplete="off" placeholder="9XXXXXXX" aria-invalid={!!errors.recipient_phone} />
+                            <span className="flex min-w-0 items-stretch gap-2" dir="ltr">
+                                {!/^\s*(\+|00)/.test(form.data.recipient_phone) && <span className="inline-flex h-[52px] shrink-0 items-center rounded-2xl border border-[rgba(22,19,15,0.18)] bg-[#F6F3EE] px-3 text-base text-[#5E5648] num" aria-hidden>+968</span>}
+                                <input className={cn(giftInput, 'text-start')} type="tel" inputMode="tel" dir="ltr" value={form.data.recipient_phone} onChange={(e) => form.setData('recipient_phone', e.target.value)} maxLength={32} autoComplete="off" placeholder="9XXXXXXX" required aria-invalid={!!errors.recipient_phone || (form.data.recipient_phone.trim() !== '' && !shapeOk)} aria-label={t('رقم واتساب المستلمة')} />
+                            </span>
                         </GiftField>
                         <GiftField
                             label={t('رسالة الإهداء (اختيارية)')}
@@ -191,10 +214,10 @@ export default function GiftBuy({ site, seo, plan, summary, onlinePayments, term
 
                     <button
                         type="submit"
-                        disabled={!onlinePayments || form.processing}
+                        disabled={!ready || form.processing}
                         className="inline-flex h-[54px] items-center justify-center gap-2 rounded-full bg-[var(--site-gold)] px-6 text-base font-bold text-[var(--site-ink)] transition-colors hover:bg-[#DDB85C] disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                        {form.processing ? t('جارٍ الإرسال…') : t('ادفع وأهدِ الآن')}
+                        {form.processing ? t('جارٍ الإرسال…') : t('متابعة: تأكيد رقم المستلمة')}
                         {!form.processing && <Lock className="size-4" />}
                     </button>
                     <p className="m-0 flex items-center justify-center gap-1.5 text-center text-[13px] text-[#7A7060]"><Lock className="size-3.5" /> {t('الدفع عبر بوابة دفع آمنة، ولا نحفظ بيانات البطاقة.')}</p>

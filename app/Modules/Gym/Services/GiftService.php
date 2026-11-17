@@ -48,15 +48,22 @@ final class GiftService
     /**
      * Sell a gift: saved as `pending` with its invoice issued to the giver (no member account needed).
      *
-     * @param  array{giver_name: string, giver_phone?: string|null, giver_email?: string|null, recipient_name: string, message?: string|null, branch_id?: int|null}  $data
+     * The recipient's WhatsApp number is required: the gift is sent there once paid and its number confirmed
+     * (GiftWhatsApp). Its confirmation code is issued here; nothing is sent.
+     *
+     * @param  array{giver_name: string, giver_phone?: string|null, giver_email?: string|null, recipient_name: string, recipient_phone: string, message?: string|null, branch_id?: int|null}  $data
      */
     public function issue(MembershipPlan $plan, array $data, string $source): GiftMembership
     {
         if (! $plan->is_active || ! $plan->giftable) {
             throw new BusinessRuleException('gift.plan', 'هذه الباقة غير متاحة للإهداء.', 'membership_plan_id');
         }
+        $recipientPhone = Phone::normalize($data['recipient_phone'] ?? '');
+        if (! Phone::isMobile($recipientPhone)) {
+            throw new BusinessRuleException('gift.recipient_phone', 'أدخل رقم واتساب صحيحًا للمستلمة.', 'recipient_phone');
+        }
 
-        return DB::transaction(function () use ($plan, $data, $source) {
+        return DB::transaction(function () use ($plan, $data, $source, $recipientPhone) {
             $token = Str::random(48);
             $gift = GiftMembership::create([
                 'branch_id' => $data['branch_id'] ?? null,
@@ -69,8 +76,8 @@ final class GiftService
                 'giver_phone' => filled($data['giver_phone'] ?? null) ? Phone::normalize($data['giver_phone']) : null,
                 'giver_email' => $data['giver_email'] ?? null,
                 'recipient_name' => trim($data['recipient_name']),
-                // Optional: when given, only an account with this number redeems it from the link (#192 review).
-                'recipient_phone' => filled($data['recipient_phone'] ?? null) ? Phone::normalize($data['recipient_phone']) : null,
+                // Only an account with this number redeems it from the link; staff may redeem it for another.
+                'recipient_phone' => $recipientPhone,
                 'message' => filled($data['message'] ?? null) ? Str::limit(trim($data['message']), 300, '') : null,
                 'status' => GiftMembership::PENDING,
                 'token_hash' => GiftMembership::hashToken($token),
@@ -95,7 +102,7 @@ final class GiftService
             $gift->forceFill(['invoice_id' => $invoice->id])->save();
             $this->audit->log('gift.created', $gift, ['number' => $gift->number, 'source' => $gift->source, 'invoice' => $invoice->number]);
 
-            return $gift->refresh();
+            return app(GiftWhatsApp::class)->newCode($gift->refresh());
         });
     }
 
@@ -114,6 +121,9 @@ final class GiftService
             'expires_on' => $today->addDays($this->redeemDays()),
         ])->save();
         $this->audit->log('gift.paid', $gift, ['number' => $gift->number, 'expires_on' => $gift->expires_on->toDateString()]);
+
+        // Paid in full: its message goes to the recipient's confirmed number, after this transaction commits (once).
+        app(GiftWhatsApp::class)->queue($gift);
     }
 
     /** Days a paid gift can be redeemed in (club setting `gift_redeem_days`, 90 by default). */

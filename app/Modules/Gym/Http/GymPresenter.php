@@ -9,6 +9,7 @@ use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\MembershipPlan;
+use App\Modules\Gym\Services\GiftWhatsApp;
 
 /** Shapes gym models into the arrays the pages receive. */
 final class GymPresenter
@@ -122,6 +123,13 @@ final class GymPresenter
             'refunded_at' => $g->refunded_at?->toIso8601String(),
             // Withdrawn by a credit note: whether the money is actually back with the buyer (not the note itself).
             'refund' => $g->refundState(),
+            // The recipient's WhatsApp: confirmed by her message, and where the gift's message is (#192).
+            'phone_verified_at' => $g->phone_verified_at?->toIso8601String(),
+            'delivery' => (function () use ($g) {
+                $state = GiftWhatsApp::stateOf($g, $g->relationLoaded('whatsappMessage') ? $g->whatsappMessage : $g->whatsappMessage()->first());
+
+                return ['state' => $state, 'label' => GiftMembership::DELIVERY_LABELS[$state] ?? $state];
+            })(),
             'expired_at' => $g->expired_at?->toIso8601String(),
             'created_at' => $g->created_at?->toIso8601String(),
         ];

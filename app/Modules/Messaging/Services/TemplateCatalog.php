@@ -139,6 +139,16 @@ final class TemplateCatalog
             'variables' => ['user_name', 'document_name', 'expiry_date', 'days_left'],
             'body' => 'مرحبًا {{1}}، المستند «{{2}}» ينتهي بتاريخ {{3}} (متبقٍ {{4}} يوم). يرجى متابعة تجديده.',
         ],
+        // A gift membership sent to its recipient once its invoice is paid in full (#192). To a number that is not a
+        // member's: confirmed by the recipient's own message from it first, which is her consent to receive it. No
+        // price, invoice or payment detail; the link opens the gift's card. A WhatsApp parameter cannot hold a line
+        // break, so the gift's message is sent on one line (GiftWhatsApp::values).
+        'gift_received' => [
+            'label' => 'إرسال هدية اشتراك إلى المستلمة',
+            'category' => 'utility',
+            'variables' => ['giver_name', 'plan_name', 'gift_message', 'gift_link'],
+            'body' => "🎁 هدية خاصة لك من Alopera Gym!\n\nأهداك {{1}} اشتراكًا في باقة {{2}}.\n\n{{3}}\n\nاضغط على الرابط التالي لاستلام هديتك واختيار موعد بدء الاشتراك:\n\n{{4}}\n\nنتمنى لك تجربة رياضية رائعة!",
+        ],
     ];
 
     /** Values campaigns can use. */

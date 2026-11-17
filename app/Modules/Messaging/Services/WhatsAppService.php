@@ -173,6 +173,66 @@ final class WhatsAppService
     }
 
     /**
+     * Queue an approved template to a number that need not be a member's (a gift's recipient, #192): no member is made
+     * or linked for it. The caller holds the consent (a gift: the recipient's own message from the number). It shows in
+     * that number's chat when there is one. `$shown` are the values the stored body is written with, for whoever reads
+     * the log or the chat, when a real value must not be kept there (a gift's secret link); the real ones are sent.
+     * Null when WhatsApp is off for the club or this dedupe key was already used.
+     *
+     * @param  array<string, string>  $values
+     * @param  array<string, string>  $shown
+     */
+    public function queuePhoneTemplate(string $phone, string $key, array $values, Model $related, string $dedupeKey, array $shown = []): ?Message
+    {
+        if (! $this->enabled() || Message::where('dedupe_key', $dedupeKey)->exists()) {
+            return null;
+        }
+
+        $template = MessageTemplate::where('key', $key)->first();
+        $phone = Phone::normalize($phone);
+        $skip = match (true) {
+            ! $template => 'template_missing',
+            ! $template->isUsable() => 'template_not_approved',
+            $phone === '' => 'no_phone',
+            default => null,
+        };
+        $params = $template ? array_map(fn ($name) => (string) ($values[$name] ?? ''), $template->variables ?? []) : [];
+        $display = $template ? array_map(fn ($name) => (string) ($shown[$name] ?? $values[$name] ?? ''), $template->variables ?? []) : [];
+        $conversation = $phone !== '' ? Conversation::where('phone', $phone)->first() : null;
+
+        try {
+            $message = DB::transaction(fn () => Message::create([
+                'conversation_id' => $conversation?->id,
+                'direction' => 'outbound',
+                'source' => Auth::guard('web')->check() ? Message::SOURCE_PLATFORM : Message::SOURCE_AUTOMATION,
+                'type' => 'template',
+                'to_phone' => $phone ?: null,
+                'template_key' => $key,
+                'template_name' => $template?->name,
+                'template_params' => $params,
+                'body' => $template?->render($display),
+                'status' => $skip ? Message::SKIPPED : Message::QUEUED,
+                'error_code' => $skip,
+                'dedupe_key' => $dedupeKey,
+                'related_type' => $related->getMorphClass(),
+                'related_id' => $related->getKey(),
+                'sent_by' => Auth::guard('web')->id(),
+            ]));
+        } catch (UniqueConstraintViolationException) {
+            return null;
+        }
+
+        if ($conversation && ! $skip) {
+            $this->conversations->recorded($conversation, $message);
+        }
+        if (! $skip) {
+            self::queueAfterCommit($message);
+        }
+
+        return $message;
+    }
+
+    /**
      * Queue a template message to a staff member (an internal alert such as a document about to expire). Only
      * an approved template is sent; a staff member without a phone is skipped. Returns null when WhatsApp is
      * off for the club or the alert was already sent (dedupe key).

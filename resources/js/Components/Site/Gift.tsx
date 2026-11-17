@@ -11,6 +11,23 @@ import { useLocale, useT } from '@/lib/i18n';
 
 export type GiftStatus = 'pending' | 'paid' | 'redeemed' | 'expired' | 'cancelled' | 'refunded';
 
+/** A typed number as the server stores it (Phone::normalize): digits only, 00 dropped, a local Omani number with 968. */
+export function normalizePhone(value: string): string {
+    let digits = value.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/\D+/g, '');
+    if (digits.startsWith('00')) digits = digits.slice(2);
+    return digits.length === 8 ? `968${digits}` : digits;
+}
+
+/** The shape of a mobile WhatsApp can reach (Phone::isMobile): an Omani 7/9 mobile or an international number. Not proof of an account. */
+export function isWhatsAppNumber(normalized: string): boolean {
+    return normalized.startsWith('968') ? /^968[79]\d{7}$/.test(normalized) : /^[1-9]\d{7,14}$/.test(normalized);
+}
+
+/** +968 9XXX XXXX, or +digits for another country (Phone::display). */
+export function displayPhone(normalized: string): string {
+    return normalized.startsWith('968') && normalized.length === 11 ? `+968 ${normalized.slice(3, 7)} ${normalized.slice(7)}` : normalized ? `+${normalized}` : '';
+}
+
 export interface GiftCardData {
     status: GiftStatus | string;
     recipient_name: string;

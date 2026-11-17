@@ -28,7 +28,19 @@ return new class extends Migration
             $table->string('giver_email', 190)->nullable();
             $table->string('recipient_name', 120);
             // Optional: when the giver gives it, only an account with this number redeems the gift from its link.
-            $table->string('recipient_phone', 30)->nullable();
+            // The recipient's WhatsApp number (Phone::normalize), required: the gift is sent there once paid. It is
+            // confirmed only by the recipient's own message from it (GiftWhatsApp): the code's hash finds the gift, the
+            // code is kept encrypted to show again, and the inbound message is the evidence (phone_verified_message_id).
+            $table->string('recipient_phone', 30);
+            $table->text('phone_verify_code')->nullable();
+            $table->char('phone_verify_hash', 64)->nullable()->unique();
+            $table->timestamp('phone_verify_expires_at')->nullable();
+            $table->timestamp('phone_verified_at')->nullable();
+            $table->foreignId('phone_verified_message_id')->nullable()->constrained('messages')->nullOnDelete();
+            // The gift's WhatsApp message (the latest attempt) and how many were queued: each attempt has its own
+            // dedupe key, so a webhook replayed or a nightly run never sends it twice.
+            $table->foreignId('whatsapp_message_id')->nullable()->constrained('messages')->nullOnDelete();
+            $table->unsignedSmallInteger('whatsapp_attempts')->default(0);
             $table->string('message', 300)->nullable();
             $table->foreignId('invoice_id')->nullable()->unique()->constrained('invoices')->restrictOnDelete();
             $table->string('status', 20)->default('pending');

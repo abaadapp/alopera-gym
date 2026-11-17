@@ -6,7 +6,7 @@ import { Badge, Button, ChoiceCard, DataTable, Field, Input, Modal, Notice, Page
 import { clientKey } from '@/Components/Inventory/parts';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, dayCount, money } from '@/lib/format';
-import { GIFT_FILTERS, GIFT_PAYMENT, defaultGiftPayment, giftPaymentChoices, type GiftRow } from '@/lib/gifts';
+import { GIFT_DELIVERY_TONE, GIFT_FILTERS, GIFT_PAYMENT, defaultGiftPayment, giftPaymentChoices, type GiftRow } from '@/lib/gifts';
 import { giftStatus, label } from '@/lib/labels';
 import type { Paginated } from '@/types';
 
@@ -58,6 +58,8 @@ export default function GiftsIndex({ gifts, counts, plans, methods, redeemDays, 
         { key: 'giver', header: 'المُهدي', cell: (g) => g.giver_name },
         { key: 'plan', header: 'الباقة', cell: (g) => <Plan g={g} /> },
         { key: 'status', header: 'الحالة', cell: (g) => <GiftStatusBadge gift={g} /> },
+        // Where the gift's WhatsApp message is: «أُرسلت إلى المزود» is not «تم التسليم» (status webhooks decide it).
+        { key: 'delivery', header: 'واتساب', cell: (g) => <Badge tone={GIFT_DELIVERY_TONE[g.delivery.state]}>{g.delivery.label}</Badge> },
         { key: 'expires_on', header: 'صالحة حتى', cell: (g) => <span className="whitespace-nowrap text-xs">{date(g.expires_on)}</span> },
         { key: 'price', header: 'السعر', align: 'end', cell: (g) => <span className="num">{money(g.price, currency)}</span> },
     ];
@@ -100,6 +102,7 @@ export default function GiftsIndex({ gifts, counts, plans, methods, redeemDays, 
                             <GiftStatusBadge gift={g} />
                         </div>
                         <p className="text-muted">{g.plan.name}{g.plan.duration_label ? ` · ${g.plan.duration_label}` : ''}{g.expires_on ? <> · حتى {date(g.expires_on)}</> : null}</p>
+                        <p><Badge tone={GIFT_DELIVERY_TONE[g.delivery.state]}>واتساب: {g.delivery.label}</Badge></p>
                         <p className="num text-end">{money(g.price, currency)}</p>
                     </div>
                 )}
@@ -180,8 +183,8 @@ function IssueGiftModal({ open, onClose, plans, methods, redeemDays }: { open: b
                     <Field label="هاتف المُهدي" error={err.giver_phone}>
                         <Input dir="ltr" type="tel" value={form.data.giver_phone} onChange={(e) => form.setData('giver_phone', e.target.value)} placeholder="9XXXXXXX" />
                     </Field>
-                    <Field label="رقم جوال المستلمة (اختياري)" error={err.recipient_phone} hint="إن أُدخل فلا تُستلم الهدية من الرابط إلا بحساب هذا الرقم؛ ويستطيع الموظف تفعيلها لغيره. لا يُرسل رمز تحقق، فالرقم لا يثبت الملكية: سرية الرابط هي الحماية.">
-                        <Input dir="ltr" type="tel" value={form.data.recipient_phone} onChange={(e) => form.setData('recipient_phone', e.target.value)} placeholder="9XXXXXXX" maxLength={32} />
+                    <Field label="رقم واتساب المستلمة" required error={err.recipient_phone} hint="تُرسل الهدية إلى واتساب هذا الرقم بعد اكتمال الدفع وبعد أن تؤكده المستلمة برسالة منه. لا يُستلم من الرابط إلا بحساب هذا الرقم.">
+                        <Input dir="ltr" type="tel" value={form.data.recipient_phone} onChange={(e) => form.setData('recipient_phone', e.target.value)} placeholder="9XXXXXXX" maxLength={32} required />
                     </Field>
                     <Field label="بريد المُهدي" error={err.giver_email}>
                         <Input dir="ltr" type="email" value={form.data.giver_email} onChange={(e) => form.setData('giver_email', e.target.value)} />

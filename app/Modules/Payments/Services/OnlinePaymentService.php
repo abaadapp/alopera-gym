@@ -125,6 +125,12 @@ final class OnlinePaymentService
             if (Payment::where('invoice_id', $invoice->id)->gatewayCreditLeft()->exists()) {
                 throw new BusinessRuleException('paymob.held', 'وصلنا تأكيد دفعة إلكترونية لهذه الفاتورة وهي قيد المراجعة لدى النادي؛ لا حاجة للدفع مرة أخرى.');
             }
+            // A gift bought on the website is paid only once its recipient confirmed her WhatsApp number with a message
+            // from it (#192), whichever page the checkout is asked from (the gift's page or the invoice's pay link).
+            $gift = $invoice->type === 'gift' ? GiftMembership::where('invoice_id', $invoice->id)->first() : null;
+            if ($gift && $gift->source === 'site' && ! $gift->phoneVerified()) {
+                throw new BusinessRuleException('gift.phone_unverified', 'أكّد رقم واتساب المستلمة أولًا، ثم ادفع قيمة الهدية.');
+            }
 
             // A website order holds its stock only until reserved_until: its checkout must not outlive the hold, or the
             // customer could pay for an order already cancelled whose stock was sold to someone else.

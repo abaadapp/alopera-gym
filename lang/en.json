@@ -157,5 +157,14 @@
     "يوجد اشتراك آخر يغطي هذه الأيام. اختر تاريخ بداية بعد نهايته.": "Another membership covers these days. Choose a start date after it ends.",
     "يوجد اشتراك بانتظار الدفع على هذا الحساب. أكمل دفعه أو ألغِه قبل استلام الهدية.": "A membership on this account is awaiting payment. Pay or cancel it before claiming the gift.",
     "هذه الهدية مخصصة لرقم جوال آخر. استلميها بالحساب المسجّل برقم المستلمة، أو اطلبي تفعيلها من استقبال النادي.": "This gift is tied to another phone number. Claim it with the account registered to the recipient's number, or ask the club reception to activate it.",
-    "هذه الهدية مرتبطة برقم جوال المستلمة. أنشئي الحساب بذلك الرقم.": "This gift is tied to the recipient's phone number. Create the account with that number."
+    "هذه الهدية مرتبطة برقم جوال المستلمة. أنشئي الحساب بذلك الرقم.": "This gift is tied to the recipient's phone number. Create the account with that number.",
+    "أدخل رقم واتساب صحيحًا للمستلمة، مثل 9XXXXXXX أو ‎+968 9XXX XXXX.": "Enter a valid WhatsApp number for the recipient, such as 9XXXXXXX or +968 9XXX XXXX.",
+    "تأكيد رقم واتساب المستلمة غير متاح حاليًا، فلا يمكن شراء الهدية من الموقع الآن. يمكن شراؤها من استقبال النادي.": "Confirming the recipient's WhatsApp number is not available right now, so the gift cannot be bought on the website at the moment. It can be bought at the club reception.",
+    "تم تأكيد الرقم ولا يُغيَّر من هنا. تواصل مع النادي لتغييره.": "The number is confirmed and cannot be changed here. Contact the club to change it.",
+    "أكّد رقم واتساب المستلمة أولًا، ثم ادفع قيمة الهدية.": "Confirm the recipient's WhatsApp number first, then pay for the gift.",
+    "أدخل رقم واتساب صحيحًا للمستلمة.": "Enter a valid WhatsApp number for the recipient.",
+    "هذا هو رقم المستلمة الحالي.": "This is already the recipient's number.",
+    "تأكيد رقم المستلمة": "Confirm the recipient's number",
+    "واتساب النادي غير مربوط بالنظام أو غير مفعّل.": "The club's WhatsApp is not connected or not enabled.",
+    "رقم واتساب النادي غير مسجّل في إعدادات واتساب.": "The club's WhatsApp number is not set in the WhatsApp settings."
 }

@@ -3,6 +3,7 @@
 namespace App\Modules\Gym\Http\Controllers;
 
 use App\Core\Support\BusinessRuleException;
+use App\Core\Support\Phone;
 use App\Core\Support\SubmittedOnce;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
@@ -18,6 +19,7 @@ use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Services\GiftService;
+use App\Modules\Gym\Services\GiftWhatsApp;
 use App\Modules\Gym\Services\MemberService;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Support\GiftLinks;
@@ -46,7 +48,7 @@ final class GiftController extends Controller
         $today = today()->toDateString();
         $term = trim($request->string('q')->toString());
 
-        $query = BranchContext::scope(GiftMembership::with(['invoice:id,number,status,total,paid_total,credited_total', 'member:id,full_name,member_no']))
+        $query = BranchContext::scope(GiftMembership::with(['invoice:id,number,status,total,paid_total,credited_total', 'member:id,full_name,member_no', 'whatsappMessage:id,status']))
             ->when($filter === 'paid', fn ($q) => $q->where('status', GiftMembership::PAID)->where(fn ($w) => $w->whereNull('expires_on')->orWhere('expires_on', '>=', $today)))
             ->when($filter === 'expired', fn ($q) => $q->where(fn ($w) => $w->where('status', GiftMembership::EXPIRED)
                 ->orWhere(fn ($p) => $p->where('status', GiftMembership::PAID)->where('expires_on', '<', $today))))
@@ -79,7 +81,7 @@ final class GiftController extends Controller
             'giver_phone' => ['nullable', 'string', 'max:32', 'regex:/^[+0-9٠-٩\s-]{8,20}$/u'],
             'giver_email' => ['nullable', 'email', 'max:190'],
             'recipient_name' => ['required', 'string', 'max:120'],
-            'recipient_phone' => ['nullable', 'string', 'max:32', 'regex:/^[+0-9٠-٩\s-]{8,20}$/u'],
+            'recipient_phone' => ['required', 'string', Phone::mobileRule('أدخل رقم واتساب صحيحًا للمستلمة، مثل 9XXXXXXX أو ‎+968 9XXX XXXX.')],
             'message' => ['nullable', 'string', 'max:300'],
             // «لاحقًا» issues the gift with its invoice open; it becomes usable once the invoice is paid in full.
             'payment_method' => ['required', 'in:later,'.implode(',', self::METHODS)],
@@ -102,7 +104,7 @@ final class GiftController extends Controller
         }));
 
         return redirect()->route('club.gifts.show', $gift)->with('success', match (true) {
-            $gift->status === GiftMembership::PAID => 'صدرت الهدية '.$gift->number.' وهي جاهزة للمشاركة.',
+            $gift->status === GiftMembership::PAID => 'صدرت الهدية '.$gift->number.' وهي مدفوعة. تُرسل إلى واتساب المستلمة بعد أن تؤكد رقمها.',
             $data['payment_method'] === 'bank_transfer' => 'صدرت الهدية '.$gift->number.'. التحويل ينتظر تأكيد المالية، وتصبح الهدية صالحة بعده.',
             default => 'صدرت الهدية '.$gift->number.' بانتظار الدفع، وتصبح صالحة بعد سداد فاتورتها كاملة.',
         });
@@ -134,6 +136,7 @@ final class GiftController extends Controller
                 ->where('event', 'like', 'gift.%')->latest('id')->limit(30)->get(['id', 'event', 'actor_name', 'created_at'])
                 ->map(fn (AuditLog $a) => ['id' => $a->id, 'event' => $a->event, 'by' => $a->actor_name, 'at' => $a->created_at?->toIso8601String()]),
             'methods' => $user->can('payments.record') && $user->can('gifts.create') && $gift->status === GiftMembership::PENDING ? self::METHODS : [],
+            'delivery_panel' => $this->whatsappPanel($gift, $user),
             'redeem' => [
                 'min' => today()->toDateString(),
                 'max' => today()->addDays(GiftService::MAX_START_DAYS)->toDateString(),
@@ -197,6 +200,61 @@ final class GiftController extends Controller
         });
 
         return back()->with('success', 'تم تفعيل الهدية '.$gift->number.' للعضو '.$gift->member?->full_name.'.');
+    }
+
+    /** A new confirmation code for the recipient's number (the old one stops); nothing is sent. */
+    public function newCode(GiftMembership $gift): RedirectResponse
+    {
+        abort_unless(in_array($gift->status, [GiftMembership::PENDING, GiftMembership::PAID], true) && ! $gift->phoneVerified(), 404);
+        app(GiftWhatsApp::class)->newCode($gift);
+
+        return back()->with('success', 'صدر رمز تأكيد جديد لرقم المستلمة، والرمز السابق لم يعد يعمل.');
+    }
+
+    /** Correct the recipient's number: confirmed again, and a new link when the old one may have gone out. */
+    public function changeRecipient(Request $request, GiftMembership $gift): RedirectResponse
+    {
+        $data = $request->validate([
+            'recipient_phone' => ['required', 'string', Phone::mobileRule('أدخل رقم واتساب صحيحًا للمستلمة، مثل 9XXXXXXX أو ‎+968 9XXX XXXX.')],
+        ], [], ['recipient_phone' => 'رقم واتساب المستلمة']);
+        $exposed = $gift->paid_at !== null || $gift->whatsapp_message_id !== null;
+        app(GiftWhatsApp::class)->changeRecipient($gift, $data['recipient_phone']);
+
+        return back()->with('success', 'غُيّر رقم المستلمة. يؤكده الرقم الجديد برسالة منه قبل إرسال الهدية'.($exposed ? '، وأُصدر للهدية رابط جديد أوقف القديم.' : '.'));
+    }
+
+    /** Send the gift's message again (none went, or the last failed); twice at once is still one. */
+    public function resend(Request $request, GiftMembership $gift): RedirectResponse
+    {
+        $data = $request->validate(['client_key' => SubmittedOnce::RULE]);
+        SubmittedOnce::run($data['client_key'] ?? null, 'gift-resend', fn () => app(GiftWhatsApp::class)->resend($gift));
+
+        return back()->with('success', 'جُهّزت رسالة الهدية '.$gift->number.' للإرسال إلى واتساب المستلمة.');
+    }
+
+    /**
+     * The WhatsApp side of the gift: the number's confirmation (its code, message and link only for whoever issues
+     * gifts, to pass on), the message's delivery, and what this user may do about it.
+     *
+     * @return array<string, mixed>
+     */
+    private function whatsappPanel(GiftMembership $gift, User $user): array
+    {
+        $whatsapp = app(GiftWhatsApp::class);
+        $verification = $whatsapp->verification($gift);
+        if (! $user->can('gifts.create')) {
+            $verification = array_merge($verification, ['code' => null, 'text' => null, 'link' => null]);
+        }
+        $delivery = $whatsapp->delivery($gift);
+        $open = in_array($gift->status, [GiftMembership::PENDING, GiftMembership::PAID], true);
+
+        return [
+            'verification' => $verification,
+            'delivery' => $delivery,
+            'can_new_code' => $user->can('gifts.create') && $open && ! $gift->phoneVerified() && $verification['state'] !== 'unavailable',
+            'can_change' => $user->can('gifts.manage') && $open,
+            'can_resend' => $user->can('gifts.manage') && $delivery['can_send'],
+        ];
     }
 
     /** «رابط جديد»: the old link stops at once; the new one is shown on the page to copy or share. */

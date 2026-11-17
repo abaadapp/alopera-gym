@@ -25,8 +25,9 @@ import { PlanCard, type PlanData } from '@/Pages/Site/Plans';
 import GiftBuy from '@/Pages/Site/GiftBuy';
 import GiftCard from '@/Pages/Site/GiftCard';
 import GiftClaim from '@/Pages/Site/GiftClaim';
+import GiftVerify, { type GiftVerification } from '@/Pages/Site/GiftVerify';
 import GiftRedeem from '@/Pages/Portal/GiftRedeem';
-import type { GiftCardData } from '@/Components/Site/Gift';
+import { displayPhone, isWhatsAppNumber, normalizePhone, type GiftCardData } from '@/Components/Site/Gift';
 import { hasEnglish } from '@/lib/i18n';
 
 beforeAll(() => {
@@ -102,7 +103,7 @@ describe('the gift card at its link', () => {
 
 describe('buying a gift: the policy before payment (#192)', () => {
     const buy = () => render(
-        <GiftBuy site={site} seo={{ title: 'إهداء' }} plan={plan} summary={{ price: '29.000', tax: '0.000', tax_rate: 0, total: '29.000' }} onlinePayments terms={terms} />,
+        <GiftBuy site={site} seo={{ title: 'إهداء' }} plan={plan} summary={{ price: '29.000', tax: '0.000', tax_rate: 0, total: '29.000' }} onlinePayments whatsapp={{ available: true, refusal: null }} terms={terms} />,
     );
 
     it('states the window with the last day if paid today, and no refund, above the total and the pay button', () => {
@@ -121,17 +122,25 @@ describe('buying a gift: the policy before payment (#192)', () => {
         // The agreement is in the policy box, and the box comes before the total and the button.
         expect(policy.querySelector('input[type="checkbox"]')).toBeTruthy();
         const total = screen.getByText('الإجمالي');
-        const pay = screen.getByText('ادفع وأهدِ الآن');
+        const pay = screen.getByText('متابعة: تأكيد رقم المستلمة');
         expect(policy.compareDocumentPosition(total) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(policy.compareDocumentPosition(pay) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it('asks for the recipient\'s number as optional, left to right', () => {
+    it('asks for the recipient\'s WhatsApp number, required, left to right, and says where the gift goes', () => {
         buy();
-        const input = screen.getByText('رقم جوال المستلمة (اختياري)').closest('label')?.querySelector('input');
+        const input = screen.getByText('رقم واتساب المستلمة').closest('label')?.querySelector('input');
         expect(input?.getAttribute('dir')).toBe('ltr');
-        expect(input?.hasAttribute('required')).toBe(false);
-        expect(screen.getByText('إذا أدخلته فلا يستلم الهدية من الرابط إلا حساب بهذا الرقم. لا يظهر الرقم في بطاقة الهدية.')).toBeTruthy();
+        expect(input?.hasAttribute('required')).toBe(true);
+        expect(screen.getByText('نرسل الهدية إلى واتساب هذا الرقم. قبل الدفع تؤكد المستلمة الرقم برسالة منها.')).toBeTruthy();
+        expect(screen.getByText('+968')).toBeTruthy();
+    });
+
+    it('says so and sells nothing while the recipient\'s number cannot be confirmed', () => {
+        render(<GiftBuy site={site} seo={{ title: 'إهداء' }} plan={plan} summary={{ price: '29.000', tax: '0.000', tax_rate: 0, total: '29.000' }} onlinePayments
+            whatsapp={{ available: false, refusal: 'تأكيد رقم واتساب المستلمة غير متاح حاليًا، فلا يمكن شراء الهدية من الموقع الآن. يمكن شراؤها من استقبال النادي.' }} terms={terms} />);
+        expect(screen.getByText('تأكيد رقم واتساب المستلمة غير متاح حاليًا، فلا يمكن شراء الهدية من الموقع الآن. يمكن شراؤها من استقبال النادي.')).toBeTruthy();
+        expect((screen.getByText('متابعة: تأكيد رقم المستلمة').closest('button') as HTMLButtonElement).disabled).toBe(true);
     });
 
     it('has the English of every new phrase', () => {
@@ -142,8 +151,12 @@ describe('buying a gift: the policy before payment (#192)', () => {
             'لا تُردّ قيمة الهدية بعد استلامها، ولا يُردّ جزء منها.',
             'لا تُردّ قيمة الهدية بعد انتهاء مهلتها أو بعد استلامها، ولا يُردّ جزء منها.',
             'أوافق على سياسة الهدية وشروطها و:terms',
-            'رقم جوال المستلمة (اختياري)',
-            'إذا أدخلته فلا يستلم الهدية من الرابط إلا حساب بهذا الرقم. لا يظهر الرقم في بطاقة الهدية.',
+            'رقم واتساب المستلمة',
+            'نرسل الهدية إلى واتساب هذا الرقم. قبل الدفع تؤكد المستلمة الرقم برسالة منها.',
+            'سنرسل إلى: :number. تأكد أنه رقم واتساب المستلمة.',
+            'اكتب رقمًا عمانيًا يبدأ بـ 9 أو 7 (8 أرقام)، أو رقمًا دوليًا يبدأ بـ +.',
+            'متابعة: تأكيد رقم المستلمة',
+            'تأكيد رقم واتساب المستلمة غير متاح حاليًا، فلا يمكن شراء الهدية من الموقع الآن. يمكن شراؤها من استقبال النادي.',
             FOR_NUMBER,
             'استخدمي رقم الجوال الذي أدخله المُهدي.',
             'هذه الهدية مخصصة لرقم جوال آخر. استلميها بالحساب المسجّل برقم المستلمة، أو اطلبي تفعيلها من استقبال النادي.',
@@ -197,5 +210,55 @@ describe('a gift tied to the recipient\'s number (#192)', () => {
         expect(screen.getByText('تأكيد استلام الهدية')).toBeTruthy();
         expect(document.querySelector('input[type="date"]')).toBeTruthy();
         expect(screen.queryByText('هذه الهدية مخصصة لرقم جوال آخر. استلميها بالحساب المسجّل برقم المستلمة، أو اطلبي تفعيلها من استقبال النادي.')).toBeNull();
+    });
+});
+
+describe('the recipient\'s WhatsApp number (#192)', () => {
+    it('reads a number as the server does: Omani forms to one, its shape only', () => {
+        for (const typed of ['9555 1234', '+968 9555 1234', '0096895551234', '٩٥٥٥١٢٣٤']) expect(normalizePhone(typed)).toBe('96895551234');
+        expect(isWhatsAppNumber('96895551234')).toBe(true);
+        expect(isWhatsAppNumber('96871234567')).toBe(true);
+        expect(isWhatsAppNumber('96881234567')).toBe(false); // not a mobile
+        expect(isWhatsAppNumber('96824123456')).toBe(false); // a landline
+        expect(isWhatsAppNumber('447700900123')).toBe(true);
+        expect(isWhatsAppNumber('12345')).toBe(false);
+        expect(displayPhone('96895551234')).toBe('+968 9555 1234');
+    });
+
+    const verification = (over: Partial<GiftVerification> = {}): GiftVerification => ({
+        state: 'waiting', phone: '96895551234', verified_at: null, expires_at: '2026-11-18T12:00:00+04:00', code: 'K7Q2-9MPL',
+        text: 'أوافق على استلام رسائل Alopera Gym على هذا الرقم. رمز التأكيد: K7Q2-9MPL', link: 'https://wa.me/96824000000?text=x',
+        club_number: '96824000000', refusal: null, refusal_text: null, ...over,
+    });
+    const page = (v: GiftVerification, canPay = false) => render(
+        <GiftVerify site={site} seo={{ title: 'تأكيد' }} gift={card('pending')} token="t" recipient_phone="96895551234" verification={v} total="29.000" can_pay={canPay} online_payments terms={terms} />,
+    );
+
+    it('shows the number to check, the message she sends from it, and no payment before it is confirmed', () => {
+        const { container } = page(verification());
+        const text = container.textContent ?? '';
+        expect(text).toContain('+968 9555 1234');
+        expect(text).toContain('رمز التأكيد: K7Q2-9MPL');
+        // The buyer sees the total; the message the recipient sends names no gift and no price.
+        expect(screen.getByText('رمز التأكيد: K7Q2-9MPL', { exact: false }).textContent).not.toMatch(/هدية|29/);
+        expect(screen.getByText('فتح واتساب وإرسال الرسالة').closest('a')?.getAttribute('href')).toBe('https://wa.me/96824000000?text=x');
+        expect((screen.getByText('ادفع', { exact: false, selector: 'button' }) as HTMLButtonElement).disabled).toBe(true);
+        expect(text).toContain('صحة شكل الرقم لا تعني أن له حسابًا على واتساب');
+    });
+
+    it('offers the payment once her message confirmed the number, and says it cannot be done when WhatsApp is off', () => {
+        page(verification({ state: 'verified', code: null, text: null, link: null, verified_at: '2026-11-17T12:00:00+04:00' }), true);
+        expect(screen.getByText('تم تأكيد الرقم برسالة من المستلمة. بعد تأكيد الدفع نرسل لها الهدية على واتساب.')).toBeTruthy();
+        expect((screen.getByText('ادفع', { exact: false, selector: 'button' }) as HTMLButtonElement).disabled).toBe(false);
+        cleanup();
+        page(verification({ state: 'unavailable', code: null, text: null, link: null, refusal: 'not_connected', refusal_text: 'واتساب النادي غير مربوط بالنظام أو غير مفعّل.' }));
+        expect(screen.getByText('واتساب النادي غير مربوط بالنظام أو غير مفعّل.')).toBeTruthy();
+        expect(screen.queryByText('فتح واتساب وإرسال الرسالة')).toBeNull();
+    });
+
+    it('has the English of the confirmation page', () => {
+        for (const text of ['تأكيد رقم واتساب المستلمة', 'كيف تؤكد المستلمة رقمها', 'فتح واتساب وإرسال الرسالة', 'نسخ رابط التأكيد', 'بانتظار رسالة المستلمة…',
+            'يظهر الدفع بعد تأكيد رقم المستلمة.', 'ادفع :amount وأهدِ الآن', 'تم تأكيد الرقم برسالة من المستلمة. بعد تأكيد الدفع نرسل لها الهدية على واتساب.',
+            'صحة شكل الرقم لا تعني أن له حسابًا على واتساب: يتأكد ذلك فقط عندما تصلنا رسالة من الرقم نفسه.']) expect(hasEnglish(text), text).toBe(true);
     });
 });

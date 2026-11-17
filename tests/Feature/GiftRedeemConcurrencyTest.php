@@ -38,10 +38,10 @@ class GiftRedeemConcurrencyTest extends TestCase
     {
         $club = $this->club();
         $plan = $this->plan($club);
-        $recipient = $this->member($club);
+        $recipient = $this->member($club, ['phone' => '91234567']);
         $walkIn = $this->member($club);
         $gift = $this->asTenant($club, function () use ($plan) {
-            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara', 'recipient_name' => 'Noor'], 'site');
+            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara', 'recipient_name' => 'Noor', 'recipient_phone' => '91234567'], 'site');
             app(PaymentService::class)->record($gift->invoice, $gift->invoice->balance(), 'cash');
 
             return $gift->fresh();

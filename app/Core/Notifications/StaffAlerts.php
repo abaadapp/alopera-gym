@@ -187,6 +187,18 @@ final class StaffAlerts
         $this->tenants->id() === (int) $record->tenant_id ? $send() : $this->tenants->run(Tenant::findOrFail($record->tenant_id), $send);
     }
 
+    /**
+     * A gift's WhatsApp message did not reach its recipient (#192): whoever issues gifts or may correct the number and
+     * send it again, in the gift's branch. Once per attempt; the paid gift itself is left as it is.
+     */
+    public function giftUndelivered(GiftMembership $gift, string $reason): void
+    {
+        $this->notifier->notify(['gifts.manage', 'gifts.create'], 'gift-whatsapp:'.$gift->id.':'.$gift->whatsapp_attempts, 'membership',
+            'لم تصل رسالة الهدية '.$gift->number.' إلى واتساب المستلمة'.($reason !== '' ? ': '.$reason : '.'),
+            route('club.gifts.show', $gift),
+            fn (User $u) => $this->branches->allows($u, $gift->branch_id ? (int) $gift->branch_id : null));
+    }
+
     /** The records the bell said were not in the books and that are now (the sync posted them, or a later save did). */
     public function settleLedger(): void
     {

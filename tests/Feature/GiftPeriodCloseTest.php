@@ -35,7 +35,7 @@ class GiftPeriodCloseTest extends TestCase
         $plan = $this->plan($club, ['price' => '30']);
 
         return $this->asTenant($club, function () use ($plan, $method) {
-            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara', 'recipient_name' => 'Noor'], 'staff');
+            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara', 'recipient_name' => 'Noor', 'recipient_phone' => '91234567'], 'staff');
             $payment = app(PaymentService::class)->record($gift->invoice, $gift->invoice->balance(), $method);
             $payment->status === Payment::PENDING && app(PaymentService::class)->confirm($payment);
 

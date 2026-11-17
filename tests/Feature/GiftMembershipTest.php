@@ -36,7 +36,7 @@ class GiftMembershipTest extends TestCase
     private function giftFor(Tenant $club, MembershipPlan $plan, string $source = 'staff'): GiftMembership
     {
         return $this->asTenant($club, fn () => $this->gifts()->issue($plan, [
-            'giver_name' => 'Sara', 'giver_phone' => '96891234567', 'recipient_name' => 'Noor', 'message' => 'Happy birthday',
+            'giver_name' => 'Sara', 'giver_phone' => '96891234567', 'recipient_name' => 'Noor', 'recipient_phone' => '91234567', 'message' => 'Happy birthday',
         ], $source));
     }
 
@@ -65,7 +65,7 @@ class GiftMembershipTest extends TestCase
             $this->assertSame($plan->snapshot()['duration_unit'], $gift->plan_snapshot['duration_unit']);
             $this->assertNull($gift->expires_on);
 
-            $member = $this->member(Tenant::find($gift->tenant_id));
+            $member = $this->member(Tenant::find($gift->tenant_id), ['phone' => '91234567']);
             try {
                 $this->gifts()->redeem($gift, $member, today()->toDateString(), 'link');
                 $this->fail('An unpaid gift was redeemed.');
@@ -112,7 +112,7 @@ class GiftMembershipTest extends TestCase
         $club = $this->club();
         $plan = $this->plan($club, ['price' => 30, 'signup_fee' => 5, 'duration_value' => 1, 'duration_unit' => 'month']);
         $gift = $this->paidGift($club, $plan);
-        $member = $this->member($club);
+        $member = $this->member($club, ['phone' => '91234567']);
         $start = today()->addDays(10);
 
         $this->asTenant($club, function () use ($gift, $member, $start) {
@@ -162,7 +162,7 @@ class GiftMembershipTest extends TestCase
     {
         $club = $this->club();
         $gift = $this->paidGift($club, $this->plan($club));
-        $first = $this->member($club);
+        $first = $this->member($club, ['phone' => '91234567']);
         $second = $this->member($club);
 
         $this->asTenant($club, function () use ($gift, $first, $second) {
@@ -182,7 +182,7 @@ class GiftMembershipTest extends TestCase
     {
         $club = $this->club();
         $plan = $this->plan($club);
-        $member = $this->member($club);
+        $member = $this->member($club, ['phone' => '91234567']);
         $this->activeMembership($club, $member, $plan);
         $gift = $this->paidGift($club, $plan);
 
@@ -271,7 +271,7 @@ class GiftMembershipTest extends TestCase
     {
         $club = $this->club();
         $gift = $this->paidGift($club, $this->plan($club));
-        $member = $this->member($club);
+        $member = $this->member($club, ['phone' => '91234567']);
 
         $this->asTenant($club, function () use ($gift, $member) {
             $this->gifts()->redeem($gift, $member, today()->toDateString(), 'link');
@@ -285,12 +285,12 @@ class GiftMembershipTest extends TestCase
         $club = $this->club();
         $plan = $this->plan($club, ['price' => 30]);
         $gift = $this->paidGift($club, $plan);
-        $member = $this->member($club);
+        $member = $this->member($club, ['phone' => '91234567']);
 
         $this->asTenant($club, function () use ($plan, $gift, $member) {
             $plan->update(['giftable' => false]);
             try {
-                $this->gifts()->issue($plan->fresh(), ['giver_name' => 'A', 'recipient_name' => 'B'], 'site');
+                $this->gifts()->issue($plan->fresh(), ['giver_name' => 'A', 'recipient_name' => 'B', 'recipient_phone' => '91234567'], 'site');
                 $this->fail('A plan closed to gifts was gifted.');
             } catch (BusinessRuleException) {
             }
@@ -342,7 +342,7 @@ class GiftMembershipTest extends TestCase
         $plan = $this->plan($club, ['price' => 30, 'duration_value' => 30, 'duration_unit' => 'day']);
         $better = $this->plan($club, ['name' => 'Gold', 'price' => 90, 'duration_value' => 30, 'duration_unit' => 'day']);
         $gift = $this->paidGift($club, $plan);
-        $member = $this->member($club);
+        $member = $this->member($club, ['phone' => '91234567']);
 
         $this->asTenant($club, function () use ($gift, $member, $better) {
             $membership = $this->gifts()->redeem($gift, $member, today()->toDateString(), 'link')->membership;

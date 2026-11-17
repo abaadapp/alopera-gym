@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Tenant;
 use App\Modules\Gym\Services\GiftService;
+use App\Modules\Gym\Services\GiftWhatsApp;
 use App\Modules\Gym\Services\MembershipService;
 use App\Modules\Gym\Services\PtService;
 
@@ -19,7 +20,9 @@ class RunDailyMemberships extends ForEachTenant
         $pt = app(PtService::class)->expireDue();
         $reconciled = app(GiftService::class)->reconcilePaid();
         $gifts = app(GiftService::class)->expireDue();
+        // Paid, confirmed gifts whose WhatsApp message has not gone (the switch or the template came later): once each.
+        $sent = app(GiftWhatsApp::class)->sendPending();
 
-        return "started={$r['started']} resumed={$r['resumed']} expired={$r['expired']} pt_expired={$pt} gifts_paid={$reconciled} gifts_expired={$gifts}";
+        return "started={$r['started']} resumed={$r['resumed']} expired={$r['expired']} pt_expired={$pt} gifts_paid={$reconciled} gifts_expired={$gifts} gifts_sent={$sent}";
     }
 }

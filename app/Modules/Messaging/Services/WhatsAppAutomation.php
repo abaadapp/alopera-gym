@@ -10,8 +10,9 @@ use App\Models\Tenant;
  * after-expiry follow-up is a marketing message and needs marketing consent as well. Each one is sent once (its
  * dedupe key), however often the daily job or the event runs.
  *
- * Stored in the club's settings: whatsapp_automation.off (the notices switched off), whatsapp_automation.hour (the
- * hour the daily reminders go out); the days before and after expiry are the club's existing reminder settings.
+ * Stored in the club's settings: whatsapp_automation.off (the notices switched off), whatsapp_automation.enabled (the
+ * notices off by default that were switched on), whatsapp_automation.hour (the hour the daily reminders go out); the
+ * days before and after expiry are the club's existing reminder settings.
  */
 final class WhatsAppAutomation
 {
@@ -25,12 +26,23 @@ final class WhatsAppAutomation
         'membership_followup' => ['label' => 'متابعة بعد الانتهاء (تسويقية)', 'detail' => 'بعد الانتهاء بالأيام المحددة لمن لم يجدد ووافق على الرسائل التسويقية.', 'templates' => ['membership_followup'], 'timing' => 'expired_followup_days'],
         'membership_renewed' => ['label' => 'تأكيد تجديد العضوية', 'detail' => 'عند تفعيل التجديد بعد دفعه.', 'templates' => ['membership_renewed']],
         'payment_received' => ['label' => 'تأكيد الدفع', 'detail' => 'عند تسجيل دفعة مؤكدة لها إيصال (التحويل البنكي بعد تأكيده فقط).', 'templates' => ['payment_received', 'membership_paid_after_end']],
+        'gift_received' => ['label' => 'إرسال هدية الاشتراك للمستلمة', 'detail' => 'بعد اكتمال دفع الهدية، إلى رقم المستلمة بعد أن تؤكده برسالة منها.', 'templates' => ['gift_received']],
     ];
+
+    /**
+     * Notices that stay off until the club switches them on (whatsapp_automation.enabled), not on until switched off:
+     * the gift goes to someone who is not a member, so nothing is sent before the owner decides it (#192).
+     */
+    public const OFF_BY_DEFAULT = ['gift_received'];
 
     public const DEFAULT_HOUR = 10;
 
     public static function on(Tenant $tenant, string $event): bool
     {
+        if (in_array($event, self::OFF_BY_DEFAULT, true)) {
+            return in_array($event, (array) $tenant->setting('whatsapp_automation.enabled', []), true);
+        }
+
         return ! in_array($event, (array) $tenant->setting('whatsapp_automation.off', []), true);
     }
 

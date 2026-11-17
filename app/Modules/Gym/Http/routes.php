@@ -75,6 +75,11 @@ Route::get('/gifts/members', [GiftController::class, 'members'])->middleware('ca
 Route::get('/gifts/{gift}', [GiftController::class, 'show'])->whereNumber('gift')->middleware('can:gifts.view')->name('gifts.show');
 Route::post('/gifts/{gift}/pay', [GiftController::class, 'pay'])->whereNumber('gift')->middleware(['can:gifts.create', 'can:payments.record'])->name('gifts.pay');
 Route::post('/gifts/{gift}/redeem', [GiftController::class, 'redeem'])->whereNumber('gift')->middleware('can:gifts.redeem')->name('gifts.redeem');
+// The recipient's WhatsApp (#192): a new confirmation code (whoever issues gifts), a corrected number and a new send
+// attempt (whoever manages them).
+Route::post('/gifts/{gift}/code', [GiftController::class, 'newCode'])->whereNumber('gift')->middleware('can:gifts.create')->name('gifts.code');
+Route::post('/gifts/{gift}/recipient', [GiftController::class, 'changeRecipient'])->whereNumber('gift')->middleware('can:gifts.manage')->name('gifts.recipient');
+Route::post('/gifts/{gift}/resend', [GiftController::class, 'resend'])->whereNumber('gift')->middleware('can:gifts.manage')->name('gifts.resend');
 Route::post('/gifts/{gift}/link', [GiftController::class, 'rotateLink'])->whereNumber('gift')->middleware('can:gifts.manage')->name('gifts.link');
 Route::post('/gifts/{gift}/cancel', [GiftController::class, 'cancel'])->whereNumber('gift')->middleware('can:gifts.manage')->name('gifts.cancel');
 

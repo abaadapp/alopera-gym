@@ -47,7 +47,7 @@ class GiftAccountingTest extends TestCase
         $plan = $this->plan($club, ['price' => $price]);
 
         return $this->asTenant($club, function () use ($plan) {
-            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara', 'recipient_name' => 'Noor'], 'staff');
+            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara', 'recipient_name' => 'Noor', 'recipient_phone' => '91234567'], 'staff');
             app(PaymentService::class)->record($gift->invoice, $gift->invoice->balance(), 'cash');
 
             return $gift->fresh();
@@ -69,7 +69,7 @@ class GiftAccountingTest extends TestCase
         $this->assertBooks($club, ['cash' => '30.000', 'receivable' => '0.000', 'gift_liability' => '30.000',
             'revenue_membership' => '0.000', 'revenue_other' => '0.000']);
 
-        $this->asTenant($club, fn () => app(GiftService::class)->redeem($gift, $this->member($club), today()->toDateString(), 'link'));
+        $this->asTenant($club, fn () => app(GiftService::class)->redeem($gift, $this->member($club, ['phone' => '91234567']), today()->toDateString(), 'link'));
         $this->assertBooks($club, ['cash' => '30.000', 'gift_liability' => '0.000', 'revenue_membership' => '30.000', 'receivable' => '0.000']);
     }
 
@@ -163,7 +163,7 @@ class GiftAccountingTest extends TestCase
         $club = $this->club();
         $plan = $this->plan($club, ['price' => 30]);
         $gift = $this->asTenant($club, function () use ($plan) {
-            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara', 'recipient_name' => 'Noor'], 'staff');
+            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara', 'recipient_name' => 'Noor', 'recipient_phone' => '91234567'], 'staff');
             app(PaymentService::class)->record($gift->invoice, '10.000', 'cash');
 
             return $gift->fresh();
@@ -215,7 +215,7 @@ class GiftAccountingTest extends TestCase
         $club = $this->club();
         $plan = $this->plan($club, ['price' => 30]);
         $gift = $this->asTenant($club, function () use ($plan) {
-            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara', 'recipient_name' => 'Noor'], 'staff');
+            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara', 'recipient_name' => 'Noor', 'recipient_phone' => '91234567'], 'staff');
             // As after a rollback: the invoice was paid by code that did not know gifts.
             $gift->invoice->forceFill(['status' => Invoice::PAID, 'paid_total' => $gift->invoice->total, 'paid_at' => now()->subDays(3)])->saveQuietly();
 
@@ -240,7 +240,7 @@ class GiftAccountingTest extends TestCase
         $gift = $this->paidGift($club);
 
         $this->asTenant($club, function () use ($club, $gift) {
-            app(GiftService::class)->redeem($gift, $this->member($club), today()->toDateString(), 'link');
+            app(GiftService::class)->redeem($gift, $this->member($club, ['phone' => '91234567']), today()->toDateString(), 'link');
             $this->travel(1)->minutes();
             app(CreditNoteService::class)->issue($gift->invoice->fresh(), '5.000', 'Goodwill');
             $this->assertSame(GiftMembership::REDEEMED, $gift->fresh()->status);
@@ -256,7 +256,7 @@ class GiftAccountingTest extends TestCase
         $this->paidGift($club); // still owed
         $refunded = $this->paidGift($club);
         $this->asTenant($club, function () use ($club, $redeemed, $refunded) {
-            app(GiftService::class)->redeem($redeemed, $this->member($club), today()->toDateString(), 'link');
+            app(GiftService::class)->redeem($redeemed, $this->member($club, ['phone' => '91234567']), today()->toDateString(), 'link');
             app(CreditNoteService::class)->issue($refunded->invoice->fresh(), '30.000', 'Refund');
         });
         $expected = ['gift_liability' => '30.000', 'revenue_membership' => '30.000', 'receivable' => '-30.000', 'cash' => '90.000'];

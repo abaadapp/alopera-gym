@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GIFT_EVENTS, GIFT_FILTERS, defaultGiftPayment, giftCancelReason, giftForAnotherNumber, giftPaymentChoices, giftSource, redeemErrorStep, redeemGeneralErrors } from '@/lib/gifts';
+import { GIFT_DELIVERY_TONE, GIFT_EVENTS, GIFT_FILTERS, defaultGiftPayment, giftCancelReason, giftForAnotherNumber, giftPaymentChoices, giftSource, redeemErrorStep, redeemGeneralErrors } from '@/lib/gifts';
 import { giftStatus, invoiceType, label } from '@/lib/labels';
 
 const STATUSES = ['pending', 'paid', 'redeemed', 'expired', 'cancelled', 'refunded'];
@@ -39,7 +39,7 @@ describe('«هدايا الاشتراكات» in the panel (#192)', () => {
     });
 
     it('reads the history, the source and a voided invoice in words', () => {
-        expect(Object.keys(GIFT_EVENTS)).toHaveLength(8);
+        expect(Object.keys(GIFT_EVENTS)).toHaveLength(14);
         expect(GIFT_EVENTS['gift.unpaid']).toBe('أُلغيت دفعتها فعادت بانتظار الدفع');
         expect(GIFT_EVENTS['gift.link_rotated']).toBe('أُصدر لها رابط جديد');
         expect(giftCancelReason('invoice_voided')).toBe('أُلغيت فاتورتها');
@@ -59,5 +59,12 @@ describe('«هدايا الاشتراكات» in the panel (#192)', () => {
         expect(giftForAnotherNumber('96891234567', '٩١٢٣٤٥٦٧')).toBe(false);
         expect(giftForAnotherNumber('96891234567', '96899999999')).toBe(true);
         expect(giftForAnotherNumber('96891234567', '')).toBe(true);
+    });
+
+    it('colours each delivery state, never «sent» as delivered, and names the WhatsApp events in the history', () => {
+        expect(Object.keys(GIFT_DELIVERY_TONE).sort()).toEqual(['closed', 'delivered', 'failed', 'not_due', 'read', 'sending', 'sent', 'waiting']);
+        expect(GIFT_DELIVERY_TONE.sent).not.toBe(GIFT_DELIVERY_TONE.delivered);
+        expect(GIFT_DELIVERY_TONE.failed).toBe('red');
+        for (const e of ['gift.phone_verified', 'gift.recipient_changed', 'gift.whatsapp_queued', 'gift.whatsapp_resent', 'gift.whatsapp_failed']) expect(GIFT_EVENTS[e]).toBeTruthy();
     });
 });

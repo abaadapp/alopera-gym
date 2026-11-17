@@ -49,6 +49,11 @@ Route::get('/invoice/{token}/pdf', [PayController::class, 'invoicePdf'])->where(
 Route::get('/gift/plan/{plan}', [GiftSiteController::class, 'create'])->whereNumber('plan')->name('site.gift.create');
 Route::post('/gift/plan/{plan}', [GiftSiteController::class, 'store'])->whereNumber('plan')->middleware('throttle:public-forms')->name('site.gift.store');
 Route::get('/gift/{token}', [GiftSiteController::class, 'show'])->where('token', '[A-Za-z0-9]{48}')->middleware(['throttle:portal', PrivateLinkPage::class])->name('site.gift.show');
+// The recipient's WhatsApp number, confirmed by her message from it before the gift is paid (the buyer's own page).
+Route::get('/gift/{token}/verify', [GiftSiteController::class, 'verify'])->where('token', '[A-Za-z0-9]{48}')->middleware(['throttle:portal', PrivateLinkPage::class])->name('site.gift.verify');
+Route::post('/gift/{token}/verify/code', [GiftSiteController::class, 'newCode'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:public-forms')->name('site.gift.code');
+Route::post('/gift/{token}/verify/phone', [GiftSiteController::class, 'changePhone'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:public-forms')->name('site.gift.phone');
+Route::post('/gift/{token}/pay', [GiftSiteController::class, 'pay'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:public-forms')->name('site.gift.pay');
 Route::get('/gift/{token}/claim', [GiftSiteController::class, 'claim'])->where('token', '[A-Za-z0-9]{48}')->middleware(['throttle:portal', PrivateLinkPage::class])->name('site.gift.claim');
 Route::post('/gift/{token}/register', [GiftSiteController::class, 'register'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:public-forms')->name('site.gift.register');
 

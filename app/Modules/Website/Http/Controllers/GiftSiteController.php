@@ -15,6 +15,7 @@ use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Services\GiftService;
+use App\Modules\Gym\Services\GiftWhatsApp;
 use App\Modules\Gym\Services\MemberService;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Http\RendersSite;
@@ -33,8 +34,10 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
 /**
  * Gift memberships on the website (#192):
  *  - «إهداء هذه الباقة»: a published plan offered as a gift, bought without a member account and paid online through
- *    the existing Paymob path (OnlinePaymentService). The return from the gateway proves nothing: the gift is usable
- *    only once the signed webhook pays its invoice (InvoicePaid → ActivatePaidItems).
+ *    the existing Paymob path (OnlinePaymentService). The recipient's WhatsApp number is required and confirmed first,
+ *    by a message she sends from it (GiftWhatsApp); only then can it be paid. The return from the gateway proves
+ *    nothing: the gift is usable — and sent to her WhatsApp — only once the signed webhook pays its invoice
+ *    (InvoicePaid → ActivatePaidItems).
  *  - The gift's card at its secret link: names, plan, duration, message and the redemption deadline — never the price,
  *    the invoice or anyone's phone.
  *  - «استلمي هديتك»: the recipient signs in or creates an account, picks a start date and redeems it (GiftService).
@@ -70,6 +73,8 @@ class GiftSiteController extends Controller
             'plan' => GymPresenter::sitePlan($plan),
             'summary' => ['price' => $preview->subtotal, 'tax' => $preview->tax_total, 'tax_rate' => (float) $preview->tax_rate, 'total' => $preview->total],
             'onlinePayments' => $online->available(),
+            // The recipient confirms her WhatsApp number before the gift is paid; said up front when that cannot be done.
+            'whatsapp' => $this->whatsappState(),
             'terms' => $this->terms(),
         ], __('إهداء باقة :name', ['name' => SiteLanguage::pick($plan->name, $plan->name_en)]));
     }
@@ -82,7 +87,7 @@ class GiftSiteController extends Controller
             'giver_phone' => ['required', 'string', 'max:32', 'regex:/^[+0-9٠-٩\s-]{8,20}$/u'],
             'giver_email' => ['nullable', 'email', 'max:190'],
             'recipient_name' => ['required', 'string', 'max:120'],
-            'recipient_phone' => ['nullable', 'string', 'max:32', 'regex:/^[+0-9٠-٩\s-]{8,20}$/u'],
+            'recipient_phone' => ['required', 'string', Phone::mobileRule(SiteLanguage::word('أدخل رقم واتساب صحيحًا للمستلمة، مثل 9XXXXXXX أو ‎+968 9XXX XXXX.'))],
             'message' => ['nullable', 'string', 'max:300'],
             'accept_terms' => ['accepted'],
             'website' => ['prohibited'], // honeypot
@@ -90,28 +95,116 @@ class GiftSiteController extends Controller
         if (! $online->available()) {
             throw ValidationException::withMessages(['error' => SiteLanguage::word('الدفع الإلكتروني غير متاح حاليًا. يمكن شراء الهدية من استقبال النادي.')]);
         }
+        // The website's path confirms the number before payment: without the club's WhatsApp it cannot, so no gift.
+        if ($refusal = app(GiftWhatsApp::class)->verificationRefusal()) {
+            throw ValidationException::withMessages(['error' => SiteLanguage::word('تأكيد رقم واتساب المستلمة غير متاح حاليًا، فلا يمكن شراء الهدية من الموقع الآن. يمكن شراؤها من استقبال النادي.')]);
+        }
 
         $gift = DB::transaction(fn () => $this->gifts->issue($plan, [
             'giver_name' => $data['giver_name'],
             'giver_phone' => Phone::normalize($data['giver_phone']),
             'giver_email' => $data['giver_email'] ?? null,
             'recipient_name' => $data['recipient_name'],
-            'recipient_phone' => $data['recipient_phone'] ?? null,
+            'recipient_phone' => $data['recipient_phone'],
             'message' => $data['message'] ?? null,
         ], 'site'));
         $request->session()->push(self::BOUGHT, $gift->id);
 
-        try {
-            return Inertia::location(app(OnlinePaymentService::class)->start($gift->invoice, 'website')->checkout_url);
-        } catch (BusinessRuleException $e) {
-            return redirect()->route('site.gift.show', ['token' => $gift->linkToken()])->with('error', SiteLanguage::word($e->getMessage()));
+        // Next: the recipient confirms her number from WhatsApp; only then is the gift paid.
+        return redirect()->route('site.gift.verify', ['token' => $gift->linkToken()]);
+    }
+
+    /**
+     * «تأكيد رقم المستلمة»: the buyer's own page between the form and the payment. The number as typed (to check it),
+     * the message the recipient sends from it to the club's number, its state (refreshed by the page), and once
+     * confirmed, the payment. Only for the browser that bought it; anyone else sees the card.
+     */
+    public function verify(Request $request, string $token, OnlinePaymentService $online): Response|RedirectResponse
+    {
+        $gift = $this->gift($token);
+        if (! $this->isBuyer($request, $gift) || $gift->status !== GiftMembership::PENDING) {
+            return redirect()->route('site.gift.show', ['token' => $token]);
         }
+        $whatsapp = app(GiftWhatsApp::class);
+
+        return $this->page('Site/GiftVerify', [
+            'gift' => $this->card($gift),
+            'token' => $token,
+            'recipient_phone' => $gift->recipient_phone,
+            'verification' => (fn (array $v) => ['refusal_text' => $v['refusal_text'] !== null ? SiteLanguage::word($v['refusal_text']) : null] + $v)($whatsapp->verification($gift, SiteLanguage::isEnglish())),
+            'total' => $gift->invoice?->balance(),
+            'can_pay' => $gift->phoneVerified() && $online->available() && (bool) $gift->invoice?->isOpen(),
+            'online_payments' => $online->available(),
+            'terms' => $this->terms(),
+        ], __('تأكيد رقم المستلمة'));
+    }
+
+    /** A new code (the old one stops), while the number waits for its confirmation. */
+    public function newCode(Request $request, string $token): RedirectResponse
+    {
+        $gift = $this->buyersPendingGift($request, $token);
+        if (! $gift->phoneVerified()) {
+            app(GiftWhatsApp::class)->newCode($gift);
+        }
+
+        return redirect()->route('site.gift.verify', ['token' => $token]);
+    }
+
+    /** The buyer corrects the number before it is confirmed and before paying: a new code for the new number. */
+    public function changePhone(Request $request, string $token): RedirectResponse
+    {
+        $gift = $this->buyersPendingGift($request, $token);
+        $data = $request->validate([
+            'recipient_phone' => ['required', 'string', Phone::mobileRule(SiteLanguage::word('أدخل رقم واتساب صحيحًا للمستلمة، مثل 9XXXXXXX أو ‎+968 9XXX XXXX.'))],
+        ]);
+        if ($gift->phoneVerified()) {
+            throw ValidationException::withMessages(['recipient_phone' => SiteLanguage::word('تم تأكيد الرقم ولا يُغيَّر من هنا. تواصل مع النادي لتغييره.')]);
+        }
+        try {
+            $gift = app(GiftWhatsApp::class)->changeRecipient($gift, $data['recipient_phone']);
+        } catch (BusinessRuleException $e) {
+            throw ValidationException::withMessages(['recipient_phone' => SiteLanguage::word($e->getMessage())]);
+        }
+
+        return redirect()->route('site.gift.verify', ['token' => $gift->linkToken()]);
+    }
+
+    /** Pay for the gift, once its number is confirmed (OnlinePaymentService refuses it before, whatever the page). */
+    public function pay(Request $request, string $token, OnlinePaymentService $online): HttpResponse|RedirectResponse
+    {
+        $gift = $this->buyersPendingGift($request, $token);
+        try {
+            return Inertia::location($online->start($gift->invoice, 'website')->checkout_url);
+        } catch (BusinessRuleException $e) {
+            return redirect()->route('site.gift.verify', ['token' => $token])->with('error', SiteLanguage::word($e->getMessage()));
+        }
+    }
+
+    private function isBuyer(Request $request, GiftMembership $gift): bool
+    {
+        return in_array($gift->id, (array) $request->session()->get(self::BOUGHT, []), true);
+    }
+
+    private function buyersPendingGift(Request $request, string $token): GiftMembership
+    {
+        $gift = $this->gift($token);
+        abort_unless($this->isBuyer($request, $gift) && $gift->status === GiftMembership::PENDING, 404);
+
+        return $gift;
+    }
+
+    /** @return array{available: bool, refusal: string|null} */
+    private function whatsappState(): array
+    {
+        $refusal = app(GiftWhatsApp::class)->verificationRefusal();
+
+        return ['available' => $refusal === null, 'refusal' => $refusal !== null ? SiteLanguage::word('تأكيد رقم واتساب المستلمة غير متاح حاليًا، فلا يمكن شراء الهدية من الموقع الآن. يمكن شراؤها من استقبال النادي.') : null];
     }
 
     public function show(Request $request, string $token, OnlinePaymentService $online): Response
     {
         $gift = $this->gift($token);
-        $buyer = in_array($gift->id, (array) $request->session()->get(self::BOUGHT, []), true);
+        $buyer = $this->isBuyer($request, $gift);
         $redeemable = $gift->isRedeemable();
 
         return $this->page('Site/GiftCard', [
@@ -120,9 +213,10 @@ class GiftSiteController extends Controller
             'link' => $gift->paid_at ? $this->links->card($gift) : null,
             'whatsapp' => $redeemable ? $this->links->whatsapp($gift, SiteLanguage::isEnglish()) : null,
             'claim_url' => $redeemable ? route('site.gift.claim', ['token' => $token]) : null,
-            // The buyer, back before the webhook or after leaving the checkout: finish paying on the invoice's pay page.
+            // The buyer, back before the webhook or after leaving the checkout: finish paying on the invoice's pay page,
+            // or first confirm the recipient's number (the website's gift is paid only after that).
             'pay_url' => $buyer && $gift->status === GiftMembership::PENDING && $gift->invoice?->isOpen() && $online->available()
-                ? route('site.pay.show', ['token' => $gift->invoice->public_token]) : null,
+                ? ($gift->phoneVerified() ? route('site.pay.show', ['token' => $gift->invoice->public_token]) : route('site.gift.verify', ['token' => $token])) : null,
             'is_buyer' => $buyer,
             'terms' => $this->terms(),
         ], __('هدية لـ :name', ['name' => $gift->recipient_name]));

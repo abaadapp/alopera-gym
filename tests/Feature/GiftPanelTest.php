@@ -37,7 +37,7 @@ class GiftPanelTest extends TestCase
     private function issue(User $user, MembershipPlan $plan, array $data = []): TestResponse
     {
         return $this->actingAs($user)->post(route('club.gifts.store'), $data + [
-            'membership_plan_id' => $plan->id, 'giver_name' => 'Sara', 'giver_phone' => '91234567', 'recipient_name' => 'Noor',
+            'membership_plan_id' => $plan->id, 'giver_name' => 'Sara', 'giver_phone' => '91234567', 'recipient_name' => 'Noor', 'recipient_phone' => '95551234',
             'message' => 'Happy birthday', 'payment_method' => 'cash',
         ]);
     }

@@ -17,6 +17,7 @@ use App\Modules\Payments\Paymob\PaymobSignature;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\Concerns\BuildsClubs;
+use Tests\Concerns\SendsGiftWhatsApp;
 use Tests\TestCase;
 
 /**
@@ -26,7 +27,7 @@ use Tests\TestCase;
  */
 class GiftSiteTest extends TestCase
 {
-    use BuildsClubs, RefreshDatabase;
+    use BuildsClubs, RefreshDatabase, SendsGiftWhatsApp;
 
     private const HMAC = 'test-hmac-secret';
 
@@ -55,7 +56,7 @@ class GiftSiteTest extends TestCase
     /** @return array<string, string> */
     private function buyer(array $overrides = []): array
     {
-        return $overrides + ['giver_name' => 'Sara Giver', 'giver_phone' => '91234567', 'recipient_name' => 'Noor', 'message' => 'Happy birthday!', 'accept_terms' => '1'];
+        return $overrides + ['giver_name' => 'Sara Giver', 'giver_phone' => '91234567', 'recipient_name' => 'Noor', 'recipient_phone' => '95551234', 'message' => 'Happy birthday!', 'accept_terms' => '1'];
     }
 
     private function paidGift(Tenant $club): GiftMembership
@@ -63,7 +64,7 @@ class GiftSiteTest extends TestCase
         $plan = $this->plan($club, ['price' => 30]);
 
         return $this->asTenant($club, function () use ($plan) {
-            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara Giver', 'giver_phone' => '96891234567', 'recipient_name' => 'Noor', 'message' => 'Enjoy'], 'site');
+            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara Giver', 'giver_phone' => '96891234567', 'recipient_name' => 'Noor', 'recipient_phone' => '91234567', 'message' => 'Enjoy'], 'site');
             app(PaymentService::class)->record($gift->invoice, $gift->invoice->balance(), 'cash');
 
             return $gift->fresh();
@@ -113,7 +114,16 @@ class GiftSiteTest extends TestCase
         $this->configurePaymob($club);
         $plan = $this->plan($club, ['price' => 30]);
 
-        $this->post(route('site.gift.store', ['club' => $club->slug, 'plan' => $plan->id]), $this->buyer())->assertRedirectContains('unifiedcheckout');
+        $this->connectWhatsApp($club);
+
+        // The form leads to the recipient's confirmation, not to the gateway: no checkout before her number is confirmed.
+        $this->post(route('site.gift.store', ['club' => $club->slug, 'plan' => $plan->id]), $this->buyer())->assertRedirectContains('/verify');
+        $gift = $this->asTenant($club, fn () => GiftMembership::sole());
+        $this->post(route('site.gift.pay', ['club' => $club->slug, 'token' => $this->token($club, $gift)]))->assertRedirectContains('/verify');
+        $this->asTenant($club, fn () => $this->assertSame(0, PaymentIntent::count()));
+
+        $this->recipientConfirms($club, $gift)->assertOk();
+        $this->post(route('site.gift.pay', ['club' => $club->slug, 'token' => $this->token($club, $gift)]))->assertRedirectContains('unifiedcheckout');
 
         [$gift, $intent] = $this->asTenant($club, fn () => [GiftMembership::sole(), PaymentIntent::sole()]);
         $this->assertSame(GiftMembership::PENDING, $gift->status);
@@ -166,7 +176,7 @@ class GiftSiteTest extends TestCase
         $club = $this->club();
         $plan = $this->plan($club, ['name' => 'شهري', 'name_en' => 'Monthly', 'duration_value' => 3, 'duration_unit' => 'month']);
         $gift = $this->asTenant($club, function () use ($plan) {
-            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara', 'recipient_name' => 'Noor'], 'staff');
+            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara', 'recipient_name' => 'Noor', 'recipient_phone' => '91234567'], 'staff');
             app(PaymentService::class)->record($gift->invoice, $gift->invoice->balance(), 'cash');
 
             return $gift->fresh();
@@ -187,7 +197,7 @@ class GiftSiteTest extends TestCase
             ->assertInertia(fn ($page) => $page->component('Site/GiftClaim', false));
 
         $this->post(route('site.gift.register', ['club' => $club->slug, 'token' => $token]), [
-            'full_name' => 'Noor Recipient', 'phone' => '95556666', 'password' => 'secret-pass-1', 'password_confirmation' => 'secret-pass-1', 'accept_terms' => '1',
+            'full_name' => 'Noor Recipient', 'phone' => '91234567', 'password' => 'secret-pass-1', 'password_confirmation' => 'secret-pass-1', 'accept_terms' => '1',
         ])->assertRedirect(route('portal.gift.redeem', ['club' => $club->slug, 'token' => $token]));
         $member = $this->asTenant($club, fn () => Member::where('full_name', 'Noor Recipient')->sole());
         $this->assertAuthenticatedAs($member, 'member');
@@ -220,13 +230,13 @@ class GiftSiteTest extends TestCase
     public function test_an_existing_member_signs_in_and_comes_back_to_redeem_and_overlap_is_refused(): void
     {
         $club = $this->club();
-        $member = $this->member($club, ['phone' => '97778888', 'password' => 'secret-pass-1']);
+        $member = $this->member($club, ['phone' => '91234567', 'password' => 'secret-pass-1']);
         $membership = $this->activeMembership($club, $member);
         $gift = $this->paidGift($club);
         $token = $this->token($club, $gift);
 
         $this->get(route('site.gift.claim', ['club' => $club->slug, 'token' => $token]))->assertOk();
-        $this->post(route('portal.login.store', ['club' => $club->slug]), ['login' => '97778888', 'password' => 'secret-pass-1'])
+        $this->post(route('portal.login.store', ['club' => $club->slug]), ['login' => '91234567', 'password' => 'secret-pass-1'])
             ->assertRedirect(route('portal.gift.redeem', ['club' => $club->slug, 'token' => $token]));
 
         $after = $membership->ends_on->addDay()->toDateString();
@@ -266,7 +276,11 @@ class GiftSiteTest extends TestCase
         $club = $this->club();
         $this->configurePaymob($club);
         $plan = $this->plan($club, ['price' => 30]);
+        $this->connectWhatsApp($club);
         $this->post(route('site.gift.store', ['club' => $club->slug, 'plan' => $plan->id]), $this->buyer());
+        $gift = $this->asTenant($club, fn () => GiftMembership::sole());
+        $this->recipientConfirms($club, $gift)->assertOk();
+        $this->post(route('site.gift.pay', ['club' => $club->slug, 'token' => $this->token($club, $gift)]));
         [$gift, $intent] = $this->asTenant($club, fn () => [GiftMembership::sole(), PaymentIntent::sole()]);
         // A desk payment on part of it keeps its invoice from being voided by the cancellation.
         $this->asTenant($club, function () use ($gift) {
@@ -339,11 +353,14 @@ class GiftSiteTest extends TestCase
         $register($token, ['phone' => '97771111', 'email' => 'taken@example.test'])->assertSessionHasErrors('email');
         $this->assertGuest('member');
 
-        $pending = $this->asTenant($club, fn () => app(GiftService::class)->issue($this->plan($club), ['giver_name' => 'A', 'recipient_name' => 'B'], 'staff'));
+        $pending = $this->asTenant($club, fn () => app(GiftService::class)->issue($this->plan($club), ['giver_name' => 'A', 'recipient_name' => 'B', 'recipient_phone' => '91234567'], 'staff'));
         $register($this->token($club, $pending), ['phone' => '97772222'])->assertRedirect(route('site.gift.show', ['club' => $club->slug, 'token' => $this->token($club, $pending)]));
         $this->asTenant($club, fn () => $this->assertFalse(Member::where('phone', '96897772222')->exists()));
 
-        $register($token, ['phone' => '97773333'])->assertRedirect(route('portal.gift.redeem', ['club' => $club->slug, 'token' => $token]));
+        // Only the recipient's own number makes the account; a second gift for the same number never makes another.
+        $register($token, ['phone' => '97773333'])->assertSessionHasErrors('phone');
+        $register($token, ['phone' => '91234567'])->assertRedirect(route('portal.gift.redeem', ['club' => $club->slug, 'token' => $token]));
+        $register($this->token($club, $this->paidGift($club)), ['phone' => '9123 4567'])->assertSessionHasErrors('phone');
         $this->asTenant($club, fn () => $this->assertSame(2, Member::count(), 'The existing member and the new recipient, nobody else.'));
         $this->assertNotNull($existing);
     }
