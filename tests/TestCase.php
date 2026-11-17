@@ -3,6 +3,7 @@
 namespace Tests;
 
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Http\Request;
 use Tests\Support\DatabaseIsolation;
@@ -48,10 +49,17 @@ abstract class TestCase extends BaseTestCase
     /**
      * A test run as production (env switched) passes the trusted-host check, which keeps its list in a static of the
      * request class: cleared, so the next test's hosts are not judged by it. Production clears it with each request.
+     *
+     * Eloquent keeps each model's column names (to check mass assignment against $guarded) in a static, read once per
+     * process: a test that fills a model before the database is migrated (a unit test runs before the first
+     * migrate:fresh) left the columns of an older schema, and a column added since was refused in every later test.
+     * Cleared too, so each test reads the columns of its own database. Production reads them afresh with each request,
+     * and deploy.sh restarts the queue workers after migrating.
      */
     protected function tearDown(): void
     {
         Request::setTrustedHosts([]);
+        (new \ReflectionProperty(Model::class, 'guardableColumns'))->setValue(null, []);
         parent::tearDown();
     }
 }
