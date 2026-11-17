@@ -22,6 +22,11 @@ export interface MemberRow {
     membership: { status: string; plan: string; ends_on: string; days_left: number } | null;
 }
 
+/** The list's filters the file follows (search, membership, the member's status and the order), never its page: the file holds every page. */
+export function exportFilters(filters: Record<string, string | undefined>): Record<string, string> {
+    return Object.fromEntries(['q', 'membership', 'status', 'sort', 'dir'].flatMap((key) => (filters[key] ? [[key, String(filters[key])]] : [])));
+}
+
 /** The membership tabs, each with its badge's colour. */
 const MEMBERSHIP_TABS = [
     { value: 'active', label: 'نشطة', dot: '#059669' },
@@ -80,7 +85,7 @@ export default function MembersIndex({ members, filters }: { members: Paginated<
                 subtitle={`${members.total} عضو`}
                 actions={
                     <>
-                        <ExportMenu href={can('members.export') ? route('club.members.export') : null} title="الأعضاء" formats={['xlsx', 'csv']} />
+                        <ExportMenu href={can('members.export') ? route('club.members.export') : null} params={exportFilters(filters)} title="الأعضاء" formats={['xlsx', 'csv']} />
                         {can('members.manage') && <Button href={route('club.members.create')} icon={<UserPlus className="size-4" />}>عضو جديد</Button>}
                     </>
                 }

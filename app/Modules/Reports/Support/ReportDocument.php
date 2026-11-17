@@ -2,7 +2,10 @@
 
 namespace App\Modules\Reports\Support;
 
+use App\Core\Export\ExcelLimit;
+use App\Core\Export\ExcelTooLong;
 use App\Core\Export\TableExporter;
+use Illuminate\Http\JsonResponse;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -38,7 +41,7 @@ final class ReportDocument
         private readonly ?string $club = null,
     ) {}
 
-    public function download(string $format): StreamedResponse
+    public function download(string $format): StreamedResponse|JsonResponse
     {
         $name = preg_replace('/[^A-Za-z0-9_.-]/', '_', $this->slug).'-'.now()->format('Ymd-His');
         $headers = ['X-Report-Empty' => $this->empty ? '1' : '0', 'Cache-Control' => 'no-store, private'];
@@ -52,7 +55,15 @@ final class ReportDocument
         }
 
         if ($format === 'xlsx') {
-            return response()->streamDownload(fn () => (new Xlsx($this->book()))->save('php://output'), $name.'.xlsx',
+            // Built before the answer starts, so that a report too long for one Excel file is refused with its reason
+            // (ExcelLimit) instead of a file that breaks off half-way or takes the server's memory.
+            try {
+                $book = $this->book();
+            } catch (ExcelTooLong $e) {
+                return ExcelLimit::refuse($e->rows, true);
+            }
+
+            return response()->streamDownload(fn () => (new Xlsx($book))->save('php://output'), $name.'.xlsx',
                 $headers + ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
         }
 
@@ -88,23 +99,25 @@ final class ReportDocument
         $book = new Spreadsheet;
         $book->removeSheetByIndex(0);
         $names = [];
+        $written = 0;
+        $limit = ExcelLimit::rows();
 
         foreach ($this->sheets as $sheet) {
             $ws = $book->createSheet();
             $ws->setTitle($this->sheetName($sheet->title, $names));
             $ws->setRightToLeft(true);
 
-            $ws->setCellValueExplicit('A1', TableExporter::cell($this->title), DataType::TYPE_STRING);
+            TableExporter::text($ws, 'A', 1, $this->title);
             $ws->getStyle('A1')->getFont()->setBold(true)->setSize(14);
             $r = 2;
             foreach ($this->meta as [$label, $value]) {
                 $ws->setCellValueExplicit("A{$r}", $label, DataType::TYPE_STRING);
-                $ws->setCellValueExplicit("B{$r}", TableExporter::cell((string) $value), DataType::TYPE_STRING);
+                TableExporter::text($ws, 'B', $r, $value);
                 $ws->getStyle("A{$r}")->getFont()->setBold(true);
                 $r++;
             }
             if (count($this->sheets) > 1) {
-                $ws->setCellValueExplicit("A{$r}", TableExporter::cell($sheet->title), DataType::TYPE_STRING);
+                TableExporter::text($ws, 'A', $r, $sheet->title);
                 $ws->getStyle("A{$r}")->getFont()->setBold(true)->setSize(12);
                 $r++;
             }
@@ -124,6 +137,9 @@ final class ReportDocument
 
             $r = $head + 1;
             foreach ($sheet->rows as $row) {
+                if (++$written > $limit) {
+                    throw new ExcelTooLong($written);
+                }
                 foreach (array_values($row) as $i => $cell) {
                     [$value, $kind] = $this->split($cell, $sheet->columns[$i][1] ?? ReportSheet::TEXT);
                     $this->write($ws, $i + 1, $r, $value, $kind);
@@ -145,7 +161,7 @@ final class ReportDocument
             return;
         }
         if ($kind === ReportSheet::TEXT || ! is_numeric($value)) {
-            $ws->setCellValueExplicit([$col, $row], (string) TableExporter::cell((string) $value), DataType::TYPE_STRING);
+            TableExporter::text($ws, $col, $row, $value);
 
             return;
         }

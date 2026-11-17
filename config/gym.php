@@ -22,4 +22,11 @@ return [
     // One image, as uploaded. Raising it needs the server to accept as much first: PHP upload_max_filesize and
     // post_max_size, and nginx client_max_body_size (deploy/nginx, 20m today) — see docs/MEDIA.md.
     'max_image_kb' => (int) env('GYM_MAX_IMAGE_KB', 4096),
+
+    // Exports. An Excel file is built whole in memory (about 67 MB for 5,000 sale rows, 193 MB for 20,000, measured on
+    // the report writer), so a list longer than this is refused in Excel with a message pointing to CSV, which is
+    // streamed row by row and holds everything. Never cut a file short in silence.
+    'exports' => [
+        'xlsx_max_rows' => (int) env('GYM_EXPORT_XLSX_MAX_ROWS', 5000),
+    ],
 ];
