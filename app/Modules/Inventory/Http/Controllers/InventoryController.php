@@ -3,6 +3,7 @@
 namespace App\Modules\Inventory\Http\Controllers;
 
 use App\Core\Support\Period;
+use App\Core\Support\SubmittedOnce;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -122,11 +123,14 @@ class InventoryController extends Controller
             'quantity' => ['required', 'numeric', 'min:0.001', 'max:1000000'],
             'reason' => ['required', 'in:damaged,lost,expired,internal,correction'],
             'note' => ['nullable', 'string', 'max:200'],
+            'client_key' => SubmittedOnce::RULE,
         ]);
         $quantity = (float) $data['quantity'] * ($data['direction'] === 'out' ? -1 : 1);
-        $movement = $inventory->adjust(Product::findOrFail($data['product_id']), (int) $data['branch_id'], $quantity, $data['reason'], $data['note'] ?? null);
+        // A change, not a count: the same form sent twice would take the stock twice; with its key it is taken once.
+        $document = SubmittedOnce::run($data['client_key'] ?? null, 'stock-adjust',
+            fn () => $inventory->adjust(Product::findOrFail($data['product_id']), (int) $data['branch_id'], $quantity, $data['reason'], $data['note'] ?? null)->document);
 
-        return back()->with('success', 'سُجّلت التسوية '.$movement->document.'.');
+        return back()->with('success', 'سُجّلت التسوية '.$document.'.');
     }
 
     /** @return array{0: string, 1: string} the SQL for a product's quantity and its reorder level in the list's branch */
