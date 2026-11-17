@@ -34,7 +34,7 @@ final class ClassesReport extends Report
                 array_map(fn ($p) => [$p['program'], $p['sessions'], $p['bookings'], $p['avg_per_session'], $p['attended'], $p['no_show'], $p['attendance_rate']], $r['programs'])),
             new S('الحصص', [['التاريخ', S::TEXT], ['الوقت', S::TEXT], ['البرنامج', S::TEXT], ['المدرب', S::TEXT], ['السعة', S::INT], ['المحجوز', S::INT], ['الحالة', S::TEXT]],
                 (function () use ($f) {
-                    foreach ($this->in(ClassSession::with(['program:id,name', 'trainer:id,name'])->whereBetween('starts_at', [$f->from, $f->to->endOfDay()]), $f)->orderBy('starts_at')->lazy(500) as $s) {
+                    foreach ($this->in(ClassSession::with(['program:id,name', 'trainer:id,name'])->whereBetween('starts_at', [$f->from, $f->to->endOfDay()]), $f)->orderBy('starts_at')->orderBy((new ClassSession)->getQualifiedKeyName())->lazy(500) as $s) {
                         yield [$s->starts_at->toDateString(), $s->starts_at->format('H:i'), $s->program?->name, $s->trainer?->name, $s->capacity, $s->booked_count, ClassSession::STATUS_LABELS[$s->status] ?? $s->status];
                     }
                 })()),
