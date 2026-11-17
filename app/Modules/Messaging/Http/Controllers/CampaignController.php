@@ -58,6 +58,7 @@ class CampaignController extends Controller
 
         return Inertia::render('Messaging/Campaigns/Show', [
             'campaign' => $campaign->only('id', 'name', 'status', 'audience', 'recipients_count', 'sent_count', 'delivered_count', 'read_count', 'failed_count') + [
+                'uncertain_count' => $campaign->uncertainCount(),
                 'template' => $campaign->template?->only('id', 'name', 'body', 'status'),
                 'scheduled_at' => $campaign->scheduled_at?->format('Y-m-d H:i'), 'started_at' => $campaign->started_at?->format('Y-m-d H:i'),
                 'completed_at' => $campaign->completed_at?->format('Y-m-d H:i'),

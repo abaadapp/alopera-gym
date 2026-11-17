@@ -76,7 +76,8 @@ final class CampaignService
             ->pluck('total', 'status');
 
         $sent = $stats->only([Message::SENT, Message::DELIVERED, Message::READ])->sum();
-        $pending = $stats->only([Message::QUEUED, Message::SCHEDULED])->sum();
+        // In flight counts as waiting; an uncertain outcome (#203) is settled, and neither sent nor failed.
+        $pending = $stats->only([Message::QUEUED, Message::SCHEDULED, Message::SENDING])->sum();
 
         $campaign = Campaign::find($campaignId);
         if (! $campaign) {

@@ -58,7 +58,8 @@ final class WhatsAppReports
                 'succeeded' => (int) ($automatic['sent'] ?? 0) + (int) ($automatic['delivered'] ?? 0) + (int) ($automatic['read'] ?? 0),
                 'failed' => (int) ($automatic['failed'] ?? 0),
                 'skipped' => (int) ($automatic['skipped'] ?? 0),
-                'waiting' => (int) ($automatic['queued'] ?? 0) + (int) ($automatic['scheduled'] ?? 0),
+                'waiting' => (int) ($automatic['queued'] ?? 0) + (int) ($automatic['scheduled'] ?? 0) + (int) ($automatic['sending'] ?? 0),
+                'uncertain' => (int) ($automatic['uncertain'] ?? 0),
             ],
             'staff' => $names->map(fn ($name, $id) => ['id' => $id, 'name' => $name, 'open' => (int) ($perStaff[$id] ?? 0), 'replies' => (int) ($replies[$id] ?? 0)])
                 ->sortByDesc('open')->values(),

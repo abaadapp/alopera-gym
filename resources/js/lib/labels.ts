@@ -69,6 +69,9 @@ export const memberStatus: Record<string, [string, Tone]> = {
 export const messageStatus: Record<string, [string, Tone]> = {
     scheduled: ['مجدولة', 'blue'],
     queued: ['في الانتظار', 'gray'],
+    sending: ['قيد الإرسال', 'gray'],
+    // #203: the request may have reached WhatsApp and nothing confirmed it either way; never «فشلت».
+    uncertain: ['نتيجة الإرسال غير مؤكدة', 'amber'],
     sent: ['أُرسلت', 'blue'],
     delivered: ['وصلت', 'green'],
     read: ['قُرئت', 'green'],

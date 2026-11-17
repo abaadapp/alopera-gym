@@ -44,6 +44,9 @@ class DispatchScheduledMessages extends ForEachTenant
             $campaigns++;
         });
 
-        return "messages={$messages} campaigns={$campaigns}";
+        // A message a lost job claimed and never settled (#203): uncertain, never sent again on its own.
+        $uncertain = app(WhatsAppService::class)->settleAbandonedClaims();
+
+        return "messages={$messages} campaigns={$campaigns} uncertain={$uncertain}";
     }
 }

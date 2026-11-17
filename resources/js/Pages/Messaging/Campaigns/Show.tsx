@@ -17,6 +17,7 @@ interface Props {
         delivered_count: number;
         read_count: number;
         failed_count: number;
+        uncertain_count: number;
         template: { id: number; name: string; body: string; status: string } | null;
         scheduled_at: string | null;
         started_at: string | null;
@@ -77,7 +78,7 @@ export default function CampaignShow({ campaign, messages }: Props) {
                 <StatCard label="المستلمون" value={number(total || campaign.audience_size || 0)} icon={<Users className="size-5" />} hint={total === 0 && campaign.audience_size !== null ? 'الجمهور المتوقع قبل الإطلاق' : undefined} />
                 <StatCard label="أُرسلت" value={number(campaign.sent_count)} tone="blue" icon={<Send className="size-5" />} hint={`${pct(campaign.sent_count)}%`} />
                 <StatCard label="وصلت" value={number(campaign.delivered_count)} tone="green" icon={<CheckCheck className="size-5" />} hint={`${pct(campaign.delivered_count)}%`} />
-                <StatCard label="قُرئت" value={number(campaign.read_count)} tone="violet" icon={<Eye className="size-5" />} hint={`${pct(campaign.read_count)}% · فشلت ${number(campaign.failed_count)}`} />
+                <StatCard label="قُرئت" value={number(campaign.read_count)} tone="violet" icon={<Eye className="size-5" />} hint={`${pct(campaign.read_count)}% · فشلت ${number(campaign.failed_count)}${campaign.uncertain_count > 0 ? ` · غير مؤكدة ${number(campaign.uncertain_count)}` : ''}`} />
             </div>
 
             <div className="mt-6 grid gap-6 lg:grid-cols-3">
