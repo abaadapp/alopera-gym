@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Modules\Accounting\Services\ChartOfAccounts;
+use App\Modules\Accounting\Services\FinanceReports;
 use App\Modules\Finance\Models\CashShift;
 use App\Modules\Finance\Models\Expense;
 use App\Modules\Finance\Models\Payment;
@@ -177,6 +178,29 @@ class CashShiftCloseRaceTest extends TestCase
         $this->assertTrue(self::refused($cancel), 'then was refused: '.$dump);
         $this->assertSame(Payment::COMPLETED, $this->asTenant($club, fn () => $payment->fresh()->status), $dump);
         $this->assertCountUnchanged($club, $shift, [$closing]);
+    }
+
+    public function test_cash_taken_out_of_the_drawer_by_another_door_while_its_shift_closes_is_counted_once(): void
+    {
+        // Money that leaves the drawer outside the shift's own records (a transfer to the bank, a salary, a supplier
+        // paid) is counted by its entry's time: one written just before the closing and committed just after it was
+        // left out of the count, and is in the closed shift's records afterwards.
+        [$club, $owner, $shift] = $this->desk();
+        [$drawer, $bank] = $this->asTenant($club, fn () => [app(ChartOfAccounts::class)->account('cash'), app(ChartOfAccounts::class)->account('bank')]);
+
+        $results = $this->concurrently([
+            function (string $dir) use ($owner, $drawer, $bank) {
+                self::pauseAfter('insert into "gym_journal_entries"', $dir, 1.5);
+
+                return $this->send($owner, 'post', route('club.finance.transfers.store'), [
+                    'from_id' => $drawer->id, 'to_id' => $bank->id, 'amount' => '10', 'date' => today()->toDateString(), 'note' => 'إيداع', 'client_key' => $this->key(),
+                ]);
+            },
+            fn (string $dir) => $this->close($owner, $shift, $dir),
+        ]);
+
+        $this->assertCountUnchanged($club, $shift, $results);
+        $this->assertSame('10.000', $this->asTenant($club, fn () => app(FinanceReports::class)->balance($bank->fresh())), 'the transfer went through');
     }
 
     public function test_two_cash_payments_of_one_open_shift_cancelled_at_once_both_go_through(): void
