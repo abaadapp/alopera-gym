@@ -37,8 +37,8 @@ final class BackupHealth
                 'message' => 'لا تستطيع لوحة التحكم قراءة مجلد النسخ الاحتياطية على الخادم (صلاحيات المجلد): لا يمكن عرض النسخ ولا إنشاء نسخة يدوية من اللوحة حتى يُصلَح.'];
         }
         $dir = $this->backups->directory($tenant);
-        $sound = $this->newest($this->backups->disk()->files($dir));
-        $incomplete = $this->newest($this->backups->disk()->files($dir.'/'.TenantBackupService::INCOMPLETE));
+        $sound = $this->newest($this->files($dir));
+        $incomplete = $this->newest($this->files($dir.'/'.TenantBackupService::INCOMPLETE));
         $now = CarbonImmutable::now();
 
         if ($incomplete && (! $sound || $incomplete > $sound)) {
@@ -63,6 +63,23 @@ final class BackupHealth
         };
 
         return ['kind' => $kind, 'last_sound_at' => $last, 'hours' => $hours, 'missing_attachments' => $missing, 'message' => $message];
+    }
+
+    /**
+     * A folder's files, or none when it cannot be read: this runs on every panel page, which a folder closed to the web
+     * (one the nightly made in a group the web is not in) must never break.
+     *
+     * @return list<string>
+     */
+    private function files(string $dir): array
+    {
+        try {
+            return $this->backups->disk()->files($dir);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return [];
+        }
     }
 
     /** @param list<string> $files */

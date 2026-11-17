@@ -128,6 +128,11 @@ final class TenantBackupService
             if ($mode !== false && ($mode & 0070) !== 0070 && @fileowner($path) === self::processUser()) {
                 @chmod($path, ($mode & 07777) | self::FOLDER_MODE);
                 clearstatcache(true, $path);
+                if ((@fileperms($path) & 02000) === 0) {
+                    // The kernel drops setgid when this user is not in the folder's group: folders made in it later
+                    // would take this user's own group, which the other user may not share (deploy must be in www-data).
+                    Log::warning('backup folder opened without setgid: this process is not in its group', ['path' => $path, 'group' => @filegroup($path), 'process_user' => self::processUser()]);
+                }
             }
         }
         $path = $this->disk()->path($dir);

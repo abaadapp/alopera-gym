@@ -35,9 +35,10 @@ class BackupTwoUsersTest extends TestCase
         Storage::fake('public');
         $this->root = sys_get_temp_dir().'/bk2u-'.Str::random(8);
         mkdir($this->root);
-        exec('sudo -n chgrp www-data '.escapeshellarg($this->root), $o, $code);
+        // As on the server (shared/storage/app/private is 2775 deploy:www-data), set by root: a user outside the group
+        // cannot set setgid itself (the kernel drops it).
+        exec('sudo -n chgrp www-data '.escapeshellarg($this->root).' && sudo -n chmod 2775 '.escapeshellarg($this->root), $o, $code);
         $this->assertSame(0, $code, 'the shared group is set');
-        chmod($this->root, 02775);
         config(['filesystems.disks.bk2u' => ['driver' => 'local', 'root' => $this->root, 'throw' => false] + array_intersect_key(config('filesystems.disks.local'), ['permissions' => 1])]);
         config(['gym.backup_disk' => 'bk2u']);
         $this->probe = sys_get_temp_dir().'/bk2u-probe-'.Str::random(8).'.php';
@@ -105,7 +106,12 @@ class BackupTwoUsersTest extends TestCase
         foreach (['backups', 'backups/tenants', $service->directory($club)] as $level) {
             $stat = stat($this->root.'/'.$level);
             $this->assertSame('www-data', posix_getgrgid($stat['gid'])['name'], "$level is the shared group's");
-            $this->assertSame(02070, $stat['mode'] & 02070, "$level: group rwx, passed on");
+            $this->assertSame(0070, $stat['mode'] & 0070, "$level: group rwx");
+            // setgid survives the nightly's chmod only if its user is in the group (the kernel drops it otherwise):
+            // on the server, deploy must be in www-data for folders made later to stay the web's (docs, id deploy).
+            if (in_array(posix_getgrnam('www-data')['gid'], posix_getgroups(), true)) {
+                $this->assertSame(02000, $stat['mode'] & 02000, "$level: the group passed on");
+            }
             $this->assertSame(0, $stat['mode'] & 0007, "$level: others nothing");
         }
 
