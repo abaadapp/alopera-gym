@@ -402,9 +402,13 @@ class SalesTest extends TestCase
         foreach ($this->asTenant($club, fn () => Sale::pluck('id')) as $id) {
             $this->actingAs($owner)->get(route('club.sales.show', $id))->assertOk();
         }
-        // The sales report lives on the reports page; its file has the sales of both sources.
+        // The sales report lives on the reports page; its file has the sales of both sources. A website order is a sale
+        // once handed over (a pending one is in no figure and no row), so one is handed over first.
+        $this->actingAs($owner);
+        $this->asTenant($club, fn () => app(OrderService::class)->deliver(Sale::where('source', Sale::WEBSITE)->orderBy('id')->firstOrFail(), 'cash'));
         $csv = $this->actingAs($owner)->get(route('club.reports.export', ['report' => 'sales', 'format' => 'csv']))->assertOk()->streamedContent();
         $this->assertStringContainsString('الموقع الإلكتروني', $csv);
+        $this->assertStringContainsString('نقطة البيع', $csv);
         $sale = $this->asTenant($club, fn () => Sale::firstOrFail());
         $this->actingAs($owner)->get(route('club.sales.receipt', $sale))->assertOk();
     }
