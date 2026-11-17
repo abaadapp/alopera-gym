@@ -6,6 +6,7 @@ use App\Core\Support\BusinessRuleException;
 use App\Models\Tenant;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Finance\Services\CreditNoteService;
 use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Gym\Models\GiftMembership;
@@ -235,7 +236,10 @@ class GiftMembershipTest extends TestCase
             $this->gifts()->cancel($cancelled, 'طلب المشتري');
             $this->assertSame(Invoice::PAID, $cancelled->invoice->fresh()->status, 'The money stays on its invoice for finance to refund.');
 
-            app(PaymentService::class)->cancel(Payment::where('invoice_id', $refunded->invoice_id)->first(), 'سُجّلت بالخطأ');
+            // Refunded in full through finance (a credit note and its refund): the only way a gift's money goes back.
+            $note = app(CreditNoteService::class)->issue($refunded->invoice->fresh(), $refunded->invoice->total, 'طلب المشتري');
+            app(PaymentService::class)->refund($note, $note->amount, 'cash');
+            $this->assertSame(GiftMembership::REFUNDED, $refunded->fresh()->status);
 
             $this->gifts()->cancel($unpaid, 'لم يدفع');
             $this->assertSame(Invoice::VOID, $unpaid->invoice->fresh()->status, 'An unpaid gift voids its invoice.');
