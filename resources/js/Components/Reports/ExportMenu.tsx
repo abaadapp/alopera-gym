@@ -38,8 +38,11 @@ export default function ExportMenu({ href, params, title, formats = ['xlsx', 'pd
             const res = await fetch(address(format), { credentials: 'same-origin', headers: { Accept: 'text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } });
             const type = res.headers.get('content-type') ?? '';
             if (!res.ok || !(type.includes('spreadsheetml') || type.includes('text/csv'))) {
+                // A file the server refused with its reason (an Excel file longer than it may hold): that reason, as said.
+                const reason = res.status === 422 && type.includes('application/json') ? ((await res.json().catch(() => null)) as { message?: string } | null)?.message : undefined;
                 setFailed(
-                    res.status === 403 ? 'لا تملك صلاحية تصدير هذا التقرير.'
+                    reason ? reason
+                    : res.status === 403 ? 'لا تملك صلاحية تصدير هذا التقرير.'
                         : res.status === 429 ? 'صدّرت تقارير كثيرة خلال دقيقة؛ حاول بعد قليل.'
                             : res.redirected || res.status === 401 || res.status === 419 ? 'انتهت الجلسة؛ أعد تحميل الصفحة ثم صدّر مرة أخرى.'
                                 : 'تعذّر التصدير — حاول مرّة أخرى',

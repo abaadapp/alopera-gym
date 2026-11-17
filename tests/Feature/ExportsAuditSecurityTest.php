@@ -38,10 +38,10 @@ class ExportsAuditSecurityTest extends TestCase
         $this->activeMembership($club, $this->member($club));
         $owner = $this->owner($club);
 
-        $this->actingAs($owner)->get(route('club.memberships.index', ['filter' => 'active', 'format' => 'xlsx']))
+        $this->actingAs($owner)->get(route('club.memberships.export', ['filter' => 'active', 'format' => 'xlsx']))
             ->assertOk()->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
-        $csv = $this->actingAs($owner)->get(route('club.memberships.index', ['filter' => 'active', 'format' => 'csv']))->assertOk()->streamedContent();
+        $csv = $this->actingAs($owner)->get(route('club.memberships.export', ['filter' => 'active', 'format' => 'csv']))->assertOk()->streamedContent();
         $this->assertStringContainsString('نشطة', $csv);
         $this->assertStringNotContainsString(',active,', $csv);
     }

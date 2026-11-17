@@ -2,6 +2,8 @@
 
 namespace App\Modules\Payroll\Http\Controllers;
 
+use App\Core\Audit\AuditLogger;
+use App\Core\Export\ExcelLimit;
 use App\Core\Export\TableExporter;
 use App\Core\Papers\Papers;
 use App\Core\Support\Money;
@@ -15,6 +17,7 @@ use App\Modules\Payroll\Models\PayrollPayout;
 use App\Modules\Payroll\Models\PayrollRun;
 use App\Modules\Payroll\Services\PayrollService;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -104,15 +107,22 @@ class PayrollRunController extends Controller
         return Papers::for('payroll_sheet', $run)->respond($request);
     }
 
-    public function export(Request $request, PayrollRun $run): StreamedResponse
+    public function export(Request $request, PayrollRun $run, AuditLogger $audit): StreamedResponse|JsonResponse
     {
         $format = $request->query('format') === 'xlsx' ? 'xlsx' : 'csv';
-        $rows = $run->items()->orderBy('employee_name')->get()->map(fn (PayrollItem $i) => [
+        $count = $run->items()->count();
+        if ($format === 'xlsx' && ($refusal = ExcelLimit::check($count))) {
+            return $refusal;
+        }
+        // Salaries leave the system: who took them, when, in what form, of which month (the run, not its figures).
+        $audit->log('payroll.exported', $run, ['format' => $format, 'rows' => $count, 'period' => $run->period->format('Y-m')]);
+        $rows = $run->items()->orderBy('employee_name')->orderBy('id')->get()->map(fn (PayrollItem $i) => [
             $i->employee_name, $i->job_title, $i->attendance_days, $i->basic, $i->allowances, $i->overtime_hours, $i->overtime, $i->deductions, $i->deduction_notes, $i->net,
             $i->paid_at ? 'مصروف '.$i->paid_at->toDateString() : 'غير مصروف',
         ]);
 
-        return TableExporter::download("payroll-{$run->period->format('Y-m')}", ['الموظف', 'المسمى', 'أيام الحضور', 'الأساسي', 'البدلات', 'ساعات إضافية', 'الإضافي', 'الخصومات', 'سبب الخصم', 'الصافي', 'الصرف'], $rows, $format);
+        return TableExporter::download("payroll-{$run->period->format('Y-m')}", ['الموظف', 'المسمى', 'أيام الحضور', 'الأساسي', 'البدلات', 'ساعات إضافية', 'الإضافي', 'الخصومات', 'سبب الخصم', 'الصافي', 'الصرف'], $rows, $format,
+            [2 => TableExporter::NUMBER, 3 => TableExporter::MONEY, 4 => TableExporter::MONEY, 5 => TableExporter::NUMBER, 6 => TableExporter::MONEY, 7 => TableExporter::MONEY, 9 => TableExporter::MONEY]);
     }
 
     /** صرف الرواتب: approved runs with what is still owed, payouts made, and the accounts to pay from. */

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Club;
 
+use App\Core\Audit\AuditLogger;
 use App\Core\Backup\BackupDailyReport;
 use App\Core\Backup\TenantBackupService;
 use App\Core\Tenancy\TenantContext;
@@ -40,10 +41,12 @@ class BackupController extends Controller
         return back()->with('success', 'تم إنشاء النسخة الاحتياطية: '.$name);
     }
 
-    public function download(string $file): StreamedResponse
+    public function download(string $file, AuditLogger $audit): StreamedResponse
     {
         $path = $this->backups->path($this->tenants->require(), $file);
         abort_unless($this->backups->disk()->exists($path), 404);
+        // A copy of every record of the club leaves the server: who took it, when, which archive (its name and size).
+        $audit->log('backup.downloaded', null, ['file' => $file, 'bytes' => $this->backups->disk()->size($path)]);
 
         return $this->backups->disk()->download($path, $file);
     }

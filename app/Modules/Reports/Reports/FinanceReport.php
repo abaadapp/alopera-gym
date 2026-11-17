@@ -52,14 +52,14 @@ final class FinanceReport extends Report
         }
         $sheets[] = new S('الدفعات', [['الإيصال', S::TEXT], ['التاريخ', S::TEXT], ['النوع', S::TEXT], ['الطريقة', S::TEXT], ['المبلغ', S::MONEY], ['الفاتورة', S::TEXT], ['العميل', S::TEXT], ['المرجع', S::TEXT]],
             (function () use ($f, $end) {
-                foreach ($this->in(Payment::with('invoice:id,number,customer_name')->completed()->whereBetween('paid_at', [$f->from, $end]), $f)->orderBy('paid_at')->lazy(500) as $p) {
+                foreach ($this->in(Payment::with('invoice:id,number,customer_name')->completed()->whereBetween('paid_at', [$f->from, $end]), $f)->orderBy('paid_at')->orderBy('payments.id')->lazy(500) as $p) {
                     yield [$p->receipt_number, $p->paid_at?->format('Y-m-d H:i'), Payment::KIND_LABELS[$p->kind] ?? $p->kind, Payment::METHOD_LABELS[$p->method] ?? $p->method,
                         $p->kind === Payment::KIND_REFUND ? -1 * (float) $p->amount : (float) $p->amount, $p->invoice?->number, $p->invoice?->customer_name, $p->reference];
                 }
             })());
         $sheets[] = new S('المصروفات', [['الرقم', S::TEXT], ['التاريخ', S::TEXT], ['التصنيف', S::TEXT], ['الوصف', S::TEXT], ['المبلغ', S::MONEY]],
             (function () use ($f) {
-                foreach ($this->in(Expense::with('category:id,name')->whereBetween('expense_date', [$f->from, $f->to]), $f)->orderBy('expense_date')->lazy(500) as $e) {
+                foreach ($this->in(Expense::with('category:id,name')->whereBetween('expense_date', [$f->from, $f->to]), $f)->orderBy('expense_date')->orderBy('expenses.id')->lazy(500) as $e) {
                     yield [$e->number, $e->expense_date->toDateString(), $e->category?->name, $e->description, $e->amount];
                 }
             })());
