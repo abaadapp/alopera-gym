@@ -77,7 +77,7 @@ export default function PaymentsIndex({ payments, pendingCount, creditCount, fil
     const Actions = ({ p }: { p: PaymentRow }) => (
         <div className="flex justify-end gap-1">
             {p.has_proof && <Button variant="ghost" size="sm" href={route('club.payments.proof', p.id)} external icon={<FileDown className="size-3.5" />} aria-label="الإثبات" />}
-            {p.status === 'completed' && <PrintButton variant="ghost" size="sm" url={route('club.payments.receipt', p.id)} title={`receipt-${p.id}`} icon={<Receipt className="size-3.5" />} aria-label="الإيصال" />}
+            {p.status === 'completed' && can('papers.print') && <PrintButton variant="ghost" size="sm" url={route('club.payments.receipt', p.id)} title={`receipt-${p.id}`} icon={<Receipt className="size-3.5" />} aria-label="الإيصال" />}
             {p.status === 'pending' && can('payments.confirm') && (p.kind === 'refund' ? (
                 <>
                     <ConfirmAction url={route('club.payments.confirm', p.id)} title="تأكيد تنفيذ الرد" message="أكّد بعد تنفيذ الرد فعلًا (من البنك أو لوحة Paymob)." reason="مرجع التنفيذ (رقم العملية)" reasonName="reference" reasonOptional confirmLabel="تأكيد التنفيذ" tone="primary" variant="success" icon={<Check className="size-3.5" />}>تأكيد</ConfirmAction>

@@ -113,7 +113,7 @@ class WebsiteContentTest extends TestCase
         $this->plan($club, ['is_public' => true]);
         [$doc, $version] = $this->editor($club);
         $props = $this->actingAs($this->owner($club))->get(route('club.website.edit'))->viewData('page')['props'];
-        $this->assertSame(['plans', 'programs', 'schedule', 'trainers', 'news', 'contact', 'join', 'shop'], array_column($props['pageFields'], 'key'));
+        $this->assertSame(['plans', 'programs', 'schedule', 'trainers', 'news', 'contact', 'join', 'shop', 'privacy', 'terms'], array_column($props['pageFields'], 'key'));
         // The starting words state what each page holds, nothing more.
         $words = json_encode($doc['pages'], JSON_UNESCAPED_UNICODE);
         foreach (['معتمد', 'قريب', 'دقائق', 'دقيقة', 'أونلاين', 'سنتواصل', 'أقرب وقت', 'مصمم'] as $claim) {
@@ -553,5 +553,31 @@ class WebsiteContentTest extends TestCase
         $this->save($club, $doc, $v);
         $this->assertNull($this->asTenant($club, fn () => SiteSetting::first()->published));
         $this->assertTrue($this->asTenant($club, fn () => app(SiteContent::class)->status(SiteSetting::first())['never_published']));
+    }
+
+    public function test_the_privacy_policy_and_terms_are_pages_the_owner_writes(): void
+    {
+        $club = $this->club();
+        // Each page opens with its starting text, in Arabic and in English, as its own page only.
+        $privacy = $this->get(route('site.privacy', ['club' => $club->slug]))->assertOk();
+        $privacy->assertInertia(fn (AssertableInertia $p) => $p->component('Site/Legal')->where('page', 'privacy')
+            ->where('chrome.pages.privacy.title', 'سياسة الخصوصية')
+            ->where('body', fn ($body) => str_contains($body, '## البيانات التي نجمعها'))
+            ->missing('chrome.pages.privacy.body'));
+        $this->get('/c/'.$club->slug.'/en/terms')->assertOk()->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('chrome.pages.terms.title', 'Terms and conditions')
+            ->where('body', fn ($body) => str_contains($body, '## Membership')));
+        // Every other page carries the headings, never the long text.
+        $home = $this->home($club);
+        $this->assertArrayNotHasKey('body', $home['chrome']['pages']['terms']);
+
+        // The owner's own text replaces it, and both pages are in the site map.
+        [$doc, $version] = $this->editor($club);
+        $doc['pages']['terms']['body'] = "شروطنا.\n\n## الدفع\n- مقدمًا";
+        $this->save($club, $doc, $version)->assertSessionHasNoErrors();
+        $this->publish($club, $version + 1)->assertSessionHasNoErrors();
+        auth()->logout();
+        $this->get(route('site.terms', ['club' => $club->slug]))->assertInertia(fn (AssertableInertia $p) => $p->where('body', "شروطنا.\n\n## الدفع\n- مقدمًا"));
+        $this->get(route('site.sitemap', ['club' => $club->slug]))->assertOk()->assertSee('/privacy', false)->assertSee('/terms', false);
     }
 }

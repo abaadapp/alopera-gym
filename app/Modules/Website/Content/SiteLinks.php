@@ -24,6 +24,8 @@ final class SiteLinks
         '@contact' => ['site.contact', 'صفحة تواصل معنا'],
         '@join' => ['site.join', 'صفحة التسجيل والاشتراك'],
         '@shop' => ['site.shop', 'المتجر'],
+        '@privacy' => ['site.privacy', 'صفحة سياسة الخصوصية'],
+        '@terms' => ['site.terms', 'صفحة الشروط والأحكام'],
         '@portal' => ['portal.login', 'دخول العضوات (البوابة)'],
     ];
 

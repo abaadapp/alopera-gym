@@ -254,5 +254,9 @@
     "دخول النادي طوال مدة الاشتراك": "Club access for the whole membership",
     "الدخول إلى النادي يوم الحصة المحجوزة فقط": "Club entry only on the day of a booked class",
     "لا تشمل حجز الحصص": "Class bookings are not included",
-    "باقتك الحالية لا تشمل حجز الحصص.": "Your current membership does not include class bookings."
+    "باقتك الحالية لا تشمل حجز الحصص.": "Your current membership does not include class bookings.",
+    "السياسات": "Policies",
+    "سياسة الخصوصية": "Privacy policy",
+    "الشروط والأحكام": "Terms and conditions",
+    "أوافق على :terms و:privacy": "I agree to the :terms and the :privacy"
 }

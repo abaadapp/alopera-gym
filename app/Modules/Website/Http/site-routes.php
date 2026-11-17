@@ -17,6 +17,8 @@ Route::get('/news', [SiteController::class, 'news'])->name('site.news');
 Route::get('/news/{slug}', [SiteController::class, 'showPost'])->name('site.post');
 Route::get('/contact', [SiteController::class, 'contact'])->name('site.contact');
 Route::post('/contact', [SiteController::class, 'sendContact'])->middleware('throttle:public-forms')->name('site.contact.send');
+Route::get('/privacy', [SiteController::class, 'privacy'])->name('site.privacy');
+Route::get('/terms', [SiteController::class, 'terms'])->name('site.terms');
 Route::get('/sitemap.xml', [SiteController::class, 'sitemap'])->name('site.sitemap');
 
 // Shop: the products the club shows on its website; orders land in the panel (sales module).
