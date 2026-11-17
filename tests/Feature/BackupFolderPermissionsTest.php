@@ -6,6 +6,7 @@ use App\Core\Backup\TenantBackupService;
 use App\Core\Support\BusinessRuleException;
 use App\Models\Tenant;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Event;
@@ -164,6 +165,29 @@ class BackupFolderPermissionsTest extends TestCase
         $this->assertSame('Asia/Muscat', (string) ($event->timezone ?? config('app.timezone')));
         $this->assertTrue($event->withoutOverlapping);
         $this->assertSame(120, $event->expiresAt, 'the lock of a killed run ends long before the next night');
+    }
+
+    public function test_every_folder_the_private_disk_makes_is_open_to_the_shared_group_and_shut_to_others(): void
+    {
+        // The configured disk itself (Storage::fake would use Flysystem's defaults): an upload's folder, as the panel makes it.
+        $root = sys_get_temp_dir().'/perm-'.Str::random(8);
+        $disk = Storage::build(['root' => $root] + config('filesystems.disks.local'));
+        $old = umask(0002); // the deploy user's; the web's 022 leaves the group read and enter, which reading needs
+        try {
+            $disk->put('tenants/7/documents/2026/11/scan.jpg', 'x');
+            foreach (['tenants', 'tenants/7', 'tenants/7/documents/2026/11'] as $dir) {
+                $mode = fileperms($root.'/'.$dir) & 07777;
+                $this->assertSame(0070, $mode & 0070, "$dir: the other user (through the group) can enter, read and write");
+                $this->assertSame(0, $mode & 0007, "$dir: others nothing");
+            }
+            // A folder that is there and made shut is set back to group-open by the disk, not to 0700 as before.
+            chmod($root.'/tenants/7', 0700);
+            $disk->makeDirectory('tenants/7');
+            $this->assertSame(0070, fileperms($root.'/tenants/7') & 0070);
+        } finally {
+            umask($old);
+            (new Filesystem)->deleteDirectory($root);
+        }
     }
 
     public function test_the_page_says_the_folder_cannot_be_read_instead_of_no_backups(): void

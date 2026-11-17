@@ -26,6 +26,8 @@ Schedule::command('notifications:sync')->hourly()->withoutOverlapping(55)->onOne
 // The scheduler's own lock lasts two hours, not its default day: a run killed half-way (the server restarted) must not
 // shut out the next night's. Each club's backup is one at a time anyway (TenantBackupService's PostgreSQL lock).
 Schedule::command('backup:tenants')->dailyAt('03:00')->withoutOverlapping(120)->onOneServer();
+// An hour and a half after: a club with no archive from today and no result told is told the nightly did not run.
+Schedule::command('backup:check-daily')->dailyAt('04:30')->withoutOverlapping(30)->onOneServer();
 Schedule::command('queue:prune-failed --hours=720')->daily();
 Schedule::command('model:prune', ['--model' => [SubmittedOnceKey::class]])->dailyAt('04:20')->withoutOverlapping(120)->onOneServer();
 Schedule::command('whatsapp:prune-webhooks')->dailyAt('04:10')->withoutOverlapping(120)->onOneServer();
