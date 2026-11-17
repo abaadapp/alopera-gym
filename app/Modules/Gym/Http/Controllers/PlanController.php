@@ -103,6 +103,7 @@ class PlanController extends Controller
             'is_public' => ['boolean'],
             'is_featured' => ['boolean'],
             'is_active' => ['boolean'],
+            'giftable' => ['boolean'],
             'sort' => ['nullable', 'integer'],
             'program_ids' => ['array'],
             'program_ids.*' => [TenantRule::exists('gym_programs')],

@@ -6,6 +6,7 @@ use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
+use App\Core\Support\Phone;
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
@@ -63,7 +64,7 @@ final class GiftService
                 'price' => Money::normalize($plan->price),
                 'source' => $source === 'site' ? 'site' : 'staff',
                 'giver_name' => trim($data['giver_name']),
-                'giver_phone' => $data['giver_phone'] ?? null,
+                'giver_phone' => filled($data['giver_phone'] ?? null) ? Phone::normalize($data['giver_phone']) : null,
                 'giver_email' => $data['giver_email'] ?? null,
                 'recipient_name' => trim($data['recipient_name']),
                 'message' => filled($data['message'] ?? null) ? Str::limit(trim($data['message']), 300, '') : null,
@@ -127,7 +128,7 @@ final class GiftService
         $today ??= CarbonImmutable::today();
         $start = CarbonImmutable::parse($startsOn)->startOfDay();
         if ($start->lt($today) || $start->gt($today->addDays(self::MAX_START_DAYS))) {
-            throw new BusinessRuleException('gift.start', 'اختر تاريخ بداية من اليوم وحتى '.self::MAX_START_DAYS.' يومًا.', 'starts_on');
+            throw new BusinessRuleException('gift.start', 'اختر تاريخ بداية من اليوم وحتى 90 يومًا بعده.', 'starts_on');
         }
 
         return DB::transaction(function () use ($gift, $member, $start, $via, $today) {
@@ -165,11 +166,11 @@ final class GiftService
             $gift->status === GiftMembership::REDEEMED => throw new BusinessRuleException('gift.redeemed', 'استُخدمت هذه الهدية من قبل.'),
             $gift->status === GiftMembership::CANCELLED => throw new BusinessRuleException('gift.cancelled', 'هذه الهدية ملغاة.'),
             $gift->status === GiftMembership::REFUNDED => throw new BusinessRuleException('gift.refunded', 'رُدّ مبلغ هذه الهدية، فلا يمكن استخدامها.'),
-            $gift->status === GiftMembership::EXPIRED => throw new BusinessRuleException('gift.expired', 'انتهت مهلة استرداد هذه الهدية في '.$gift->expires_on?->format('Y-m-d').'.'),
+            $gift->status === GiftMembership::EXPIRED => throw new BusinessRuleException('gift.expired', 'انتهت مهلة استرداد هذه الهدية.'),
             $gift->status !== GiftMembership::PAID => throw new BusinessRuleException('gift.unpaid', 'لم يكتمل دفع هذه الهدية بعد.'),
             // Refunded (fully or partly) in finance after it was paid: what was given back is not given again.
             ! $invoice || $invoice->status !== Invoice::PAID => throw new BusinessRuleException('gift.refunded', 'رُدّ مبلغ هذه الهدية، فلا يمكن استخدامها.'),
-            $gift->isExpired($today) => throw new BusinessRuleException('gift.expired', 'انتهت مهلة استرداد هذه الهدية في '.$gift->expires_on->format('Y-m-d').'.'),
+            $gift->isExpired($today) => throw new BusinessRuleException('gift.expired', 'انتهت مهلة استرداد هذه الهدية.'),
             default => null,
         };
     }

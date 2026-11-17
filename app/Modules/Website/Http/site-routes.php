@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Inventory\Http\Controllers\ShopController;
+use App\Modules\Website\Http\Controllers\GiftSiteController;
 use App\Modules\Website\Http\Controllers\PayController;
 use App\Modules\Website\Http\Controllers\PortalAuthController;
 use App\Modules\Website\Http\Controllers\PortalController;
@@ -43,6 +44,13 @@ Route::get('/invoice/{token}', [PayController::class, 'invoice'])->where('token'
 Route::get('/invoice/{token}/print', [PayController::class, 'invoicePrint'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:portal')->name('site.invoice.print');
 Route::get('/invoice/{token}/pdf', [PayController::class, 'invoicePdf'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:portal')->name('site.invoice.pdf');
 
+// Gift memberships (#192): buy a published plan as a gift, its card at a secret link, and claiming it.
+Route::get('/gift/plan/{plan}', [GiftSiteController::class, 'create'])->whereNumber('plan')->name('site.gift.create');
+Route::post('/gift/plan/{plan}', [GiftSiteController::class, 'store'])->whereNumber('plan')->middleware('throttle:public-forms')->name('site.gift.store');
+Route::get('/gift/{token}', [GiftSiteController::class, 'show'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:portal')->name('site.gift.show');
+Route::get('/gift/{token}/claim', [GiftSiteController::class, 'claim'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:portal')->name('site.gift.claim');
+Route::post('/gift/{token}/register', [GiftSiteController::class, 'register'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:public-forms')->name('site.gift.register');
+
 // Member portal
 Route::prefix('portal')->name('portal.')->group(function () {
     Route::middleware('guest:member')->group(function () {
@@ -63,5 +71,7 @@ Route::prefix('portal')->name('portal.')->group(function () {
         Route::post('/bookings/{booking}/cancel', [PortalController::class, 'cancelBooking'])->name('bookings.cancel');
         Route::get('/profile', [PortalController::class, 'profile'])->name('profile');
         Route::put('/profile', [PortalController::class, 'updateProfile'])->name('profile.update');
+        Route::get('/gift/{token}', [GiftSiteController::class, 'redeemForm'])->where('token', '[A-Za-z0-9]{48}')->name('gift.redeem');
+        Route::post('/gift/{token}', [GiftSiteController::class, 'redeem'])->where('token', '[A-Za-z0-9]{48}')->name('gift.redeem.store');
     });
 });

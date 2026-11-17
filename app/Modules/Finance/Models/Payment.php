@@ -52,6 +52,7 @@ class Payment extends Model implements BranchOwned
         'membership_overlap' => 'للعضو اشتراك آخر يغطي الفترة نفسها',
         'membership_previous_closed' => 'الاشتراك الذي تحلّ محله الترقية أُلغي أو انتهى',
         'pt_not_pending' => 'باقة التدريب لم تعد بانتظار الدفع',
+        'gift_not_pending' => 'هدية الاشتراك أُلغيت قبل اكتمال دفعها',
     ];
 
     /** The kinds of money account a method may land in when one is chosen. */

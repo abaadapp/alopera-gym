@@ -5,6 +5,7 @@ use App\Modules\Gym\Http\Controllers\BookingController;
 use App\Modules\Gym\Http\Controllers\CheckInController;
 use App\Modules\Gym\Http\Controllers\CouponController;
 use App\Modules\Gym\Http\Controllers\DeviceController;
+use App\Modules\Gym\Http\Controllers\GiftController;
 use App\Modules\Gym\Http\Controllers\MemberController;
 use App\Modules\Gym\Http\Controllers\MemberCredentialController;
 use App\Modules\Gym\Http\Controllers\MemberDocumentController;
@@ -65,6 +66,15 @@ Route::post('/memberships/{membership}/upgrade', [MembershipController::class, '
 
 Route::resource('plans', PlanController::class)->except(['show', 'create', 'edit'])->middleware('can:plans.manage');
 Route::resource('coupons', CouponController::class)->except(['show', 'create', 'edit'])->middleware('can:plans.manage');
+
+// Gift memberships (#192): issue, collect, list, redeem for a member, cancel.
+Route::get('/gifts', [GiftController::class, 'index'])->middleware('can:gifts.view')->name('gifts.index');
+Route::post('/gifts', [GiftController::class, 'store'])->middleware('can:gifts.create')->name('gifts.store');
+Route::get('/gifts/members', [GiftController::class, 'members'])->middleware('can:gifts.redeem')->name('gifts.members');
+Route::get('/gifts/{gift}', [GiftController::class, 'show'])->whereNumber('gift')->middleware('can:gifts.view')->name('gifts.show');
+Route::post('/gifts/{gift}/pay', [GiftController::class, 'pay'])->whereNumber('gift')->middleware(['can:gifts.create', 'can:payments.record'])->name('gifts.pay');
+Route::post('/gifts/{gift}/redeem', [GiftController::class, 'redeem'])->whereNumber('gift')->middleware('can:gifts.redeem')->name('gifts.redeem');
+Route::post('/gifts/{gift}/cancel', [GiftController::class, 'cancel'])->whereNumber('gift')->middleware('can:gifts.manage')->name('gifts.cancel');
 
 // ─── Training ──────────────────────────────────────────────────────────
 Route::resource('programs', ProgramController::class)->except(['show', 'create', 'edit'])->middleware('can:classes.manage');

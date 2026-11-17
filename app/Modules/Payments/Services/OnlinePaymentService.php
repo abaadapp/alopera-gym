@@ -12,6 +12,7 @@ use App\Models\TenantIntegration;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\PaymentService;
+use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Inventory\Models\Sale;
@@ -473,7 +474,7 @@ final class OnlinePaymentService
             return 'order_closed';
         }
 
-        $items = $invoice->items()->whereIn('itemable_type', ['membership', 'pt_subscription'])->get(['itemable_type', 'itemable_id']);
+        $items = $invoice->items()->whereIn('itemable_type', ['membership', 'pt_subscription', 'gift_membership'])->get(['itemable_type', 'itemable_id']);
         $today = CarbonImmutable::today();
         $memberships = Membership::whereIn('id', $items->where('itemable_type', 'membership')->pluck('itemable_id')->unique())->orderBy('id')->lockForUpdate()->get();
         foreach ($memberships as $membership) {
@@ -503,6 +504,15 @@ final class OnlinePaymentService
         foreach ($subscriptions as $subscription) {
             if ($subscription->status !== PtSubscription::PENDING) {
                 return 'pt_not_pending';
+            }
+        }
+        // A gift (#192) cancelled while its invoice was still open (a desk payment on part of it kept the invoice from
+        // being voided): the money is held for review, not applied to a gift nobody can use. Invoice then gift, the
+        // order GiftService takes.
+        $gifts = GiftMembership::whereIn('id', $items->where('itemable_type', 'gift_membership')->pluck('itemable_id')->unique())->orderBy('id')->lockForUpdate()->get();
+        foreach ($gifts as $gift) {
+            if ($gift->status !== GiftMembership::PENDING) {
+                return 'gift_not_pending';
             }
         }
 

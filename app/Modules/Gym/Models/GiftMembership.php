@@ -4,6 +4,8 @@ namespace App\Modules\Gym\Models;
 
 use App\Core\Audit\Auditable;
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
+use App\Core\Tenancy\OwnedByBranch;
 use App\Modules\Finance\Models\Invoice;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
@@ -21,9 +23,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * A paid gift past expires_on is treated as expired at once (isExpired), before the nightly job stores it.
  * Only a fully paid invoice moves a gift out of `pending`; a bank transfer awaiting confirmation does not.
  */
-class GiftMembership extends Model
+class GiftMembership extends Model implements BranchOwned
 {
-    use Auditable, BelongsToTenant;
+    use Auditable, BelongsToTenant, OwnedByBranch;
 
     public const PENDING = 'pending';
 

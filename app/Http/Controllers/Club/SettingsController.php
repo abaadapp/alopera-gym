@@ -101,6 +101,7 @@ class SettingsController extends Controller
             'rules.cr_number' => ['nullable', 'string', 'max:40'],
             'rules.invoice_footer' => ['nullable', 'string', 'max:500'],
             'rules.invoice_due_days' => ['integer', 'between:0,90'],
+            'rules.gift_redeem_days' => ['integer', 'between:1,365'],
             'rules.allow_pay_at_reception' => ['boolean'],
             'rules.member_signup_enabled' => ['boolean'],
         ]);

@@ -6,6 +6,7 @@ use App\Core\Papers\Papers;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Services\OnlinePaymentService;
@@ -62,6 +63,8 @@ class PayController extends Controller
             'invoice' => $intent->invoice?->only('number') + ['token' => $intent->invoice?->public_token],
             // A website order's payment returns to the order's own page link.
             'order' => $intent->invoice_id ? Sale::where('invoice_id', $intent->invoice_id)->where('source', Sale::WEBSITE)->value('public_token') : null,
+            // A gift's payment (#192) returns to the gift's card, which shows it usable only once the webhook paid it.
+            'gift' => $intent->invoice_id ? GiftMembership::where('invoice_id', $intent->invoice_id)->first()?->linkToken() : null,
         ], __('نتيجة الدفع'));
     }
 

@@ -320,6 +320,7 @@ final class SiteRenderer
             'type_label' => SiteLanguage::word(MembershipPlan::TYPES[$p->type] ?? $p->type), 'features' => SiteLanguage::pickList($p->features, $p->features_en), 'is_featured' => (bool) $p->is_featured,
             'allows_gym' => $p->allowsGym(), 'allows_classes' => $p->allowsClasses(), 'sessions_limit' => $p->sessions_limit,
             'join_url' => route('site.join', ['plan' => $p->id]),
+            'gift_url' => $p->giftable ? route('site.gift.create', ['plan' => $p->id]) : null,
         ])->all();
     }
 
