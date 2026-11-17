@@ -50,6 +50,9 @@ return [
     |
     */
 
+    // The log files are shared by two users on the server: PHP-FPM (www-data) and the scheduler, queue worker and deploy
+    // (deploy, in the www-data group). Whoever creates a file, it is made 0660: both write it, nobody else reads it. Without
+    // this, Monolog leaves it to the creator's umask (0644 under PHP-FPM) and deploy's errors are lost (#197).
     'channels' => [
 
         'stack' => [
@@ -61,6 +64,7 @@ return [
         'single' => [
             'driver' => 'single',
             'path' => storage_path('logs/laravel.log'),
+            'permission' => 0660,
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
         ],
@@ -68,6 +72,7 @@ return [
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),
+            'permission' => 0660,
             'level' => env('LOG_LEVEL', 'debug'),
             'max_files' => env('LOG_DAILY_DAYS', 14),
             'replace_placeholders' => true,
@@ -76,6 +81,7 @@ return [
         'monthly' => [
             'driver' => 'monthly',
             'path' => storage_path('logs/laravel.log'),
+            'permission' => 0660,
             'level' => env('LOG_LEVEL', 'debug'),
             'max_files' => 3,
             'replace_placeholders' => true,
