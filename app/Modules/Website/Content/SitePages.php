@@ -19,10 +19,26 @@ final class SitePages
         'contact' => ['label' => 'صفحة تواصل معنا', 'title' => 'تواصل معنا', 'subtitle' => 'بيانات التواصل مع النادي، ونموذج لإرسال رسالة.'],
         'join' => ['label' => 'صفحة التسجيل', 'title' => 'اشترك الآن', 'subtitle' => 'اختر الباقة وأكمل بياناتك.'],
         'shop' => ['label' => 'صفحة المتجر', 'title' => 'المتجر', 'subtitle' => 'منتجات النادي وأسعارها.'],
+        // The legal pages: their text starts from legal/*.md (a starting point the owner reviews), then is the owner's.
+        'privacy' => ['label' => 'صفحة سياسة الخصوصية', 'title' => 'سياسة الخصوصية', 'subtitle' => 'كيف نجمع بياناتكِ ونستخدمها ونحميها.', 'extra' => ['body' => '']],
+        'terms' => ['label' => 'صفحة الشروط والأحكام', 'title' => 'الشروط والأحكام', 'subtitle' => 'شروط العضوية واستخدام الموقع.', 'extra' => ['body' => '']],
     ];
 
+    /** The legal pages' text: up to 20,000 characters; «## » starts a heading and «- » a point. */
+    public const BODY_MAX = 20000;
+
     /** Field labels in the editor. */
-    private const LABELS = ['title' => 'عنوان الصفحة', 'subtitle' => 'السطر تحت العنوان', 'pt_title' => 'عنوان قسم التدريب الشخصي', 'pt_subtitle' => 'السطر تحت عنوان التدريب الشخصي'];
+    private const LABELS = ['title' => 'عنوان الصفحة', 'subtitle' => 'السطر تحت العنوان', 'pt_title' => 'عنوان قسم التدريب الشخصي', 'pt_subtitle' => 'السطر تحت عنوان التدريب الشخصي', 'body' => 'نص الصفحة'];
+
+    /** How a page field is edited and checked. @return array{type: string, max: int, rows?: int, help?: string} */
+    private static function meta(string $field): array
+    {
+        return match (true) {
+            $field === 'body' => ['type' => 'textarea', 'max' => self::BODY_MAX, 'rows' => 18, 'help' => 'سطر يبدأ بـ «## » يصير عنوانًا، وسطر يبدأ بـ «- » يصير نقطة، وسطر فارغ يبدأ فقرة جديدة.'],
+            str_ends_with($field, 'subtitle') => ['type' => 'textarea', 'max' => 300],
+            default => ['type' => 'text', 'max' => 80],
+        };
+    }
 
     /** The fields of the document's `pages` part, checked like the rest of the document. @return list<array<string, mixed>> */
     public static function fields(): array
@@ -30,18 +46,29 @@ final class SitePages
         return collect(self::PAGES)->map(fn ($page, $key) => [
             'key' => $key,
             'type' => 'group',
-            'fields' => collect(self::keys($key))->map(fn ($field) => [
-                'key' => $field,
-                'type' => str_ends_with($field, 'subtitle') ? 'textarea' : 'text',
-                'max' => str_ends_with($field, 'subtitle') ? 300 : 80,
-            ])->all(),
+            'fields' => collect(self::keys($key))->map(fn ($field) => ['key' => $field, 'type' => self::meta($field)['type'], 'max' => self::meta($field)['max']])->all(),
         ])->values()->all();
     }
 
     /** @return array<string, array<string, string>> */
     public static function defaults(): array
     {
-        return collect(self::PAGES)->map(fn ($page) => ['title' => $page['title'], 'subtitle' => $page['subtitle']] + ($page['extra'] ?? []))->all();
+        return collect(self::PAGES)->map(function ($page, $key) {
+            $extra = $page['extra'] ?? [];
+            if (array_key_exists('body', $extra) && $extra['body'] === '') {
+                $extra['body'] = self::legalText($key);
+            }
+
+            return ['title' => $page['title'], 'subtitle' => $page['subtitle']] + $extra;
+        })->all();
+    }
+
+    /** The starting text of a legal page (Arabic; its English is in lang/en.json). */
+    public static function legalText(string $page): string
+    {
+        $file = __DIR__.'/legal/'.$page.'.md';
+
+        return is_file($file) ? trim((string) file_get_contents($file)) : '';
     }
 
     /**
@@ -75,12 +102,7 @@ final class SitePages
         return collect(self::PAGES)->map(fn ($page, $key) => [
             'key' => $key,
             'label' => $page['label'],
-            'fields' => collect(self::keys($key))->map(fn ($field) => [
-                'key' => $field,
-                'type' => str_ends_with($field, 'subtitle') ? 'textarea' : 'text',
-                'label' => self::LABELS[$field],
-                'max' => str_ends_with($field, 'subtitle') ? 300 : 80,
-            ])->all(),
+            'fields' => collect(self::keys($key))->map(fn ($field) => ['key' => $field, 'label' => self::LABELS[$field]] + self::meta($field))->all(),
         ])->values()->all();
     }
 

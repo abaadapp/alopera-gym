@@ -45,13 +45,15 @@ export interface SectionDoc {
 }
 
 /** The inner pages whose title and line under it the owner writes (app/Modules/Website/Content/SitePages). */
-export type PageKey = 'plans' | 'programs' | 'schedule' | 'trainers' | 'news' | 'contact' | 'join' | 'shop';
+export type PageKey = 'plans' | 'programs' | 'schedule' | 'trainers' | 'news' | 'contact' | 'join' | 'shop' | 'privacy' | 'terms';
 export interface PageText {
     title: string;
     subtitle: string;
     /** Only on the plans page: the personal training part. */
     pt_title?: string;
     pt_subtitle?: string;
+    /** Only in the editor, for the legal pages (privacy, terms): the page's text (visitors get it on its own page). */
+    body?: string;
 }
 
 export interface SiteDoc {
