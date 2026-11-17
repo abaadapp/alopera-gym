@@ -155,5 +155,7 @@
     "اختر تاريخ بداية من اليوم وحتى 90 يومًا بعده.": "Choose a start date from today up to 90 days ahead.",
     "هذه الباقة غير متاحة للإهداء.": "This plan cannot be given as a gift.",
     "يوجد اشتراك آخر يغطي هذه الأيام. اختر تاريخ بداية بعد نهايته.": "Another membership covers these days. Choose a start date after it ends.",
-    "يوجد اشتراك بانتظار الدفع على هذا الحساب. أكمل دفعه أو ألغِه قبل استلام الهدية.": "A membership on this account is awaiting payment. Pay or cancel it before claiming the gift."
+    "يوجد اشتراك بانتظار الدفع على هذا الحساب. أكمل دفعه أو ألغِه قبل استلام الهدية.": "A membership on this account is awaiting payment. Pay or cancel it before claiming the gift.",
+    "هذه الهدية مخصصة لرقم جوال آخر. استلميها بالحساب المسجّل برقم المستلمة، أو اطلبي تفعيلها من استقبال النادي.": "This gift is tied to another phone number. Claim it with the account registered to the recipient's number, or ask the club reception to activate it.",
+    "هذه الهدية مرتبطة برقم جوال المستلمة. أنشئي الحساب بذلك الرقم.": "This gift is tied to the recipient's phone number. Create the account with that number."
 }

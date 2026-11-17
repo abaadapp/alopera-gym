@@ -8,6 +8,8 @@ use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Core\Support\Phone;
 use App\Core\Tenancy\TenantContext;
+use App\Modules\Finance\Events\CreditNoteIssuing;
+use App\Modules\Finance\Events\PaymentCancelled;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Services\InvoiceService;
@@ -67,6 +69,8 @@ final class GiftService
                 'giver_phone' => filled($data['giver_phone'] ?? null) ? Phone::normalize($data['giver_phone']) : null,
                 'giver_email' => $data['giver_email'] ?? null,
                 'recipient_name' => trim($data['recipient_name']),
+                // Optional: when given, only an account with this number redeems it from the link (#192 review).
+                'recipient_phone' => filled($data['recipient_phone'] ?? null) ? Phone::normalize($data['recipient_phone']) : null,
                 'message' => filled($data['message'] ?? null) ? Str::limit(trim($data['message']), 300, '') : null,
                 'status' => GiftMembership::PENDING,
                 'token_hash' => GiftMembership::hashToken($token),
@@ -136,6 +140,11 @@ final class GiftService
             $gift = GiftMembership::whereKey($gift->id)->lockForUpdate()->firstOrFail();
 
             $this->assertRedeemable($gift, $invoice, $today);
+            // Tied to the recipient's number by the giver: from the link, only that account takes it. Staff, who see who
+            // is in front of them, may redeem it for another member (the panel shows the number it was meant for).
+            if ($via === 'link' && $gift->recipient_phone !== null && Phone::normalize((string) $member->phone) !== $gift->recipient_phone) {
+                throw new BusinessRuleException('gift.not_recipient', 'هذه الهدية مخصصة لرقم جوال آخر. استلميها بالحساب المسجّل برقم المستلمة، أو اطلبي تفعيلها من استقبال النادي.');
+            }
 
             $plan = MembershipPlan::withTrashed()->findOrFail($gift->membership_plan_id);
             try {
@@ -213,20 +222,108 @@ final class GiftService
     }
 
     /**
-     * A credit note on a gift's invoice once it was paid (CreditNote created, inside CreditNoteService::issue, under the
-     * invoice's lock): the money, or part of it, goes back, so the gift can no longer be used. A note while the gift
-     * still waits for its money (an agreed discount that settles the rest) changes nothing here: InvoicePaid follows.
-     * A redeemed gift stays redeemed: what is credited then comes out of the membership's revenue.
+     * CreditNoteIssuing (CreditNoteService::issue, the invoice locked): a gift not used is given back in full or not at
+     * all — never in part, which would leave a gift nobody can use and money nobody decided about. Once redeemed it is
+     * a membership like any other, refunded as finance sees fit.
+     */
+    public function guardCredit(CreditNoteIssuing $event): void
+    {
+        $gift = GiftMembership::where('invoice_id', $event->invoice->id)->lockForUpdate()->first();
+        if (! $gift || $gift->status === GiftMembership::REDEEMED) {
+            return;
+        }
+        if (Money::cmp($event->amount, $event->invoice->netTotal()) !== 0) {
+            throw new BusinessRuleException('gift.partial_refund', 'هدية الاشتراك غير المستخدمة تُردّ كاملة أو لا تُردّ. المبلغ الكامل: '.$event->invoice->netTotal().'.', 'amount');
+        }
+    }
+
+    /**
+     * The credit note was issued (CreditNote created, inside CreditNoteService::issue, under the invoice's lock): it
+     * gave the whole of it back (guardCredit), so the gift is closed. Paid (or cancelled after its money came): refunded.
+     * Still waiting for its money: cancelled. Expired: stays expired (its value already left the liability). Redeemed:
+     * stays redeemed, and what is credited comes out of the membership's revenue.
      */
     public function refundedBy(CreditNote $note): void
     {
         $gift = GiftMembership::where('invoice_id', $note->invoice_id)->lockForUpdate()->first();
-        if (! $gift || ! in_array($gift->status, [GiftMembership::PAID, GiftMembership::CANCELLED], true) || $gift->paid_at === null) {
+        if (! $gift) {
+            return;
+        }
+        if ($gift->status === GiftMembership::PENDING) {
+            $gift->forceFill(['status' => GiftMembership::CANCELLED, 'cancelled_at' => now(), 'cancel_reason' => 'invoice_credited'])->save();
+            $this->audit->log('gift.cancelled', $gift, ['number' => $gift->number, 'reason' => 'invoice_credited', 'credit_note' => $note->number]);
+
+            return;
+        }
+        if (! in_array($gift->status, [GiftMembership::PAID, GiftMembership::CANCELLED], true) || $gift->paid_at === null) {
             return;
         }
 
         $gift->forceFill(['status' => GiftMembership::REFUNDED, 'refunded_at' => now(), 'refund_note_id' => $note->id])->save();
         $this->audit->log('gift.refunded', $gift, ['number' => $gift->number, 'credit_note' => $note->number, 'amount' => $note->amount]);
+    }
+
+    /**
+     * PaymentCancelled (a payment recorded by mistake, PaymentService::cancel, the invoice locked): a gift no longer
+     * fully paid waits for its money again. A redeemed one cannot be taken back that way: the membership was given.
+     */
+    public function paymentCancelled(PaymentCancelled $event): void
+    {
+        $gift = GiftMembership::where('invoice_id', $event->invoice->id)->lockForUpdate()->first();
+        if (! $gift) {
+            return;
+        }
+        if ($gift->status === GiftMembership::REDEEMED) {
+            throw new BusinessRuleException('gift.redeemed_payment', 'استُخدمت الهدية التي دُفعت بها هذه الدفعة، فلا تُلغى. ردّ المبلغ بإشعار دائن.');
+        }
+        if ($gift->status === GiftMembership::PAID && $event->invoice->status !== Invoice::PAID) {
+            $gift->forceFill(['status' => GiftMembership::PENDING, 'paid_at' => null, 'expires_on' => null])->save();
+            $this->audit->log('gift.unpaid', $gift, ['number' => $gift->number, 'payment' => $event->payment->id]);
+        }
+    }
+
+    /**
+     * «رابط جديد»: a new secret link for a gift not yet used; the old one stops at once (sent to the wrong person, or
+     * seen where it should not have been).
+     */
+    public function rotateLink(GiftMembership $gift): GiftMembership
+    {
+        return DB::transaction(function () use ($gift) {
+            $gift = GiftMembership::whereKey($gift->id)->lockForUpdate()->firstOrFail();
+            if (! in_array($gift->status, [GiftMembership::PENDING, GiftMembership::PAID], true)) {
+                throw new BusinessRuleException('gift.closed', 'هذه الهدية لم تعد قابلة للاستخدام، فلا يُصدر لها رابط جديد.');
+            }
+            $token = Str::random(48);
+            $gift->forceFill(['token' => $token, 'token_hash' => GiftMembership::hashToken($token)])->save();
+            $this->audit->log('gift.link_rotated', $gift, ['number' => $gift->number]);
+
+            return $gift;
+        });
+    }
+
+    /**
+     * The repair path for a missed InvoicePaid (a gift's invoice paid while this code was rolled back, or a listener
+     * that failed): a gift still waiting whose invoice is fully paid is marked paid, its window counted from the day the
+     * invoice was paid. Read under the invoice's lock, then the gift's (markPaid). Run nightly by gym:daily-memberships.
+     */
+    public function reconcilePaid(): int
+    {
+        $count = 0;
+        GiftMembership::where('status', GiftMembership::PENDING)->whereNotNull('invoice_id')
+            ->whereHas('invoice', fn ($q) => $q->where('status', Invoice::PAID))
+            ->eachById(function (GiftMembership $gift) use (&$count) {
+                DB::transaction(function () use ($gift, &$count) {
+                    $invoice = Invoice::whereKey($gift->invoice_id)->lockForUpdate()->first();
+                    if ($invoice?->status !== Invoice::PAID) {
+                        return;
+                    }
+                    $before = $gift->status;
+                    $this->markPaid($gift, CarbonImmutable::parse($invoice->paid_at ?? now())->startOfDay());
+                    $count += (int) ($gift->fresh()->status !== $before);
+                });
+            });
+
+        return $count;
     }
 
     /**

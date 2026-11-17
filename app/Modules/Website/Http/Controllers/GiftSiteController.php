@@ -82,6 +82,7 @@ class GiftSiteController extends Controller
             'giver_phone' => ['required', 'string', 'max:32', 'regex:/^[+0-9٠-٩\s-]{8,20}$/u'],
             'giver_email' => ['nullable', 'email', 'max:190'],
             'recipient_name' => ['required', 'string', 'max:120'],
+            'recipient_phone' => ['nullable', 'string', 'max:32', 'regex:/^[+0-9٠-٩\s-]{8,20}$/u'],
             'message' => ['nullable', 'string', 'max:300'],
             'accept_terms' => ['accepted'],
             'website' => ['prohibited'], // honeypot
@@ -95,6 +96,7 @@ class GiftSiteController extends Controller
             'giver_phone' => Phone::normalize($data['giver_phone']),
             'giver_email' => $data['giver_email'] ?? null,
             'recipient_name' => $data['recipient_name'],
+            'recipient_phone' => $data['recipient_phone'] ?? null,
             'message' => $data['message'] ?? null,
         ], 'site'));
         $request->session()->push(self::BOUGHT, $gift->id);
@@ -161,6 +163,11 @@ class GiftSiteController extends Controller
         if (! $gift->isRedeemable()) {
             return redirect()->route('site.gift.show', ['token' => $token]);
         }
+        // A gift tied to the recipient's number makes an account only with that number (the link may reach others).
+        if ($gift->recipient_phone !== null && Phone::normalize($data['phone']) !== $gift->recipient_phone) {
+            throw ValidationException::withMessages(['phone' => SiteLanguage::word('هذه الهدية مرتبطة برقم جوال المستلمة. أنشئي الحساب بذلك الرقم.')]);
+        }
+        // One account per number (and per e-mail, above), whatever the gift: a duplicate is never made from a link.
         if (Member::withTrashed()->where('phone', Phone::normalize($data['phone']))->exists()) {
             throw ValidationException::withMessages(['phone' => SiteLanguage::word('هذا الرقم مسجّل لدينا. سجّلي الدخول لاستلام الهدية.')]);
         }
@@ -197,6 +204,8 @@ class GiftSiteController extends Controller
             'suggested' => ($suggested->lt($today) ? $today : ($suggested->gt($max) ? $max : $suggested))->toDateString(),
             'covered_until' => $last ? CarbonImmutable::parse($last)->toDateString() : null,
             'member_name' => $member->full_name,
+            // Tied to another number: said before anything is chosen (the redemption refuses it anyway).
+            'not_recipient' => $gift->recipient_phone !== null && Phone::normalize((string) $member->phone) !== $gift->recipient_phone,
         ], __('استلام الهدية'));
     }
 
@@ -226,12 +235,21 @@ class GiftSiteController extends Controller
             'duration_label' => $english ? $n.' '.($snapshot['duration_unit'] ?? '').($n === 1 ? '' : 's') : ($snapshot['duration_label'] ?? ''),
             'expires_on' => $gift->paid_at ? $gift->expires_on?->toDateString() : null,
             'club' => app(TenantContext::class)->require()->name,
+            // Whether only the recipient's number can take it; the number itself is never shown on the card.
+            'for_recipient_number' => $gift->recipient_phone !== null,
         ];
     }
 
-    /** The gift's conditions, as every gift page states them. @return array{redeem_days: int, max_start_days: int} */
+    /**
+     * The gift's conditions, as every gift page states them, before payment too: the window (and the last day if paid
+     * today), when the period starts, used once, no part refunded, and no refund once expired or used.
+     *
+     * @return array{redeem_days: int, max_start_days: int, expires_if_paid_today: string}
+     */
     private function terms(): array
     {
-        return ['redeem_days' => $this->gifts->redeemDays(), 'max_start_days' => GiftService::MAX_START_DAYS];
+        $days = $this->gifts->redeemDays();
+
+        return ['redeem_days' => $days, 'max_start_days' => GiftService::MAX_START_DAYS, 'expires_if_paid_today' => today()->addDays($days)->toDateString()];
     }
 }

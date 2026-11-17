@@ -223,4 +223,59 @@ class GiftPanelTest extends TestCase
         $this->actingAs($this->owner($other))->post(route('club.gifts.redeem', $gift), ['mode' => 'new', 'full_name' => 'X', 'phone' => '94445555', 'starts_on' => today()->toDateString()])->assertNotFound();
         $this->asTenant($club, fn () => $this->assertSame(GiftMembership::PAID, $gift->fresh()->status));
     }
+
+    public function test_a_new_link_stops_the_old_one_and_only_managers_issue_it(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $this->issue($owner, $this->plan($club), ['recipient_phone' => '95551234']);
+        $gift = $this->onlyGift($club);
+        $this->assertSame('96895551234', $gift->recipient_phone);
+        $old = $this->asTenant($club, fn () => $gift->fresh()->linkToken());
+
+        $this->actingAs($this->roleWith($club, ['gifts.view', 'gifts.redeem']))->post(route('club.gifts.link', $gift))->assertForbidden();
+        $this->actingAs($owner)->post(route('club.gifts.link', $gift))->assertSessionHasNoErrors();
+        $new = $this->asTenant($club, fn () => $gift->fresh()->linkToken());
+
+        $this->assertNotSame($old, $new);
+        $this->get(route('site.gift.show', ['club' => $club->slug, 'token' => $old]))->assertNotFound();
+        $this->get(route('site.gift.show', ['club' => $club->slug, 'token' => $new]))->assertOk();
+        $this->assertDatabaseHas('audit_logs', ['event' => 'gift.link_rotated', 'subject_id' => $gift->id]);
+
+        // Staff see whom it was meant for and may still redeem it for the member in front of them.
+        $this->actingAs($owner)->get(route('club.gifts.show', $gift))->assertInertia(fn ($page) => $page->where('gift.recipient_phone', '96895551234'));
+        $this->actingAs($owner)->post(route('club.gifts.redeem', $gift), ['mode' => 'existing', 'member_id' => $this->member($club)->id, 'starts_on' => today()->toDateString()])
+            ->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.gifts.link', $gift))->assertSessionHasErrors('error');
+    }
+
+    public function test_each_permission_opens_only_its_own_action(): void
+    {
+        $club = $this->club();
+        $owner = $this->owner($club);
+        $plan = $this->plan($club);
+        $this->issue($owner, $plan, ['payment_method' => 'later']);
+        $pending = $this->onlyGift($club);
+        $member = $this->member($club);
+
+        // Collecting needs both gifts.create and payments.record.
+        $this->actingAs($this->roleWith($club, ['gifts.view', 'payments.record']))->post(route('club.gifts.pay', $pending), ['method' => 'cash'])->assertForbidden();
+        $collector = $this->roleWith($club, ['gifts.view', 'gifts.create', 'payments.record']);
+        $this->actingAs($collector)->get(route('club.gifts.show', $pending))->assertInertia(fn ($page) => $page->where('methods', ['cash', 'card', 'bank_transfer', 'other']));
+        $this->actingAs($this->roleWith($club, ['gifts.view', 'payments.record']))->get(route('club.gifts.show', $pending))->assertInertia(fn ($page) => $page->where('methods', []));
+        $this->actingAs($collector)->post(route('club.gifts.pay', $pending), ['method' => 'cash'])->assertSessionHasNoErrors();
+
+        // Redeeming needs gifts.redeem; its member search does not need the members list.
+        $redeemer = $this->roleWith($club, ['gifts.view', 'gifts.redeem']);
+        $this->actingAs($redeemer)->get(route('club.members.search', ['q' => 'Member']))->assertForbidden();
+        $this->actingAs($redeemer)->getJson(route('club.gifts.members', ['q' => $member->full_name]))->assertOk()->assertJsonPath('0.id', $member->id);
+        $this->actingAs($redeemer)->post(route('club.gifts.cancel', $pending), ['reason' => 'x'])->assertForbidden();
+        $this->actingAs($redeemer)->post(route('club.gifts.redeem', $pending), ['mode' => 'existing', 'member_id' => $member->id, 'starts_on' => today()->toDateString()])
+            ->assertSessionHasNoErrors();
+
+        // Cancelling needs gifts.manage, and a used gift is never cancelled.
+        $manager = $this->roleWith($club, ['gifts.view', 'gifts.manage']);
+        $this->actingAs($manager)->post(route('club.gifts.cancel', $pending), ['reason' => 'x'])->assertSessionHasErrors('error');
+        $this->asTenant($club, fn () => $this->assertSame(GiftMembership::REDEEMED, $pending->fresh()->status));
+    }
 }

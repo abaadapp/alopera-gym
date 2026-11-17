@@ -3,8 +3,10 @@
 namespace App\Modules\Gym;
 
 use App\Core\Support\ModuleServiceProvider;
+use App\Modules\Finance\Events\CreditNoteIssuing;
 use App\Modules\Finance\Events\InvoicePaid;
 use App\Modules\Finance\Events\InvoiceVoided;
+use App\Modules\Finance\Events\PaymentCancelled;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Gym\Listeners\ActivatePaidItems;
 use App\Modules\Gym\Services\GiftService;
@@ -23,5 +25,8 @@ class GymServiceProvider extends ModuleServiceProvider
         Event::listen(InvoiceVoided::class, [ActivatePaidItems::class, 'handleVoided']);
         // A credit note on a paid gift's invoice (inside CreditNoteService::issue, under the invoice's lock) ends the gift.
         CreditNote::created(fn (CreditNote $note) => app(GiftService::class)->refundedBy($note));
+        // A gift not used is refunded in full or not at all; a mistaken payment's cancellation sends it back to waiting.
+        Event::listen(CreditNoteIssuing::class, [GiftService::class, 'guardCredit']);
+        Event::listen(PaymentCancelled::class, [GiftService::class, 'paymentCancelled']);
     }
 }

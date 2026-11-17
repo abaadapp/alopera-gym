@@ -336,10 +336,12 @@ final class LedgerProjector
         }
         $at = $note->created_at;
 
+        // A note before the gift was redeemed or expired would have closed it (a gift not used is refunded only in full,
+        // GiftService::guardCredit), so it could not have been redeemed or expired after: a note of the same second came after.
         return match (true) {
             $gift->refund_note_id !== null && $note->id > $gift->refund_note_id => false,
-            $gift->redeemed_at !== null && $at !== null && $gift->redeemed_at->lt($at) => false,
-            $gift->expired_at !== null && $at !== null && $gift->expired_at->lt($at) => false,
+            $gift->redeemed_at !== null && $at !== null && $gift->redeemed_at->lte($at) => false,
+            $gift->expired_at !== null && $at !== null && $gift->expired_at->lte($at) => false,
             default => true,
         };
     }

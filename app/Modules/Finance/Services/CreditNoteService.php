@@ -7,6 +7,7 @@ use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Support\NumberSequence;
 use App\Modules\Accounting\Services\AccountFunds;
+use App\Modules\Finance\Events\CreditNoteIssuing;
 use App\Modules\Finance\Events\InvoicePaid;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
@@ -70,6 +71,9 @@ final class CreditNoteService
             if (Money::isZero($invoice->paid_total) && Money::isZero($invoice->credited_total) && Money::cmp($amount, $invoice->netTotal()) === 0) {
                 throw new BusinessRuleException('credit.use_void', 'الفاتورة غير مدفوعة: لإلغائها بالكامل استخدم «إلغاء الفاتورة».', 'amount');
             }
+
+            // What the invoice sold may limit how it is given back (a gift membership: in full or not at all).
+            CreditNoteIssuing::dispatch($invoice, Money::normalize($amount));
 
             $wasOpen = $invoice->isOpen();
 

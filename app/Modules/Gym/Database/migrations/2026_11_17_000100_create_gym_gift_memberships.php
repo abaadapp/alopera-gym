@@ -27,6 +27,8 @@ return new class extends Migration
             $table->string('giver_phone', 30)->nullable();
             $table->string('giver_email', 190)->nullable();
             $table->string('recipient_name', 120);
+            // Optional: when the giver gives it, only an account with this number redeems the gift from its link.
+            $table->string('recipient_phone', 30)->nullable();
             $table->string('message', 300)->nullable();
             $table->foreignId('invoice_id')->nullable()->unique()->constrained('invoices')->restrictOnDelete();
             $table->string('status', 20)->default('pending');

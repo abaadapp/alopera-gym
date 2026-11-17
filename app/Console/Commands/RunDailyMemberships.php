@@ -17,8 +17,9 @@ class RunDailyMemberships extends ForEachTenant
     {
         $r = app(MembershipService::class)->runDailyTransitions();
         $pt = app(PtService::class)->expireDue();
+        $reconciled = app(GiftService::class)->reconcilePaid();
         $gifts = app(GiftService::class)->expireDue();
 
-        return "started={$r['started']} resumed={$r['resumed']} expired={$r['expired']} pt_expired={$pt} gifts_expired={$gifts}";
+        return "started={$r['started']} resumed={$r['resumed']} expired={$r['expired']} pt_expired={$pt} gifts_paid={$reconciled} gifts_expired={$gifts}";
     }
 }

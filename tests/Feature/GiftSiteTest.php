@@ -284,4 +284,81 @@ class GiftSiteTest extends TestCase
             $this->assertNotSame(Invoice::PAID, $gift->invoice->fresh()->status);
         });
     }
+
+    public function test_a_gift_tied_to_the_recipients_number_is_taken_from_the_link_only_by_that_account(): void
+    {
+        $club = $this->club();
+        $plan = $this->plan($club, ['price' => 30]);
+        $gift = $this->asTenant($club, function () use ($plan) {
+            $gift = app(GiftService::class)->issue($plan, ['giver_name' => 'Sara', 'recipient_name' => 'Noor', 'recipient_phone' => '9555 1234'], 'staff');
+            app(PaymentService::class)->record($gift->invoice, $gift->invoice->balance(), 'cash');
+
+            return $gift->fresh();
+        });
+        $this->assertSame('96895551234', $gift->recipient_phone);
+        $token = $this->token($club, $gift);
+
+        // The card says it is tied to a number, never which.
+        $html = $this->get(route('site.gift.show', ['club' => $club->slug, 'token' => $token]))
+            ->assertInertia(fn ($page) => $page->where('gift.for_recipient_number', true))->getContent();
+        $this->assertStringNotContainsString('5551234', $html);
+
+        // Someone else who got the link: no account with another number, and no redemption with theirs.
+        $this->post(route('site.gift.register', ['club' => $club->slug, 'token' => $token]), [
+            'full_name' => 'Not Noor', 'phone' => '96661111', 'password' => 'secret-pass-1', 'password_confirmation' => 'secret-pass-1', 'accept_terms' => '1',
+        ])->assertSessionHasErrors('phone');
+        $this->asTenant($club, fn () => $this->assertFalse(Member::where('full_name', 'Not Noor')->exists()));
+
+        $stranger = $this->member($club, ['phone' => '96662222']);
+        $this->actingAs($stranger, 'member');
+        $this->get(route('portal.gift.redeem', ['club' => $club->slug, 'token' => $token]))->assertInertia(fn ($page) => $page->where('not_recipient', true));
+        $this->post(route('portal.gift.redeem.store', ['club' => $club->slug, 'token' => $token]), ['starts_on' => today()->toDateString()])
+            ->assertSessionHasErrors('error');
+        $this->asTenant($club, fn () => $this->assertSame(GiftMembership::PAID, $gift->fresh()->status));
+
+        // The recipient herself.
+        $noor = $this->member($club, ['phone' => '95551234']);
+        $this->actingAs($noor, 'member');
+        $this->get(route('portal.gift.redeem', ['club' => $club->slug, 'token' => $token]))->assertInertia(fn ($page) => $page->where('not_recipient', false));
+        $this->post(route('portal.gift.redeem.store', ['club' => $club->slug, 'token' => $token]), ['starts_on' => today()->toDateString()])->assertSessionHasNoErrors();
+        $this->asTenant($club, fn () => $this->assertSame($noor->id, $gift->fresh()->member_id));
+    }
+
+    public function test_the_recipient_signs_up_from_a_paid_gift_even_with_sign_up_closed_but_never_twice_and_never_from_an_unpaid_one(): void
+    {
+        $club = $this->club();
+        $club->forceFill(['settings' => array_merge($club->settings ?? [], ['member_signup_enabled' => false])])->save();
+        $this->get(route('site.join', ['club' => $club->slug]))->assertNotFound();
+        $paid = $this->paidGift($club);
+        $token = $this->token($club, $paid);
+        $existing = $this->member($club, ['phone' => '97770000', 'email' => 'taken@example.test']);
+        $form = ['full_name' => 'Noor', 'password' => 'secret-pass-1', 'password_confirmation' => 'secret-pass-1', 'accept_terms' => '1'];
+        $register = fn (string $t, array $data) => $this->post(route('site.gift.register', ['club' => $club->slug, 'token' => $t]), $data + $form);
+
+        $register($token, ['phone' => '9777 0000'])->assertSessionHasErrors('phone');
+        $register($token, ['phone' => '97771111', 'email' => 'taken@example.test'])->assertSessionHasErrors('email');
+        $this->assertGuest('member');
+
+        $pending = $this->asTenant($club, fn () => app(GiftService::class)->issue($this->plan($club), ['giver_name' => 'A', 'recipient_name' => 'B'], 'staff'));
+        $register($this->token($club, $pending), ['phone' => '97772222'])->assertRedirect(route('site.gift.show', ['club' => $club->slug, 'token' => $this->token($club, $pending)]));
+        $this->asTenant($club, fn () => $this->assertFalse(Member::where('phone', '96897772222')->exists()));
+
+        $register($token, ['phone' => '97773333'])->assertRedirect(route('portal.gift.redeem', ['club' => $club->slug, 'token' => $token]));
+        $this->asTenant($club, fn () => $this->assertSame(2, Member::count(), 'The existing member and the new recipient, nobody else.'));
+        $this->assertNotNull($existing);
+    }
+
+    public function test_gift_pages_keep_the_link_out_of_other_sites_search_engines_and_shared_caches(): void
+    {
+        $club = $this->club();
+        $token = $this->token($club, $this->paidGift($club));
+
+        foreach (['site.gift.show', 'site.gift.claim'] as $name) {
+            $response = $this->get(route($name, ['club' => $club->slug, 'token' => $token]))->assertOk()
+                ->assertHeader('X-Robots-Tag', 'noindex, nofollow')
+                // Only the origin crosses to another site (wa.me, the gateway): never the path that holds the token.
+                ->assertHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+            $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
+        }
+    }
 }

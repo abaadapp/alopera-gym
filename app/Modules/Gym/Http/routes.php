@@ -75,6 +75,7 @@ Route::get('/gifts/members', [GiftController::class, 'members'])->middleware('ca
 Route::get('/gifts/{gift}', [GiftController::class, 'show'])->whereNumber('gift')->middleware('can:gifts.view')->name('gifts.show');
 Route::post('/gifts/{gift}/pay', [GiftController::class, 'pay'])->whereNumber('gift')->middleware(['can:gifts.create', 'can:payments.record'])->name('gifts.pay');
 Route::post('/gifts/{gift}/redeem', [GiftController::class, 'redeem'])->whereNumber('gift')->middleware('can:gifts.redeem')->name('gifts.redeem');
+Route::post('/gifts/{gift}/link', [GiftController::class, 'rotateLink'])->whereNumber('gift')->middleware('can:gifts.manage')->name('gifts.link');
 Route::post('/gifts/{gift}/cancel', [GiftController::class, 'cancel'])->whereNumber('gift')->middleware('can:gifts.manage')->name('gifts.cancel');
 
 // ─── Training ──────────────────────────────────────────────────────────

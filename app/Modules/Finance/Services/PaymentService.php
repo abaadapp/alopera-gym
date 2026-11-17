@@ -14,6 +14,7 @@ use App\Modules\Accounting\Services\AccountingPeriods;
 use App\Modules\Accounting\Services\ChartOfAccounts;
 use App\Modules\Accounting\Services\Ledger;
 use App\Modules\Finance\Events\InvoicePaid;
+use App\Modules\Finance\Events\PaymentCancelled;
 use App\Modules\Finance\Events\PaymentRecorded;
 use App\Modules\Finance\Events\TransferSubmitted;
 use App\Modules\Finance\Models\CashShift;
@@ -483,6 +484,7 @@ final class PaymentService
             $status = $invoice->settledStatus();
             $invoice->forceFill(['status' => $status, 'paid_at' => $status === Invoice::PAID ? $invoice->paid_at : null])->save();
             $this->audit->log('payment.cancelled', $payment, ['invoice' => $invoice->number, 'amount' => $payment->amount, 'method' => $payment->method, 'reason' => $reason]);
+            PaymentCancelled::dispatch($payment, $invoice);
 
             return $payment;
         });

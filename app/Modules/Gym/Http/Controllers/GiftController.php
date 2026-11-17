@@ -77,6 +77,7 @@ final class GiftController extends Controller
             'giver_phone' => ['nullable', 'string', 'max:32', 'regex:/^[+0-9٠-٩\s-]{8,20}$/u'],
             'giver_email' => ['nullable', 'email', 'max:190'],
             'recipient_name' => ['required', 'string', 'max:120'],
+            'recipient_phone' => ['nullable', 'string', 'max:32', 'regex:/^[+0-9٠-٩\s-]{8,20}$/u'],
             'message' => ['nullable', 'string', 'max:300'],
             // «لاحقًا» issues the gift with its invoice open; it becomes usable once the invoice is paid in full.
             'payment_method' => ['required', 'in:later,'.implode(',', self::METHODS)],
@@ -194,6 +195,14 @@ final class GiftController extends Controller
         });
 
         return back()->with('success', 'تم تفعيل الهدية '.$gift->number.' للعضو '.$gift->member?->full_name.'.');
+    }
+
+    /** «رابط جديد»: the old link stops at once; the new one is shown on the page to copy or share. */
+    public function rotateLink(GiftMembership $gift): RedirectResponse
+    {
+        $gift = $this->gifts->rotateLink($gift);
+
+        return back()->with('success', 'أُصدر رابط جديد للهدية '.$gift->number.'، والرابط السابق لم يعد يعمل.');
     }
 
     public function cancel(Request $request, GiftMembership $gift): RedirectResponse

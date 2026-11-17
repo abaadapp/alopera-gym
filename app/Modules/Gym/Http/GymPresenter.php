@@ -98,6 +98,7 @@ final class GymPresenter
             'giver_phone' => $g->giver_phone,
             'giver_email' => $g->giver_email,
             'recipient_name' => $g->recipient_name,
+            'recipient_phone' => $g->recipient_phone,
             'message' => $g->message,
             'plan' => [
                 'id' => $g->membership_plan_id,
