@@ -106,4 +106,11 @@ class FinanceReportPeriodTest extends TestCase
         $this->assertEquals(0.0, $this->figures('2026-10-01', '2026-10-31')['product_sales'], 'not October');
         $this->assertEquals(1.5, $this->figures('2026-11-01', '2026-11-30')['product_sales'], 'November');
     }
+
+    public function test_all_in_a_report_says_it_is_the_last_two_years(): void
+    {
+        $this->at('2026-11-17 10:00:00');
+        $csv = $this->get(route('club.reports.export', ['report' => 'finance', 'format' => 'csv', 'range' => 'all']))->streamedContent();
+        $this->assertStringContainsString('«الكل»: آخر سنتين، من 2024-11-17 إلى 2026-11-17', $csv);
+    }
 }
