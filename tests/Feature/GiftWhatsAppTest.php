@@ -27,6 +27,8 @@ use App\Modules\Messaging\Services\WhatsAppAutomation;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Paymob\PaymobSignature;
 use App\Modules\Payments\Services\OnlinePaymentService;
+use GuzzleHttp\Exception\NetworkTimeoutException;
+use GuzzleHttp\Promise\Create;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Collection;
@@ -181,7 +183,8 @@ class GiftWhatsAppTest extends TestCase
         $this->assertStringContainsString('أوافق على استلام رسائل', $v['text']);
         // The message she sends names no gift and no price.
         $this->assertStringNotContainsString('هدية', $v['text']);
-        $this->assertStringNotContainsString('30', $v['text']);
+        // (The price is 30.000; the club's random test name may hold "30", so the price is looked for as written.)
+        $this->assertStringNotContainsString('30.000', $v['text']);
 
         // Her plain hello is just a chat; the code from someone else's number confirms nothing.
         $this->whatsappText(self::RECIPIENT, 'مرحبا', 'wamid.hello')->assertOk();
@@ -266,7 +269,9 @@ class GiftWhatsAppTest extends TestCase
         foreach ([$token, '30', $invoice, 'OMR', 'ر.ع'] as $secret) {
             $this->assertStringNotContainsString($secret, $message->body);
         }
-        foreach (['30', $invoice] as $secret) {
+        // The price in no value: "30" is looked for outside the link (its random token may hold those two digits).
+        $this->assertStringNotContainsString('30', implode(' ', array_slice($message->template_params, 0, 3)));
+        foreach (['30.000', $invoice, 'OMR', 'ر.ع'] as $secret) {
             $this->assertStringNotContainsString($secret, implode(' ', $message->template_params));
         }
         $this->assertArrayNotHasKey('template_params', $message->toArray());
@@ -662,6 +667,41 @@ class GiftWhatsAppTest extends TestCase
             $this->assertSame(0, JournalLine::count(), 'the test gift left nothing in the accounts');
             $this->assertSame([0, 0], [Member::count(), Membership::count()]);
         });
+    }
+
+    /** With #204 on main: the real send path, a request that timed out after it left — once, then for staff to decide. */
+    public function test_a_gift_message_that_timed_out_after_it_left_is_uncertain_once_and_staff_are_told_so(): void
+    {
+        config(['services.whatsapp.driver' => 'meta']);
+        $templates = 0;
+        Http::fake(['https://graph.facebook.com/*' => function (HttpRequest $r) use (&$templates) {
+            if (($r->data()['type'] ?? '') === 'template' && ++$templates === 1) {
+                return Create::rejectionFor(new NetworkTimeoutException('cURL error 28: Operation timed out after 15001 milliseconds with 0 bytes received', $r->toPsrRequest()));
+            }
+
+            return Http::response(['messaging_product' => 'whatsapp', 'messages' => [['id' => 'wamid.'.Str::random(10)]]], 200);
+        }]);
+        $club = $this->club();
+        $this->connectWhatsApp($club);
+        $gift = $this->deskGift($club, pay: false);
+        $this->recipientConfirms($club, $gift)->assertOk();
+        $this->asTenant($club, fn () => app(PaymentService::class)->record($gift->invoice, $gift->invoice->balance(), 'cash'));
+        $this->artisan('messaging:dispatch-scheduled')->assertSuccessful();
+
+        $this->assertSame(1, $templates, 'one request, never retried on its own');
+        $this->asTenant($club, function () use ($gift) {
+            $this->assertSame(Message::UNCERTAIN, Message::findOrFail($gift->fresh()->whatsapp_message_id)->status);
+            $d = app(GiftWhatsApp::class)->delivery($gift->fresh());
+            $this->assertSame(['uncertain', 'نتيجة الإرسال غير مؤكدة', true], [$d['state'], $d['label'], $d['can_send']]);
+            $alert = StaffNotification::where('key', 'like', 'gift-whatsapp:'.$gift->id.':%')->sole();
+            $this->assertStringContainsString('غير مؤكدة', $alert->text);
+            $this->assertSame(1, AuditLog::where('event', 'gift.whatsapp_uncertain')->count());
+        });
+
+        // Staff check with her, then send again: one more request, and the gift stands.
+        $this->actingAs($this->owner($club))->post(route('club.gifts.resend', $gift))->assertSessionHasNoErrors();
+        $this->assertSame(2, $templates);
+        $this->asTenant($club, fn () => $this->assertSame(GiftMembership::PAID, $gift->fresh()->status));
     }
 
     public function test_a_number_meta_refuses_fails_once_without_retries_and_the_gift_stands(): void
