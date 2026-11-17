@@ -1,13 +1,13 @@
 import type { FormEvent, ReactNode } from 'react';
 import { useForm } from '@inertiajs/react';
-import { AlertCircle, Gift, Lock, Store } from 'lucide-react';
+import { AlertCircle, Gift, Lock, ShieldCheck, Store } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
 import { GiftTermsList, type GiftTermsData } from '@/Components/Site/Gift';
 import { phrase } from '@/Components/Site/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { useCarryOver } from '@/lib/carry-over';
-import { money } from '@/lib/format';
+import { date, dayCount, money } from '@/lib/format';
 import { useLocale, useT } from '@/lib/i18n';
 import { planAccess, say } from '@/lib/plan-access';
 import type { PlanData } from './Plans';
@@ -46,8 +46,9 @@ export function GiftAlert({ children }: { children: ReactNode }) {
 }
 
 /**
- * «إهداء هذه الباقة»: the giver's details, the recipient's name and a message, the gift's conditions and the total,
- * then the gateway. No account is needed. The gift is usable only once the gateway's signed confirmation paid it.
+ * «إهداء هذه الباقة»: the giver's details, the recipient's name (and, optionally, her number) and a message, the gift's
+ * conditions, its expiry and no-refund policy to agree to, and the total, then the gateway. No account is needed. The
+ * gift is usable only once the gateway's signed confirmation paid it.
  */
 export default function GiftBuy({ site, seo, plan, summary, onlinePayments, terms }: Props) {
     const currency = useCurrency();
@@ -58,6 +59,7 @@ export default function GiftBuy({ site, seo, plan, summary, onlinePayments, term
         giver_phone: '',
         giver_email: '',
         recipient_name: '',
+        recipient_phone: '',
         message: '',
         accept_terms: false,
         website: '',
@@ -122,6 +124,14 @@ export default function GiftBuy({ site, seo, plan, summary, onlinePayments, term
                             <input className={giftInput} value={form.data.recipient_name} onChange={(e) => form.setData('recipient_name', e.target.value)} maxLength={120} autoComplete="off" aria-invalid={!!errors.recipient_name} required />
                         </GiftField>
                         <GiftField
+                            label={t('رقم جوال المستلمة (اختياري)')}
+                            error={errors.recipient_phone}
+                            hint={t('إذا أدخلته فلا يستلم الهدية من الرابط إلا حساب بهذا الرقم. لا يظهر الرقم في بطاقة الهدية.')}
+                            className="sm:col-span-2"
+                        >
+                            <input className={cn(giftInput, 'text-start')} type="tel" inputMode="tel" dir="ltr" value={form.data.recipient_phone} onChange={(e) => form.setData('recipient_phone', e.target.value)} maxLength={32} autoComplete="off" placeholder="9XXXXXXX" aria-invalid={!!errors.recipient_phone} />
+                        </GiftField>
+                        <GiftField
                             label={t('رسالة الإهداء (اختيارية)')}
                             error={errors.message}
                             hint={<span dir="ltr" className="num [unicode-bidi:isolate]">{form.data.message.length}/{MESSAGE_MAX}</span>}
@@ -141,10 +151,24 @@ export default function GiftBuy({ site, seo, plan, summary, onlinePayments, term
                     <section className="flex flex-col gap-4 rounded-[24px] bg-white p-5 ring-1 ring-[rgba(26,22,18,0.08)] sm:p-7">
                         <h2 className="m-0 text-base font-bold">{t('شروط الهدية')}</h2>
                         <GiftTermsList terms={terms} />
-                        <label className="flex cursor-pointer items-start gap-3 border-t border-[rgba(26,22,18,0.08)] pt-4 text-[15px] leading-6">
+                    </section>
+
+                    {/* The expiry and no-refund policy, stated plainly before payment, and the agreement to it. */}
+                    <section aria-labelledby="gift-policy" className="flex flex-col gap-3 rounded-[24px] border-2 border-[var(--site-gold)] bg-[#FBF6EA] p-5 sm:p-7">
+                        <h2 id="gift-policy" className="m-0 flex items-center gap-2 text-lg font-bold"><ShieldCheck className="size-5 shrink-0 text-[#8A6A1F]" /> {t('سياسة الهدية')}</h2>
+                        <ul className="m-0 flex list-disc flex-col gap-1.5 ps-5 text-[15px] leading-7 font-medium text-[var(--site-ink)] marker:text-[#8A6A1F]">
+                            <li>
+                                {phrase(t('صالحة للاستلام :days من تاريخ الدفع (حتى :date إن تمّ الدفع اليوم).', { days: dayCount(terms.redeem_days) }), {
+                                    date: <strong className="font-bold">{date(terms.expires_if_paid_today)}</strong>,
+                                })}
+                            </li>
+                            <li>{t('إذا انقضت المهلة دون استلامها تنتهي الهدية ولا تُردّ قيمتها.')}</li>
+                            <li>{t('لا تُردّ قيمة الهدية بعد استلامها، ولا يُردّ جزء منها.')}</li>
+                        </ul>
+                        <label className="flex cursor-pointer items-start gap-3 border-t border-[#C9A042]/40 pt-4 text-[15px] leading-6">
                             <input type="checkbox" checked={form.data.accept_terms} onChange={(e) => form.setData('accept_terms', e.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[#C9A042]" aria-invalid={!!errors.accept_terms} />
                             <span className="flex flex-col">
-                                {phrase(t('أوافق على شروط الهدية و:terms'), {
+                                {phrase(t('أوافق على سياسة الهدية وشروطها و:terms'), {
                                     terms: <a href={route('site.terms')} target="_blank" rel="noopener" className="font-semibold text-[var(--site-accent)] underline underline-offset-4">{t('الشروط والأحكام')}</a>,
                                 })}
                                 {errors.accept_terms && <span className="text-sm text-[#A33A22]">{errors.accept_terms}</span>}

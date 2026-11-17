@@ -284,7 +284,7 @@
     "بريدك الإلكتروني (اختياري)": "Your email (optional)",
     "اسم المستلمة": "Recipient's name",
     "رسالة الإهداء (اختيارية)": "Gift message (optional)",
-    "أوافق على شروط الهدية و:terms": "I agree to the gift conditions and the :terms",
+    "أوافق على سياسة الهدية وشروطها و:terms": "I agree to the gift policy and its conditions and to the :terms",
     "سعر الباقة": "Plan price",
     "ادفع وأهدِ الآن": "Pay and send the gift",
     "الدفع عبر بوابة دفع آمنة، ولا نحفظ بيانات البطاقة.": "Payment goes through a secure payment gateway; we don't store card details.",
@@ -305,5 +305,14 @@
     "استلمنا دفعتك. يمكنك الآن عرض بطاقة الهدية ومشاركتها.": "We received your payment. You can now view and share the gift card.",
     "لم يصلنا تأكيد البنك بعد. لا داعي للدفع مرة أخرى. تظهر بطاقة الهدية صالحة حين يصل تأكيد الدفع.": "The bank's confirmation hasn't reached us yet. There is no need to pay again. The gift card shows as valid once the payment is confirmed.",
     "ننتظر تأكيد البنك الآمن. تظهر بطاقة الهدية صالحة حين يصل تأكيد الدفع.": "Waiting for the secure bank confirmation. The gift card shows as valid once the payment is confirmed.",
-    "عرض بطاقة الهدية": "View the gift card"
+    "عرض بطاقة الهدية": "View the gift card",
+    "لا تُردّ قيمة الهدية بعد انتهاء مهلتها أو بعد استلامها، ولا يُردّ جزء منها.": "The gift's value is not refunded once its time has run out or once it has been redeemed, and no part of it is refunded.",
+    "تُستلم هذه الهدية بحساب رقم جوال المستلمة.": "This gift is redeemed with the account of the recipient's mobile number.",
+    "رقم جوال المستلمة (اختياري)": "Recipient's mobile number (optional)",
+    "إذا أدخلته فلا يستلم الهدية من الرابط إلا حساب بهذا الرقم. لا يظهر الرقم في بطاقة الهدية.": "If you enter it, only an account with this number can redeem the gift from the link. The number is not shown on the gift card.",
+    "سياسة الهدية": "Gift policy",
+    "صالحة للاستلام :days من تاريخ الدفع (حتى :date إن تمّ الدفع اليوم).": "Can be redeemed within :days of the payment date (until :date if paid today).",
+    "إذا انقضت المهلة دون استلامها تنتهي الهدية ولا تُردّ قيمتها.": "If the time runs out before it is redeemed, the gift expires and its value is not refunded.",
+    "لا تُردّ قيمة الهدية بعد استلامها، ولا يُردّ جزء منها.": "The gift's value is not refunded once it has been redeemed, and no part of it is refunded.",
+    "استخدمي رقم الجوال الذي أدخله المُهدي.": "Use the mobile number the giver entered."
 }

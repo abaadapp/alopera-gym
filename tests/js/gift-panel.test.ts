@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GIFT_EVENTS, GIFT_FILTERS, defaultGiftPayment, giftCancelReason, giftPaymentChoices, giftSource, redeemErrorStep, redeemGeneralErrors } from '@/lib/gifts';
+import { GIFT_EVENTS, GIFT_FILTERS, defaultGiftPayment, giftCancelReason, giftForAnotherNumber, giftPaymentChoices, giftSource, redeemErrorStep, redeemGeneralErrors } from '@/lib/gifts';
 import { giftStatus, invoiceType, label } from '@/lib/labels';
 
 const STATUSES = ['pending', 'paid', 'redeemed', 'expired', 'cancelled', 'refunded'];
@@ -30,11 +30,25 @@ describe('«هدايا الاشتراكات» in the panel (#192)', () => {
     });
 
     it('reads the history, the source and a voided invoice in words', () => {
-        expect(Object.keys(GIFT_EVENTS)).toHaveLength(6);
+        expect(Object.keys(GIFT_EVENTS)).toHaveLength(8);
+        expect(GIFT_EVENTS['gift.unpaid']).toBe('أُلغيت دفعتها فعادت بانتظار الدفع');
+        expect(GIFT_EVENTS['gift.link_rotated']).toBe('أُصدر لها رابط جديد');
         expect(giftCancelReason('invoice_voided')).toBe('أُلغيت فاتورتها');
+        expect(giftCancelReason('invoice_credited')).toBe('رُدّت قيمة فاتورتها كاملة قبل اكتمال دفعها');
         expect(giftCancelReason('طلب المُهدي')).toBe('طلب المُهدي');
         expect(giftCancelReason(null)).toBeNull();
         expect(giftSource('site')).toBe('الموقع');
         expect(giftSource('staff')).toBe('الموظف');
+    });
+
+    it('warns when a gift tied to a number is redeemed for a member with another one', () => {
+        expect(giftForAnotherNumber(null, '96891234567')).toBe(false);
+        expect(giftForAnotherNumber('96891234567', '96891234567')).toBe(false);
+        // The same number written as typed: local, with 00, spaced or in Arabic digits.
+        expect(giftForAnotherNumber('96891234567', '91234567')).toBe(false);
+        expect(giftForAnotherNumber('96891234567', '00968 9123 4567')).toBe(false);
+        expect(giftForAnotherNumber('96891234567', '٩١٢٣٤٥٦٧')).toBe(false);
+        expect(giftForAnotherNumber('96891234567', '96899999999')).toBe(true);
+        expect(giftForAnotherNumber('96891234567', '')).toBe(true);
     });
 });

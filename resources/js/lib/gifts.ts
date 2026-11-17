@@ -12,6 +12,8 @@ export interface GiftRow {
     giver_phone: string | null;
     giver_email: string | null;
     recipient_name: string;
+    /** Optional: when set, only an account with this number redeems it from the link (staff may redeem it for another). */
+    recipient_phone: string | null;
     message: string | null;
     plan: { id: number; name: string; name_en: string | null; duration_label: string | null };
     price: string;
@@ -66,12 +68,33 @@ export const GIFT_EVENTS: Record<string, string> = {
     'gift.cancelled': 'أُلغيت',
     'gift.expired': 'انتهت مهلتها',
     'gift.refunded': 'رُدّ مبلغها',
+    'gift.unpaid': 'أُلغيت دفعتها فعادت بانتظار الدفع',
+    'gift.link_rotated': 'أُصدر لها رابط جديد',
 };
 
-/** A cancellation's reason in words: the server writes a code when the invoice was voided. */
+/** The codes the server writes as a cancellation's reason when the invoice did it (anything else is staff's text). */
+const CANCEL_REASONS: Record<string, string> = {
+    invoice_voided: 'أُلغيت فاتورتها',
+    invoice_credited: 'رُدّت قيمة فاتورتها كاملة قبل اكتمال دفعها',
+};
+
+/** A cancellation's reason in words. */
 export function giftCancelReason(reason: string | null | undefined): string | null {
     if (!reason) return null;
-    return reason === 'invoice_voided' ? 'أُلغيت فاتورتها' : reason;
+    return CANCEL_REASONS[reason] ?? reason;
+}
+
+/** A phone as the server keeps it (Phone::normalize): digits only, no leading 00, a local Omani number with 968. */
+function normalizePhone(value: string): string {
+    let digits = value.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660)).replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)).replace(/\D+/g, '');
+    if (digits.startsWith('00')) digits = digits.slice(2);
+    return digits.length === 8 ? `968${digits}` : digits;
+}
+
+/** Whether a gift tied to a recipient's number is being redeemed for a member with another one (staff are warned). */
+export function giftForAnotherNumber(recipientPhone: string | null | undefined, memberPhone: string | null | undefined): boolean {
+    if (!recipientPhone) return false;
+    return normalizePhone(memberPhone ?? '') !== normalizePhone(recipientPhone);
 }
 
 /** Where a gift was bought. */

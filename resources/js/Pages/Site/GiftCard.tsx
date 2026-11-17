@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import { Check, Copy, CreditCard, Gift, Info, MessageCircle } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
-import { GiftArt, GiftTermsList, giftStatusText, type GiftCardData, type GiftTermsData } from '@/Components/Site/Gift';
+import { GiftArt, GiftForNumberNote, GiftTermsList, giftStatusText, type GiftCardData, type GiftTermsData } from '@/Components/Site/Gift';
 import { useT } from '@/lib/i18n';
 
 interface Props {
@@ -51,10 +51,14 @@ export default function GiftCard({ site, seo, gift, link, whatsapp, claim_url, p
         <SiteLayout site={site} seoTitle={seo.title}>
             <Head>
                 <meta name="robots" content="noindex,nofollow" />
+                {/* The secret link is never passed on to another site, the WhatsApp share included. */}
+                <meta name="referrer" content="no-referrer" />
             </Head>
             <div className="bg-[var(--site-surface)]">
                 <section className="mx-auto flex max-w-2xl flex-col gap-6 px-4 pt-8 pb-16 sm:px-6 sm:pt-14">
                     <GiftArt gift={gift} />
+
+                    <GiftForNumberNote gift={gift} className="-mt-2 px-1" />
 
                     {note && (
                         <div role="status" className="flex items-start gap-3 rounded-2xl bg-white px-5 py-4 text-[15px] leading-7 ring-1 ring-[rgba(26,22,18,0.08)]">
@@ -84,7 +88,7 @@ export default function GiftCard({ site, seo, gift, link, whatsapp, claim_url, p
                                         </button>
                                     )}
                                     {whatsapp && (
-                                        <a href={whatsapp} target="_blank" rel="noopener" className="inline-flex h-[52px] items-center justify-center gap-2 rounded-full border border-[rgba(26,22,18,0.2)] bg-white px-5 text-[15px] font-semibold transition-colors hover:border-[var(--site-ink)]">
+                                        <a href={whatsapp} target="_blank" rel="noopener noreferrer" className="inline-flex h-[52px] items-center justify-center gap-2 rounded-full border border-[rgba(26,22,18,0.2)] bg-white px-5 text-[15px] font-semibold transition-colors hover:border-[var(--site-ink)]">
                                             <MessageCircle className="size-4" /> {t('مشاركة عبر واتساب')}
                                         </a>
                                     )}

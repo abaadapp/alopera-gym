@@ -3,7 +3,7 @@
  * what each state says. The server sends the card in the page's language (GiftSiteController::card): names, plan,
  * duration, message and the redemption deadline only, never a price or a phone.
  */
-import { Check } from 'lucide-react';
+import { Check, Smartphone } from 'lucide-react';
 import { useShared } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { date, dayCount } from '@/lib/format';
@@ -21,11 +21,15 @@ export interface GiftCardData {
     /** The last day to redeem it; null until it is paid. */
     expires_on: string | null;
     club: string;
+    /** Only an account with the recipient's number takes it from the link; the number itself is never sent. */
+    for_recipient_number: boolean;
 }
 
 export interface GiftTermsData {
     redeem_days: number;
     max_start_days: number;
+    /** The last day to redeem it if it is paid today (Y-m-d): the policy states it before payment. */
+    expires_if_paid_today: string;
 }
 
 /** Why a gift cannot be used now (its card says so instead of offering to claim it); null for a usable one. */
@@ -46,9 +50,22 @@ export function giftTerms(terms: GiftTermsData, t: ReturnType<typeof useT>): str
         t('تُستلم الهدية خلال :days من تاريخ الدفع.', { days: dayCount(terms.redeem_days) }),
         t('يبدأ الاشتراك في يوم تختاره المستلمة، حتى :max بعد استلام الهدية.', { max: dayCount(terms.max_start_days) }),
         t('تُستخدم الهدية مرة واحدة.'),
+        t('لا تُردّ قيمة الهدية بعد انتهاء مهلتها أو بعد استلامها، ولا يُردّ جزء منها.'),
         t('لا رسوم إضافية على المستلمة.'),
         t('لا يلزم حساب لشراء الهدية.'),
     ];
+}
+
+/** «تُستلم هذه الهدية بحساب رقم جوال المستلمة.»: on a gift tied to her number (never the number itself). */
+export function GiftForNumberNote({ gift, className }: { gift: Pick<GiftCardData, 'for_recipient_number'>; className?: string }) {
+    const t = useT();
+    if (!gift.for_recipient_number) return null;
+    return (
+        <p className={cn('m-0 flex items-start gap-2 text-[13px] leading-6 text-[#5E5648]', className)}>
+            <Smartphone className="mt-1 size-4 shrink-0 text-[#8A6A1F]" />
+            {t('تُستلم هذه الهدية بحساب رقم جوال المستلمة.')}
+        </p>
+    );
 }
 
 export function GiftTermsList({ terms, className }: { terms: GiftTermsData; className?: string }) {

@@ -5,7 +5,7 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, ChoiceCard, DataTable, Field, Input, Modal, Notice, PageHeader, Textarea, type Column, type PageMeta, type TableFilter } from '@/Components/ui';
 import { clientKey } from '@/Components/Inventory/parts';
 import { useCan, useCurrency } from '@/hooks/useShared';
-import { date, money } from '@/lib/format';
+import { date, dayCount, money } from '@/lib/format';
 import { GIFT_FILTERS, GIFT_PAYMENT, defaultGiftPayment, giftPaymentChoices, type GiftRow } from '@/lib/gifts';
 import { giftStatus, label } from '@/lib/labels';
 import type { Paginated } from '@/types';
@@ -33,7 +33,7 @@ export function GiftStatusBadge({ gift, inline = false }: { gift: Pick<GiftRow, 
  * «هدايا الاشتراكات» (#192) on the panel's list table: the status tabs with their counts and the search (number, giver,
  * recipient) are in the address and read by the server. A gift is issued here for a plan open to gifting.
  */
-export default function GiftsIndex({ gifts, counts, plans, methods, filters }: { gifts: Paginated<GiftRow>; counts: Record<string, number>; plans: GiftPlan[]; methods: string[]; filters: Record<string, string | undefined> }) {
+export default function GiftsIndex({ gifts, counts, plans, methods, redeemDays, filters }: { gifts: Paginated<GiftRow>; counts: Record<string, number>; plans: GiftPlan[]; methods: string[]; redeemDays: number; filters: Record<string, string | undefined> }) {
     const can = useCan();
     const currency = useCurrency();
     const [issuing, setIssuing] = useState(false);
@@ -102,12 +102,12 @@ export default function GiftsIndex({ gifts, counts, plans, methods, filters }: {
                 )}
             />
 
-            {mayIssue && <IssueGiftModal key={issuing ? 'open' : 'closed'} open={issuing} onClose={() => setIssuing(false)} plans={plans} methods={methods} />}
+            {mayIssue && <IssueGiftModal key={issuing ? 'open' : 'closed'} open={issuing} onClose={() => setIssuing(false)} plans={plans} methods={methods} redeemDays={redeemDays} />}
         </ClubLayout>
     );
 }
 
-function IssueGiftModal({ open, onClose, plans, methods }: { open: boolean; onClose: () => void; plans: GiftPlan[]; methods: string[] }) {
+function IssueGiftModal({ open, onClose, plans, methods, redeemDays }: { open: boolean; onClose: () => void; plans: GiftPlan[]; methods: string[]; redeemDays: number }) {
     const currency = useCurrency();
     const choices = giftPaymentChoices(methods);
     const form = useForm({
@@ -116,6 +116,7 @@ function IssueGiftModal({ open, onClose, plans, methods }: { open: boolean; onCl
         giver_phone: '',
         giver_email: '',
         recipient_name: '',
+        recipient_phone: '',
         message: '',
         payment_method: defaultGiftPayment(methods),
         payment_reference: '',
@@ -176,6 +177,9 @@ function IssueGiftModal({ open, onClose, plans, methods }: { open: boolean; onCl
                     <Field label="هاتف المُهدي" error={err.giver_phone}>
                         <Input dir="ltr" type="tel" value={form.data.giver_phone} onChange={(e) => form.setData('giver_phone', e.target.value)} placeholder="9XXXXXXX" />
                     </Field>
+                    <Field label="رقم جوال المستلمة (اختياري)" error={err.recipient_phone} hint="إن أُدخل فلا تُستلم الهدية من الرابط إلا بحساب هذا الرقم؛ ويستطيع الموظف تفعيلها لغيره.">
+                        <Input dir="ltr" type="tel" value={form.data.recipient_phone} onChange={(e) => form.setData('recipient_phone', e.target.value)} placeholder="9XXXXXXX" maxLength={32} />
+                    </Field>
                     <Field label="بريد المُهدي" error={err.giver_email}>
                         <Input dir="ltr" type="email" value={form.data.giver_email} onChange={(e) => form.setData('giver_email', e.target.value)} />
                     </Field>
@@ -183,6 +187,8 @@ function IssueGiftModal({ open, onClose, plans, methods }: { open: boolean; onCl
                         <Textarea rows={3} maxLength={300} value={form.data.message} onChange={(e) => form.setData('message', e.target.value)} placeholder="تظهر على بطاقة الهدية" />
                     </Field>
                 </div>
+
+                <Notice tone="gray">الهدية صالحة للاستلام {dayCount(redeemDays)} من الدفع، ولا تُردّ قيمتها بعد انتهائها أو استلامها، ولا يُردّ جزء منها.</Notice>
 
                 <Field label="الدفع" error={err.payment_method} required>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

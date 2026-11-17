@@ -1,8 +1,8 @@
 import type { FormEvent } from 'react';
-import { Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import { LogIn, UserPlus } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
-import { GiftArt, type GiftCardData } from '@/Components/Site/Gift';
+import { GiftArt, GiftForNumberNote, type GiftCardData } from '@/Components/Site/Gift';
 import { phrase } from '@/Components/Site/ui';
 import { cn } from '@/lib/cn';
 import { useCarryOver } from '@/lib/carry-over';
@@ -43,6 +43,10 @@ export default function GiftClaim({ site, seo, gift, token, login_url }: Props) 
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>
+            <Head>
+                {/* The secret link is never passed on to another site. */}
+                <meta name="referrer" content="no-referrer" />
+            </Head>
             <div className="bg-[var(--site-surface)]">
                 <section className="mx-auto flex max-w-3xl flex-col gap-6 px-4 pt-8 pb-16 sm:px-6 sm:pt-12">
                     <header className="flex flex-col gap-1.5">
@@ -51,6 +55,8 @@ export default function GiftClaim({ site, seo, gift, token, login_url }: Props) 
                     </header>
 
                     <GiftArt gift={gift} compact />
+
+                    <GiftForNumberNote gift={gift} className="-mt-2 px-1" />
 
                     {errors.error && <GiftAlert>{errors.error}</GiftAlert>}
 
@@ -71,7 +77,7 @@ export default function GiftClaim({ site, seo, gift, token, login_url }: Props) 
                             <GiftField label={t('الاسم الكامل')} error={errors.full_name} required>
                                 <input className={giftInput} value={form.data.full_name} onChange={(e) => form.setData('full_name', e.target.value)} maxLength={160} autoComplete="name" aria-invalid={!!errors.full_name} required />
                             </GiftField>
-                            <GiftField label={t('رقم الهاتف')} error={errors.phone} required>
+                            <GiftField label={t('رقم الهاتف')} error={errors.phone} hint={gift.for_recipient_number ? t('استخدمي رقم الجوال الذي أدخله المُهدي.') : undefined} required>
                                 <input className={cn(giftInput, 'text-start')} type="tel" inputMode="tel" dir="ltr" value={form.data.phone} onChange={(e) => form.setData('phone', e.target.value)} maxLength={32} autoComplete="tel" placeholder="9XXXXXXX" aria-invalid={!!errors.phone} required />
                             </GiftField>
                             <GiftField label={t('البريد الإلكتروني')} error={errors.email} hint={t('اختياري')}>
@@ -89,8 +95,8 @@ export default function GiftClaim({ site, seo, gift, token, login_url }: Props) 
                                 <input type="checkbox" checked={form.data.accept_terms} onChange={(e) => form.setData('accept_terms', e.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[#C9A042]" aria-invalid={!!errors.accept_terms} />
                                 <span className="flex flex-col">
                                     {phrase(t('أوافق على :terms و:privacy'), {
-                                        terms: <a href={route('site.terms')} target="_blank" rel="noopener" className="font-semibold text-[var(--site-accent)] underline underline-offset-4">{t('الشروط والأحكام')}</a>,
-                                        privacy: <a href={route('site.privacy')} target="_blank" rel="noopener" className="font-semibold text-[var(--site-accent)] underline underline-offset-4">{t('سياسة الخصوصية')}</a>,
+                                        terms: <a href={route('site.terms')} target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--site-accent)] underline underline-offset-4">{t('الشروط والأحكام')}</a>,
+                                        privacy: <a href={route('site.privacy')} target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--site-accent)] underline underline-offset-4">{t('سياسة الخصوصية')}</a>,
                                     })}
                                     {errors.accept_terms && <span className="text-sm text-[#A33A22]">{errors.accept_terms}</span>}
                                 </span>

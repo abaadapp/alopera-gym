@@ -1,14 +1,14 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import { toast } from 'sonner';
-import { Ban, Banknote, CalendarDays, CheckCircle2, Clock, Copy, CreditCard, Gift, MessageCircle, Receipt, UserPlus, UserRound, Wallet, X } from 'lucide-react';
+import { Ban, Banknote, CalendarDays, CheckCircle2, Clock, Copy, CreditCard, Gift, MessageCircle, Receipt, RefreshCw, Smartphone, UserPlus, UserRound, Wallet, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { DocumentMeta } from '@/Components/Papers/PaperPanel';
 import { clientKey } from '@/Components/Inventory/parts';
 import { BackLink, Badge, Button, Card, ChoiceCard, ConfirmAction, Field, Input, MemberPicker, Modal, Notice, PageHeader, type MemberHit } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
-import { date, isoDate, money, time } from '@/lib/format';
-import { GIFT_EVENTS, GIFT_PAYMENT, giftCancelReason, giftSource, redeemErrorStep, redeemGeneralErrors, type GiftRow, type RedeemStep } from '@/lib/gifts';
+import { date, isoDate, money, phone, time } from '@/lib/format';
+import { GIFT_EVENTS, GIFT_PAYMENT, giftCancelReason, giftForAnotherNumber, giftSource, redeemErrorStep, redeemGeneralErrors, type GiftRow, type RedeemStep } from '@/lib/gifts';
 import { invoiceStatus, label, membershipStatus } from '@/lib/labels';
 import { GiftStatusBadge } from './Index';
 
@@ -64,6 +64,8 @@ export default function GiftShow({ gift, link, whatsapp, pay_link, pending_trans
     const mayCollect = pending && methods.length > 0 && !pending_transfer && can('gifts.create');
     const mayRedeem = gift.status === 'paid' && can('gifts.redeem');
     const mayCancel = (gift.status === 'pending' || gift.status === 'paid') && can('gifts.manage');
+    // «رابط جديد» while the link can still be used, as the link route allows (gifts.manage).
+    const mayRotate = mayCancel;
     const [invoiceLabel, invoiceTone] = label(invoiceStatus, gift.invoice?.status);
     const reason = giftCancelReason(gift.cancel_reason);
 
@@ -77,6 +79,19 @@ export default function GiftShow({ gift, link, whatsapp, pay_link, pending_trans
                     <>
                         {mayRedeem && <Button icon={<CheckCircle2 />} onClick={() => setRedeemOpen(true)}>تفعيل الهدية</Button>}
                         {mayCollect && <Button icon={<Wallet />} onClick={() => setPayOpen(true)}>تحصيل المبلغ</Button>}
+                        {mayRotate && (
+                            <ConfirmAction
+                                url={route('club.gifts.link', gift.id)}
+                                title="إصدار رابط جديد"
+                                message="يتوقف الرابط الحالي فورًا ويُصدر رابط جديد. استخدمه إذا وصل الرابط إلى غير المستلمة."
+                                confirmLabel="إصدار رابط جديد"
+                                tone="primary"
+                                size="md"
+                                icon={<RefreshCw />}
+                            >
+                                رابط جديد
+                            </ConfirmAction>
+                        )}
                         {mayCancel && (
                             <ConfirmAction
                                 url={route('club.gifts.cancel', gift.id)}
@@ -193,6 +208,7 @@ export default function GiftShow({ gift, link, whatsapp, pay_link, pending_trans
                         gift.expires_on ? { label: 'صالحة للاستلام حتى', value: <span className="num">{date(gift.expires_on)}</span> } : null,
                         gift.giver_phone ? { label: 'هاتف المُهدي', value: gift.giver_phone, ltr: true } : null,
                         gift.giver_email ? { label: 'بريد المُهدي', value: gift.giver_email, ltr: true } : null,
+                        gift.recipient_phone ? { label: 'جوال المستلمة', value: phone(gift.recipient_phone), ltr: true } : null,
                     ]} />
 
                     <Card className="p-4">
@@ -410,6 +426,13 @@ function RedeemGiftModal({ open, onClose, gift, redeem }: { open: boolean; onClo
             </ol>
 
             {general.length > 0 && <Notice tone="red" className="mb-4">{general.map((m, i) => <p key={i}>{m}</p>)}</Notice>}
+
+            {/* Tied to another number: staff see who is in front of them, so a warning, not a refusal. */}
+            {d.mode === 'existing' && member && giftForAnotherNumber(gift.recipient_phone, member.phone) && (
+                <Notice tone="amber" icon={<Smartphone />} className="mb-4">
+                    هذه الهدية مخصصة لرقم جوال آخر (<span dir="ltr" className="num [unicode-bidi:isolate]">{phone(gift.recipient_phone)}</span>). تأكّد من هوية المستلمة قبل التفعيل.
+                </Notice>
+            )}
 
             {step === 'who' && (
                 <div className="space-y-4">

@@ -65,6 +65,8 @@ final class GiftController extends Controller
             'counts' => BranchContext::scope(GiftMembership::selectRaw('status, count(*) as how_many'))->groupBy('status')->pluck('how_many', 'status'),
             'plans' => $user->can('gifts.create') ? $this->giftablePlans() : [],
             'methods' => $user->can('payments.record') ? self::METHODS : [],
+            // The club's window, for the policy the desk tells the buyer before payment.
+            'redeemDays' => $this->gifts->redeemDays(),
             'filters' => $request->only('filter', 'q', 'per_page'),
         ]);
     }
