@@ -87,18 +87,25 @@ class ExpenseController extends Controller
         $data = $this->validated($request);
         $expense->fill(collect($data)->except('attachment', 'client_key')->all());
         $expense->account_id = $this->moneyAccount($data);
-        if ($expense->isDirty(['amount', 'account_id', 'payment_method'])) {
+        $money = $expense->isDirty(['amount', 'account_id', 'payment_method']);
+        if ($money) {
             $this->assertShiftOpen($expense);
-        }
-        // Moved to another account: it belongs to that drawer's open shift now (counted there), or to none.
-        if ($expense->isDirty('account_id')) {
-            $expense->cash_shift_id = app(CashShifts::class)->current(Account::find($expense->account_id), $expense->branch_id);
         }
         // Raised on the same account it spends the difference; moved to another, that account pays it whole.
         $spends = (int) $expense->getOriginal('account_id') === $expense->account_id ? Money::sub($expense->amount, (string) $expense->getOriginal('amount')) : $expense->amount;
         // A new attachment is written in the save's transaction: kept whole or the save fails, and gone again if the save
         // fails. The one it replaces stays on the disk as before (a financial record: the audit trail keeps its path).
-        $this->spending(Account::find($expense->account_id), $spends, function () use ($request, $tenants, $expense) {
+        $this->spending(Account::find($expense->account_id), $spends, function () use ($request, $tenants, $expense, $money) {
+            // Again in the save's transaction, the account held first (as every payment out of a drawer): the shifts are
+            // read under a share lock, so a closing under way is waited for and then refuses this, and one that comes
+            // after waits for this save and counts it.
+            if ($money) {
+                $this->assertShiftOpen($expense);
+            }
+            // Moved to another account: it belongs to that drawer's open shift now (counted there), or to none.
+            if ($expense->isDirty('account_id')) {
+                $expense->cash_shift_id = app(CashShifts::class)->current(Account::find($expense->account_id), $expense->branch_id);
+            }
             if ($request->hasFile('attachment')) {
                 $expense->attachment_path = SafeFiles::putUpload($request->file('attachment'), 'tenants/'.$tenants->require()->id.'/expenses', 'attachment');
             }
@@ -111,8 +118,12 @@ class ExpenseController extends Controller
     public function destroy(Expense $expense): RedirectResponse
     {
         app(AccountingPeriods::class)->assertEditable($expense->expense_date, 'المصروف');
-        $this->assertShiftOpen($expense);
-        $expense->delete();
+        // The check and the delete in one transaction, the shift read under a share lock (assertShiftOpen): a closing under
+        // way is waited for and then refuses this; one that comes after waits for the delete and leaves it out.
+        DB::transaction(function () use ($expense) {
+            $this->assertShiftOpen($expense);
+            $expense->delete();
+        });
 
         return back()->with('success', 'تم حذف المصروف.');
     }
@@ -120,7 +131,7 @@ class ExpenseController extends Controller
     /** Paid from a drawer whose shift is closed: the closing counted it, so its money is not changed afterwards. */
     private function assertShiftOpen(Expense $expense): void
     {
-        $shift = $expense->getOriginal('cash_shift_id') ? CashShift::find($expense->getOriginal('cash_shift_id')) : null;
+        $shift = $expense->getOriginal('cash_shift_id') ? CashShift::whereKey($expense->getOriginal('cash_shift_id'))->sharedLock()->first() : null;
         if ($shift && ! $shift->isOpen() && (int) $expense->getOriginal('account_id') === (int) $shift->account_id) {
             throw new BusinessRuleException('expense.shift_closed', "دُفع هذا المصروف من الصندوق في الوردية {$shift->number} وقد أُقفلت وحُسب فرقها؛ لا يُحذف ولا يُغيَّر مبلغه أو حسابه. صحّح بقيد يومية.");
         }
