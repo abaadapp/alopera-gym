@@ -36,6 +36,14 @@ return [
             'serve' => true,
             'throw' => false,
             'report' => false,
+            // Two users share this folder through its group: the web (PHP-FPM) and the nightly jobs (cron, the deploy
+            // user). Laravel's default folders (0700) shut the other one out — the nightly could not read an upload the
+            // panel made, nor the panel a backup the nightly made. Folders: owner and group, the group passed on
+            // (setgid); others nothing. The creating process's umask may still take the group's write off a new folder.
+            'permissions' => [
+                'file' => ['public' => 0644, 'private' => 0660],
+                'dir' => ['public' => 0755, 'private' => 02770],
+            ],
         ],
 
         'public' => [
