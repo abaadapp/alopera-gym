@@ -40,12 +40,14 @@ class ExpenseController extends Controller
     public function index(Request $request, AccountingPeriods $periods): Response
     {
         $query = $this->filtered($request);
+        // The last closed day, read once for the page (was once per row). Editing and deleting check it again.
+        $through = $periods->lockedThrough();
 
         return Inertia::render('Finance/Expenses/Index', [
             'expenses' => (clone $query)->with('category:id,name', 'account:id,name')->latest('expense_date')->latest('id')->paginate(in_array($request->integer('per_page'), [30, 50, 100], true) ? $request->integer('per_page') : 30)->withQueryString()
                 ->through(fn (Expense $e) => $e->only('id', 'number', 'description', 'amount', 'payment_method', 'payee', 'reference', 'expense_category_id', 'supplier_id', 'account_id') + [
                     'category' => $e->category?->name, 'account' => $e->account?->name, 'expense_date' => $e->expense_date->toDateString(), 'has_attachment' => $e->attachment_path !== null,
-                    'locked' => $periods->isLocked($e->expense_date),
+                    'locked' => AccountingPeriods::lockedBy($e->expense_date, $through),
                 ]),
             'total' => round((float) (clone $query)->sum('amount'), 3),
             'categories' => ExpenseCategory::where('is_active', true)->orderBy('name')->get(['id', 'name']),

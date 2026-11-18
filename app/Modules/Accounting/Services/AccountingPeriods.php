@@ -51,8 +51,15 @@ final class AccountingPeriods
 
     public function isLocked(DateTimeInterface|string $date): bool
     {
-        $through = $this->lockedThrough();
+        return self::lockedBy($date, $this->lockedThrough());
+    }
 
+    /**
+     * The same rule against a lockedThrough() read once: a list marks each of its rows with one read, not one per row.
+     * Only for showing; saving, editing and deleting still ask isLocked() / assertEditable() afresh.
+     */
+    public static function lockedBy(DateTimeInterface|string $date, ?CarbonImmutable $through): bool
+    {
         return $through !== null && CarbonImmutable::parse($date)->startOfDay()->lte($through);
     }
 

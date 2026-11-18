@@ -18,13 +18,13 @@ final class GiftLinks
     public function __construct(private readonly TenantContext $tenants) {}
 
     /**
-     * «إهداء هذه الباقة» on the website: only while the website can sell a gift — online payment taken and the
-     * recipient's number confirmable on the club's WhatsApp. Otherwise no button: the desk sells gifts (the launch's
-     * first step), and nobody fills the form to learn at the end that it cannot be paid.
+     * «إهداء هذه الباقة» remains visible for public giftable plans even when online checkout is disabled.
+     * The gift page explains why checkout is unavailable. The form and server-side store/payment routes
+     * still require active online payment and recipient WhatsApp verification; showing a link is not enabling sales.
      */
     public function buy(MembershipPlan $plan, ?bool $siteSells = null): ?string
     {
-        return $plan->giftable && ($siteSells ?? $this->siteSells()) ? route('site.gift.create', ['plan' => $plan->id]) : null;
+        return $plan->giftable ? route('site.gift.create', ['plan' => $plan->id]) : null;
     }
 
     public function siteSells(): bool
