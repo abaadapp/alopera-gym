@@ -40,6 +40,9 @@ final class ImageStore
     /** Larger than this many pixels is refused before decoding (a small file can unpack to gigabytes). */
     public const MAX_PIXELS = 40_000_000;
 
+    /** Said when a picture does not fit the server's memory even the lighter way. */
+    private const TOO_LARGE = 'الصورة كبيرة جدًا على معالجة الخادم. ارفعها من متصفح حديث ليجهز نسخة العرض تلقائيًا، أو صغّر أبعادها.';
+
     // v2- : original on the local private disk; v2r- : original in the Spaces bucket (SpacesOriginals);
     // v2o- : no original (optimized-only), the display copy is all there is.
     private const NAME = '#^(?<dir>tenants/(?<tenant>[^/]+)/(?<folder>.+))/(?<id>v2(?<kind>[ro]?)-[0-9a-z]{26})-(?<ext>jpg|png|gif|webp|avif|heic|heif)\.(?<view>webp|png|gif|jpg)$#D';
@@ -337,7 +340,7 @@ final class ImageStore
                 $written[] = [self::originalsDisk(), $original];
             }
 
-            $image = self::displaySource($upload, $facts, $source);
+            $image = self::displaySource($upload, $facts, $source, max($maxWidth, $maxHeight));
             // A moving GIF is shown as it is: re-encoding would keep only its first frame. Its bytes are the original
             // itself, or the browser's copy of it when that is the very same file (same SHA-256 as the ticket).
             $gif = $source ?? ($ticket && $upload->preview && hash_file('sha256', (string) $upload->preview->getRealPath()) === $ticket['s'] ? (string) $upload->preview->getRealPath() : null);
@@ -399,7 +402,7 @@ final class ImageStore
                 $display = $base.'.gif';
                 self::putVerified('public', $display, $source);
                 $written[] = ['public', $display];
-                $image = self::displaySource(new ImageUpload($upload->original, null, $upload->field), $facts, $source);
+                $image = self::displaySource(new ImageUpload($upload->original, null, $upload->field), $facts, $source, max($maxWidth, $maxHeight));
                 [$width, $height, $mime, $size] = [$facts->width, $facts->height, 'image/gif', $facts->bytes];
             } elseif (self::keepsAsItCame($facts, $source, $maxWidth, $maxHeight, $view)) {
                 $display = $base.'.'.$facts->ext;
@@ -408,7 +411,7 @@ final class ImageStore
                 $image = self::decode($facts, $source) ?? throw new ImageRejected('تعذرت قراءة الصورة. قد يكون الملف تالفًا.');
                 [$width, $height, $mime, $size] = [$facts->width, $facts->height, $facts->mime, $facts->bytes];
             } else {
-                $image = self::displaySource(new ImageUpload($upload->original, $upload->preview, $upload->field), $facts, $source);
+                $image = self::displaySource(new ImageUpload($upload->original, $upload->preview, $upload->field), $facts, $source, max($maxWidth, $maxHeight));
                 [$image, $width, $height] = self::fit($image, $maxWidth, $maxHeight);
                 $bytes = self::encode($image, $view, $quality);
                 $display = $base.'.'.$view;
@@ -460,7 +463,7 @@ final class ImageStore
      * The picture the display copy and the thumbnail are made from: the browser's display source, or the original
      * when the app has it ($source null: the original is only in the bucket, so the display source is required).
      */
-    private static function displaySource(ImageUpload $upload, ImageFacts $facts, ?string $source): \GdImage
+    private static function displaySource(ImageUpload $upload, ImageFacts $facts, ?string $source, int $side): \GdImage
     {
         if ($upload->preview) {
             $path = (string) $upload->preview->getRealPath();
@@ -482,17 +485,17 @@ final class ImageStore
         if (! self::decodable($facts)) {
             throw new ImageRejected(in_array($facts->type, ['heic', 'heif'], true)
                 ? 'لم يستطع هذا المتصفح تجهيز صورة HEIC/HEIF للعرض، ولا يقرؤها الخادم. حدّث المتصفح أو صدّرها JPG ثم ارفعها.'
-                : 'الصورة كبيرة جدًا على معالجة الخادم. ارفعها من متصفح حديث ليجهز نسخة العرض تلقائيًا، أو صغّر أبعادها.');
+                : self::TOO_LARGE);
         }
         $image = self::decode($facts, $source);
         if (! $image) {
             throw new ImageRejected('تعذرت قراءة الصورة. قد يكون الملف تالفًا.');
         }
 
-        return $facts->type === 'jpeg' ? self::upright($image, $source) : $image;
+        return $facts->type === 'jpeg' ? self::upright($image, $source, $side) : $image;
     }
 
-    /** GD reads this type here, and there is memory to hold it decoded (about 5 bytes a pixel with the copies). */
+    /** GD reads this type here, and the decoded picture fits the budget with a quarter more for its copies (room()). */
     private static function decodable(ImageFacts $facts): bool
     {
         $reader = ['jpeg' => 'imagecreatefromjpeg', 'png' => 'imagecreatefrompng', 'gif' => 'imagecreatefromgif',
@@ -500,9 +503,26 @@ final class ImageStore
         if (! $reader || ! function_exists($reader) || ($facts->type === 'webp' && $facts->animated)) {
             return false;
         }
+
+        return self::room((int) ($facts->width * $facts->height * 1.25));
+    }
+
+    /**
+     * Whether GD may make a picture of $pixels more now, beside the $held pixels it already holds for this upload. Asked
+     * before each costly step (decoding, each scaling), so a large picture takes the lighter way or is refused with a
+     * message. Counted in pixels against media.server_pixels (GD keeps a true-colour pixel in 4 bytes): PHP built with
+     * the system libgd, as on the droplet (ppa:ondrej, libgd3), allocates them outside memory_limit and
+     * memory_get_usage(), so only the count keeps one upload's memory bounded there. Where PHP counts them (its bundled
+     * GD), memory_limit is asked too, with 16 MB kept for the rest of the request.
+     */
+    private static function room(int $pixels, int $held = 0): bool
+    {
+        if ($held + $pixels > (int) config('media.server_pixels', 24_000_000)) {
+            return false;
+        }
         $limit = self::bytes((string) ini_get('memory_limit'));
 
-        return $limit < 0 || $facts->width * $facts->height * 5 + 16 * 1_048_576 <= $limit - memory_get_usage(true);
+        return $limit < 0 || $pixels * 4 + 16 * 1_048_576 <= $limit - memory_get_usage(true);
     }
 
     private static function decode(ImageFacts $facts, string $path): ?\GdImage
@@ -533,10 +553,16 @@ final class ImageStore
         }
         $w = max(1, (int) round($width * $scale));
         $h = max(1, (int) round($height * $scale));
-        if ($scale < 0.5 && $width * $height > 8_000_000) {
-            // A large step down from a large photo: a fast scale to twice the size first, then the careful one from
-            // that much smaller picture (a quarter less time on a 12MP photo for 12 MB more memory; the browser's
-            // display source, at most 2400px, never takes this path).
+        $held = $width * $height; // the picture being scaled, held until the caller lets it go
+        if (! self::room($w * $h, $held)) {
+            throw new ImageRejected(self::TOO_LARGE);
+        }
+        // A large step down from a large photo: a fast scale to twice the size first, then the careful one from that
+        // much smaller picture (a quarter less time on a 12MP photo; the browser's display source, at most 2400px,
+        // never takes this path). Only when that middle copy (and imagescale's own work copy) fits the budget beside
+        // the picture: just under half the size (a 12MP photo for a 1600–1920px use) it is nearly as large as the
+        // picture itself. Otherwise the careful scale goes straight from the picture.
+        if ($scale < 0.5 && $width * $height > 8_000_000 && self::room($w * 2 * $h * 2 * 2 + $w * $h, $held)) {
             $half = imagescale($image, $w * 2, $h * 2, IMG_BILINEAR_FIXED);
             if ($half instanceof \GdImage) {
                 [$image, $width, $height] = [$half, $w * 2, $h * 2];
@@ -565,13 +591,29 @@ final class ImageStore
         return $bytes;
     }
 
-    /** Applies a JPEG's EXIF orientation so a phone photo is shown the way it was taken. */
-    private static function upright(\GdImage $image, string $jpegPath): \GdImage
+    /**
+     * Applies a JPEG's EXIF orientation so a phone photo is shown the way it was taken. A picture larger than its use
+     * ($side) is first scaled to it and the full one let go (taken by reference, so the caller's copy goes too), then
+     * turned: a quarter turn only moves pixels, so the result is the same as turning first, without a second
+     * full-size picture in memory (a 12MP photo: 49 MB less) or the time to turn it.
+     */
+    private static function upright(\GdImage &$image, string $jpegPath, int $side): \GdImage
     {
         if (! function_exists('exif_read_data')) {
             return $image;
         }
         $orientation = (int) ((@exif_read_data($jpegPath) ?: [])['Orientation'] ?? 1);
+        if (! in_array($orientation, [3, 6, 8], true)) {
+            return $image;
+        }
+        if (max(imagesx($image), imagesy($image)) > $side) {
+            [$smaller] = self::fit($image, $side, $side);
+            $image = $smaller;
+            unset($smaller);
+        }
+        if (! self::room(imagesx($image) * imagesy($image), imagesx($image) * imagesy($image))) {
+            throw new ImageRejected(self::TOO_LARGE);
+        }
         $turned = match ($orientation) {
             3 => imagerotate($image, 180, 0),
             6 => imagerotate($image, -90, 0),

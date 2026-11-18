@@ -59,6 +59,12 @@ return [
     // The thumbnail's longest side, in pixels.
     'thumb_side' => 360,
 
+    // The most pixels the server holds decoded for one upload at once (4 bytes each), when it makes the light copy
+    // itself (a browser that sent the picked file): 24 million is about 96 MB, room for a 12MP phone photo and its
+    // copies. PHP with the system libgd (the droplet) does not count these bytes in memory_limit, so this is what
+    // bounds them; a larger picture is refused with a message (a modern browser makes the light copy itself).
+    'server_pixels' => (int) env('MEDIA_SERVER_PIXELS', 24_000_000),
+
     // A display source the browser made (a HEIC or a very large photo): its longest side and size at most.
     'preview_max_side' => 2_400,
     'preview_max_kb' => 4_096,

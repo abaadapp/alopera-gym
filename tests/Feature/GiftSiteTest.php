@@ -84,15 +84,19 @@ class GiftSiteTest extends TestCase
         $hidden = $this->plan($club, ['name' => 'Hidden', 'is_public' => false]);
         $inactive = $this->plan($club, ['name' => 'Off', 'is_active' => false]);
 
-        // While the website cannot sell a gift (online payment off, as at launch), no plan shows the button: the desk
-        // sells gifts. The page itself still answers, and says so.
+        // Giftable plans are visible as gifts before Paymob or WhatsApp is connected, while checkout remains blocked.
+        $giftLinkVisible = fn ($plans) => collect($plans)->firstWhere('id', $open->id)['gift_url'] !== null
+            && collect($plans)->firstWhere('id', $closed->id)['gift_url'] === null
+            && collect($plans)->pluck('id')->doesntContain($hidden->id);
         $this->get(route('site.plans', ['club' => $club->slug]))->assertOk()->assertInertia(fn ($page) => $page
-            ->where('plans', fn ($plans) => collect($plans)->every(fn ($p) => $p['gift_url'] === null)));
+            ->where('plans', $giftLinkVisible));
+        $this->get(route('site.gift.create', ['club' => $club->slug, 'plan' => $open->id]))->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Site/GiftBuy', false)->where('onlinePayments', false));
         $this->configurePaymob($club);
         $this->get(route('site.plans', ['club' => $club->slug]))->assertOk()->assertInertia(fn ($page) => $page
-            ->where('plans', fn ($plans) => collect($plans)->every(fn ($p) => $p['gift_url'] === null)));
+            ->where('plans', $giftLinkVisible));
 
-        // Online payment on and the club's WhatsApp able to confirm the recipient's number: the button is there.
+        // Once Paymob and WhatsApp are connected, the same visible gift link opens a checkout-ready form.
         $this->connectWhatsApp($club);
         $this->get(route('site.plans', ['club' => $club->slug]))->assertOk()->assertInertia(fn ($page) => $page
             ->where('plans', fn ($plans) => collect($plans)->firstWhere('id', $open->id)['gift_url'] !== null
