@@ -109,39 +109,64 @@ final class ImageInspector
      * Whether a JPEG is whole: its segments follow each other by their lengths up to the picture (so the camera's own
      * small preview inside EXIF, which has an end marker too, is stepped over), and an end marker (FF D9) follows the
      * picture. Inside the picture's data a 0xFF byte is always followed by 0x00 or a restart marker, so FF D9 there is
-     * its end; anything after it (a phone's "motion photo") is allowed. Read in 64 KB pieces, never whole.
+     * its end; anything after it (a phone's "motion photo") is allowed, and so are stray bytes between two segments
+     * (libjpeg reads past them). The part before the picture is read once (at most 4 MB) and walked in memory, at most
+     * 1,000 segments (a camera writes a few dozen), so a file made of tiny segments costs no more than a normal one;
+     * the picture is then read in 64 KB pieces, never whole.
      */
     private static function jpegWhole(string $path): bool
     {
-        $size = (int) @filesize($path);
         $handle = @fopen($path, 'rb');
         if ($handle === false) {
             return false;
         }
         try {
-            if (fread($handle, 2) !== "\xFF\xD8") {
+            $head = (string) fread($handle, 4 * 1_048_576);
+            $length = strlen($head);
+            if (! str_starts_with($head, "\xFF\xD8")) {
                 return false;
             }
-            while (true) {
-                if (fread($handle, 1) !== "\xFF") {
+            $at = 2;
+            for ($segments = 0; $segments < 1_000; $segments++) {
+                $marker = strpos($head, "\xFF", $at); // stray bytes before a marker are passed over
+                if ($marker === false) {
                     return false;
                 }
-                do {
-                    $code = (string) fread($handle, 1);
-                } while ($code === "\xFF");
-                if ($code === '' || $code === "\xD9") {
-                    return false; // the file, or the image, ends before any picture
+                $at = $marker + 1;
+                while ($at < $length && $head[$at] === "\xFF") {
+                    $at++; // fill bytes
                 }
-                if ($code === "\x01" || ($code >= "\xD0" && $code <= "\xD7")) {
-                    continue;
-                }
-                $length = unpack('n', str_pad((string) fread($handle, 2), 2, "\0"))[1];
-                if ($length < 2 || ftell($handle) + $length - 2 > $size || fseek($handle, $length - 2, SEEK_CUR) !== 0) {
+                if ($at >= $length) {
                     return false;
                 }
-                if ($code === "\xDA") {
-                    break; // the picture starts
+                $code = ord($head[$at++]);
+                if ($code === 0xD9) {
+                    return false; // the image ends before any picture
                 }
+                if ($code === 0x00 || $code === 0x01 || ($code >= 0xD0 && $code <= 0xD7)) {
+                    continue; // no length follows
+                }
+                if ($at + 2 > $length) {
+                    return false;
+                }
+                $size = (ord($head[$at]) << 8) | ord($head[$at + 1]);
+                if ($size < 2) {
+                    return false;
+                }
+                $at += $size;
+                if ($code === 0xDA) {
+                    break; // the picture starts here
+                }
+                if ($at > $length) {
+                    return false; // a segment runs past the file (or past 4 MB of header)
+                }
+            }
+            if ($segments >= 1_000) {
+                return false;
+            }
+            // From the picture on: its end marker, read in pieces (one byte carried over for a marker split across two).
+            if (fseek($handle, $at) !== 0) {
+                return false;
             }
             $carry = '';
             while (($piece = fread($handle, 65_536)) !== false && $piece !== '') {

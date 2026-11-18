@@ -14,9 +14,11 @@ use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
 
 /**
- * The server's own processing of a picture (when the browser sent the picked file itself, with no light copy): a
- * 12 MP phone photo is stored for every use within PHP-FPM's 128 MB, or refused with a message, never a fatal error;
- * and a JPEG cut short is refused before anything is written, while a whole one with camera data is kept.
+ * The server's own processing of a picture (when the browser sent the picked file itself, with no light copy): what GD
+ * holds for one upload stays within media.server_pixels whatever GD's allocator (the droplet's PHP uses the system
+ * libgd, whose pixels memory_limit does not count), a phone photo on its side is turned at its use's size, a 12 MP
+ * photo is stored for every use within PHP-FPM's 128 MB where PHP does count them (its bundled GD), and a JPEG cut
+ * short is refused before anything is written, while a whole one with camera data is kept.
  */
 class ImageServerSafetyTest extends TestCase
 {
@@ -33,6 +35,14 @@ class ImageServerSafetyTest extends TestCase
         Storage::fake('local');
         $this->dir = sys_get_temp_dir().'/image-safety-'.getmypid();
         @mkdir($this->dir);
+    }
+
+    protected function tearDown(): void
+    {
+        // Only the pictures this test made.
+        array_map('unlink', glob($this->dir.'/*.jpg') ?: []);
+        @rmdir($this->dir);
+        parent::tearDown();
     }
 
     /** A photo-like JPEG (bands of colour with fine detail), as GD writes it. */
@@ -108,6 +118,33 @@ class ImageServerSafetyTest extends TestCase
         }
     }
 
+    public function test_a_picture_larger_than_the_servers_pixel_budget_is_refused_with_a_message_and_leaves_nothing(): void
+    {
+        // 6 million pixels: a 4000×3000 photo (12 million) does not fit, whatever GD's allocator.
+        config(['media.server_pixels' => 6_000_000]);
+        $club = $this->club();
+        try {
+            $this->asTenant($club, fn () => ImageStore::store(UploadedFile::fake()->createWithContent('big.jpg', $this->jpeg(4000, 3000, 70)), 'members'));
+            $this->fail('a picture over the pixel budget was decoded');
+        } catch (ImageRejected $e) {
+            $this->assertStringContainsString('كبيرة جدًا على معالجة الخادم', $e->getMessage());
+        }
+        $this->assertSame([], Storage::disk('public')->allFiles());
+    }
+
+    public function test_a_phone_photo_on_its_side_is_turned_at_its_uses_size_within_the_budget(): void
+    {
+        // 15 million pixels: room to decode a 12 MP photo, not for a second full-size copy to turn it; scaled to its use
+        // first, it is turned within the budget, upright and at the use's size.
+        config(['media.server_pixels' => 15_000_000]);
+        $club = $this->club();
+        $sideways = $this->withCameraData($this->jpeg(3000, 4000, 70), 6);
+        foreach (['members' => [800, 600], 'site' => [1920, 1440]] as $use => $size) {
+            $path = $this->asTenant($club, fn () => ImageStore::store(UploadedFile::fake()->createWithContent('side.jpg', $sideways), $use));
+            $this->assertSame($size, array_slice(getimagesizefromstring((string) Storage::disk('public')->get($path)), 0, 2), $use);
+        }
+    }
+
     public function test_a_whole_jpeg_with_exif_icc_and_its_camera_preview_is_kept(): void
     {
         $whole = $this->withCameraData($this->jpeg(1200, 900), 1);
@@ -126,12 +163,16 @@ class ImageServerSafetyTest extends TestCase
 
     public function test_a_jpeg_cut_short_anywhere_is_refused_even_when_gd_can_read_part_of_it(): void
     {
-        $whole = $this->withCameraData($this->jpeg(1200, 900), 6);
-        $scan = strpos($whole, "\xFF\xDA");
+        $jpeg = $this->jpeg(1200, 900);
+        $whole = $this->withCameraData($jpeg, 6);
+        // The main picture's own start (the camera's preview inside EXIF has one too, earlier).
+        $scan = strlen($whole) - strlen($jpeg) + strpos($jpeg, "\xFF\xDA");
+        $this->assertGreaterThan(strpos($whole, "\xFF\xDA"), $scan);
         $cuts = [
             'in its camera data' => 600,
             'just after the picture starts' => $scan + 40,
             'halfway' => intdiv(strlen($whole), 2),
+            // The whole picture but its last two bytes: incomplete, so refused too (GD would read it).
             'without its end marker' => strlen($whole) - 2,
         ];
         // GD reads what is there of a picture cut halfway and fills the rest with grey: that is what was kept before.
@@ -160,5 +201,26 @@ class ImageServerSafetyTest extends TestCase
         $this->assertSame(0, $this->asTenant($club, fn () => Member::count()));
         $this->assertSame([], Storage::disk('public')->allFiles());
         $this->assertSame([], Storage::disk('local')->allFiles());
+    }
+
+    public function test_stray_bytes_between_segments_are_read_past_and_a_file_of_tiny_segments_is_refused_quickly(): void
+    {
+        // Two stray bytes after the first segment, as some editors write: libjpeg reads past them, and so does the check.
+        $jpeg = $this->jpeg(600, 400);
+        $app0 = 4 + ((ord($jpeg[4]) << 8) | ord($jpeg[5]));
+        $stray = substr($jpeg, 0, $app0)."\x00\x00".substr($jpeg, $app0);
+        $this->assertInstanceOf(\GdImage::class, @imagecreatefromstring($stray));
+        $facts = ImageInspector::inspect($this->file('stray.jpg', $stray));
+        $this->assertSame([600, 400], [$facts->width, $facts->height]);
+
+        // A file made of tiny comment segments before a picture: refused after 1,000 segments, without reading them all.
+        $spam = "\xFF\xD8".str_repeat("\xFF\xFE\x00\x02", 1_000_000).substr($jpeg, 2);
+        $started = microtime(true);
+        try {
+            ImageInspector::inspect($this->file('spam.jpg', $spam), 8 * 1_048_576);
+            $this->fail('a file of a million tiny segments was accepted');
+        } catch (ImageRejected) {
+            $this->assertLessThan(0.5, microtime(true) - $started);
+        }
     }
 }
