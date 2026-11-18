@@ -61,6 +61,12 @@ final class ImageInspector
             throw new ImageRejected('هذا الملف ليس صورة. الصيغ المقبولة: JPG وPNG وWebP وHEIC وHEIF وAVIF وGIF.');
         }
 
+        // A JPEG cut short (a broken transfer, a damaged card) is refused here, before anything is written: GD would read
+        // what is there of it and fill the rest with grey, and that half picture was kept.
+        if ($type === 'jpeg' && $whole && ! self::jpegWhole($path)) {
+            throw new ImageRejected('ملف الصورة تالف أو غير مكتمل. صدّره أو صوّره مرة أخرى ثم ارفعه.');
+        }
+
         [$width, $height] = in_array($type, ['heic', 'heif', 'avif'], true)
             ? (self::isoSize($head) ?? self::measured($path))
             : self::measured($path);
@@ -94,6 +100,58 @@ final class ImageInspector
                 'webp' => self::webpCarries($handle),
                 default => true,
             };
+        } finally {
+            fclose($handle);
+        }
+    }
+
+    /**
+     * Whether a JPEG is whole: its segments follow each other by their lengths up to the picture (so the camera's own
+     * small preview inside EXIF, which has an end marker too, is stepped over), and an end marker (FF D9) follows the
+     * picture. Inside the picture's data a 0xFF byte is always followed by 0x00 or a restart marker, so FF D9 there is
+     * its end; anything after it (a phone's "motion photo") is allowed. Read in 64 KB pieces, never whole.
+     */
+    private static function jpegWhole(string $path): bool
+    {
+        $size = (int) @filesize($path);
+        $handle = @fopen($path, 'rb');
+        if ($handle === false) {
+            return false;
+        }
+        try {
+            if (fread($handle, 2) !== "\xFF\xD8") {
+                return false;
+            }
+            while (true) {
+                if (fread($handle, 1) !== "\xFF") {
+                    return false;
+                }
+                do {
+                    $code = (string) fread($handle, 1);
+                } while ($code === "\xFF");
+                if ($code === '' || $code === "\xD9") {
+                    return false; // the file, or the image, ends before any picture
+                }
+                if ($code === "\x01" || ($code >= "\xD0" && $code <= "\xD7")) {
+                    continue;
+                }
+                $length = unpack('n', str_pad((string) fread($handle, 2), 2, "\0"))[1];
+                if ($length < 2 || ftell($handle) + $length - 2 > $size || fseek($handle, $length - 2, SEEK_CUR) !== 0) {
+                    return false;
+                }
+                if ($code === "\xDA") {
+                    break; // the picture starts
+                }
+            }
+            $carry = '';
+            while (($piece = fread($handle, 65_536)) !== false && $piece !== '') {
+                if (str_contains($carry.$piece, "\xFF\xD9")) {
+                    return true;
+                }
+                $carry = substr($piece, -1);
+            }
+
+            return false;
         } finally {
             fclose($handle);
         }

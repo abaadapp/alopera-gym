@@ -40,6 +40,9 @@ final class ImageStore
     /** Larger than this many pixels is refused before decoding (a small file can unpack to gigabytes). */
     public const MAX_PIXELS = 40_000_000;
 
+    /** Said when a picture does not fit the server's memory even the lighter way. */
+    private const TOO_LARGE = 'الصورة كبيرة جدًا على معالجة الخادم. ارفعها من متصفح حديث ليجهز نسخة العرض تلقائيًا، أو صغّر أبعادها.';
+
     // v2- : original on the local private disk; v2r- : original in the Spaces bucket (SpacesOriginals);
     // v2o- : no original (optimized-only), the display copy is all there is.
     private const NAME = '#^(?<dir>tenants/(?<tenant>[^/]+)/(?<folder>.+))/(?<id>v2(?<kind>[ro]?)-[0-9a-z]{26})-(?<ext>jpg|png|gif|webp|avif|heic|heif)\.(?<view>webp|png|gif|jpg)$#D';
@@ -482,7 +485,7 @@ final class ImageStore
         if (! self::decodable($facts)) {
             throw new ImageRejected(in_array($facts->type, ['heic', 'heif'], true)
                 ? 'لم يستطع هذا المتصفح تجهيز صورة HEIC/HEIF للعرض، ولا يقرؤها الخادم. حدّث المتصفح أو صدّرها JPG ثم ارفعها.'
-                : 'الصورة كبيرة جدًا على معالجة الخادم. ارفعها من متصفح حديث ليجهز نسخة العرض تلقائيًا، أو صغّر أبعادها.');
+                : self::TOO_LARGE);
         }
         $image = self::decode($facts, $source);
         if (! $image) {
@@ -492,7 +495,7 @@ final class ImageStore
         return $facts->type === 'jpeg' ? self::upright($image, $source) : $image;
     }
 
-    /** GD reads this type here, and there is memory to hold it decoded (about 5 bytes a pixel with the copies). */
+    /** GD reads this type here, and there is memory to hold it decoded (4 bytes a pixel, and a quarter more for the copies). */
     private static function decodable(ImageFacts $facts): bool
     {
         $reader = ['jpeg' => 'imagecreatefromjpeg', 'png' => 'imagecreatefrompng', 'gif' => 'imagecreatefromgif',
@@ -500,9 +503,20 @@ final class ImageStore
         if (! $reader || ! function_exists($reader) || ($facts->type === 'webp' && $facts->animated)) {
             return false;
         }
+
+        return self::room((int) ($facts->width * $facts->height * 1.25));
+    }
+
+    /**
+     * Whether $pixels more of a picture fit in PHP's memory now (GD holds a true-colour pixel in 4 bytes, and 16 MB are
+     * kept for the rest of the request). Asked before each costly step (decoding, turning upright, each scaling), so a
+     * large picture takes a lighter way, or is refused with a message, instead of a fatal error.
+     */
+    private static function room(int $pixels): bool
+    {
         $limit = self::bytes((string) ini_get('memory_limit'));
 
-        return $limit < 0 || $facts->width * $facts->height * 5 + 16 * 1_048_576 <= $limit - memory_get_usage(true);
+        return $limit < 0 || $pixels * 4 + 16 * 1_048_576 <= $limit - memory_get_usage(true);
     }
 
     private static function decode(ImageFacts $facts, string $path): ?\GdImage
@@ -533,10 +547,15 @@ final class ImageStore
         }
         $w = max(1, (int) round($width * $scale));
         $h = max(1, (int) round($height * $scale));
-        if ($scale < 0.5 && $width * $height > 8_000_000) {
-            // A large step down from a large photo: a fast scale to twice the size first, then the careful one from
-            // that much smaller picture (a quarter less time on a 12MP photo for 12 MB more memory; the browser's
-            // display source, at most 2400px, never takes this path).
+        if (! self::room($w * $h)) {
+            throw new ImageRejected(self::TOO_LARGE);
+        }
+        // A large step down from a large photo: a fast scale to twice the size first, then the careful one from that
+        // much smaller picture (a quarter less time on a 12MP photo; the browser's display source, at most 2400px,
+        // never takes this path). Only when that middle copy fits beside the picture: just under half the size (a
+        // 12MP photo for a 1600–1920px use) it is nearly as large as the picture itself, and it once ran PHP out of
+        // its 128 MB (a fatal error). Otherwise the careful scale goes straight from the picture.
+        if ($scale < 0.5 && $width * $height > 8_000_000 && self::room($w * 2 * $h * 2 * 2 + $w * $h)) {
             $half = imagescale($image, $w * 2, $h * 2, IMG_BILINEAR_FIXED);
             if ($half instanceof \GdImage) {
                 [$image, $width, $height] = [$half, $w * 2, $h * 2];
@@ -566,12 +585,24 @@ final class ImageStore
     }
 
     /** Applies a JPEG's EXIF orientation so a phone photo is shown the way it was taken. */
-    private static function upright(\GdImage $image, string $jpegPath): \GdImage
+    private static function upright(\GdImage &$image, string $jpegPath): \GdImage
     {
         if (! function_exists('exif_read_data')) {
             return $image;
         }
         $orientation = (int) ((@exif_read_data($jpegPath) ?: [])['Orientation'] ?? 1);
+        if (in_array($orientation, [3, 6, 8], true) && ! self::room(imagesx($image) * imagesy($image))) {
+            // Turning makes a second picture as large as this one. Without room for it, this one is scaled first to
+            // the largest a display source may be (no use shows more), and let go (taken by reference, so the
+            // caller's copy goes too), then turned: the same picture, upright, in about half the memory.
+            $side = (int) config('media.preview_max_side', 2400);
+            [$smaller] = self::fit($image, $side, $side);
+            $image = $smaller;
+            unset($smaller);
+            if (! self::room(imagesx($image) * imagesy($image))) {
+                throw new ImageRejected(self::TOO_LARGE);
+            }
+        }
         $turned = match ($orientation) {
             3 => imagerotate($image, 180, 0),
             6 => imagerotate($image, -90, 0),
