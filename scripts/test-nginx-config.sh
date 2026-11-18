@@ -64,6 +64,7 @@ done
 echo 'png' > "$T/public/storage/v1.2/photo.png"
 echo 'png' > "$T/public/storage/a.b.png"
 echo 'body{}' > "$T/public/build/app.css"
+for i in $(seq 1 200); do printf 'export const line%s = "built code, long enough to be compressed";\n' "$i"; done > "$T/public/build/app.js"
 echo 'APP_KEY=secret' > "$T/public/.env"
 echo '[core]' > "$T/public/.git/config"
 echo 'dump' > "$T/public/backup.sql"
@@ -94,7 +95,7 @@ pid $T/nginx.pid;
 error_log $T/logs/error.log;
 events {}
 http {
-    types { text/html html; text/css css; image/png png; application/json json; }
+    types { text/html html; text/css css; application/javascript js; image/png png; application/json json; }
     default_type application/octet-stream;
     access_log off;
     client_body_temp_path $T/tmp/body;
@@ -227,6 +228,9 @@ for name in aloperagym.om app.aloperagym.om; do
     check "/storage/missing.png" 404 "$(result "$name" /storage/missing.png)"
     check "/build/app.css" 200 "$(https "$name" /build/app.css)"
     check "/build/ cached for a year" "max-age=31536000, public, immutable" "$(https_header "$name" /build/app.css Cache-Control)"
+    check "/build/app.js compressed (gzip)" gzip "$(curl -sk --http1.1 -o /dev/null -D - -H 'Accept-Encoding: gzip' --max-time 5 \
+        --resolve "$name:$HTTPS:127.0.0.1" "https://$name:$HTTPS/build/app.js" | tr -d '\r' | awk 'tolower($1) == "content-encoding:" { print $2 }')"
+    check "/build/ Vary: Accept-Encoding" "Accept-Encoding" "$(https_header "$name" /build/app.js Vary)"
     echo "== $name: what the answers say about the server"
     check "no nginx version in Server" nginx "$(https_header "$name" /storage/photo.png Server)"
     check "no nginx version on a 404" nginx "$(https_header "$name" /storage/evil.php Server)"
