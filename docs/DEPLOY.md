@@ -134,3 +134,24 @@ chown deploy:deploy /home/deploy/.ssh/authorized_keys && chmod 600 /home/deploy/
 | `shared/deploy-state/MIGRATED.txt` | آخر Commit نُفذت ترحيلاته كلها: منه يبدأ فحص الترحيلات في النشر التالي |
 | `shared/deploy-state/ROLLBACK.txt` | الـCommit السابق وأمر الرجوع |
 | `shared/deploy-state/migrate-*.log` | ناتج كل ترحيل |
+
+## سجل التطبيق (`shared/storage/logs/laravel.log`)
+
+يكتب فيه مستخدمان: PHP-FPM (`www-data`)، والجدولة وعامل الطوابير والنشر (`deploy`، وهو عضو في مجموعة `www-data`).
+
+- **الصلاحية:** قنوات الملفات في `config/logging.php` تجعل كل ملف سجل `0660`، أيًا كان منشئه، ومن ذلك root حين يشغّل `php artisan`، وملف كل يوم جديد. ويعيد مالك الملف ضبطها إلى `0660` كلما فتحه.
+- **المجموعة:** المجلد `logs/` من مجموعة `www-data` مع setgid، فيأخذ كل ملف جديد مجموعة `www-data`.
+- **لا يقرأ السجل أحد غير المستخدمين:** لا تُفتح صلاحية القراءة أو الكتابة لباقي المستخدمين، ولا تُستخدم 777.
+- **logrotate:** لا يوجد على الخادم لهذا الملف. إن أُضيف يومًا:
+  - فليكن مع `su www-data www-data`.
+  - وإما `create 0660 www-data www-data` وإما `copytruncate`.
+  - لا تستخدم `create 0644`، ولا ملكية root، فلا يستطيع الاثنان الكتابة في الملف الجديد عندها.
+- **قناة الطوارئ:** Laravel يستخدم `emergency` حين يتعذر إنشاء قناة. لا تأخذ صلاحية، فإذا أنشأت الملف أخذ umask منشئه. أول سطر عادي يكتبه مالك الملف بعدها يعيده `0660`.
+- **عند الشك:**
+  ```bash
+  ls -l shared/storage/logs/laravel.log
+  ```
+  المتوقع `-rw-rw---- … www-data`. وللتأكد من كتابة كل مستخدم:
+  ```bash
+  sudo -u deploy test -w …/laravel.log
+  ```
