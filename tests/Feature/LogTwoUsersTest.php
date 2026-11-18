@@ -139,10 +139,23 @@ class LogTwoUsersTest extends TestCase
         $root = $this->file('root-made.log');
         $this->assertSame([0660, 'root', 'www-data'], [$root['mode'], $root['owner'], $root['group']]);
 
-        // Nobody outside the two.
-        foreach (['laravel.log', 'laravel-2026-11-18.log', 'root-made.log'] as $file) {
-            $this->assertSame('no', trim((string) shell_exec('sudo -n -u nobody test -r '.escapeshellarg($this->root.'/'.$file).' && echo yes || echo no')), $file);
+        // Each line once, none lost, none twice.
+        foreach (['laravel.log' => ['web line', 'nightly line'], 'laravel-2026-11-18.log' => ['nightly line', 'web line'], 'root-made.log' => ['root line', 'web line', 'nightly line']] as $file => $lines) {
+            $text = $this->file($file)['text'];
+            $this->assertSame(count($lines), substr_count($text, 'probe.ERROR'), "$file: every line once");
+            foreach ($lines as $line) {
+                $this->assertSame(1, substr_count($text, $line), "$file: «{$line}» once");
+            }
         }
+
+        // Nobody outside the two: neither reads nor writes.
+        foreach (['laravel.log', 'laravel-2026-11-18.log', 'root-made.log'] as $file) {
+            foreach (['r' => 'reads', 'w' => 'writes'] as $test => $what) {
+                $this->assertSame('no', trim((string) shell_exec('sudo -n -u nobody test -'.$test.' '.escapeshellarg($this->root.'/'.$file).' && echo yes || echo no')), "nobody $what $file");
+            }
+        }
+        $this->assertStringStartsWith('failed:', $this->log('nobody', 'laravel.log', 'intruder line', $permission), 'nobody cannot log into it');
+        $this->assertStringNotContainsString('intruder line', $this->file('laravel.log')['text']);
     }
 
     public function test_the_file_on_the_server_today_is_put_right_by_php_fpm_s_next_line_with_nothing_lost(): void
