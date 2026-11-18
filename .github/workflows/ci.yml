@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     name: PHP · JavaScript · TypeScript · Pint · البناء
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # production runs Ubuntu 24.04; ubuntu-latest moved to 26.04 (#207)
     services:
       postgres:
         image: postgres:16
@@ -57,7 +57,7 @@ jobs:
     name: إثبات الشجرة المختبَرة
     if: github.event_name == 'pull_request'
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # production runs Ubuntu 24.04; ubuntu-latest moved to 26.04 (#207)
     steps:
       - uses: actions/checkout@v4
         with:

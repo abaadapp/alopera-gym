@@ -28,7 +28,7 @@ concurrency:
 jobs:
   execute:
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'claude:ready'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # production runs Ubuntu 24.04; ubuntu-latest moved to 26.04 (#207)
     timeout-minutes: 60
     # What CI has, so the agent can run the tests it is told to run (PostgreSQL, PHP 8.4, Node 22).
     services:

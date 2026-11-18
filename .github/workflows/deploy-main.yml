@@ -36,7 +36,7 @@ env:
 jobs:
   deploy:
     name: نشر على الإنتاج ووسمه
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # production runs Ubuntu 24.04; ubuntu-latest moved to 26.04 (#207)
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
