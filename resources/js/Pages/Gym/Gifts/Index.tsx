@@ -2,11 +2,11 @@ import { Link, useForm } from '@inertiajs/react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Gift, Plus } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, ChoiceCard, DataTable, Field, Input, Modal, Notice, PageHeader, Textarea, type Column, type PageMeta, type TableFilter } from '@/Components/ui';
+import { Badge, Button, Checkbox, ChoiceCard, DataTable, Field, Input, Modal, Notice, PageHeader, type Column, type PageMeta, type TableFilter } from '@/Components/ui';
 import { clientKey } from '@/Components/Inventory/parts';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, dayCount, money } from '@/lib/format';
-import { GIFT_DELIVERY_TONE, GIFT_FILTERS, GIFT_PAYMENT, defaultGiftPayment, giftPaymentChoices, type GiftRow } from '@/lib/gifts';
+import { GIFT_DELIVERY_TONE, GIFT_FILTERS, GIFT_LANGUAGES, GIFT_PAYMENT, defaultGiftPayment, giftPaymentChoices, type GiftRow } from '@/lib/gifts';
 import { giftStatus, label } from '@/lib/labels';
 import type { Paginated } from '@/types';
 
@@ -123,7 +123,8 @@ function IssueGiftModal({ open, onClose, plans, methods, redeemDays }: { open: b
         giver_email: '',
         recipient_name: '',
         recipient_phone: '',
-        message: '',
+        message_language: 'ar' as 'ar' | 'en',
+        is_anonymous: false,
         payment_method: defaultGiftPayment(methods),
         payment_reference: '',
         client_key: '',
@@ -176,6 +177,7 @@ function IssueGiftModal({ open, onClose, plans, methods, redeemDays }: { open: b
                 <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="اسم المُهدي" error={err.giver_name} required>
                         <Input value={form.data.giver_name} onChange={(e) => form.setData('giver_name', e.target.value)} maxLength={120} />
+                        <Checkbox className="mt-2" label="إخفاء اسم المُهدي عن المستلمة" checked={form.data.is_anonymous} onChange={(e) => form.setData('is_anonymous', e.target.checked)} />
                     </Field>
                     <Field label="اسم المُهدى إليها" error={err.recipient_name} required>
                         <Input value={form.data.recipient_name} onChange={(e) => form.setData('recipient_name', e.target.value)} maxLength={120} />
@@ -189,8 +191,14 @@ function IssueGiftModal({ open, onClose, plans, methods, redeemDays }: { open: b
                     <Field label="بريد المُهدي" error={err.giver_email}>
                         <Input dir="ltr" type="email" value={form.data.giver_email} onChange={(e) => form.setData('giver_email', e.target.value)} />
                     </Field>
-                    <Field label="رسالة الهدية" error={err.message} className="sm:col-span-2" hint={<span className="num">{form.data.message.length}/300</span>}>
-                        <Textarea rows={3} maxLength={300} value={form.data.message} onChange={(e) => form.setData('message', e.target.value)} placeholder="تظهر على بطاقة الهدية" />
+                    <Field label="لغة رسالة الإهداء" error={err.message_language} hint="لغة رسالة واتساب التي تصل المستلمة، كما يختارها المُهدي.">
+                        <div className="grid grid-cols-2 gap-2">
+                            {GIFT_LANGUAGES.map((l) => (
+                                <ChoiceCard key={l.value} selected={form.data.message_language === l.value} onClick={() => form.setData('message_language', l.value)} className="py-2.5 text-center text-sm">
+                                    <span lang={l.value}>{l.label}</span>
+                                </ChoiceCard>
+                            ))}
+                        </div>
                     </Field>
                 </div>
 

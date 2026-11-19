@@ -61,6 +61,12 @@ class GiftMembership extends Model implements BranchOwned
 
     public const DEFAULT_REDEEM_DAYS = 90;
 
+    /** The languages the gift's WhatsApp message goes in, as the giver picks it (Meta's codes: ar, en). */
+    public const LANGUAGES = ['ar' => 'العربية', 'en' => 'English'];
+
+    /** What the recipient reads in place of a giver who asked not to be named (is_anonymous). */
+    public const ANONYMOUS_GIVER = ['ar' => 'شخص يفضّل عدم ذكر اسمه', 'en' => 'Someone who prefers to remain anonymous'];
+
     protected $table = 'gym_gift_memberships';
 
     protected $guarded = ['id', 'tenant_id'];
@@ -99,7 +105,23 @@ class GiftMembership extends Model implements BranchOwned
             'phone_verify_code' => 'encrypted',
             'phone_verify_expires_at' => 'datetime',
             'phone_verified_at' => 'datetime',
+            'is_anonymous' => 'boolean',
         ];
+    }
+
+    /** The language the gift's WhatsApp message goes in: the giver's choice, Arabic for gifts from before it. */
+    public function messageLanguage(): string
+    {
+        return array_key_exists((string) $this->message_language, self::LANGUAGES) ? (string) $this->message_language : 'ar';
+    }
+
+    /**
+     * The giver's name as the recipient sees it (the WhatsApp message, the gift's card, its share text): the real name,
+     * or the anonymous wording in that language. The real name itself stays in giver_name for staff and the invoice.
+     */
+    public function publicGiverName(string $language): string
+    {
+        return $this->is_anonymous ? self::ANONYMOUS_GIVER[$language === 'en' ? 'en' : 'ar'] : (string) $this->giver_name;
     }
 
     public static function hashToken(string $token): string

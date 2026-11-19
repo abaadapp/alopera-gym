@@ -11,7 +11,12 @@ use App\Modules\Messaging\Models\MessageTemplate;
  */
 final class TemplateCatalog
 {
-    /** @var array<string, array{label: string, category: string, variables: list<string>, body: string}> */
+    /**
+     * Each event's template: its name in WhatsApp Manager is alopera_<key> and its language Arabic unless `name` and
+     * `language` say otherwise (one Meta name in two languages is two rows here, one per key).
+     *
+     * @var array<string, array{label: string, category: string, variables: list<string>, body: string, name?: string, language?: string, refresh_draft?: bool}>
+     */
     public const EVENTS = [
         'member_welcome' => [
             'label' => 'الترحيب بعضو جديد',
@@ -141,13 +146,26 @@ final class TemplateCatalog
         ],
         // A gift membership sent to its recipient once its invoice is paid in full (#192). To a number that is not a
         // member's: confirmed by the recipient's own message from it first, which is her consent to receive it. No
-        // price, invoice or payment detail; the link opens the gift's card. A WhatsApp parameter cannot hold a line
-        // break, so the gift's message is sent on one line (GiftWhatsApp::values).
+        // price, invoice or payment detail, and no free text from the giver: the giver's name (or the anonymous wording
+        // when they hid it), the plan and the link to the gift's card. One Meta template, alopera_gift_received, in the
+        // two languages the giver picks from (GiftMembership::message_language): Arabic here, English below, the same
+        // three values in the same order. The earlier Arabic draft had four (with the giver's message): a draft still
+        // like that takes this text (refresh_draft); one approved with four is not sent with (GiftWhatsApp).
         'gift_received' => [
-            'label' => 'إرسال هدية اشتراك إلى المستلمة',
+            'label' => 'إرسال هدية اشتراك إلى المستلمة (العربية)',
             'category' => 'utility',
-            'variables' => ['giver_name', 'plan_name', 'gift_message', 'gift_link'],
-            'body' => "🎁 هدية خاصة لك من Alopera Gym!\n\nأهداك {{1}} اشتراكًا في باقة {{2}}.\n\n{{3}}\n\nاضغط على الرابط التالي لاستلام هديتك واختيار موعد بدء الاشتراك:\n\n{{4}}\n\nنتمنى لك تجربة رياضية رائعة!",
+            'variables' => ['giver_name', 'plan_name', 'gift_link'],
+            'body' => "🎁 هدية خاصة لك من Alopera Gym!\n\nأهداك {{1}} اشتراكًا في باقة {{2}}.\n\nاضغط على الرابط التالي لاستلام هديتك واختيار موعد بدء الاشتراك:\n\n{{3}}\n\nنتمنى لك تجربة رياضية رائعة!",
+            'refresh_draft' => true,
+        ],
+        'gift_received_en' => [
+            'label' => 'إرسال هدية اشتراك إلى المستلمة (الإنجليزية)',
+            'category' => 'utility',
+            'name' => 'alopera_gift_received',
+            'language' => 'en',
+            'variables' => ['giver_name', 'plan_name', 'gift_link'],
+            'body' => "🎁 A special gift for you from Alopera Gym!\n\n{{1}} has gifted you a membership in the {{2}} plan.\n\nTap the link below to claim your gift and choose your membership start date:\n\n{{3}}\n\nWe wish you a wonderful fitness experience!",
+            'refresh_draft' => true,
         ],
     ];
 
@@ -158,15 +176,30 @@ final class TemplateCatalog
     public static function seedDefaults(bool $approved = false): void
     {
         foreach (self::EVENTS as $key => $event) {
-            MessageTemplate::firstOrCreate(['key' => $key], [
-                'name' => 'alopera_'.$key,
-                'language' => 'ar',
+            $template = MessageTemplate::firstOrCreate(['key' => $key], [
+                'name' => $event['name'] ?? 'alopera_'.$key,
+                'language' => $event['language'] ?? 'ar',
                 'category' => $event['category'],
                 'body' => $event['body'],
                 'variables' => $event['variables'],
                 'status' => $approved ? MessageTemplate::APPROVED : 'draft',
                 'is_active' => true,
             ]);
+            // A draft from before the event's values changed takes the new text; nothing approved or pending is touched.
+            if (($event['refresh_draft'] ?? false) && $template->status === 'draft' && ! self::isCurrent($template)) {
+                $template->forceFill(['body' => $event['body'], 'variables' => $event['variables']])->save();
+            }
         }
+    }
+
+    /**
+     * Whether a system template carries the values its event sends, in the same order. One saved with another list (an
+     * older text, approved in Meta with other variables) would fill the wrong {{n}}: it is not sent with.
+     */
+    public static function isCurrent(MessageTemplate $template): bool
+    {
+        $event = self::EVENTS[$template->key] ?? null;
+
+        return $event === null || array_values((array) $template->variables) === $event['variables'];
     }
 }

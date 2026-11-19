@@ -1,4 +1,4 @@
-import type { FormEvent, ReactNode } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { useForm } from '@inertiajs/react';
 import { AlertCircle, Gift, Lock, MessageCircle, ShieldCheck, Store } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
@@ -22,9 +22,15 @@ interface Props {
     /** The recipient confirms her WhatsApp number before payment: not possible while the club's WhatsApp is not connected. */
     whatsapp: { available: boolean; refusal: string | null };
     terms: GiftTermsData;
+    /** The recipient's WhatsApp language to start with: the page's. The giver may pick the other one. */
+    message_language: 'ar' | 'en';
 }
 
-const MESSAGE_MAX = 300;
+/** The message's languages, each named in its own language (no flags: a language is not a country). */
+const LANGUAGES: { value: 'ar' | 'en'; label: string; code: string }[] = [
+    { value: 'ar', label: 'العربية', code: 'AR' },
+    { value: 'en', label: 'English', code: 'EN' },
+];
 
 export const giftInput = 'h-[52px] w-full min-w-0 rounded-2xl border border-[rgba(22,19,15,0.18)] bg-white px-4 text-base text-[var(--site-ink)] outline-none placeholder:text-[#9A9284] focus:border-[var(--site-gold)] focus:ring-2 focus:ring-[var(--site-gold)]/25 aria-[invalid=true]:border-[#A33A22]';
 
@@ -48,12 +54,13 @@ export function GiftAlert({ children }: { children: ReactNode }) {
 }
 
 /**
- * «إهداء هذه الباقة»: the giver's details, the recipient's name and WhatsApp number (required: the gift is sent there)
- * and a message, the gift's conditions, its expiry and no-refund policy to agree to, and the total. Next comes the
+ * «إهداء هذه الباقة»: the giver's details (and whether to hide their name from the recipient), the recipient's name and
+ * WhatsApp number (required: the gift is sent there), the language of her WhatsApp message (the giver's choice, not the
+ * page's), the gift's conditions, its expiry and no-refund policy to agree to, and the total. No free-text message. Next comes the
  * recipient's confirmation of her number (GiftVerify), then the gateway. No account is needed. The gift is usable —
  * and sent — only once the gateway's signed confirmation paid it.
  */
-export default function GiftBuy({ site, seo, plan, summary, onlinePayments, whatsapp, terms }: Props) {
+export default function GiftBuy({ site, seo, plan, summary, onlinePayments, whatsapp, terms, message_language }: Props) {
     const currency = useCurrency();
     const t = useT();
     const english = useLocale() === 'en';
@@ -63,13 +70,25 @@ export default function GiftBuy({ site, seo, plan, summary, onlinePayments, what
         giver_email: '',
         recipient_name: '',
         recipient_phone: '',
-        message: '',
+        message_language,
+        is_anonymous: false,
         accept_terms: false,
         website: '',
     });
+    // Whether the giver picked the message's language: until then it follows the page's, also after a language switch.
+    const [picked, setPicked] = useState(false);
+    const pickLanguage = (value: 'ar' | 'en') => {
+        setPicked(true);
+        form.setData('message_language', value);
+    };
 
-    // What was typed survives the language switch (never the honeypot).
-    useCarryOver('gift', form.data, (saved) => form.setData((d) => ({ ...d, ...saved })));
+    // What was typed survives the language switch (never the honeypot); the message's language only once picked.
+    useCarryOver('gift', { ...form.data, language_picked: picked }, (saved) => {
+        const { language_picked, ...rest } = saved;
+        if (language_picked) setPicked(true);
+        else delete rest.message_language;
+        form.setData((d) => ({ ...d, ...rest }));
+    });
 
     const errors = form.errors as Record<string, string | undefined>;
     const access = planAccess(plan);
@@ -129,6 +148,13 @@ export default function GiftBuy({ site, seo, plan, summary, onlinePayments, what
                         <GiftField label={t('اسمك (المُهدي)')} error={errors.giver_name} required className="sm:col-span-2">
                             <input className={giftInput} value={form.data.giver_name} onChange={(e) => form.setData('giver_name', e.target.value)} maxLength={120} autoComplete="name" aria-invalid={!!errors.giver_name} required />
                         </GiftField>
+                        <label className="-mt-1 flex cursor-pointer items-start gap-3 text-[15px] leading-6 sm:col-span-2">
+                            <input type="checkbox" name="is_anonymous" checked={form.data.is_anonymous} onChange={(e) => form.setData('is_anonymous', e.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[#C9A042]" />
+                            <span className="flex flex-col">
+                                <span className="font-semibold">{t('إخفاء اسمي عن مستلم الهدية')}</span>
+                                <span className="text-[13px] text-[#7A7060]">{t('تقرأ المستلمة «شخص يفضّل عدم ذكر اسمه» بدل اسمك، في الرسالة وبطاقة الهدية. يبقى اسمك في فاتورتك لدى النادي.')}</span>
+                            </span>
+                        </label>
                         <GiftField label={t('رقم هاتفك للتواصل')} error={errors.giver_phone} hint={t('لا يظهر في بطاقة الهدية.')} required>
                             <input className={cn(giftInput, 'text-start')} type="tel" inputMode="tel" dir="ltr" value={form.data.giver_phone} onChange={(e) => form.setData('giver_phone', e.target.value)} maxLength={32} autoComplete="tel" placeholder="9XXXXXXX" aria-invalid={!!errors.giver_phone} required />
                         </GiftField>
@@ -154,21 +180,29 @@ export default function GiftBuy({ site, seo, plan, summary, onlinePayments, what
                                 <input className={cn(giftInput, 'text-start')} type="tel" inputMode="tel" dir="ltr" value={form.data.recipient_phone} onChange={(e) => form.setData('recipient_phone', e.target.value)} maxLength={32} autoComplete="off" placeholder="9XXXXXXX" required aria-invalid={!!errors.recipient_phone || (form.data.recipient_phone.trim() !== '' && !shapeOk)} aria-label={t('رقم واتساب المستلمة')} />
                             </span>
                         </GiftField>
-                        <GiftField
-                            label={t('رسالة الإهداء (اختيارية)')}
-                            error={errors.message}
-                            hint={<span dir="ltr" className="num [unicode-bidi:isolate]">{form.data.message.length}/{MESSAGE_MAX}</span>}
-                            className="sm:col-span-2"
-                        >
-                            <textarea
-                                className={cn(giftInput, 'h-auto min-h-[112px] resize-y py-3 leading-7')}
-                                value={form.data.message}
-                                onChange={(e) => form.setData('message', e.target.value.slice(0, MESSAGE_MAX))}
-                                maxLength={MESSAGE_MAX}
-                                rows={4}
-                                aria-invalid={!!errors.message}
-                            />
-                        </GiftField>
+                        <fieldset className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0 sm:col-span-2" aria-describedby="gift-language-hint">
+                            <legend className="mb-1.5 p-0 text-sm font-semibold">{t('لغة رسالة الإهداء')}</legend>
+                            <div role="radiogroup" aria-label={t('لغة رسالة الإهداء')} className="grid grid-cols-2 gap-2">
+                                {LANGUAGES.map((l) => {
+                                    const on = form.data.message_language === l.value;
+                                    return (
+                                        <label
+                                            key={l.value}
+                                            className={cn(
+                                                'flex h-[52px] min-w-0 cursor-pointer items-center justify-center gap-2 rounded-2xl border px-3 text-base transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--site-gold)]/40',
+                                                on ? 'border-[var(--site-gold)] bg-[#FBF6EA] font-bold text-[var(--site-ink)]' : 'border-[rgba(22,19,15,0.18)] bg-white text-[#5E5648] hover:border-[var(--site-gold)]/60',
+                                            )}
+                                        >
+                                            <input type="radio" name="message_language" value={l.value} checked={on} onChange={() => pickLanguage(l.value)} className="sr-only" />
+                                            <span dir="ltr" aria-hidden className={cn('rounded-md px-1.5 py-0.5 text-[11px] font-bold tracking-wide', on ? 'bg-[var(--site-gold)] text-[var(--site-ink)]' : 'bg-[#F6F3EE] text-[#7A7060]')}>{l.code}</span>
+                                            <span lang={l.value} dir={l.value === 'ar' ? 'rtl' : 'ltr'}>{l.label}</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                            {errors.message_language ? <span className="text-sm text-[#A33A22]">{errors.message_language}</span>
+                                : <span id="gift-language-hint" className="text-[13px] text-[#7A7060]">{t('لغة رسالة واتساب التي تصل المستلمة. اختيارك لا يتغير بتغيير لغة الموقع.')}</span>}
+                        </fieldset>
                     </section>
 
                     <section className="flex flex-col gap-4 rounded-[24px] bg-white p-5 ring-1 ring-[rgba(26,22,18,0.08)] sm:p-7">

@@ -12,11 +12,11 @@ use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Messaging\Events\InboundTextReceived;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Models\MessageTemplate;
+use App\Modules\Messaging\Services\TemplateCatalog;
 use App\Modules\Messaging\Services\WhatsAppAutomation;
 use App\Modules\Messaging\Services\WhatsAppService;
 use App\Modules\Website\Support\GiftLinks;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 /**
  * A gift sent to its recipient's WhatsApp (#192), through the club's own connected number (WhatsAppService) only.
@@ -35,6 +35,12 @@ use Illuminate\Support\Str;
  * twice; a new attempt is staff's (resend, after a failure). Nothing goes while the club has not switched the notice
  * on (off by default) or its template is not approved by Meta.
  *
+ * Language. The giver picks the message's language (GiftMembership::message_language, ar|en): the gift goes with that
+ * language's template (alopera_gift_received in Arabic or in English, one row each in TEMPLATES), and only with it.
+ * When that template is missing, not approved or still the older text with other values, the gift waits with the
+ * reason; it never goes in the other language instead. A giver who hid their name (is_anonymous) is named in the
+ * message by the anonymous wording of that language; staff and the invoice keep the real name.
+ *
  * Delivery. The message's own status, from WhatsApp's status webhooks: `sent` is WhatsApp having taken it, not the
  * recipient having it. A failure leaves the paid gift as it is (no cancellation, no new invoice or payment), tells
  * staff in the bell, and lets them correct the number (a new confirmation, and a new link once one may have gone to
@@ -42,7 +48,11 @@ use Illuminate\Support\Str;
  */
 final class GiftWhatsApp
 {
+    /** The club's switch for gift messages (WhatsAppAutomation), and the Arabic template's key. */
     public const TEMPLATE = 'gift_received';
+
+    /** The template each language's gift goes with: the same Meta name, alopera_gift_received, in ar and en. */
+    public const TEMPLATES = ['ar' => 'gift_received', 'en' => 'gift_received_en'];
 
     public const CODE_HOURS = 24;
 
@@ -54,11 +64,18 @@ final class GiftWhatsApp
         'not_connected' => 'واتساب النادي غير مربوط بالنظام أو غير مفعّل.',
         'no_club_number' => 'رقم واتساب النادي غير مسجّل في إعدادات واتساب.',
         'automation_off' => 'إرسال الهدايا عبر واتساب غير مفعّل في الرسائل التلقائية.',
-        'template_missing' => 'قالب رسالة الهدية غير موجود في واتساب ← القوالب.',
-        'template_not_approved' => 'قالب رسالة الهدية لم يُعتمد من Meta بعد.',
+        'template_missing' => 'قالب رسالة الهدية (:lang) غير موجود في واتساب ← القوالب.',
+        'template_not_approved' => 'قالب رسالة الهدية (:lang) لم يُعتمد بعد: أنشئه في Meta بهذه اللغة، ثم اجعله «معتمد» في واتساب ← القوالب. لا تُرسل الهدية بلغة أخرى.',
+        'template_outdated' => 'قالب رسالة الهدية (:lang) من الإصدار السابق بمتغيرات أخرى، فلا يُرسل به. اجعله «مسودة» في واتساب ← القوالب ليأخذ النص الجديد، وأنشئ النص الجديد في Meta، ثم اعتمده.',
         'not_verified' => 'بانتظار تأكيد رقم المستلمة برسالة منها.',
         'paid_before_on' => 'دُفعت قبل تشغيل إرسال الهدايا، فلا تُرسل وحدها. تأكد أن الرابط لم يصل المستلمة بطريقة أخرى، ثم أرسلها من «إرسال الآن».',
     ];
+
+    /** The reason as staff read it, naming the template's language where it is about the template. */
+    public static function reasonText(string $code, ?string $language = null): string
+    {
+        return str_replace(':lang', $language === 'en' ? 'الإنجليزية' : 'العربية', self::REASONS[$code] ?? $code);
+    }
 
     public function __construct(
         private readonly WhatsAppService $whatsapp,
@@ -182,9 +199,10 @@ final class GiftWhatsApp
             };
             if ($refusal !== null) {
                 $gift && $this->audit->log('gift.phone_verify_refused', $gift, ['number' => $gift->number, 'reason' => $refusal, 'from' => self::mask($from)]);
+                $english = $gift?->messageLanguage() === 'en';
                 $answer = match ($refusal) {
-                    'expired' => 'انتهت صلاحية رمز التأكيد. اطلب رمزًا جديدًا ممن أرسله إليك.',
-                    'other_number' => 'هذا الرمز ليس لهذا الرقم، فلم يُؤكَّد.',
+                    'expired' => $english ? 'This confirmation code has expired. Ask the person who sent it to you for a new one.' : 'انتهت صلاحية رمز التأكيد. اطلب رمزًا جديدًا ممن أرسله إليك.',
+                    'other_number' => $english ? 'This code is not for this number, so it was not confirmed.' : 'هذا الرمز ليس لهذا الرقم، فلم يُؤكَّد.',
                     default => null,
                 };
                 $answer && $this->answer($event, $answer);
@@ -200,7 +218,7 @@ final class GiftWhatsApp
                 'phone_verify_expires_at' => null,
             ])->save();
             $this->audit->log('gift.phone_verified', $gift, ['number' => $gift->number, 'phone' => self::mask($from), 'message_id' => $event->message->id]);
-            $this->answer($event, 'شكرًا لك، تم تأكيد رقمك.');
+            $this->answer($event, $gift->messageLanguage() === 'en' ? 'Thank you, your number is confirmed.' : 'شكرًا لك، تم تأكيد رقمك.');
 
             // Paid already (at the desk): it goes now.
             $this->queue($gift);
@@ -211,16 +229,27 @@ final class GiftWhatsApp
 
     // ---- Sending ---------------------------------------------------------------------------------------------------
 
-    /** Why a gift's message cannot go now, whatever the gift: the club's switch, its connection, the template. */
-    public function sendRefusal(): ?string
+    /**
+     * Why a gift's message cannot go now: the club's connection and switch, then — for a language — that language's
+     * template: there, approved, and carrying the three values sent (an older text approved with four is not used).
+     */
+    public function sendRefusal(?string $language = null): ?string
     {
-        $template = MessageTemplate::where('key', self::TEMPLATE)->first();
+        if (! $this->whatsapp->enabled()) {
+            return 'not_connected';
+        }
+        if (! WhatsAppAutomation::on($this->tenants->require(), self::TEMPLATE)) {
+            return 'automation_off';
+        }
+        if ($language === null) {
+            return null;
+        }
+        $template = MessageTemplate::where('key', self::TEMPLATES[$language] ?? self::TEMPLATE)->first();
 
         return match (true) {
-            ! $this->whatsapp->enabled() => 'not_connected',
-            ! WhatsAppAutomation::on($this->tenants->require(), self::TEMPLATE) => 'automation_off',
             ! $template => 'template_missing',
             ! $template->isUsable() => 'template_not_approved',
+            ! TemplateCatalog::isCurrent($template) => 'template_outdated',
             default => null,
         };
     }
@@ -231,13 +260,14 @@ final class GiftWhatsApp
      */
     public function queue(GiftMembership $gift, bool $again = false): ?Message
     {
-        if (! $gift->isRedeemable() || ! $gift->phoneVerified() || (! $again && $gift->whatsapp_message_id !== null) || $this->sendRefusal() !== null) {
+        $language = $gift->messageLanguage();
+        if (! $gift->isRedeemable() || ! $gift->phoneVerified() || (! $again && $gift->whatsapp_message_id !== null) || $this->sendRefusal($language) !== null) {
             return null;
         }
 
         $attempt = $gift->whatsapp_attempts + 1;
-        $message = $this->whatsapp->queuePhoneTemplate($gift->recipient_phone, self::TEMPLATE, $this->values($gift), $gift,
-            'gift:'.$gift->id.':'.$attempt, ['gift_link' => '[رابط الهدية]']);
+        $message = $this->whatsapp->queuePhoneTemplate($gift->recipient_phone, self::TEMPLATES[$language], $this->values($gift), $gift,
+            'gift:'.$gift->id.':'.$attempt, ['gift_link' => $language === 'en' ? '[gift link]' : '[رابط الهدية]']);
         if (! $message) {
             return null;
         }
@@ -263,8 +293,8 @@ final class GiftWhatsApp
             if (! $gift->phoneVerified()) {
                 throw new BusinessRuleException('gift.not_verified', self::REASONS['not_verified']);
             }
-            if ($refusal = $this->sendRefusal()) {
-                throw new BusinessRuleException('gift.whatsapp_'.$refusal, self::REASONS[$refusal]);
+            if ($refusal = $this->sendRefusal($gift->messageLanguage())) {
+                throw new BusinessRuleException('gift.whatsapp_'.$refusal, self::reasonText($refusal, $gift->messageLanguage()));
             }
 
             return $this->queue($gift, again: true) ?? throw new BusinessRuleException('gift.whatsapp_not_queued', 'تعذّر تجهيز رسالة الهدية. حاول مرة أخرى.');
@@ -338,16 +368,20 @@ final class GiftWhatsApp
         return $since !== null && $gift->paid_at !== null && $gift->paid_at->greaterThanOrEqualTo($since);
     }
 
-    /** The values the template is sent with: one line each (WhatsApp refuses a line break in a parameter). */
+    /**
+     * The three values the template is sent with, in the gift's language: the giver as the recipient may see them
+     * (the anonymous wording when hidden), the plan, the link. One line each (WhatsApp refuses a line break in a
+     * parameter). No free text from the giver: a message from an older gift stays on its card only.
+     */
     public function values(GiftMembership $gift): array
     {
         $line = fn (?string $v) => trim((string) preg_replace('/\s+/u', ' ', (string) $v));
-        $message = $line($gift->message);
+        $language = $gift->messageLanguage();
+        $plan = $gift->plan_snapshot ?? [];
 
         return [
-            'giver_name' => $line($gift->giver_name),
-            'plan_name' => $line($gift->plan_snapshot['name'] ?? ''),
-            'gift_message' => $message !== '' ? '«'.Str::limit($message, 300).'»' : 'مع أطيب الأمنيات.',
+            'giver_name' => $line($gift->publicGiverName($language)),
+            'plan_name' => $line($language === 'en' ? (($plan['name_en'] ?? null) ?: ($plan['name'] ?? '')) : ($plan['name'] ?? '')),
             'gift_link' => $this->links->card($gift),
         ];
     }
@@ -370,11 +404,11 @@ final class GiftWhatsApp
     public function delivery(GiftMembership $gift): array
     {
         $message = $gift->whatsapp_message_id ? Message::find($gift->whatsapp_message_id) : null;
-        $waitingFor = ! $gift->phoneVerified() ? 'not_verified' : $this->sendRefusal();
+        $waitingFor = ! $gift->phoneVerified() ? 'not_verified' : $this->sendRefusal($gift->messageLanguage());
         $state = self::stateOf($gift, $message);
         $reason = match ($state) {
             'waiting' => match (true) {
-                $waitingFor !== null => self::REASONS[$waitingFor],
+                $waitingFor !== null => self::reasonText($waitingFor, $gift->messageLanguage()),
                 ! $this->sendsOnItsOwn($gift) => self::REASONS['paid_before_on'],
                 default => 'تُرسل وحدها في ساعة الرسائل التلقائية ('.sprintf('%02d:00', WhatsAppAutomation::hour($this->tenants->require())).')، أو الآن من «إرسال الآن».',
             },

@@ -51,7 +51,10 @@ final class GiftService
      * The recipient's WhatsApp number is required: the gift is sent there once paid and its number confirmed
      * (GiftWhatsApp). Its confirmation code is issued here; nothing is sent.
      *
-     * @param  array{giver_name: string, giver_phone?: string|null, giver_email?: string|null, recipient_name: string, recipient_phone: string, message?: string|null, branch_id?: int|null}  $data
+     * The giver picks the language of the recipient's WhatsApp message (ar|en, Arabic when not said) and may hide their
+     * name from her (is_anonymous): the invoice and the panel keep the real name either way.
+     *
+     * @param  array{giver_name: string, giver_phone?: string|null, giver_email?: string|null, recipient_name: string, recipient_phone: string, message?: string|null, message_language?: string|null, is_anonymous?: bool|null, branch_id?: int|null}  $data
      */
     public function issue(MembershipPlan $plan, array $data, string $source): GiftMembership
     {
@@ -79,6 +82,8 @@ final class GiftService
                 // Only an account with this number redeems it from the link; staff may redeem it for another.
                 'recipient_phone' => $recipientPhone,
                 'message' => filled($data['message'] ?? null) ? Str::limit(trim($data['message']), 300, '') : null,
+                'message_language' => array_key_exists((string) ($data['message_language'] ?? ''), GiftMembership::LANGUAGES) ? $data['message_language'] : 'ar',
+                'is_anonymous' => (bool) ($data['is_anonymous'] ?? false),
                 'status' => GiftMembership::PENDING,
                 'token_hash' => GiftMembership::hashToken($token),
                 'token' => $token,
@@ -100,7 +105,7 @@ final class GiftService
             ], $gift->giver_name);
 
             $gift->forceFill(['invoice_id' => $invoice->id])->save();
-            $this->audit->log('gift.created', $gift, ['number' => $gift->number, 'source' => $gift->source, 'invoice' => $invoice->number]);
+            $this->audit->log('gift.created', $gift, ['number' => $gift->number, 'source' => $gift->source, 'invoice' => $invoice->number, 'language' => $gift->messageLanguage(), 'anonymous' => $gift->is_anonymous]);
 
             return app(GiftWhatsApp::class)->newCode($gift->refresh());
         });

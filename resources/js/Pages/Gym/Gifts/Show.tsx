@@ -221,6 +221,8 @@ export default function GiftShow({ gift, link, whatsapp, pay_link, pending_trans
                         { label: 'تاريخ الإصدار', value: <span className="num">{when(gift.created_at)}</span> },
                         gift.paid_at ? { label: 'اكتمل الدفع', value: <span className="num">{when(gift.paid_at)}</span> } : null,
                         gift.expires_on ? { label: 'صالحة للاستلام حتى', value: <span className="num">{date(gift.expires_on)}</span> } : null,
+                        { label: 'لغة رسالة الإهداء', value: <span lang={gift.message_language}>{gift.message_language_label}</span> },
+                        gift.is_anonymous ? { label: 'اسم المُهدي', value: <span className="inline-flex flex-wrap items-center gap-1.5">{gift.giver_name} <Badge tone="amber">مخفي عن المستلمة</Badge></span> } : null,
                         gift.giver_phone ? { label: 'هاتف المُهدي', value: gift.giver_phone, ltr: true } : null,
                         gift.giver_email ? { label: 'بريد المُهدي', value: gift.giver_email, ltr: true } : null,
                         gift.recipient_phone ? { label: 'واتساب المستلمة', value: phone(gift.recipient_phone), ltr: true } : null,
@@ -376,7 +378,7 @@ function GiftCardPreview({ gift }: { gift: GiftDetail }) {
                 </div>
                 <div className="min-w-0">
                     <dt className="text-[11px] text-white/50">من</dt>
-                    <dd className="truncate text-[14px] font-medium text-white/90">{gift.giver_name}</dd>
+                    <dd className="truncate text-[14px] font-medium text-white/90">{gift.public_giver_name}</dd>
                 </div>
             </dl>
             <div className="mt-4 rounded-xl border border-[#C9A042]/40 bg-white/[0.03] px-3 py-2.5">

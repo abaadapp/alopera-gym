@@ -42,9 +42,11 @@ final class GiftLinks
     {
         $club = $this->tenants->require()->name;
         $plan = $english ? (($gift->plan_snapshot['name_en'] ?? null) ?: ($gift->plan_snapshot['name'] ?? '')) : ($gift->plan_snapshot['name'] ?? '');
+        // The giver as the recipient may see them: the anonymous wording when they hid their name.
+        $giver = $gift->publicGiverName($english ? 'en' : 'ar');
         $text = $english
-            ? "🎁 {$gift->recipient_name}, {$gift->giver_name} sent you a gift: the {$plan} membership at {$club}. Open it here:"
-            : "🎁 {$gift->recipient_name}، لديكِ هدية من {$gift->giver_name}: اشتراك {$plan} في {$club}. افتحيها من هنا:";
+            ? "🎁 {$gift->recipient_name}, {$giver} sent you a gift: the {$plan} membership at {$club}. Open it here:"
+            : "🎁 {$gift->recipient_name}، لديكِ هدية من {$giver}: اشتراك {$plan} في {$club}. افتحيها من هنا:";
 
         return 'https://wa.me/?text='.rawurlencode($text.' '.$this->card($gift));
     }
