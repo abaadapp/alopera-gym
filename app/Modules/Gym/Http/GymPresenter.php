@@ -102,6 +102,12 @@ final class GymPresenter
             'recipient_name' => $g->recipient_name,
             'recipient_phone' => $g->recipient_phone,
             'message' => $g->message,
+            // Staff see the real giver; these say how the recipient gets it (#192): the message's language, chosen by the
+            // giver, and whether the giver's name is hidden from her.
+            'message_language' => $g->messageLanguage(),
+            'message_language_label' => GiftMembership::LANGUAGES[$g->messageLanguage()],
+            'is_anonymous' => (bool) $g->is_anonymous,
+            'public_giver_name' => $g->publicGiverName($g->messageLanguage()),
             'plan' => [
                 'id' => $g->membership_plan_id,
                 'name' => $snapshot['name'] ?? '',

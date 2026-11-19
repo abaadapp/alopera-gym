@@ -38,7 +38,7 @@ class TemplateController extends Controller
     {
         $tenant = $tenants->require();
         TemplateCatalog::seedDefaults();
-        $templates = MessageTemplate::get(['key', 'status', 'is_active'])->keyBy('key');
+        $templates = MessageTemplate::get(['key', 'status', 'is_active', 'variables'])->keyBy('key');
 
         return Inertia::render('Messaging/Automation', [
             'autoReplies' => AutoReply::orderBy('id')->get(['id', 'keyword', 'match_type', 'reply', 'is_active', 'hits']),
@@ -52,7 +52,8 @@ class TemplateController extends Controller
                     'key' => $t,
                     'label' => TemplateCatalog::EVENTS[$t]['label'] ?? $t,
                     'category' => TemplateCatalog::EVENTS[$t]['category'] ?? 'utility',
-                    'approved' => (bool) $templates->get($t)?->isUsable(),
+                    // Approved and carrying the values its event sends (an older text approved with others is not).
+                    'approved' => (bool) $templates->get($t)?->isUsable() && TemplateCatalog::isCurrent($templates->get($t)),
                 ], $e['templates']),
             ])->values(),
             'rules' => [

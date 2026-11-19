@@ -102,8 +102,8 @@ describe('the gift card at its link', () => {
 });
 
 describe('buying a gift: the policy before payment (#192)', () => {
-    const buy = () => render(
-        <GiftBuy site={site} seo={{ title: 'إهداء' }} plan={plan} summary={{ price: '29.000', tax: '0.000', tax_rate: 0, total: '29.000' }} onlinePayments whatsapp={{ available: true, refusal: null }} terms={terms} />,
+    const buy = (language: 'ar' | 'en' = 'ar') => render(
+        <GiftBuy site={site} seo={{ title: 'إهداء' }} plan={plan} summary={{ price: '29.000', tax: '0.000', tax_rate: 0, total: '29.000' }} onlinePayments whatsapp={{ available: true, refusal: null }} terms={terms} message_language={language} />,
     );
 
     it('states the window with the last day if paid today, and no refund, above the total and the pay button', () => {
@@ -138,13 +138,45 @@ describe('buying a gift: the policy before payment (#192)', () => {
 
     it('says so and sells nothing while the recipient\'s number cannot be confirmed', () => {
         render(<GiftBuy site={site} seo={{ title: 'إهداء' }} plan={plan} summary={{ price: '29.000', tax: '0.000', tax_rate: 0, total: '29.000' }} onlinePayments
-            whatsapp={{ available: false, refusal: 'تأكيد رقم واتساب المستلمة غير متاح حاليًا، فلا يمكن شراء الهدية من الموقع الآن. يمكن شراؤها من استقبال النادي.' }} terms={terms} />);
+            whatsapp={{ available: false, refusal: 'تأكيد رقم واتساب المستلمة غير متاح حاليًا، فلا يمكن شراء الهدية من الموقع الآن. يمكن شراؤها من استقبال النادي.' }} terms={terms} message_language="ar" />);
         expect(screen.getByText('تأكيد رقم واتساب المستلمة غير متاح حاليًا، فلا يمكن شراء الهدية من الموقع الآن. يمكن شراؤها من استقبال النادي.')).toBeTruthy();
         expect((screen.getByText('متابعة: تأكيد رقم المستلمة').closest('button') as HTMLButtonElement).disabled).toBe(true);
     });
 
+    it('asks no free-text message, offers the message language (the page\'s first) and hiding the giver\'s name, off', () => {
+        const { container } = buy();
+        expect(container.querySelector('textarea')).toBeNull();
+        expect(container.textContent).not.toContain('رسالة الإهداء (اختيارية)');
+
+        const radios = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="radio"][name="message_language"]'));
+        expect(radios.map((r) => r.value)).toEqual(['ar', 'en']);
+        expect(radios.find((r) => r.checked)?.value).toBe('ar');
+        expect(screen.getByText('لغة رسالة الإهداء', { selector: 'legend' })).toBeTruthy();
+        // Each language named in its own language, with its code; no country flag.
+        expect(screen.getByText('العربية').getAttribute('lang')).toBe('ar');
+        expect(screen.getByText('English').getAttribute('lang')).toBe('en');
+        expect(container.textContent).not.toMatch(/[\u{1F1E6}-\u{1F1FF}]/u);
+
+        const hide = container.querySelector<HTMLInputElement>('input[type="checkbox"][name="is_anonymous"]');
+        expect(hide).toBeTruthy();
+        expect(hide?.checked).toBe(false);
+        expect(screen.getByText('إخفاء اسمي عن مستلم الهدية')).toBeTruthy();
+        // Right under the giver's name.
+        const giver = screen.getByText('اسمك (المُهدي)').closest('label') as HTMLElement;
+        expect(giver.nextElementSibling?.contains(hide as Node)).toBe(true);
+    });
+
+    it('starts the message language as the page\'s English when the page is English', () => {
+        const { container } = buy('en');
+        expect(container.querySelector<HTMLInputElement>('input[type="radio"][name="message_language"]:checked')?.value).toBe('en');
+    });
+
     it('has the English of every new phrase', () => {
         for (const text of [
+            'لغة رسالة الإهداء',
+            'لغة رسالة واتساب التي تصل المستلمة. اختيارك لا يتغير بتغيير لغة الموقع.',
+            'إخفاء اسمي عن مستلم الهدية',
+            'تقرأ المستلمة «شخص يفضّل عدم ذكر اسمه» بدل اسمك، في الرسالة وبطاقة الهدية. يبقى اسمك في فاتورتك لدى النادي.',
             'سياسة الهدية',
             'صالحة للاستلام :days من تاريخ الدفع (حتى :date إن تمّ الدفع اليوم).',
             'إذا انقضت المهلة دون استلامها تنتهي الهدية ولا تُردّ قيمتها.',

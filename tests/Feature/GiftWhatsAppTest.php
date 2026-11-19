@@ -260,9 +260,12 @@ class GiftWhatsAppTest extends TestCase
         $token = $this->asTenant($club, fn () => $gift->fresh()->linkToken());
         $invoice = $this->asTenant($club, fn () => $gift->invoice->number);
 
-        // Sent with the real link; one line per value (WhatsApp refuses a line break in a parameter).
-        $this->assertSame(['Sara', 'Gold', '«Happy birthday»'], array_slice($message->template_params, 0, 3));
-        $this->assertStringContainsString($token, $message->template_params[3]);
+        // Sent with the real link: the giver, the plan, the link — three values, and no free text (the desk's message
+        // stays on the card only).
+        $this->assertCount(3, $message->template_params);
+        $this->assertSame(['Sara', 'Gold'], array_slice($message->template_params, 0, 2));
+        $this->assertStringContainsString($token, $message->template_params[2]);
+        $this->assertStringNotContainsString('birthday', json_encode($message->template_params));
         // Kept for staff without it, and never in an array or JSON.
         $this->assertStringContainsString('[رابط الهدية]', $message->body);
         $this->assertStringContainsString('أهداك Sara اشتراكًا في باقة Gold', $message->body);
@@ -361,7 +364,7 @@ class GiftWhatsAppTest extends TestCase
         $messages = $this->giftMessages($club);
         $this->assertCount(3, $messages);
         $this->assertSame('96896661111', $messages->last()->to_phone);
-        $this->assertStringContainsString($this->asTenant($club, fn () => $gift->fresh()->linkToken()), $messages->last()->template_params[3]);
+        $this->assertStringContainsString($this->asTenant($club, fn () => $gift->fresh()->linkToken()), $messages->last()->template_params[2]);
     }
 
     public function test_a_website_gift_is_paid_only_after_the_confirmation_and_sent_once_after_the_signed_webhook(): void
@@ -577,7 +580,7 @@ class GiftWhatsAppTest extends TestCase
         });
     }
 
-    public function test_the_real_meta_request_carries_the_approved_template_and_the_four_values_and_nothing_else(): void
+    public function test_the_real_meta_request_carries_the_approved_template_and_the_three_values_and_nothing_else(): void
     {
         config(['services.whatsapp.driver' => 'meta']);
         // Meta answers each send with its own id: the gift's template gets wamid.REAL-1.
@@ -603,8 +606,9 @@ class GiftWhatsAppTest extends TestCase
         $this->assertSame([self::RECIPIENT, 'alopera_gift_received', 'ar'], [$data['to'], $data['template']['name'], $data['template']['language']['code']]);
         $values = array_column($data['template']['components'][0]['parameters'], 'text');
         $token = $this->asTenant($club, fn () => $gift->fresh()->linkToken());
-        $this->assertSame(['Sara', 'Gold', '«Happy birthday»'], array_slice($values, 0, 3));
-        $this->assertStringContainsString('/gift/'.$token, $values[3]);
+        $this->assertCount(3, $values, 'the giver, the plan and the link: no free text');
+        $this->assertSame(['Sara', 'Gold'], array_slice($values, 0, 2));
+        $this->assertStringContainsString('/gift/'.$token, $values[2]);
         $json = json_encode($data, JSON_UNESCAPED_UNICODE);
         foreach (['30.000', $invoice, 'OMR', 'ر.ع'] as $secret) {
             $this->assertStringNotContainsString($secret, $json);

@@ -38,6 +38,10 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
  *    by a message she sends from it (GiftWhatsApp); only then can it be paid. The return from the gateway proves
  *    nothing: the gift is usable — and sent to her WhatsApp — only once the signed webhook pays its invoice
  *    (InvoicePaid → ActivatePaidItems).
+ *  - The giver picks the language of the recipient's WhatsApp message (Arabic or English, the page's by default, kept
+ *    on the gift for whoever sends it) and may hide their name from her: the recipient then reads the anonymous
+ *    wording everywhere she can look (the message, the card, the share text); staff and the invoice keep the real name.
+ *    No free text from the giver any more: an older gift's message still shows on its card.
  *  - The gift's card at its secret link: names, plan, duration, message and the redemption deadline — never the price,
  *    the invoice or anyone's phone.
  *  - «استلمي هديتك»: the recipient signs in or creates an account, picks a start date and redeems it (GiftService).
@@ -76,6 +80,8 @@ class GiftSiteController extends Controller
             // The recipient confirms her WhatsApp number before the gift is paid; said up front when that cannot be done.
             'whatsapp' => $this->whatsappState(),
             'terms' => $this->terms(),
+            // The message's language starts as the page's; the giver may pick the other one.
+            'message_language' => SiteLanguage::isEnglish() ? 'en' : 'ar',
         ], __('إهداء باقة :name', ['name' => SiteLanguage::pick($plan->name, $plan->name_en)]));
     }
 
@@ -88,7 +94,10 @@ class GiftSiteController extends Controller
             'giver_email' => ['nullable', 'email', 'max:190'],
             'recipient_name' => ['required', 'string', 'max:120'],
             'recipient_phone' => ['required', 'string', Phone::mobileRule(SiteLanguage::word('أدخل رقم واتساب صحيحًا للمستلمة، مثل 9XXXXXXX أو ‎+968 9XXX XXXX.'))],
-            'message' => ['nullable', 'string', 'max:300'],
+            // The recipient's WhatsApp language, the giver's own choice (the page's when a form says none), and whether to
+            // hide the giver from her.
+            'message_language' => ['nullable', 'in:'.implode(',', array_keys(GiftMembership::LANGUAGES))],
+            'is_anonymous' => ['boolean'],
             'accept_terms' => ['accepted'],
             'website' => ['prohibited'], // honeypot
         ]);
@@ -106,7 +115,8 @@ class GiftSiteController extends Controller
             'giver_email' => $data['giver_email'] ?? null,
             'recipient_name' => $data['recipient_name'],
             'recipient_phone' => $data['recipient_phone'],
-            'message' => $data['message'] ?? null,
+            'message_language' => $data['message_language'] ?? (SiteLanguage::isEnglish() ? 'en' : 'ar'),
+            'is_anonymous' => (bool) ($data['is_anonymous'] ?? false),
         ], 'site'));
         $request->session()->push(self::BOUGHT, $gift->id);
 
@@ -345,7 +355,8 @@ class GiftSiteController extends Controller
         return [
             'status' => $gift->displayStatus(),
             'recipient_name' => $gift->recipient_name,
-            'giver_name' => $gift->giver_name,
+            // Whoever holds the link reads the giver as the recipient may: the anonymous wording when it is hidden.
+            'giver_name' => $gift->publicGiverName($english ? 'en' : 'ar'),
             'message' => $gift->message,
             'plan_name' => $english ? (($snapshot['name_en'] ?? null) ?: ($snapshot['name'] ?? '')) : ($snapshot['name'] ?? ''),
             'duration_label' => $english ? $n.' '.($snapshot['duration_unit'] ?? '').($n === 1 ? '' : 's') : ($snapshot['duration_label'] ?? ''),

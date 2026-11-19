@@ -14,7 +14,14 @@ export interface GiftRow {
     recipient_name: string;
     /** Optional: when set, only an account with this number redeems it from the link (staff may redeem it for another). */
     recipient_phone: string | null;
+    /** Kept for older gifts only: new ones carry no free text from the giver. */
     message: string | null;
+    /** The recipient's WhatsApp language, as the giver chose it (the template of that language, and only it). */
+    message_language: 'ar' | 'en';
+    message_language_label: string;
+    /** The giver asked not to be named to the recipient: she reads public_giver_name; staff see giver_name. */
+    is_anonymous: boolean;
+    public_giver_name: string;
     plan: { id: number; name: string; name_en: string | null; duration_label: string | null };
     price: string;
     invoice: { id: number; number: string; status: string; total: string; paid_total: string; balance: string } | null;
@@ -66,6 +73,12 @@ export const GIFT_DELIVERY_TONE: Record<GiftDeliveryState, 'gray' | 'amber' | 'b
 };
 
 /** The list's status tabs («الكل» comes first on its own), each with its badge's colour. */
+/** The languages the giver picks the recipient's WhatsApp message in (Meta's codes), each named in its own language. */
+export const GIFT_LANGUAGES: { value: 'ar' | 'en'; label: string }[] = [
+    { value: 'ar', label: 'العربية' },
+    { value: 'en', label: 'English' },
+];
+
 export const GIFT_FILTERS = [
     { value: 'pending', label: 'بانتظار الدفع', dot: '#d97706' },
     { value: 'paid', label: 'مدفوعة — لم تُستخدم', dot: '#059669' },
