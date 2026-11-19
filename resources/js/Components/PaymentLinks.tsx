@@ -105,7 +105,7 @@ export function PaymentLinksLog({ data }: { data: PaymentLinksData }) {
             ) : (
                 <div className="overflow-x-auto">
                     <table className="table-base">
-                        <thead><tr><th>الرابط</th><th>العميل</th><th>المبلغ</th><th>الحالة</th><th></th></tr></thead>
+                        <thead><tr><th>الرابط</th><th>العميل</th><th>المبلغ</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
                         <tbody>
                             {data.rows.map((r) => (
                                 <tr key={r.id}>
@@ -123,8 +123,9 @@ export function PaymentLinksLog({ data }: { data: PaymentLinksData }) {
                                         {r.status === 'pending' && <p className="num mt-0.5 text-[11px] text-muted">حتى {r.expires_at}</p>}
                                     </td>
                                     <td>
+                                        {!(r.status === 'pending' && r.url) && <span className="text-muted">—</span>}
                                         {r.status === 'pending' && r.url && (
-                                            <div className="flex flex-wrap justify-end gap-1.5">
+                                            <div className="flex flex-wrap gap-1.5">
                                                 <Button variant="outline" size="sm" onClick={() => copy(r.url!)} icon={<Copy />}>نسخ</Button>
                                                 {r.whatsapp && <Button variant="outline" size="sm" href={r.whatsapp} external icon={<MessageCircle />}>واتساب</Button>}
                                                 <ConfirmAction url={route('club.payment-links.cancel', r.id)} title="إلغاء رابط الدفع" message="يُلغى الرابط وتُلغى فاتورته، فلا يفتح صفحة دفع بعد ذلك." confirmLabel="إلغاء الرابط" variant="ghost" size="sm">إلغاء</ConfirmAction>
