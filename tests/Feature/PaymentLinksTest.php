@@ -44,7 +44,7 @@ class PaymentLinksTest extends TestCase
     /** @return array<string, mixed> */
     private function form(array $over = []): array
     {
-        return array_replace(['amount' => '12.345', 'description' => 'حصص خاصة — نوفمبر', 'customer_name' => 'سارة', 'customer_phone' => '91234567', 'valid_days' => 7, 'client_key' => (string) Str::uuid()], $over);
+        return array_replace(['amount' => '12.340', 'description' => 'حصص خاصة — نوفمبر', 'customer_name' => 'سارة', 'customer_phone' => '91234567', 'valid_days' => 7, 'client_key' => (string) Str::uuid()], $over);
     }
 
     private function holding(Tenant $club, array $permissions): User
@@ -98,7 +98,7 @@ class PaymentLinksTest extends TestCase
 
         $link = $this->link($club);
         $invoice = $link->invoice;
-        $this->assertSame([Invoice::ISSUED, '12.345', '0.000', 'سارة', '96891234567'], [$invoice->status, $invoice->total, $invoice->paid_total, $invoice->customer_name, $invoice->customer_phone]);
+        $this->assertSame([Invoice::ISSUED, '12.340', '0.000', 'سارة', '96891234567'], [$invoice->status, $invoice->total, $invoice->paid_total, $invoice->customer_name, $invoice->customer_phone]);
         $this->assertSame(0, $this->asTenant($club, fn () => Payment::where('invoice_id', $invoice->id)->count()), 'making the link records no payment');
         $this->assertSame(PaymentLink::PENDING, $this->asTenant($club, fn () => $link->status()));
         $this->assertEqualsWithDelta(now()->addDays(7)->getTimestamp(), $link->expires_at->getTimestamp(), 5);
@@ -108,7 +108,7 @@ class PaymentLinksTest extends TestCase
             ->assertInertia(fn ($p) => $p->component('Finance/PaymentLinks/Index')
                 ->where('paymentLinks.on', true)
                 ->where('paymentLinks.rows.0.status', 'pending')
-                ->where('paymentLinks.rows.0.amount', '12.345')
+                ->where('paymentLinks.rows.0.amount', '12.340')
                 ->where('paymentLinks.rows.0.url', $url)
                 ->where('paymentLinks.rows.0.whatsapp', fn ($wa) => str_starts_with($wa, 'https://wa.me/96891234567?text=') && str_contains(rawurldecode($wa), $url)));
 
@@ -118,7 +118,7 @@ class PaymentLinksTest extends TestCase
 
         // The customer's page shows the amount and the pay button's way.
         auth()->logout();
-        $this->get($url)->assertOk()->assertInertia(fn ($p) => $p->component('Site/Pay')->where('invoice.balance', '12.345')->where('onlinePayments', true)->where('closed', null));
+        $this->get($url)->assertOk()->assertInertia(fn ($p) => $p->component('Site/Pay')->where('invoice.balance', '12.340')->where('onlinePayments', true)->where('closed', null));
     }
 
     public function test_with_tax_the_customer_is_asked_exactly_the_amount_typed(): void
@@ -144,7 +144,7 @@ class PaymentLinksTest extends TestCase
         $club = $this->club();
         $owner = $this->owner($club);
 
-        foreach ([['amount' => '0'], ['amount' => '-5'], ['amount' => '1.2345'], ['amount' => 'abc'], ['amount' => '5000.001'], ['amount' => '']] as $bad) {
+        foreach ([['amount' => '0'], ['amount' => '-5'], ['amount' => '1.2345'], ['amount' => 'abc'], ['amount' => '5000.010'], ['amount' => ''], ['amount' => '12.345']] as $bad) {
             $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form($bad))->assertSessionHasErrors('amount');
         }
         $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form(['description' => '']))->assertSessionHasErrors('description');
@@ -203,9 +203,9 @@ class PaymentLinksTest extends TestCase
         $first = $this->start($club, $link)->assertRedirect()->headers->get('Location');
         $this->assertSame($first, $this->start($club, $link)->headers->get('Location'), 'pressed twice: the same checkout');
         Http::assertSentCount(1);
-        Http::assertSent(fn ($r) => $r['amount'] === Money::toMinor('12.345') && $r['currency'] === 'OMR');
+        Http::assertSent(fn ($r) => $r['amount'] === Money::toMinor('12.340') && $r['currency'] === 'OMR');
         $intent = $this->asTenant($club, fn () => PaymentIntent::where('invoice_id', $link->invoice_id)->sole());
-        $this->assertSame('12.345', $intent->amount);
+        $this->assertSame('12.340', $intent->amount);
 
         // A wrong signature, amount, currency, order or integration: nothing is paid.
         $this->webhook($this->signedCallback($intent, 5501, ['id' => 800002]), str_repeat('0', 128));
@@ -222,7 +222,7 @@ class PaymentLinksTest extends TestCase
         // The right one, twice: paid once.
         $this->webhook($this->signedCallback($intent, 5501))->assertOk();
         $this->webhook($this->signedCallback($intent, 5501))->assertOk();
-        $this->assertSame([Invoice::PAID, '12.345'], [$link->invoice->fresh()->status, $link->invoice->fresh()->paid_total]);
+        $this->assertSame([Invoice::PAID, '12.340'], [$link->invoice->fresh()->status, $link->invoice->fresh()->paid_total]);
         $this->assertSame(1, $this->asTenant($club, fn () => Payment::where('invoice_id', $link->invoice_id)->where('kind', 'payment')->count()));
 
         $this->actingAs($owner)->get(route('club.payment-links.index'))->assertInertia(fn ($p) => $p->where('paymentLinks.rows.0.status', 'paid')->where('paymentLinks.rows.0.url', null));
@@ -282,5 +282,49 @@ class PaymentLinksTest extends TestCase
         $this->start($club, $quiet);
         Http::assertSentCount(1);
         $this->actingAs($owner)->get(route('club.payment-links.index'))->assertInertia(fn ($p) => $p->where('paymentLinks.rows.0.status', 'cancelled')->where('paymentLinks.rows.0.whatsapp', null));
+    }
+
+    public function test_omr_goes_to_paymob_in_baisa_and_a_single_baisa_is_refused_for_visa(): void
+    {
+        Http::fake(['*/v1/intention/' => Http::sequence()
+            ->push(['client_secret' => 'cs_a', 'intention_order_id' => 6601], 201)
+            ->push(['client_secret' => 'cs_b', 'intention_order_id' => 6602], 201)]);
+        $club = $this->club();
+        $this->paymob($club);
+        $owner = $this->owner($club);
+
+        // Paymob Oman takes OMR in baisa (×1000), as its own plugin sends it: 25.000 → 25000, 0.100 → 100.
+        foreach (['25.000' => 25000, '0.100' => 100] as $amount => $baisa) {
+            $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form(['amount' => $amount]))->assertSessionHasNoErrors();
+            $link = $this->link($club);
+            $this->assertSame($amount, $link->invoice->total, 'the invoice is what was typed');
+            auth()->logout();
+            $this->start($club, $link)->assertRedirect();
+            Http::assertSent(fn ($r) => $r['amount'] === $baisa && $r['currency'] === 'OMR' && $r['items'][0]['amount'] === $baisa);
+            $intent = $this->asTenant($club, fn () => PaymentIntent::where('invoice_id', $link->invoice_id)->sole());
+            $this->assertSame($amount, $intent->amount, 'the payment page asks the invoice amount');
+        }
+
+        // 12.345: Visa would be charged 12.340 and the callback would not match; refused before anything is issued.
+        $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form(['amount' => '12.345']))->assertSessionHasErrors('amount');
+        $this->assertStringContainsString('Visa', session('errors')->first('amount'));
+        $this->assertSame(2, $this->asTenant($club, fn () => PaymentLink::count()));
+    }
+
+    public function test_a_checkout_being_opened_right_now_also_stops_a_cancel(): void
+    {
+        $club = $this->club();
+        $this->paymob($club);
+        $owner = $this->owner($club);
+        $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form())->assertSessionHasNoErrors();
+        $link = $this->link($club);
+        // Another request claimed the checkout and is still waiting for Paymob (no page address yet).
+        $this->asTenant($club, fn () => PaymentIntent::create([
+            'invoice_id' => $link->invoice_id, 'provider' => 'paymob', 'reference' => 'PT-CLAIM'.Str::upper(Str::random(8)), 'amount' => $link->invoice->total,
+            'currency' => 'OMR', 'status' => PaymentIntent::PENDING, 'channel' => 'whatsapp', 'expires_at' => now()->addHour(),
+        ]));
+
+        $this->actingAs($owner)->post(route('club.payment-links.cancel', $link->id))->assertSessionHasErrors('error');
+        $this->assertSame([Invoice::ISSUED, null], [$link->invoice->fresh()->status, $link->fresh()->cancelled_at]);
     }
 }

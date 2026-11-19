@@ -15,7 +15,8 @@ return new class extends Migration
         Schema::create('payment_links', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('invoice_id')->unique()->constrained('invoices')->restrictOnDelete();
+            // As payment_intents: an issued invoice is voided, never deleted; a club removed takes its rows with it.
+            $table->foreignId('invoice_id')->unique()->constrained('invoices')->cascadeOnDelete();
             $table->string('description', 250);
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('expires_at');

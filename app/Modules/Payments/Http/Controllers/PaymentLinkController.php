@@ -2,6 +2,7 @@
 
 namespace App\Modules\Payments\Http\Controllers;
 
+use App\Core\Support\Money;
 use App\Core\Support\SubmittedOnce;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
@@ -66,7 +67,13 @@ class PaymentLinkController extends Controller
     public function store(Request $request, PaymentLinks $links): RedirectResponse
     {
         $data = $request->validate([
-            'amount' => ['required', 'numeric', 'decimal:0,3', 'min:0.1', 'max:5000'],
+            // A whole number of 10 baisa: Visa takes no single baisa in a three-decimal currency, and Paymob rounds such a
+            // card payment down (4.725 is charged 4.720), which the callback's exact amount check would then not record.
+            'amount' => ['bail', 'required', 'numeric', 'decimal:0,3', 'min:0.1', 'max:5000', function (string $attribute, mixed $value, \Closure $fail) {
+                if (Money::toMinor($value) % 10 !== 0) {
+                    $fail('اجعل آخر خانة في المبلغ صفرًا (مثل 12.340 أو 12.350): بطاقات Visa لا تقبل البيسة المفردة.');
+                }
+            }],
             'description' => ['required', 'string', 'max:250'],
             'customer_name' => ['nullable', 'required_with:customer_phone', 'string', 'max:160'],
             'customer_phone' => ['nullable', 'string', 'max:20', 'regex:/^[+0-9٠-٩\s-]{8,20}$/u'],

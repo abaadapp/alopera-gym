@@ -70,7 +70,7 @@ export function CreatePaymentLink({ data }: { data: PaymentLinksData }) {
                 <Notice tone="amber" className="mb-4">الدفع الإلكتروني غير مفعّل الآن: يُنشأ الرابط، لكن صفحته تعرض الفاتورة دون زر الدفع حتى يُفعَّل Paymob.</Notice>
             )}
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-                <Field label={`المبلغ (${data.currency})`} error={form.errors.amount} required hint="بالريال العُماني، حتى ثلاث منازل عشرية. هو ما يدفعه العميل شاملًا الضريبة إن وُجدت.">
+                <Field label={`المبلغ (${data.currency})`} error={form.errors.amount} required hint="بالريال العُماني بثلاث منازل، وآخر خانة صفر (مثل 12.340). هو ما يدفعه العميل شاملًا الضريبة إن وُجدت.">
                     <Input inputMode="decimal" dir="ltr" placeholder="0.000" value={form.data.amount} onChange={(e) => form.setData('amount', e.target.value)} />
                 </Field>
                 <Field label="صالح لمدة" error={form.errors.valid_days} hint="بعدها لا يفتح الرابط صفحة دفع.">
