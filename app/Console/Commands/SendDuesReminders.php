@@ -7,6 +7,7 @@ use App\Modules\Finance\Models\Invoice;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Services\MemberNotifier;
 use App\Modules\Messaging\Services\TemplateCatalog;
+use App\Modules\Payments\Models\PaymentReview;
 use Carbon\CarbonImmutable;
 
 /**
@@ -43,7 +44,7 @@ class SendDuesReminders extends ForEachTenant
         foreach ($stages as $stage => $dates) {
             foreach ($dates as $due) {
                 // Not an invoice whose online payment is confirmed and held for the club's review: the customer paid.
-                Invoice::open()->where('billable_type', 'member')->whereDate('due_date', $due)->whereDoesntHave('payments', fn ($q) => $q->gatewayCreditLeft())->with('billable')->each(function (Invoice $invoice) use ($notifier, $stage, $due, $today, $max, &$queued) {
+                Invoice::open()->where('billable_type', 'member')->whereDate('due_date', $due)->whereDoesntHave('payments', fn ($q) => $q->gatewayCreditLeft())->whereNotIn('id', PaymentReview::open()->select('invoice_id'))->with('billable')->each(function (Invoice $invoice) use ($notifier, $stage, $due, $today, $max, &$queued) {
                     if (self::sentFor($invoice) >= $max) {
                         return;
                     }

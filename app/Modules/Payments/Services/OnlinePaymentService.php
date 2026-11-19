@@ -18,6 +18,7 @@ use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Payments\Events\OnlinePaymentFailed;
 use App\Modules\Payments\Models\PaymentIntent;
+use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobClient;
 use App\Modules\Payments\Paymob\PaymobSignature;
@@ -60,6 +61,12 @@ final class OnlinePaymentService
      * sent again): the account's mode, keys and integrations stay as they are this long after.
      */
     public const LATE_CALLBACK_MINUTES = 60;
+
+    /**
+     * How long a signed «pending» callback (the bank still processing the payment) keeps a new checkout of its invoice
+     * from opening, while no final result came for it: the customer is not asked to pay a second time meanwhile.
+     */
+    public const PENDING_AT_BANK_HOURS = 24;
 
     public function __construct(
         private readonly TenantContext $tenants,
@@ -119,6 +126,14 @@ final class OnlinePaymentService
             $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
             if (! $invoice->isOpen() || Money::isZero($invoice->balance())) {
                 throw new BusinessRuleException('invoice.not_open', 'لا يوجد مبلغ مستحق على هذه الفاتورة.');
+            }
+            // Paymob confirmed money for this invoice that did not match it, and the club is checking it (PaymentReview);
+            // or the bank still processes an earlier payment of it: no second checkout, or the customer could pay twice.
+            if (PaymentReview::where('invoice_id', $invoice->id)->open()->exists()) {
+                throw new BusinessRuleException('paymob.review', PaymentReview::CUSTOMER_MESSAGE);
+            }
+            if (self::pendingAtBank($invoice)) {
+                throw new BusinessRuleException('paymob.pending', 'عملية دفع سابقة لهذه الفاتورة ما زالت قيد التنفيذ لدى البنك. انتظر نتيجتها ولا تدفع مرة أخرى، أو تواصل مع النادي.');
             }
             // Confirmed online money already waits on this invoice for the club's review: no second checkout, or the
             // customer would pay twice.
@@ -303,6 +318,9 @@ final class OnlinePaymentService
                 $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, [
                     'reason' => 'integration', 'integration' => is_scalar($signedIntegration) ? (string) $signedIntegration : null,
                 ]));
+                if (! $this->reviewIfCaptured($intent, $obj, 'integration', $transactionId)) {
+                    return $this->log($intent->tenant_id, $transactionId, $reference, true, 'error', $payload, $ip);
+                }
 
                 return $this->log($intent->tenant_id, $transactionId, $reference, true, 'integration_mismatch', $payload, $ip);
             }
@@ -314,6 +332,9 @@ final class OnlinePaymentService
             $signedOrder = (string) Arr::get($obj, 'order.id', '');
             if (($why = self::orderProblem($intent, $signedOrder)) !== null) {
                 $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_rejected', $intent, ['reason' => $why, 'order' => $signedOrder]));
+                if (! $this->reviewIfCaptured($intent, $obj, 'order', $transactionId)) {
+                    return $this->log($intent->tenant_id, $transactionId, $reference, true, 'error', $payload, $ip);
+                }
 
                 return $this->log($intent->tenant_id, $transactionId, $reference, true, $why, $payload, $ip);
             }
@@ -332,6 +353,13 @@ final class OnlinePaymentService
                 && Arr::get($obj, 'is_voided') !== true
                 && Arr::get($obj, 'is_refunded') !== true
                 && Arr::get($obj, 'error_occured') !== true;
+
+            // The bank has not decided yet (a signed «pending»): neither a failure — no «nothing was taken», no failure
+            // message or alert — nor money. The attempt stays open; its final callback decides it, and meanwhile no
+            // second checkout opens for the invoice (start()).
+            if (! $succeeded && self::stillAtBank($obj)) {
+                return $this->log($intent->tenant_id, $transactionId, $reference, true, 'pending', $payload, $ip);
+            }
 
             if (! $succeeded) {
                 if ($intent->status === PaymentIntent::PENDING) {
@@ -360,6 +388,10 @@ final class OnlinePaymentService
                 $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.webhook_amount_mismatch', $intent, [
                     'expected' => Money::toMinor($intent->amount), 'received' => $amountMinor, 'currency' => $currency,
                 ]));
+                $why = strtoupper($currency) !== strtoupper($intent->currency) ? 'currency' : 'amount';
+                if (! $this->reviewIfCaptured($intent, $obj, $why, $transactionId)) {
+                    return $this->log($intent->tenant_id, $transactionId, $reference, true, 'error', $payload, $ip);
+                }
 
                 return $this->log($intent->tenant_id, $transactionId, $reference, true, 'amount_mismatch', $payload, $ip);
             }
@@ -423,6 +455,11 @@ final class OnlinePaymentService
             } catch (Throwable $e) {
                 report($e);
                 $outcome = $this->recorded($transactionId, $intent->reference) ? 'recorded_with_error' : 'error';
+            }
+
+            // The order checked again under the lock no longer matched: the same confirmed money, kept for review.
+            if (in_array($outcome, ['order_mismatch', 'order_unverified'], true) && ! $this->reviewIfCaptured($intent, $obj, 'order', $transactionId)) {
+                $outcome = 'error';
             }
 
             if ($outcome === 'error') {
@@ -565,6 +602,100 @@ final class OnlinePaymentService
      *
      * @param  array<string, mixed>  $obj
      */
+    /**
+     * A signed callback that says Paymob took the money: successful, captured (not an authorization alone), not
+     * pending, voided, refunded or in error, and not a refund or void of its own. Only such a callback, from a live
+     * checkout (environmentProblem is asked before), opens a review when it cannot be recorded.
+     */
+    private static function captured(array $obj): bool
+    {
+        return Arr::get($obj, 'success') === true
+            && Arr::get($obj, 'pending') !== true
+            && Arr::get($obj, 'is_voided') !== true
+            && Arr::get($obj, 'is_refunded') !== true
+            && Arr::get($obj, 'error_occured') !== true
+            && Arr::get($obj, 'is_refund') !== true && Arr::get($obj, 'is_void') !== true
+            && ! (Arr::get($obj, 'has_parent_transaction') === true && Arr::get($obj, 'is_capture') !== true)
+            && ! (self::flag($obj, 'is_auth') && ! self::flag($obj, 'is_capture'));
+    }
+
+    /** A signed «pending»: the bank has not decided, and nothing says it failed (no error, void or refund). */
+    private static function stillAtBank(array $obj): bool
+    {
+        return Arr::get($obj, 'pending') === true
+            && Arr::get($obj, 'error_occured') !== true
+            && Arr::get($obj, 'is_voided') !== true
+            && Arr::get($obj, 'is_refunded') !== true;
+    }
+
+    /** Does an attempt of this invoice still wait for the bank (a signed «pending», no final result, lately)? */
+    private static function pendingAtBank(Invoice $invoice): bool
+    {
+        $references = PaymentIntent::where('invoice_id', $invoice->id)->where('status', PaymentIntent::PENDING)->pluck('reference');
+
+        return $references->isNotEmpty() && PaymentWebhookEvent::where('tenant_id', $invoice->tenant_id)->whereIn('reference', $references)
+            ->where('outcome', 'pending')->where('created_at', '>', now()->subHours(self::PENDING_AT_BANK_HOURS))->exists();
+    }
+
+    /**
+     * Confirmed money that cannot be recorded as this intent's payment is kept for staff (PaymentReview), once per
+     * Paymob transaction, with what they need to find it at Paymob: never the card's number, never a secret. True when
+     * there is nothing to keep (not confirmed money) or it is kept; false when it could not be written — the callback
+     * is then not acknowledged (an error, 500) so that Paymob sends it again, and the resend finds or writes the same row.
+     */
+    private function reviewIfCaptured(PaymentIntent $intent, array $obj, string $reason, string $transactionId): bool
+    {
+        if (! self::captured($obj) || $transactionId === '') {
+            return true;
+        }
+        try {
+            $amount = Arr::get($obj, 'amount_cents');
+            $currency = Arr::get($obj, 'currency');
+            $integration = Arr::get($obj, 'integration_id');
+            $brand = Arr::get($obj, 'source_data.sub_type');
+            $values = [
+                'payment_intent_id' => $intent->id,
+                'invoice_id' => $intent->invoice_id,
+                'provider_order_id' => is_scalar(Arr::get($obj, 'order.id')) ? Str::limit((string) Arr::get($obj, 'order.id'), 60, '') : null,
+                'integration_id' => is_scalar($integration) ? Str::limit((string) $integration, 30, '') : null,
+                'reason' => $reason,
+                'expected_minor' => Money::toMinor($intent->amount),
+                'received_minor' => is_int($amount) || (is_string($amount) && ctype_digit($amount)) ? (int) $amount : null,
+                'expected_currency' => $intent->currency,
+                'received_currency' => is_scalar($currency) ? Str::limit((string) $currency, 8, '') : null,
+                'card_brand' => is_string($brand) ? Str::limit($brand, 30, '') : null,
+                'status' => PaymentReview::OPEN,
+            ];
+            // Under the invoice's lock, as start() and the website order's expiry read it: a checkout or a cancellation
+            // asked at the same moment sees the review, or comes before it. Taken in the callback's order (intent, then
+            // invoice): the row written names the intent, and a callback recording money holds that intent first.
+            $review = DB::transaction(function () use ($intent, $transactionId, $values) {
+                PaymentIntent::whereKey($intent->id)->lockForUpdate()->firstOrFail();
+                Invoice::whereKey($intent->invoice_id)->lockForUpdate()->firstOrFail();
+
+                return PaymentReview::createOrFirst(['gateway' => 'paymob', 'transaction_id' => $transactionId], $values);
+            });
+        } catch (Throwable $e) {
+            report($e);
+
+            return false;
+        }
+        if ($review->wasRecentlyCreated) {
+            try {
+                $this->audit->as('gateway', null, 'paymob', fn () => $this->audit->log('payment.review_opened', $intent, [
+                    'review' => $review->id, 'reason' => $reason, 'transaction' => $transactionId,
+                    'expected' => $review->expected_minor, 'received' => $review->received_minor, 'currency' => $review->received_currency,
+                ]));
+                app(StaffAlerts::class)->paymentReview($review);
+            } catch (Throwable $e) {
+                // The row is written: a missed log line or alert does not lose it (the invoice page shows it).
+                report($e);
+            }
+        }
+
+        return true;
+    }
+
     private static function flag(array $obj, string $key): bool
     {
         $value = Arr::get($obj, $key);

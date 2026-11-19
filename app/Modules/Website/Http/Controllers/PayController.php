@@ -9,6 +9,7 @@ use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Payments\Models\PaymentIntent;
+use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Http\RendersSite;
 use Illuminate\Http\JsonResponse;
@@ -56,7 +57,7 @@ class PayController extends Controller
 
         return $this->page('Site/PaymentReturn', [
             'reference' => $intent->reference,
-            'status' => $intent->status,
+            'status' => self::shownStatus($intent),
             'held' => self::held($intent),
             'amount' => $intent->amount,
             'currency' => $intent->currency,
@@ -73,7 +74,16 @@ class PayController extends Controller
     {
         $intent = PaymentIntent::where('reference', $reference)->firstOrFail();
 
-        return response()->json(['status' => $intent->status, 'held' => self::held($intent)]);
+        return response()->json(['status' => self::shownStatus($intent), 'held' => self::held($intent)]);
+    }
+
+    /**
+     * What the return page says: the webhook's result, or «review» while Paymob's confirmation of this attempt did not
+     * match and the club checks it (PaymentReview) — never «failed», never «paid».
+     */
+    private static function shownStatus(PaymentIntent $intent): string
+    {
+        return PaymentReview::where('payment_intent_id', $intent->id)->open()->exists() ? 'review' : $intent->status;
     }
 
     /**

@@ -30,6 +30,7 @@ use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Services\MemberNotifier;
 use App\Modules\Messaging\Services\WhatsAppService;
 use App\Modules\Payments\Models\PaymentIntent;
+use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
@@ -459,6 +460,8 @@ class InvoiceController extends Controller
                 'public_link' => app(MemberNotifier::class)->invoiceLink($invoice),
             ],
             'intents' => PaymentIntent::where('invoice_id', $invoice->id)->latest()->limit(10)->get()->map(fn ($i) => $i->only('id', 'reference', 'amount', 'channel', 'failure_reason') + ['status' => $i->displayStatus(), 'created_at' => $i->created_at->format('Y-m-d H:i')]),
+            // Paymob money confirmed for this invoice that did not match it: what staff need to look it up at Paymob.
+            'paymentReviews' => PaymentReview::with('intent:id,reference', 'closer:id,name')->where('invoice_id', $invoice->id)->latest('id')->limit(20)->get()->map->present(),
             'onlinePayments' => $online->available(),
             // Where a payment lands when chosen (empty: the method's account in the finance settings).
             'moneyAccounts' => Account::money()->postable()->orderBy('code')->get(['id', 'name', 'kind']),

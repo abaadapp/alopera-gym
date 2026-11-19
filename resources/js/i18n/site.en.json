@@ -130,6 +130,8 @@
     "لم تكتمل عملية الدفع": "The payment was not completed",
     "لم يُخصم أي مبلغ مقابل هذه المحاولة. يمكنك المحاولة مرة أخرى.": "No amount was charged for this attempt. You can try again.",
     "جاري تأكيد الدفع": "Confirming payment",
+    "جارٍ التحقق من الدفع": "Checking your payment",
+    "استلمنا نتيجة الدفع، وجارٍ التحقق منها. يرجى عدم إعادة الدفع حتى تتأكد الحالة.": "We received the payment result and are checking it. Please don't pay again until it is confirmed.",
     "لم يصلنا تأكيد البنك بعد. لا داعي للدفع مرة أخرى — سنفعّل اشتراكك تلقائيًا فور وصول التأكيد وستصلك رسالة على واتساب.": "We haven't received the bank's confirmation yet. There's no need to pay again — we'll activate your membership automatically as soon as the confirmation arrives, and you'll receive a message on WhatsApp.",
     "نتحقق من الدفع…": "Checking the payment…",
     "ننتظر تأكيد البنك الآمن. قد يستغرق ذلك لحظات، يُرجى عدم إغلاق الصفحة.": "We're waiting for the bank's secure confirmation. This may take a few moments; please don't close this page.",
