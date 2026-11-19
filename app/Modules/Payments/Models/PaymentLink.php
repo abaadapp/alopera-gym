@@ -4,6 +4,7 @@ namespace App\Modules\Payments\Models;
 
 use App\Core\Support\Money;
 use App\Core\Tenancy\BelongsToTenant;
+use App\Core\Tenancy\BranchOwned;
 use App\Models\User;
 use App\Modules\Finance\Models\Invoice;
 use Illuminate\Database\Eloquent\Model;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * A payment link made from the Paymob page. Its money, checkout and callback are its invoice's (OnlinePaymentService);
  * the link adds only who made it, until when it opens a payment page, and its cancellation.
  */
-class PaymentLink extends Model
+class PaymentLink extends Model implements BranchOwned
 {
     use BelongsToTenant;
 
@@ -62,6 +63,14 @@ class PaymentLink extends Model
             $invoice->isOpen() && ! Money::isZero($invoice->balance()) && $this->expires_at->isPast() => self::EXPIRED,
             default => self::PENDING,
         };
+    }
+
+    /** Its invoice's branch: a user tied to another branch gets 404 for the link, as for the invoice. */
+    public function owningBranchId(): ?int
+    {
+        $branch = Invoice::whereKey($this->invoice_id)->value('branch_id');
+
+        return $branch ? (int) $branch : null;
     }
 
     /** Can it still open a payment page? Not cancelled and not past its time. */

@@ -7,5 +7,6 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('can:payments.links')->group(function () {
     Route::get('/payment-links', [PaymentLinkController::class, 'index'])->name('payment-links.index');
     Route::post('/payment-links', [PaymentLinkController::class, 'store'])->middleware('throttle:60,1')->name('payment-links.store');
-    Route::post('/payment-links/{paymentLink}/cancel', [PaymentLinkController::class, 'cancel'])->whereNumber('paymentLink')->name('payment-links.cancel');
+    // Cancelling voids the link's invoice: it takes the permission that voids invoices too.
+    Route::post('/payment-links/{paymentLink}/cancel', [PaymentLinkController::class, 'cancel'])->whereNumber('paymentLink')->middleware('can:invoices.void')->name('payment-links.cancel');
 });

@@ -8,6 +8,7 @@ use App\Core\Support\Money;
 use App\Core\Support\Phone;
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Finance\Models\Invoice;
+use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Finance\Services\ManualInvoices;
 use App\Modules\Payments\Models\PaymentIntent;
@@ -86,6 +87,11 @@ final class PaymentLinks
             }
             if ($invoice->status === Invoice::PAID || ! Money::isZero($invoice->paid_total)) {
                 throw new BusinessRuleException('payment_link.paid', 'دُفع على هذا الرابط، فلا يُلغى. للرد استخدم الإشعار الدائن أو رد المبلغ من الفاتورة.');
+            }
+            // Any money recorded on it — a late online payment held for review, a transfer awaiting confirmation — is
+            // reviewed first: voiding under it would leave the customer's money with nothing to pay.
+            if (Payment::where('invoice_id', $invoice->id)->exists()) {
+                throw new BusinessRuleException('payment_link.money', 'وصلت دفعة على هذا الرابط وهي قيد المراجعة، فلا يُلغى. راجعها من «المدفوعات والتحصيل» أولًا.');
             }
             $open = PaymentIntent::where('invoice_id', $invoice->id)
                 ->where(fn ($q) => $q->where('status', PaymentIntent::PENDING)

@@ -23,6 +23,7 @@ export interface PaymentLinkRow {
 
 export interface PaymentLinksData {
     on: boolean;
+    can_cancel: boolean;
     valid_days: number[];
     currency: string;
     rows: PaymentLinkRow[];
@@ -128,7 +129,7 @@ export function PaymentLinksLog({ data }: { data: PaymentLinksData }) {
                                             <div className="flex flex-wrap gap-1.5">
                                                 <Button variant="outline" size="sm" onClick={() => copy(r.url!)} icon={<Copy />}>نسخ</Button>
                                                 {r.whatsapp && <Button variant="outline" size="sm" href={r.whatsapp} external icon={<MessageCircle />}>واتساب</Button>}
-                                                <ConfirmAction url={route('club.payment-links.cancel', r.id)} title="إلغاء رابط الدفع" message="يُلغى الرابط وتُلغى فاتورته، فلا يفتح صفحة دفع بعد ذلك." confirmLabel="إلغاء الرابط" variant="ghost" size="sm">إلغاء</ConfirmAction>
+                                                {data.can_cancel && <ConfirmAction url={route('club.payment-links.cancel', r.id)} title="إلغاء رابط الدفع" message="يُلغى الرابط وتُلغى فاتورته، فلا يفتح صفحة دفع بعد ذلك." confirmLabel="إلغاء الرابط" variant="ghost" size="sm">إلغاء</ConfirmAction>}
                                             </div>
                                         )}
                                     </td>

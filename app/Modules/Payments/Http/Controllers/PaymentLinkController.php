@@ -4,8 +4,10 @@ namespace App\Modules\Payments\Http\Controllers;
 
 use App\Core\Support\Money;
 use App\Core\Support\SubmittedOnce;
+use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
+use App\Modules\Finance\Models\Invoice;
 use App\Modules\Payments\Models\PaymentLink;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Payments\Services\PaymentLinks;
@@ -43,7 +45,9 @@ class PaymentLinkController extends Controller
                 'on' => $online->available(),
                 'valid_days' => PaymentLink::VALID_DAYS,
                 'currency' => app(TenantContext::class)->require()->currency,
-                'rows' => PaymentLink::with(['invoice:id,number,status,customer_name,customer_phone,billable_id,total,paid_total,credited_total,currency,public_token', 'creator:id,name'])
+                'can_cancel' => (bool) request()->user()?->can('invoices.void'),
+                // A user tied to a branch sees the links of that branch's invoices only, as on the invoice list.
+                'rows' => PaymentLink::whereIn('invoice_id', BranchContext::scope(Invoice::query())->select('id'))->with(['invoice:id,number,status,customer_name,customer_phone,billable_id,total,paid_total,credited_total,currency,public_token', 'creator:id,name'])
                     ->latest('id')->limit(50)->get()
                     ->map(fn (PaymentLink $l) => [
                         'id' => $l->id,

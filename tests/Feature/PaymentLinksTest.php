@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Core\Support\Money;
+use App\Models\Branch;
 use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\TenantIntegration;
 use App\Models\User;
+use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Payments\Models\PaymentIntent;
@@ -326,5 +328,117 @@ class PaymentLinksTest extends TestCase
 
         $this->actingAs($owner)->post(route('club.payment-links.cancel', $link->id))->assertSessionHasErrors('error');
         $this->assertSame([Invoice::ISSUED, null], [$link->invoice->fresh()->status, $link->fresh()->cancelled_at]);
+    }
+
+    public function test_cancelling_a_link_voids_an_invoice_so_it_takes_the_invoice_void_permission_too(): void
+    {
+        $club = $this->club();
+        $this->paymob($club);
+        $linksOnly = $this->holding($club, ['payments.links']);
+        $this->actingAs($linksOnly)->post(route('club.payment-links.store'), $this->form())->assertSessionHasNoErrors();
+        $link = $this->link($club);
+
+        // Making links does not make its holder able to void invoices.
+        $this->actingAs($linksOnly)->get(route('club.payment-links.index'))->assertInertia(fn ($p) => $p->where('paymentLinks.can_cancel', false));
+        $this->actingAs($linksOnly)->post(route('club.payment-links.cancel', $link->id))->assertForbidden();
+        $this->assertSame([Invoice::ISSUED, null], [$link->invoice->fresh()->status, $link->fresh()->cancelled_at]);
+
+        $both = $this->holding($club, ['payments.links', 'invoices.void']);
+        $this->actingAs($both)->get(route('club.payment-links.index'))->assertInertia(fn ($p) => $p->where('paymentLinks.can_cancel', true));
+        $this->actingAs($both)->post(route('club.payment-links.cancel', $link->id))->assertSessionHasNoErrors();
+        $this->assertSame(Invoice::VOID, $link->invoice->fresh()->status);
+    }
+
+    public function test_a_link_with_money_held_for_review_is_not_cancelled(): void
+    {
+        Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_h1', 'intention_order_id' => 7701], 201)]);
+        $club = $this->club();
+        $this->paymob($club);
+        $owner = $this->owner($club);
+        $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form())->assertSessionHasNoErrors();
+        auth()->logout();
+        $link = $this->link($club);
+        $this->start($club, $link)->assertRedirect();
+        $intent = $this->asTenant($club, fn () => PaymentIntent::where('invoice_id', $link->invoice_id)->sole());
+
+        // Paid at Paymob, but its callback came after the page's end and after the late window: recorded, held for review.
+        $this->travelTo($intent->expires_at->copy()->addMinutes(OnlinePaymentService::LATE_CALLBACK_MINUTES + 5));
+        $this->webhook($this->signedCallback($intent, 7701))->assertOk();
+        $this->assertSame('held_for_review', PaymentWebhookEvent::latest('id')->value('outcome'));
+        $this->assertSame(Invoice::ISSUED, $link->invoice->fresh()->status, 'held money pays nothing yet');
+
+        $this->actingAs($owner)->post(route('club.payment-links.cancel', $link->id))->assertSessionHasErrors('error');
+        $this->assertSame([Invoice::ISSUED, null], [$link->invoice->fresh()->status, $link->fresh()->cancelled_at]);
+    }
+
+    public function test_a_staff_member_tied_to_a_branch_sees_and_cancels_only_that_branchs_links(): void
+    {
+        $club = $this->club();
+        [$khoud, $salalah] = $this->asTenant($club, fn () => [Branch::create(['name' => 'فرع الخوض', 'is_active' => true]), Branch::create(['name' => 'فرع صلالة', 'is_active' => true])]);
+        $owner = $this->owner($club);
+        foreach (['الخوض' => $khoud, 'صلالة' => $salalah] as $name => $branch) {
+            $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form(['description' => 'رابط '.$name]))->assertSessionHasNoErrors();
+            $this->asTenant($club, fn () => $this->link($club)->invoice->forceFill(['branch_id' => $branch->id])->save());
+        }
+        [$ours, $theirs] = $this->asTenant($club, fn () => PaymentLink::orderBy('id')->get()->all());
+
+        $desk = $this->holding($club, ['payments.links', 'invoices.void']);
+        $desk->forceFill(['branch_id' => $khoud->id])->save();
+        $this->actingAs($desk)->get(route('club.payment-links.index'))->assertOk()
+            ->assertInertia(fn ($p) => $p->has('paymentLinks.rows', 1)->where('paymentLinks.rows.0.description', 'رابط الخوض'));
+        $this->actingAs($desk)->post(route('club.payment-links.cancel', $theirs->id))->assertNotFound();
+        $this->assertNull($theirs->fresh()->cancelled_at);
+        $this->actingAs($desk)->post(route('club.payment-links.cancel', $ours->id))->assertSessionHasNoErrors();
+        $this->assertNotNull($ours->fresh()->cancelled_at);
+    }
+
+    public function test_each_validity_ends_when_chosen_and_the_invoice_is_booked_due_today(): void
+    {
+        $club = $this->club();
+        $club->forceFill(['settings' => array_merge($club->settings ?? [], ['vat_rate' => 5])])->save();
+        $owner = $this->owner($club);
+        $this->travelTo(now()->setTime(10, 0));
+        foreach ([1, 3, 7, 30] as $days) {
+            $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form(['valid_days' => $days, 'amount' => '10.500']))->assertSessionHasNoErrors();
+            $link = $this->link($club);
+            $this->assertSame(now()->addDays($days)->format('Y-m-d H:i'), $link->expires_at->format('Y-m-d H:i'), "$days days");
+        }
+
+        // What issuing a link books today (the invoice engine's own posting, unchanged): the customer owes the total, due
+        // today, revenue and output tax for it, and no payment.
+        $invoice = $link->invoice;
+        $this->assertSame([Invoice::ISSUED, '10.500', '0.500', today()->toDateString(), today()->toDateString()], [$invoice->status, $invoice->total, $invoice->tax_total, $invoice->issue_date->toDateString(), $invoice->due_date->toDateString()]);
+        $lines = $this->asTenant($club, fn () => JournalEntry::where('source_type', $invoice->getMorphClass())->where('source_id', $invoice->id)->with('lines.account')->get()->flatMap->lines);
+        $this->assertSame('10.500', Money::normalize($lines->sum(fn ($l) => (float) $l->debit)), 'the customer owes the total');
+        $this->assertSame('10.500', Money::normalize($lines->sum(fn ($l) => (float) $l->credit)), 'revenue and output tax');
+        $this->assertSame(0, $this->asTenant($club, fn () => Payment::where('invoice_id', $invoice->id)->count()));
+
+        // After its end the invoice is still owed (nothing cancels it on its own).
+        $this->travelTo($link->expires_at->copy()->addDay());
+        $this->assertSame([Invoice::ISSUED, '10.500'], [$invoice->fresh()->status, $invoice->fresh()->balance()]);
+        $this->assertSame(PaymentLink::EXPIRED, $this->asTenant($club, fn () => $link->fresh()->status()));
+    }
+
+    public function test_4_720_is_paid_end_to_end_in_baisa_and_4_725_is_refused(): void
+    {
+        Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_v', 'intention_order_id' => 8801], 201)]);
+        $club = $this->club();
+        $this->paymob($club);
+        $owner = $this->owner($club);
+
+        $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form(['amount' => '4.725']))->assertSessionHasErrors('amount');
+        $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form(['amount' => '4.720']))->assertSessionHasNoErrors();
+        $link = $this->link($club);
+        auth()->logout();
+        $this->start($club, $link)->assertRedirect();
+        Http::assertSent(fn ($r) => $r['amount'] === 4720 && $r['currency'] === 'OMR');
+        $intent = $this->asTenant($club, fn () => PaymentIntent::where('invoice_id', $link->invoice_id)->sole());
+        $this->assertSame(['4.720', '4.720'], [$link->invoice->total, $intent->amount]);
+
+        // The signed callback in baisa (4720): paid; one baisa less (as a rounding would make it): not recorded.
+        $this->webhook($this->signedCallback($intent, 8801, ['id' => 880001, 'amount_cents' => 4710]));
+        $this->assertSame('amount_mismatch', PaymentWebhookEvent::latest('id')->value('outcome'));
+        $this->webhook($this->signedCallback($intent, 8801, ['amount_cents' => 4720]))->assertOk();
+        $this->assertSame([Invoice::PAID, '4.720'], [$link->invoice->fresh()->status, $link->invoice->fresh()->paid_total]);
     }
 }
