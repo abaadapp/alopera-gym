@@ -9,6 +9,7 @@ use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Payments\Models\PaymentIntent;
+use App\Modules\Payments\Models\PaymentLink;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Http\RendersSite;
 use Illuminate\Http\JsonResponse;
@@ -36,10 +37,14 @@ class PayController extends Controller
     {
         $invoice = $this->invoiceByToken($token)->load('items');
 
+        // A payment link (PaymentLink) past its time or cancelled: the invoice is shown, with why it is not payable here.
+        $link = PaymentLink::where('invoice_id', $invoice->id)->first();
+
         return $this->page('Site/Pay', [
             'invoice' => $this->present($invoice),
             'token' => $token,
             'onlinePayments' => $online->available(),
+            'closed' => $link && ! $link->opensCheckout() && $invoice->isOpen() ? OnlinePaymentService::closedLinkMessage($link) : null,
         ], __('دفع الفاتورة :number', ['number' => $invoice->number]));
     }
 

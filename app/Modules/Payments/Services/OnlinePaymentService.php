@@ -18,6 +18,7 @@ use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Payments\Events\OnlinePaymentFailed;
 use App\Modules\Payments\Models\PaymentIntent;
+use App\Modules\Payments\Models\PaymentLink;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobClient;
 use App\Modules\Payments\Paymob\PaymobSignature;
@@ -131,6 +132,11 @@ final class OnlinePaymentService
             if ($gift && $gift->source === 'site' && ! $gift->phoneVerified()) {
                 throw new BusinessRuleException('gift.phone_unverified', 'أكّد رقم واتساب المستلمة أولًا، ثم ادفع قيمة الهدية.');
             }
+            // A payment link from the Paymob page (PaymentLink) opens a page only until its time, never once cancelled.
+            $paymentLink = PaymentLink::where('invoice_id', $invoice->id)->first();
+            if ($paymentLink && ! $paymentLink->opensCheckout()) {
+                throw new BusinessRuleException('payment_link.closed', self::closedLinkMessage($paymentLink));
+            }
 
             // A website order holds its stock only until reserved_until: its checkout must not outlive the hold, or the
             // customer could pay for an order already cancelled whose stock was sold to someone else.
@@ -142,6 +148,13 @@ final class OnlinePaymentService
                     throw new BusinessRuleException('order.not_payable', 'انتهت مهلة الدفع لهذا الطلب.');
                 }
                 $expires = $hold->lt($expires) ? $hold : $expires;
+            }
+            // Nor a payment link's page its link: what is paid on it after the link's time is held for review, not applied.
+            if ($paymentLink) {
+                if ($paymentLink->expires_at->lte(now()->addMinute())) {
+                    throw new BusinessRuleException('payment_link.closed', self::closedLinkMessage($paymentLink));
+                }
+                $expires = $paymentLink->expires_at->lt($expires) ? $paymentLink->expires_at : $expires;
             }
 
             // The invoice's checkouts, read in ONE statement: the claim of another request and its URL are saved at
@@ -224,6 +237,14 @@ final class OnlinePaymentService
         $intent->forceFill(['checkout_url' => $checkout['url'], 'provider_order_id' => $checkout['order_id']])->save();
 
         return $intent;
+    }
+
+    /** What the customer is told by a payment link that no longer opens a page. */
+    public static function closedLinkMessage(PaymentLink $link): string
+    {
+        return $link->cancelled_at !== null
+            ? 'أُلغي رابط الدفع هذا. تواصل مع النادي إن كان عليك مبلغ.'
+            : 'انتهت صلاحية رابط الدفع هذا. اطلب من النادي رابطًا جديدًا، أو ادفع في الاستقبال.';
     }
 
     /**

@@ -3,6 +3,7 @@ import { AlertTriangle, Apple, CircleCheck, CircleDashed, CreditCard, Landmark, 
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Card, CardHeader, EmptyState, Notice, PageHeader } from '@/Components/ui';
 import { CheckList, CopyRow, IntegrationBack, IntegrationSummary, KeysForm, VerifyButton, type IntegrationStatusData, type ProviderForm } from '@/Components/Integrations';
+import { CreatePaymentLink, PaymentLinksLog, type PaymentLinksData } from '@/Components/PaymentLinks';
 
 interface Props {
     integration: ProviderForm;
@@ -10,6 +11,7 @@ interface Props {
     warning: string | null;
     methods: { key: 'card' | 'omannet' | 'apple_pay'; label: string; saved: boolean; state: 'not_set' | 'saved' | 'checked' | 'enabled' | 'available' | 'wrong_mode'; reason: string; within_cards?: boolean }[];
     links: { on: boolean; invoices_route: string; create_route: string };
+    paymentLinks: PaymentLinksData | null;
     checks: { label: string; ok: boolean; at: string | null }[];
     usage: { label: string; on: boolean; route?: string | null }[];
     intents: { id: number; reference: string; invoice: string | null; channel: string; amount: string; currency: string; status: string; failure: string | null; at: string }[];
@@ -125,7 +127,7 @@ const INTENT_STATUS: Record<string, { label: string; tone: 'green' | 'amber' | '
     expired: { label: 'انتهت المهلة', tone: 'gray' },
 };
 
-export default function PaymobIntegration({ integration, status, warning, methods, links, checks, usage, intents, events, endpoints }: Props) {
+export default function PaymobIntegration({ integration, status, warning, methods, links, paymentLinks, checks, usage, intents, events, endpoints }: Props) {
     const complete = checks[0]?.ok;
     const methodForm = useMethodForm();
     const byKey = Object.fromEntries(methods.map((m) => [m.key, m])) as Record<MethodKey, Props['methods'][number]>;
@@ -169,7 +171,7 @@ export default function PaymobIntegration({ integration, status, warning, method
                 <MethodSection method={byKey.apple_pay} form={methodForm} icon={<Apple className="size-4" />} title="Apple Pay"
                     subtitle="يظهر داخل صفحة دفع Paymob على الأجهزة التي تدعمه، بعد أن تفعّله Paymob لحسابك. لا يعرض النظام زرًا خاصًا به."
                     hint="اختياري: رقم تكامل Apple Pay الحقيقي (Live) — لا أرقام تجريبية له لدى Paymob، فلا يُرسل مع مفاتيح الاختبار." />
-                <PayLinks links={links} />
+                {paymentLinks ? <CreatePaymentLink data={paymentLinks} /> : <PayLinks links={links} />}
                 </div>
 
                 <div className="space-y-6 lg:col-span-2">
@@ -226,6 +228,8 @@ export default function PaymobIntegration({ integration, status, warning, method
                     </Card>
                 </div>
             </div>
+
+            {paymentLinks && <div className="mt-6"><PaymentLinksLog data={paymentLinks} /></div>}
 
             <div className="mt-6 grid gap-6 xl:grid-cols-2 [&>*]:min-w-0">
                 <Card padded={false}>
