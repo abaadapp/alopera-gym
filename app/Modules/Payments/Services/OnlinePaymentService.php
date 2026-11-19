@@ -137,6 +137,10 @@ final class OnlinePaymentService
             if ($paymentLink && ! $paymentLink->opensCheckout()) {
                 throw new BusinessRuleException('payment_link.closed', self::closedLinkMessage($paymentLink));
             }
+            // What a link still owes may end in a single baisa (a part paid at the desk): not opened online, never rounded.
+            if ($paymentLink && self::singleBaisa($invoice->balance())) {
+                throw new BusinessRuleException('payment_link.single_baisa', self::singleBaisaMessage($invoice->balance()));
+            }
 
             // A website order holds its stock only until reserved_until: its checkout must not outlive the hold, or the
             // customer could pay for an order already cancelled whose stock was sold to someone else.
@@ -237,6 +241,21 @@ final class OnlinePaymentService
         $intent->forceFill(['checkout_url' => $checkout['url'], 'provider_order_id' => $checkout['order_id']])->save();
 
         return $intent;
+    }
+
+    /**
+     * An amount ending in a single baisa (4.725). Until Paymob's test environment shows such an amount charged and called
+     * back to the baisa (a pre-launch condition, docs/REMAINING.md), a payment link does not take it online: the card may
+     * be charged a rounded amount, and the callback's exact check would then leave it unrecorded. Nothing is rounded.
+     */
+    public static function singleBaisa(string $amount): bool
+    {
+        return Money::toMinor($amount) % 10 !== 0;
+    }
+
+    public static function singleBaisaMessage(string $amount): string
+    {
+        return 'المبلغ المستحق '.$amount.' ينتهي ببيسة مفردة، والدفع الإلكتروني لمثل هذا المبلغ غير متاح مؤقتًا. ادفع في الاستقبال أو اطلب من النادي رابطًا جديدًا.';
     }
 
     /** What the customer is told by a payment link that no longer opens a page. */

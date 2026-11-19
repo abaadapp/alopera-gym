@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentLink;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
@@ -309,7 +310,8 @@ class PaymentLinksTest extends TestCase
 
         // 12.345: Visa would be charged 12.340 and the callback would not match; refused before anything is issued.
         $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form(['amount' => '12.345']))->assertSessionHasErrors('amount');
-        $this->assertStringContainsString('Visa', session('errors')->first('amount'));
+        $this->assertStringContainsString('مؤقتًا', session('errors')->first('amount'));
+        $this->assertStringContainsString('لا يُقرَّب', session('errors')->first('amount'));
         $this->assertSame(2, $this->asTenant($club, fn () => PaymentLink::count()));
     }
 
@@ -392,7 +394,7 @@ class PaymentLinksTest extends TestCase
         $this->assertNotNull($ours->fresh()->cancelled_at);
     }
 
-    public function test_each_validity_ends_when_chosen_and_the_invoice_is_booked_due_today(): void
+    public function test_each_validity_ends_when_chosen_and_its_invoice_falls_due_that_day(): void
     {
         $club = $this->club();
         $club->forceFill(['settings' => array_merge($club->settings ?? [], ['vat_rate' => 5])])->save();
@@ -402,12 +404,14 @@ class PaymentLinksTest extends TestCase
             $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form(['valid_days' => $days, 'amount' => '10.500']))->assertSessionHasNoErrors();
             $link = $this->link($club);
             $this->assertSame(now()->addDays($days)->format('Y-m-d H:i'), $link->expires_at->format('Y-m-d H:i'), "$days days");
+            // Owner's decision (2026-11-19): a link's invoice is issued today and falls due the day the link ends.
+            $this->assertSame([today()->toDateString(), now()->addDays($days)->toDateString(), $days], [$link->invoice->issue_date->toDateString(), $link->invoice->due_date->toDateString(), $link->invoice->payment_terms_days], "$days days");
         }
 
-        // What issuing a link books today (the invoice engine's own posting, unchanged): the customer owes the total, due
-        // today, revenue and output tax for it, and no payment.
+        // What issuing a link books today (the invoice engine's own posting, unchanged): the customer owes the total,
+        // revenue and output tax for it, and no payment.
         $invoice = $link->invoice;
-        $this->assertSame([Invoice::ISSUED, '10.500', '0.500', today()->toDateString(), today()->toDateString()], [$invoice->status, $invoice->total, $invoice->tax_total, $invoice->issue_date->toDateString(), $invoice->due_date->toDateString()]);
+        $this->assertSame([Invoice::ISSUED, '10.500', '0.500'], [$invoice->status, $invoice->total, $invoice->tax_total]);
         $lines = $this->asTenant($club, fn () => JournalEntry::where('source_type', $invoice->getMorphClass())->where('source_id', $invoice->id)->with('lines.account')->get()->flatMap->lines);
         $this->assertSame('10.500', Money::normalize($lines->sum(fn ($l) => (float) $l->debit)), 'the customer owes the total');
         $this->assertSame('10.500', Money::normalize($lines->sum(fn ($l) => (float) $l->credit)), 'revenue and output tax');
@@ -440,5 +444,27 @@ class PaymentLinksTest extends TestCase
         $this->assertSame('amount_mismatch', PaymentWebhookEvent::latest('id')->value('outcome'));
         $this->webhook($this->signedCallback($intent, 8801, ['amount_cents' => 4720]))->assertOk();
         $this->assertSame([Invoice::PAID, '4.720'], [$link->invoice->fresh()->status, $link->invoice->fresh()->paid_total]);
+    }
+
+    public function test_what_a_link_still_owes_in_a_single_baisa_opens_no_page_and_is_not_rounded(): void
+    {
+        Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_b', 'intention_order_id' => 8901], 201)]);
+        $club = $this->club();
+        $this->paymob($club);
+        $owner = $this->owner($club);
+        $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form(['amount' => '4.730']))->assertSessionHasNoErrors();
+        $link = $this->link($club);
+        // A part paid at the desk leaves 4.725 owed.
+        $this->asTenant($club, fn () => app(PaymentService::class)->record($link->invoice, '0.005', 'cash'));
+        $this->assertSame('4.725', $link->invoice->fresh()->balance());
+        auth()->logout();
+
+        $url = route('site.pay.show', ['club' => $club->slug, 'token' => $link->invoice->public_token]);
+        $this->get($url)->assertOk()->assertInertia(fn ($p) => $p->component('Site/Pay')->where('closed', fn ($m) => str_contains((string) $m, '4.725') && str_contains((string) $m, 'مؤقتًا')));
+        $this->start($club, $link)->assertSessionHasErrors('error');
+        $this->assertStringContainsString('بيسة مفردة', session('errors')->first('error'));
+        $this->assertSame(0, $this->asTenant($club, fn () => PaymentIntent::where('invoice_id', $link->invoice_id)->count()));
+        Http::assertNothingSent();
+        $this->assertSame([Invoice::PARTIALLY_PAID, '4.725'], [$link->invoice->fresh()->status, $link->invoice->fresh()->balance()], 'nothing rounded or written off');
     }
 }

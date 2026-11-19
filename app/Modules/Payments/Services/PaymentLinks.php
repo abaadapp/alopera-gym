@@ -44,15 +44,18 @@ final class PaymentLinks
         $name = trim((string) ($data['customer_name'] ?? ''));
         $phone = filled($data['customer_phone'] ?? null) ? Phone::normalize($data['customer_phone']) : null;
         $description = trim($data['description']);
+        $days = (int) $data['valid_days'];
+        $expires = now()->addDays($days);
 
-        return DB::transaction(function () use ($amount, $net, $name, $phone, $description, $data) {
+        return DB::transaction(function () use ($amount, $net, $name, $phone, $description, $days, $expires) {
             $invoice = $this->invoices->issue([
                 'customer_mode' => $name !== '' ? 'new' : 'walk_in',
                 'customer_name' => $name !== '' ? $name : null,
                 'customer_phone' => $phone,
                 'issue_date' => today()->toDateString(),
-                'due_date' => today()->toDateString(),
-                'payment_terms_days' => 0,
+                // Owner's decision (2026-11-19), for link invoices only: due the day the link ends, not the day it is made.
+                'due_date' => $expires->toDateString(),
+                'payment_terms_days' => $days,
                 'lines' => [['description' => $description, 'quantity' => 1, 'unit_price' => $net]],
             ], ['method' => 'credit', 'amount' => null, 'paid_at' => null, 'reference' => null, 'proof' => null]);
 
@@ -65,7 +68,7 @@ final class PaymentLinks
                 'invoice_id' => $invoice->id,
                 'description' => $description,
                 'created_by' => Auth::id(),
-                'expires_at' => now()->addDays((int) $data['valid_days']),
+                'expires_at' => $expires,
             ]);
             $this->audit->log('payment_link.created', $invoice, ['link' => $link->id, 'amount' => $amount, 'expires_at' => $link->expires_at->toIso8601String()]);
 

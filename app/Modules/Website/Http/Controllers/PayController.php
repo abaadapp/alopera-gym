@@ -44,7 +44,12 @@ class PayController extends Controller
             'invoice' => $this->present($invoice),
             'token' => $token,
             'onlinePayments' => $online->available(),
-            'closed' => $link && ! $link->opensCheckout() && $invoice->isOpen() ? OnlinePaymentService::closedLinkMessage($link) : null,
+            'closed' => match (true) {
+                ! $link || ! $invoice->isOpen() => null,
+                ! $link->opensCheckout() => OnlinePaymentService::closedLinkMessage($link),
+                OnlinePaymentService::singleBaisa($invoice->balance()) => OnlinePaymentService::singleBaisaMessage($invoice->balance()),
+                default => null,
+            },
         ], __('دفع الفاتورة :number', ['number' => $invoice->number]));
     }
 

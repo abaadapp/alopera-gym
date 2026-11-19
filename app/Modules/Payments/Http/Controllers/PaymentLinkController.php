@@ -71,11 +71,11 @@ class PaymentLinkController extends Controller
     public function store(Request $request, PaymentLinks $links): RedirectResponse
     {
         $data = $request->validate([
-            // A whole number of 10 baisa: Visa takes no single baisa in a three-decimal currency, and Paymob rounds such a
-            // card payment down (4.725 is charged 4.720), which the callback's exact amount check would then not record.
+            // For now a whole number of 10 baisa (OnlinePaymentService::singleBaisa): a card may be charged a single-baisa
+            // amount rounded (4.725 as 4.720), which the callback's exact check would not record. Never rounded here.
             'amount' => ['bail', 'required', 'numeric', 'decimal:0,3', 'min:0.1', 'max:5000', function (string $attribute, mixed $value, \Closure $fail) {
-                if (Money::toMinor($value) % 10 !== 0) {
-                    $fail('اجعل آخر خانة في المبلغ صفرًا (مثل 12.340 أو 12.350): بطاقات Visa لا تقبل البيسة المفردة.');
+                if (OnlinePaymentService::singleBaisa(Money::normalize($value))) {
+                    $fail('مؤقتًا اجعل آخر خانة في المبلغ صفرًا (مثل 4.720 أو 4.730): لم يُتحقق بعد من أن Paymob تقبل البيسة المفردة مع بطاقات Visa، والمبلغ لا يُقرَّب.');
                 }
             }],
             'description' => ['required', 'string', 'max:250'],
