@@ -91,21 +91,7 @@ final class PaymentLinks
             if ($invoice->status === Invoice::PAID || ! Money::isZero($invoice->paid_total)) {
                 throw new BusinessRuleException('payment_link.paid', 'دُفع على هذا الرابط، فلا يُلغى. للرد استخدم الإشعار الدائن أو رد المبلغ من الفاتورة.');
             }
-            // Any money recorded on it — a late online payment held for review, a transfer awaiting confirmation — is
-            // reviewed first: voiding under it would leave the customer's money with nothing to pay.
-            if (Payment::where('invoice_id', $invoice->id)->exists()) {
-                throw new BusinessRuleException('payment_link.money', 'وصلت دفعة على هذا الرابط وهي قيد المراجعة، فلا يُلغى. راجعها من «المدفوعات والتحصيل» أولًا.');
-            }
-            $open = PaymentIntent::where('invoice_id', $invoice->id)
-                ->where(fn ($q) => $q->where('status', PaymentIntent::PENDING)
-                    ->orWhere(fn ($q) => $q->where('status', PaymentIntent::FAILED)->whereNotNull('checkout_url')))
-                ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()->subMinutes(OnlinePaymentService::LATE_CALLBACK_MINUTES)))
-                ->orderByDesc('expires_at')->first();
-            if ($open) {
-                $after = $open->expires_at?->copy()->addMinutes(OnlinePaymentService::LATE_CALLBACK_MINUTES)->timezone((string) config('app.timezone'));
-                throw new BusinessRuleException('payment_link.page_open', 'فتح العميل صفحة الدفع من هذا الرابط وقد يدفع منها'
-                    .($after ? ' حتى الساعة '.$after->format('H:i') : '').'. ألغِ الرابط بعد ذلك حتى لا تصل دفعة لرابط ملغى.');
-            }
+            self::refuseWhileMoneyIsUnsettled($invoice);
 
             if ($invoice->status !== Invoice::VOID) {
                 $this->engine->void($invoice, 'إلغاء رابط الدفع');
@@ -115,6 +101,35 @@ final class PaymentLinks
 
             return $link;
         });
+    }
+
+    /**
+     * Owner's decision (2026-11-19): a payment link's invoice is not cancelled — from the link or from the invoice screen
+     * (InvoiceService::void) — while a payment on it is in progress or under review, until that is settled:
+     *  - money recorded and not settled: a payment or refund awaiting confirmation, or money received whose credit is not
+     *    yet allocated or refunded (a late online payment held for review);
+     *  - a payment page opened from it that may still take money (its time, then the late-callback window).
+     * Settled money (refunded, allocated elsewhere, rejected, cancelled) no longer stops it. Called under the invoice's lock.
+     */
+    public static function refuseWhileMoneyIsUnsettled(Invoice $invoice): void
+    {
+        $unsettled = Payment::where('invoice_id', $invoice->id)
+            ->where(fn ($q) => $q->where('status', Payment::PENDING)
+                ->orWhere(fn ($q) => $q->where('status', Payment::COMPLETED)->where('kind', Payment::KIND_PAYMENT)->whereColumn('credit_amount', '>', 'credit_used')))
+            ->exists();
+        if ($unsettled) {
+            throw new BusinessRuleException('payment_link.money', 'على رابط الدفع لهذه الفاتورة دفعة قيد التنفيذ أو المراجعة، فلا تُلغى حتى تُسوّى. راجعها من «المدفوعات والتحصيل» أولًا.');
+        }
+        $open = PaymentIntent::where('invoice_id', $invoice->id)
+            ->where(fn ($q) => $q->where('status', PaymentIntent::PENDING)
+                ->orWhere(fn ($q) => $q->where('status', PaymentIntent::FAILED)->whereNotNull('checkout_url')))
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()->subMinutes(OnlinePaymentService::LATE_CALLBACK_MINUTES)))
+            ->orderByDesc('expires_at')->first();
+        if ($open) {
+            $after = $open->expires_at?->copy()->addMinutes(OnlinePaymentService::LATE_CALLBACK_MINUTES)->timezone((string) config('app.timezone'));
+            throw new BusinessRuleException('payment_link.page_open', 'فتح العميل صفحة الدفع من رابط هذه الفاتورة وقد يدفع منها'
+                .($after ? ' حتى الساعة '.$after->format('H:i') : '').'. ألغِ بعد ذلك حتى لا تصل دفعة لفاتورة ملغاة.');
+        }
     }
 
     /** The link the customer opens: the invoice's secure pay page. */

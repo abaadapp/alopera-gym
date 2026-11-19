@@ -373,6 +373,47 @@ class PaymentLinksTest extends TestCase
         $this->assertSame([Invoice::ISSUED, null], [$link->invoice->fresh()->status, $link->fresh()->cancelled_at]);
     }
 
+    public function test_a_links_invoice_is_not_voided_anywhere_while_its_money_is_unsettled_and_is_once_settled(): void
+    {
+        Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_s1', 'intention_order_id' => 7801], 201)]);
+        $club = $this->club();
+        $this->paymob($club);
+        $owner = $this->owner($club);
+        $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form())->assertSessionHasNoErrors();
+        auth()->logout();
+        $link = $this->link($club);
+        $this->start($club, $link)->assertRedirect();
+        $intent = $this->asTenant($club, fn () => PaymentIntent::where('invoice_id', $link->invoice_id)->sole());
+        $voidOnInvoiceScreen = fn () => $this->actingAs($owner)->post(route('club.invoices.void', $link->invoice_id), ['reason' => 'خطأ']);
+        $cancelLink = fn () => $this->actingAs($owner)->post(route('club.payment-links.cancel', $link->id));
+
+        // 1. A page open from it may still take money: the invoice screen refuses as the link does.
+        $voidOnInvoiceScreen()->assertSessionHasErrors('error');
+        $this->assertStringContainsString('فتح العميل صفحة الدفع', session('errors')->first('error'));
+
+        // 2. Its money came late and is held for review: refused from both, until settled.
+        $this->travelTo($intent->expires_at->copy()->addMinutes(OnlinePaymentService::LATE_CALLBACK_MINUTES + 5));
+        $this->webhook($this->signedCallback($intent, 7801))->assertOk();
+        $this->assertSame('held_for_review', PaymentWebhookEvent::latest('id')->value('outcome'));
+        $voidOnInvoiceScreen()->assertSessionHasErrors('error');
+        $this->assertStringContainsString('قيد التنفيذ أو المراجعة', session('errors')->first('error'));
+        $cancelLink()->assertSessionHasErrors('error');
+
+        // 3. Its refund asked for, not yet confirmed: still in progress.
+        $held = $this->asTenant($club, fn () => Payment::where('invoice_id', $link->invoice_id)->sole());
+        $refund = $this->asTenant($club, fn () => app(PaymentService::class)->refundCredit($held, $held->amount, 'paymob', null, null, 'رابط ملغى'));
+        $this->assertSame(Payment::PENDING, $refund->status);
+        $cancelLink()->assertSessionHasErrors('error');
+        $this->assertSame([Invoice::ISSUED, null], [$link->invoice->fresh()->status, $link->fresh()->cancelled_at]);
+
+        // 4. The refund confirmed: settled, the link is cancelled with its invoice, both in the audit log.
+        $this->asTenant($club, fn () => app(PaymentService::class)->confirm($refund->fresh(), 'TRX-7801'));
+        $cancelLink()->assertSessionHasNoErrors();
+        $this->assertSame(Invoice::VOID, $link->invoice->fresh()->status);
+        $this->assertNotNull($link->fresh()->cancelled_at);
+        $this->assertEqualsCanonicalizing(['invoice.voided', 'payment_link.cancelled'], \DB::table('audit_logs')->where('tenant_id', $club->id)->whereIn('event', ['invoice.voided', 'payment_link.cancelled'])->pluck('event')->all());
+    }
+
     public function test_a_staff_member_tied_to_a_branch_sees_and_cancels_only_that_branchs_links(): void
     {
         $club = $this->club();
