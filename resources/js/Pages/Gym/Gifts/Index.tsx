@@ -2,7 +2,7 @@ import { Link, useForm } from '@inertiajs/react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Gift, Plus } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Button, Checkbox, ChoiceCard, DataTable, Field, Input, Modal, Notice, PageHeader, Textarea, type Column, type PageMeta, type TableFilter } from '@/Components/ui';
+import { Badge, Button, Checkbox, ChoiceCard, DataTable, Field, Input, Modal, Notice, PageHeader, type Column, type PageMeta, type TableFilter } from '@/Components/ui';
 import { clientKey } from '@/Components/Inventory/parts';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, dayCount, money } from '@/lib/format';
@@ -123,7 +123,6 @@ function IssueGiftModal({ open, onClose, plans, methods, redeemDays }: { open: b
         giver_email: '',
         recipient_name: '',
         recipient_phone: '',
-        message: '',
         message_language: 'ar' as 'ar' | 'en',
         is_anonymous: false,
         payment_method: defaultGiftPayment(methods),
@@ -200,9 +199,6 @@ function IssueGiftModal({ open, onClose, plans, methods, redeemDays }: { open: b
                                 </ChoiceCard>
                             ))}
                         </div>
-                    </Field>
-                    <Field label="رسالة الهدية" error={err.message} className="sm:col-span-2" hint={<span className="num">{form.data.message.length}/300</span>}>
-                        <Textarea rows={3} maxLength={300} value={form.data.message} onChange={(e) => form.setData('message', e.target.value)} placeholder="تظهر على بطاقة الهدية" />
                     </Field>
                 </div>
 

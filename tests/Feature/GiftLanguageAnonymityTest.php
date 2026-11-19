@@ -17,7 +17,9 @@ use App\Modules\Messaging\Services\TemplateCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia;
 use Tests\Concerns\BuildsClubs;
@@ -115,6 +117,8 @@ class GiftLanguageAnonymityTest extends TestCase
 
         $english = $this->confirmAndPay($club, $english);
         $arabic = $this->confirmAndPay($club, $arabic);
+        // Paid: the language is still the giver's, nothing after the sale changes it.
+        $this->assertSame(['en', 'ar'], [$english->message_language, $arabic->message_language]);
 
         $sent = $this->templatesSent();
         $this->assertCount(2, $sent, 'one message per gift');
@@ -191,6 +195,13 @@ class GiftLanguageAnonymityTest extends TestCase
         $this->get($pages[0])->assertInertia(fn (AssertableInertia $page) => $page->where('gift.giver_name', 'شخص يفضّل عدم ذكر اسمه')
             ->where('whatsapp', fn ($share) => str_contains(rawurldecode((string) $share), 'شخص يفضّل عدم ذكر اسمه')));
         $this->get($pages[1])->assertInertia(fn (AssertableInertia $page) => $page->where('gift.giver_name', 'Someone who prefers to remain anonymous'));
+        // The recipient signed in to the portal, choosing her start date: still not named.
+        $recipient = $this->member($club, ['full_name' => 'Noor', 'phone' => '95551234']);
+        $redeem = $this->actingAs($recipient, 'member')->get(route('portal.gift.redeem', ['club' => $club->slug, 'token' => $token]))->assertOk();
+        $this->assertStringNotContainsString(self::REAL_NAME, $redeem->getContent());
+        // In the page's language (the visitor last chose English above), never the real name.
+        $redeem->assertInertia(fn (AssertableInertia $page) => $page->component('Portal/GiftRedeem')
+            ->where('gift.giver_name', fn ($name) => in_array($name, GiftMembership::ANONYMOUS_GIVER, true)));
         // A giver who did not hide it is named on the card.
         $namedToken = $this->asTenant($club, fn () => $named->linkToken());
         $this->get(route('site.gift.show', ['club' => $club->slug, 'token' => $namedToken]))->assertInertia(fn (AssertableInertia $page) => $page->where('gift.giver_name', 'Sara Named'));
@@ -307,15 +318,74 @@ class GiftLanguageAnonymityTest extends TestCase
         $this->actingAs($this->owner($club))->post(route('club.gifts.store'), [
             'membership_plan_id' => $plan->id, 'giver_name' => self::REAL_NAME, 'recipient_name' => 'Noor', 'recipient_phone' => '95551234',
             'message_language' => 'en', 'is_anonymous' => true, 'payment_method' => 'later',
+            // The desk's form has no message any more: one sent anyway is not kept.
+            'message' => 'Happy birthday from me',
         ])->assertSessionHasNoErrors();
         $this->asTenant($club, function () {
             $gift = GiftMembership::sole();
-            $this->assertSame(['en', true, self::REAL_NAME], [$gift->message_language, $gift->is_anonymous, $gift->giver_name]);
+            $this->assertSame(['en', true, self::REAL_NAME, null], [$gift->message_language, $gift->is_anonymous, $gift->giver_name, $gift->message]);
         });
         // Not said at the desk: Arabic, the name shown, as every gift so far.
         $this->post(route('club.gifts.store'), [
             'membership_plan_id' => $plan->id, 'giver_name' => 'Sara', 'recipient_name' => 'Noor', 'recipient_phone' => '95551234', 'payment_method' => 'later',
         ])->assertSessionHasNoErrors();
         $this->asTenant($club, fn () => $this->assertSame(['ar', false], [GiftMembership::latest('id')->first()->message_language, GiftMembership::latest('id')->first()->is_anonymous]));
+    }
+
+    public function test_a_gift_from_before_keeps_its_arabic_message_its_named_giver_and_its_old_text_on_the_card(): void
+    {
+        $this->metaAnswers();
+        $club = $this->club();
+        $this->connectWhatsApp($club);
+        // As a gift issued before this change: no language or anonymity said (the columns' defaults), and the giver's
+        // message it was sold with.
+        $gift = $this->deskGift($club, ['giver_name' => 'Sara Before']);
+        $this->asTenant($club, fn () => $gift->forceFill(['message' => 'Happy birthday, Noor'])->save());
+        $this->assertSame(['ar', false], [$gift->fresh()->message_language, $gift->fresh()->is_anonymous]);
+        $gift = $this->confirmAndPay($club, $gift);
+
+        // Sent as before: Arabic, the real name; the old message is not a value of the new three-value template.
+        $sent = $this->templatesSent();
+        $this->assertCount(1, $sent);
+        $values = array_column($sent[0]['template']['components'][0]['parameters'], 'text');
+        $this->assertSame(['ar', 3], [$sent[0]['template']['language']['code'], count($values)]);
+        $this->assertSame(['Sara Before', 'ذهبية'], array_slice($values, 0, 2));
+        $this->assertStringNotContainsString('Happy birthday', json_encode($values));
+        // Its card still shows the giver and the message it was sold with; the panel too.
+        $token = $this->asTenant($club, fn () => $gift->linkToken());
+        $this->get(route('site.gift.show', ['club' => $club->slug, 'token' => $token]))->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('gift.giver_name', 'Sara Before')->where('gift.message', 'Happy birthday, Noor'));
+        $this->actingAs($this->owner($club))->get(route('club.gifts.show', $gift))->assertInertia(fn (AssertableInertia $page) => $page
+            ->where('gift.message', 'Happy birthday, Noor')->where('gift.is_anonymous', false)->where('gift.message_language', 'ar'));
+    }
+
+    public function test_the_migration_only_adds_and_goes_back_and_forth_without_touching_the_gifts(): void
+    {
+        $file = base_path('app/Modules/Gym/Database/migrations/2026_11_19_000100_add_message_language_and_anonymous_to_gym_gift_memberships.php');
+        // The deploy's own check: nothing the old code could not run with.
+        exec(escapeshellarg(PHP_BINARY).' '.escapeshellarg(base_path('scripts/migration-risk.php')).' '.escapeshellarg($file), $out, $code);
+        $this->assertSame(0, $code);
+        $this->assertStringContainsString('adds only', implode("\n", $out));
+
+        $club = $this->club();
+        $gift = $this->deskGift($club, ['message_language' => 'en', 'is_anonymous' => true]);
+        $this->asTenant($club, fn () => $gift->forceFill(['message' => 'Old message'])->save());
+        $row = fn () => (array) DB::table('gym_gift_memberships')->where('id', $gift->id)->first();
+        $before = $row();
+
+        // Back: only the two columns go; the gift, its giver, message, invoice and link stay as they were.
+        $migration = require $file;
+        $migration->down();
+        $this->assertFalse(Schema::hasColumn('gym_gift_memberships', 'message_language'));
+        $this->assertFalse(Schema::hasColumn('gym_gift_memberships', 'is_anonymous'));
+        $after = $row();
+        foreach (['giver_name', 'message', 'invoice_id', 'token_hash', 'status', 'recipient_phone', 'price'] as $column) {
+            $this->assertSame($before[$column], $after[$column], $column);
+        }
+
+        // Forward again: the defaults every gift had before (Arabic, named) — the choice made in between is not kept.
+        $migration->up();
+        $this->assertSame(['ar', false], [$row()['message_language'], (bool) $row()['is_anonymous']]);
+        $this->assertSame(self::REAL_NAME, $row()['giver_name']);
     }
 }

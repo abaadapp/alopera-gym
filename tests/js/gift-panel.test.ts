@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GIFT_DELIVERY_TONE, GIFT_EVENTS, GIFT_FILTERS, defaultGiftPayment, giftCancelReason, giftForAnotherNumber, giftPaymentChoices, giftSource, redeemErrorStep, redeemGeneralErrors } from '@/lib/gifts';
+import { GIFT_DELIVERY_TONE, GIFT_EVENTS, GIFT_FILTERS, GIFT_LANGUAGES, defaultGiftPayment, giftCancelReason, giftForAnotherNumber, giftPaymentChoices, giftSource, redeemErrorStep, redeemGeneralErrors } from '@/lib/gifts';
 import { giftStatus, invoiceType, label } from '@/lib/labels';
 
 const STATUSES = ['pending', 'paid', 'redeemed', 'expired', 'cancelled', 'refunded'];
@@ -20,6 +20,12 @@ describe('«هدايا الاشتراكات» in the panel (#192)', () => {
         for (const words of [refunded?.label, GIFT_EVENTS['gift.refunded'], label(giftStatus, 'refunded')[0]]) {
             expect(words).not.toMatch(/مسترد|رُدّ/);
         }
+    });
+
+    it('offers the recipient\'s message in the two languages the server sends, each named in its own language, no flag', () => {
+        expect(GIFT_LANGUAGES.map((l) => l.value)).toEqual(['ar', 'en']);
+        expect(GIFT_LANGUAGES.map((l) => l.label)).toEqual(['العربية', 'English']);
+        for (const l of GIFT_LANGUAGES) expect(l.label).not.toMatch(/[\u{1F1E6}-\u{1F1FF}]/u);
     });
 
     it('always offers «لاحقًا», then only the methods the server allows; cash first when allowed', () => {
