@@ -11,6 +11,7 @@ use App\Modules\Finance\Events\CreditNoteIssuing;
 use App\Modules\Finance\Events\InvoicePaid;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
+use App\Modules\Payments\Models\PaymentReview;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -61,6 +62,9 @@ final class CreditNoteService
             if ($invoice->status === Invoice::VOID) {
                 throw new BusinessRuleException('credit.void', 'لا يمكن إصدار إشعار دائن لفاتورة ملغاة.');
             }
+            // Paymob money under review on it (PaymentReview, open): no note, from whichever path issues it, before
+            // anything is checked or written.
+            PaymentReview::refuseCreditWhileOpen($invoice);
             if (Money::toMinor($amount) <= 0) {
                 throw new BusinessRuleException('credit.amount', 'المبلغ يجب أن يكون أكبر من صفر.', 'amount');
             }

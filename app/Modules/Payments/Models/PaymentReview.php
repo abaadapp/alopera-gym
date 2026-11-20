@@ -63,6 +63,9 @@ class PaymentReview extends Model implements BranchOwned
     /** What staff are told when an invoice is not voided because of it (refuseVoidWhileOpen). */
     public const VOID_REFUSED = 'لا يمكن إلغاء هذه الفاتورة لوجود دفعة إلكترونية قيد المراجعة. يرجى مراجعة مسؤول النظام.';
 
+    /** What staff are told when no credit note is issued on an invoice because of it (refuseCreditWhileOpen). */
+    public const CREDIT_REFUSED = 'لا يمكن إصدار إشعار دائن لهذه الفاتورة حاليًا لوجود دفعة إلكترونية قيد المراجعة. يرجى حسم المراجعة أولًا';
+
     protected $guarded = ['id', 'tenant_id'];
 
     protected function casts(): array
@@ -104,9 +107,30 @@ class PaymentReview extends Model implements BranchOwned
      */
     public static function refuseVoidWhileOpen(Invoice $invoice): void
     {
-        if (self::where('invoice_id', $invoice->id)->open()->exists()) {
+        if (self::openOn($invoice)) {
             throw new BusinessRuleException('invoice.payment_review', self::VOID_REFUSED);
         }
+    }
+
+    /**
+     * Owner's decision (2026-11-20, PR #217 option C): no credit note, in part or in full, on an invoice with an open
+     * review, whatever issues it — the credit-note form, a paid or part-credited website order cancelled, a point-of-sale
+     * sale voided (all through CreditNoteService::issue) — until the review is closed on Paymob's evidence: lowering
+     * what is owed while that money is unsettled would leave it paying a debt the books no longer hold. Asked under the
+     * invoice's lock, before anything is written (as refuseVoidWhileOpen): a review written first is seen here; one
+     * coming after the note waits for it and is kept, open, its money not lost. A closed review no longer stops it; notes
+     * issued before stay as they are. Moves no money and closes nothing.
+     */
+    public static function refuseCreditWhileOpen(Invoice $invoice): void
+    {
+        if (self::openOn($invoice)) {
+            throw new BusinessRuleException('credit.payment_review', self::CREDIT_REFUSED);
+        }
+    }
+
+    private static function openOn(Invoice $invoice): bool
+    {
+        return self::where('invoice_id', $invoice->id)->open()->exists();
     }
 
     /** Its invoice's branch: a user tied to another branch gets 404 for it, as for the invoice. */
