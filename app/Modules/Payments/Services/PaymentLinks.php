@@ -121,10 +121,9 @@ final class PaymentLinks
         if ($unsettled) {
             throw new BusinessRuleException('payment_link.money', 'على رابط الدفع لهذه الفاتورة دفعة قيد التنفيذ أو المراجعة، فلا تُلغى حتى تُسوّى. راجعها من «المدفوعات والتحصيل» أولًا.');
         }
-        // PR #216: an open signed-Paymob review may represent money even when its checkout expired.
-        if (PaymentReview::where('invoice_id', $invoice->id)->open()->exists()) {
-            throw new BusinessRuleException('payment_link.review', 'هناك دفعة من Paymob قيد المراجعة على هذه الفاتورة. لا يمكن إلغاء الرابط أو الفاتورة حتى إغلاق المراجعة بدليل.');
-        }
+        // PR #216: an open signed-Paymob review may represent money even when its checkout expired (the same rule and
+        // words as any invoice's void).
+        PaymentReview::refuseVoidWhileOpen($invoice);
         $open = PaymentIntent::where('invoice_id', $invoice->id)
             ->where(fn ($q) => $q->where('status', PaymentIntent::PENDING)
                 ->orWhere(fn ($q) => $q->where('status', PaymentIntent::FAILED)->whereNotNull('checkout_url')))
