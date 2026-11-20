@@ -8,7 +8,9 @@ use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
+use App\Modules\Finance\Models\Payment;
 use App\Modules\Payments\Models\PaymentLink;
+use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Payments\Services\PaymentLinks;
 use Illuminate\Http\RedirectResponse;
@@ -37,33 +39,60 @@ class PaymentLinkController extends Controller
         return Inertia::render('Finance/PaymentLinks/Index', self::props($links, $online));
     }
 
-    /** What the panel shows, here and on the Paymob page: whether links take payments now, and the latest links. */
+    /**
+     * What the panel shows, here and on the Paymob page: whether links take payments now, and the latest links — each
+     * with its invoice's amount, what was paid and what is left (the invoice's, not the link's: a link asks what the
+     * invoice still owes when it is opened), money at the bank or under review, and the confirmed Paymob payment.
+     */
     public static function props(PaymentLinks $links, OnlinePaymentService $online): array
     {
+        // A user tied to a branch sees the links of that branch's invoices only, as on the invoice list.
+        $rows = PaymentLink::whereIn('invoice_id', BranchContext::scope(Invoice::query())->select('id'))
+            ->with(['invoice:id,number,status,customer_name,customer_phone,billable_id,total,paid_total,credited_total,currency,public_token', 'creator:id,name'])
+            ->latest('id')->limit(50)->get();
+        $ids = $rows->pluck('invoice_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+        $reviewed = $ids === [] ? collect() : PaymentReview::whereIn('invoice_id', $ids)->open()->pluck('invoice_id')->map(fn ($id) => (int) $id);
+        $processing = PaymentLink::processing($ids);
+        // The confirmed Paymob payment of each invoice: amount, when, the receipt and Paymob's transaction number.
+        $paid = $ids === [] ? collect() : Payment::whereIn('invoice_id', $ids)->where('gateway', 'paymob')->where('kind', Payment::KIND_PAYMENT)
+            ->where('status', Payment::COMPLETED)->orderBy('id')->get(['invoice_id', 'amount', 'paid_at', 'receipt_number', 'gateway_transaction_id'])->keyBy('invoice_id');
+
         return [
             'paymentLinks' => [
                 'on' => $online->available(),
                 'valid_days' => PaymentLink::VALID_DAYS,
                 'currency' => app(TenantContext::class)->require()->currency,
-                'can_cancel' => (bool) request()->user()?->can('invoices.void'),
-                // A user tied to a branch sees the links of that branch's invoices only, as on the invoice list.
-                'rows' => PaymentLink::whereIn('invoice_id', BranchContext::scope(Invoice::query())->select('id'))->with(['invoice:id,number,status,customer_name,customer_phone,billable_id,total,paid_total,credited_total,currency,public_token', 'creator:id,name'])
-                    ->latest('id')->limit(50)->get()
-                    ->map(fn (PaymentLink $l) => [
+                'can_cancel' => (bool) request()->user()?->can('payments.links'),
+                'can_open_invoice' => (bool) request()->user()?->can('invoices.view'),
+                'rows' => $rows->map(function (PaymentLink $l) use ($links, $reviewed, $processing, $paid) {
+                    $status = $l->status(['review' => $reviewed->contains((int) $l->invoice_id), 'processing' => $processing->contains((int) $l->invoice_id)]);
+                    $payment = $paid->get($l->invoice_id);
+
+                    return [
                         'id' => $l->id,
+                        'invoice_id' => $l->invoice_id,
                         'number' => $l->invoice?->number,
                         'description' => $l->description,
                         'customer' => $l->invoice?->customer_name,
                         'phone' => $l->invoice?->customer_phone,
                         'amount' => $l->invoice?->total,
+                        'paid' => $l->invoice?->paid_total,
+                        'remaining' => $l->invoice?->balance(),
                         'currency' => $l->invoice?->currency,
-                        'status' => $l->status(),
+                        'status' => $status,
                         'by' => $l->creator?->name,
                         'at' => $l->created_at->format('Y-m-d H:i'),
                         'expires_at' => $l->expires_at->format('Y-m-d H:i'),
-                        'url' => $l->status() === PaymentLink::PENDING ? $links->url($l) : null,
-                        'whatsapp' => $l->status() === PaymentLink::PENDING ? $links->whatsapp($l) : null,
-                    ]),
+                        'payment' => $payment ? [
+                            'amount' => $payment->amount,
+                            'at' => $payment->paid_at?->timezone((string) config('app.timezone'))->format('Y-m-d H:i'),
+                            'receipt' => $payment->receipt_number,
+                            'transaction' => $payment->gateway_transaction_id,
+                        ] : null,
+                        'url' => $status === PaymentLink::PENDING ? $links->url($l) : null,
+                        'whatsapp' => $status === PaymentLink::PENDING ? $links->whatsapp($l) : null,
+                    ];
+                }),
             ],
         ];
     }

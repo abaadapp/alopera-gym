@@ -1,5 +1,5 @@
 import { useForm } from '@inertiajs/react';
-import { Copy, Link2, MessageCircle } from 'lucide-react';
+import { Copy, ExternalLink, Link2, MessageCircle } from 'lucide-react';
 import { useRef, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Field, Input, Notice, Select } from '@/Components/ui';
@@ -7,13 +7,19 @@ import { clientKey } from '@/Components/Inventory/parts';
 
 export interface PaymentLinkRow {
     id: number;
+    invoice_id: number;
     number: string | null;
     description: string;
     customer: string | null;
     phone: string | null;
     amount: string | null;
+    /** The invoice's, not the link's: the link asks what the invoice still owes when it is opened. */
+    paid: string | null;
+    remaining: string | null;
     currency: string | null;
-    status: 'pending' | 'paid' | 'expired' | 'cancelled';
+    status: 'pending' | 'processing' | 'review' | 'paid' | 'expired' | 'cancelled';
+    /** The confirmed Paymob payment of the invoice. */
+    payment: { amount: string; at: string | null; receipt: string | null; transaction: string | null } | null;
     by: string | null;
     at: string;
     expires_at: string;
@@ -24,13 +30,16 @@ export interface PaymentLinkRow {
 export interface PaymentLinksData {
     on: boolean;
     can_cancel: boolean;
+    can_open_invoice?: boolean;
     valid_days: number[];
     currency: string;
     rows: PaymentLinkRow[];
 }
 
-const STATUS: Record<PaymentLinkRow['status'], { label: string; tone: 'green' | 'amber' | 'red' | 'gray' }> = {
+const STATUS: Record<PaymentLinkRow['status'], { label: string; tone: 'green' | 'amber' | 'red' | 'gray' | 'blue' }> = {
     pending: { label: 'بانتظار الدفع', tone: 'amber' },
+    processing: { label: 'قيد التنفيذ', tone: 'blue' },
+    review: { label: 'يحتاج مراجعة', tone: 'red' },
     paid: { label: 'مدفوع', tone: 'green' },
     expired: { label: 'منتهي', tone: 'gray' },
     cancelled: { label: 'ملغى', tone: 'red' },
@@ -96,7 +105,7 @@ export function CreatePaymentLink({ data }: { data: PaymentLinksData }) {
     );
 }
 
-/** The links made and where each stands: waiting, paid, expired or cancelled; copy, WhatsApp or cancel a waiting one. */
+/** The links made and where each stands (waiting, at the bank, under review, paid, expired, cancelled), with the invoice's paid and left; copy, WhatsApp or cancel a waiting one, open its invoice. */
 export function PaymentLinksLog({ data }: { data: PaymentLinksData }) {
     return (
         <Card padded={false}>
@@ -118,20 +127,33 @@ export function PaymentLinksLog({ data }: { data: PaymentLinksData }) {
                                         <p>{r.customer ?? '—'}</p>
                                         {r.phone && <p className="num text-[11px] text-muted" dir="ltr">{r.phone}</p>}
                                     </td>
-                                    <td className="num">{Number(r.amount ?? 0).toFixed(3)} {r.currency}</td>
+                                    <td>
+                                        <p className="num">{Number(r.amount ?? 0).toFixed(3)} {r.currency}</p>
+                                        {r.status !== 'cancelled' && Number(r.paid ?? 0) > 0 && (
+                                            <p className="num text-[11px] text-muted">مدفوع {Number(r.paid).toFixed(3)} · متبقٍّ {Number(r.remaining ?? 0).toFixed(3)}</p>
+                                        )}
+                                    </td>
                                     <td>
                                         <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge>
                                         {r.status === 'pending' && <p className="num mt-0.5 text-[11px] text-muted">حتى {r.expires_at}</p>}
+                                        {r.status === 'processing' && <p className="mt-0.5 text-[11px] text-muted">دفعة تنتظر نتيجة البنك.</p>}
+                                        {r.status === 'review' && <p className="mt-0.5 text-[11px] text-muted">دفعة من Paymob لم تطابق: راجعها من الفاتورة.</p>}
+                                        {r.payment && r.status !== 'cancelled' && (
+                                            <p className="num mt-0.5 text-[11px] text-muted">
+                                                دُفع {Number(r.payment.amount).toFixed(3)}{r.payment.at ? ` · ${r.payment.at}` : ''}{r.payment.transaction ? ` · عملية ${r.payment.transaction}` : ''}
+                                            </p>
+                                        )}
                                     </td>
                                     <td>
-                                        {!(r.status === 'pending' && r.url) && <span className="text-muted">—</span>}
-                                        {r.status === 'pending' && r.url && (
-                                            <div className="flex flex-wrap gap-1.5">
-                                                <Button variant="outline" size="sm" onClick={() => copy(r.url!)} icon={<Copy />}>نسخ</Button>
-                                                {r.whatsapp && <Button variant="outline" size="sm" href={r.whatsapp} external icon={<MessageCircle />}>واتساب</Button>}
-                                                {data.can_cancel && <ConfirmAction url={route('club.payment-links.cancel', r.id)} title="إلغاء رابط الدفع" message="يُلغى الرابط وتُلغى فاتورته، فلا يفتح صفحة دفع بعد ذلك." confirmLabel="إلغاء الرابط" variant="ghost" size="sm">إلغاء</ConfirmAction>}
-                                            </div>
-                                        )}
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {r.status === 'pending' && r.url && <Button variant="outline" size="sm" onClick={() => copy(r.url!)} icon={<Copy />}>نسخ</Button>}
+                                            {r.status === 'pending' && r.whatsapp && <Button variant="outline" size="sm" href={r.whatsapp} external icon={<MessageCircle />}>واتساب</Button>}
+                                            {data.can_open_invoice && <Button variant="ghost" size="sm" href={route('club.invoices.show', r.invoice_id)} icon={<ExternalLink />}>الفاتورة</Button>}
+                                            {r.status === 'pending' && r.url && data.can_cancel && (
+                                                <ConfirmAction url={route('club.payment-links.cancel', r.id)} title="إلغاء رابط الدفع" message="يُلغى رابط الدفع فقط، فلا يفتح صفحة دفع بعد ذلك. تبقى الفاتورة ومستحقاتها وقيودها كما هي، وإلغاء الفاتورة إجراء منفصل من صفحتها." confirmLabel="إلغاء الرابط" variant="ghost" size="sm">إلغاء الرابط</ConfirmAction>
+                                            )}
+                                            {!(r.status === 'pending' && r.url) && !data.can_open_invoice && <span className="text-muted">—</span>}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}

@@ -9,7 +9,6 @@ use App\Core\Support\Phone;
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
-use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Finance\Services\ManualInvoices;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentLink;
@@ -27,7 +26,6 @@ final class PaymentLinks
 {
     public function __construct(
         private readonly ManualInvoices $invoices,
-        private readonly InvoiceService $engine,
         private readonly TenantContext $tenants,
         private readonly AuditLogger $audit,
     ) {}
@@ -94,9 +92,8 @@ final class PaymentLinks
             }
             self::refuseWhileMoneyIsUnsettled($invoice);
 
-            if ($invoice->status !== Invoice::VOID) {
-                $this->engine->void($invoice, 'إلغاء رابط الدفع');
-            }
+            // Owner's decision (2026-11-20): cancelling ends the link only. The invoice, what it owes and its entries stay
+            // as they are; cancelling the invoice is its own action, on its own screen and permission (invoices.void).
             $link->forceFill(['cancelled_at' => now(), 'cancelled_by' => Auth::id()])->save();
             $this->audit->log('payment_link.cancelled', $invoice, ['link' => $link->id]);
 
