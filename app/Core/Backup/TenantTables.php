@@ -36,9 +36,11 @@ final class TenantTables
         'gym_gift_memberships',
         'whatsapp_attachments', 'conversation_events', 'whatsapp_contacts',
         'payment_intents',
-        // After the invoice it pays and the staff who made it.
+        // Payment links refer to invoices and their creators.
         'payment_links',
         'gym_journal_entries', 'gym_journal_lines', 'gym_accounting_periods',
+        // After the intent and the invoice it names.
+        'payment_reviews',
         'gym_job_titles', 'gym_employees', 'gym_payroll_runs', 'gym_payroll_payouts', 'gym_payroll_items',
         'gym_document_types', 'gym_documents', 'gym_document_renewals', 'gym_document_alerts',
     ];

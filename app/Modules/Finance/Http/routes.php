@@ -6,6 +6,7 @@ use App\Modules\Finance\Http\Controllers\DuesController;
 use App\Modules\Finance\Http\Controllers\ExpenseController;
 use App\Modules\Finance\Http\Controllers\InvoiceController;
 use App\Modules\Finance\Http\Controllers\PaymentController;
+use App\Modules\Payments\Http\Controllers\PaymentReviewController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/invoices', [InvoiceController::class, 'index'])->middleware('can:invoices.view')->name('invoices.index');
@@ -36,6 +37,8 @@ Route::post('/payments/{payment}/cancel', [PaymentController::class, 'cancel'])-
 // A customer's credit (money received and not applied): applied to another invoice of theirs, or paid back.
 Route::post('/payments/{payment}/allocate', [PaymentController::class, 'allocate'])->middleware(['can:payments.record', 'throttle:20,1'])->name('payments.allocate');
 Route::post('/payments/{payment}/refund-credit', [PaymentController::class, 'refundCredit'])->middleware(['can:payments.refund', 'throttle:20,1'])->name('payments.refund-credit');
+// Paymob money confirmed but not matching its invoice (PaymentReview): closing its review moves no money.
+Route::post('/payment-reviews/{paymentReview}/close', [PaymentReviewController::class, 'close'])->whereNumber('paymentReview')->middleware(['can:payments.review', 'throttle:30,1'])->name('payment-reviews.close');
 Route::get('/payments/{payment}/receipt', [PaymentController::class, 'receipt'])->middleware('can:papers.print')->name('payments.receipt');
 Route::get('/payments/{payment}/proof', [PaymentController::class, 'proof'])->middleware('can:invoices.view')->name('payments.proof');
 

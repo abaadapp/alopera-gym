@@ -27,7 +27,7 @@ final class WhatsAppAutomation
         'membership_followup' => ['label' => 'متابعة بعد الانتهاء (تسويقية)', 'detail' => 'بعد الانتهاء بالأيام المحددة لمن لم يجدد ووافق على الرسائل التسويقية.', 'templates' => ['membership_followup'], 'timing' => 'expired_followup_days'],
         'membership_renewed' => ['label' => 'تأكيد تجديد العضوية', 'detail' => 'عند تفعيل التجديد بعد دفعه.', 'templates' => ['membership_renewed']],
         'payment_received' => ['label' => 'تأكيد الدفع', 'detail' => 'عند تسجيل دفعة مؤكدة لها إيصال (التحويل البنكي بعد تأكيده فقط).', 'templates' => ['payment_received', 'membership_paid_after_end']],
-        'gift_received' => ['label' => 'إرسال هدية الاشتراك للمستلمة', 'detail' => 'بعد اكتمال دفع الهدية، إلى رقم المستلمة بعد أن تؤكده برسالة منها.', 'templates' => ['gift_received']],
+        'gift_received' => ['label' => 'إرسال هدية الاشتراك للمستلمة', 'detail' => 'بعد اكتمال دفع الهدية، إلى رقم المستلمة بعد أن تؤكده برسالة منها، باللغة التي اختارها المُهدي: كل لغة بقالبها المعتمد.', 'templates' => ['gift_received', 'gift_received_en']],
     ];
 
     /**

@@ -12,6 +12,7 @@ import { date, dayCount, money } from '@/lib/format';
 import { invoiceStatus, invoiceType, label, paymentMethod, paymentStatus, refundStatus } from '@/lib/labels';
 import { INVOICE_STATES } from './Index';
 import PrintButton, { PrintLink } from '@/Components/Printing/PrintButton';
+import PaymentReviews, { type PaymentReviewRow } from '@/Components/PaymentReviews';
 
 interface Item {
     id: number;
@@ -113,6 +114,7 @@ interface Intent {
 interface Props {
     invoice: Invoice;
     intents: Intent[];
+    paymentReviews: PaymentReviewRow[];
     onlinePayments: boolean;
     whatsappEnabled: boolean;
     paper: PaperData;
@@ -130,7 +132,7 @@ const intentStatus: Record<string, ['green' | 'amber' | 'red' | 'gray', string]>
 
 const channelLabel: Record<string, string> = { portal: 'البوابة', website: 'الموقع', whatsapp: 'رابط واتساب', reception: 'الاستقبال' };
 
-export default function InvoiceShow({ invoice, intents, onlinePayments, whatsappEnabled, paper, moneyAccounts, creditTargets, isSale }: Props) {
+export default function InvoiceShow({ invoice, intents, paymentReviews = [], onlinePayments, whatsappEnabled, paper, moneyAccounts, creditTargets, isSale }: Props) {
     const mayPrint = useCan()('papers.print');
     const can = useCan();
     const currency = useCurrency() || invoice.currency;
@@ -384,6 +386,8 @@ export default function InvoiceShow({ invoice, intents, onlinePayments, whatsapp
                             {can('whatsapp.send') && invoice.billable_type === 'member' && isOpen && !whatsappEnabled && <p className="text-[12px] text-[#9ca3af]">واتساب غير مفعّل لهذا النادي.</p>}
                         </div>
                     </Card>
+
+                    <PaymentReviews reviews={paymentReviews} />
 
                     {intents.length > 0 && (
                         <Card className="p-4">

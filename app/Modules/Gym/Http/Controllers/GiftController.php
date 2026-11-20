@@ -82,7 +82,10 @@ final class GiftController extends Controller
             'giver_email' => ['nullable', 'email', 'max:190'],
             'recipient_name' => ['required', 'string', 'max:120'],
             'recipient_phone' => ['required', 'string', Phone::mobileRule('أدخل رقم واتساب صحيحًا للمستلمة، مثل 9XXXXXXX أو ‎+968 9XXX XXXX.')],
-            'message' => ['nullable', 'string', 'max:300'],
+            // No free-text message from the giver any more (the site's form has none either): an older gift's stays on
+            // its card. The recipient's WhatsApp language and the giver's wish to stay unnamed to her, as the buyer says at the desk.
+            'message_language' => ['nullable', 'in:'.implode(',', array_keys(GiftMembership::LANGUAGES))],
+            'is_anonymous' => ['boolean'],
             // «لاحقًا» issues the gift with its invoice open; it becomes usable once the invoice is paid in full.
             'payment_method' => ['required', 'in:later,'.implode(',', self::METHODS)],
             'payment_reference' => ['nullable', 'string', 'max:120', 'required_if:payment_method,card'],

@@ -14,6 +14,7 @@ use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentLink;
+use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobSignature;
 use App\Modules\Payments\Services\OnlinePaymentService;
@@ -508,4 +509,42 @@ class PaymentLinksTest extends TestCase
         Http::assertNothingSent();
         $this->assertSame([Invoice::PARTIALLY_PAID, '4.725'], [$link->invoice->fresh()->status, $link->invoice->fresh()->balance()], 'nothing rounded or written off');
     }
+
+    public function test_an_open_paymob_review_prevents_link_cancellation_even_after_checkout_expiry(): void
+    {
+        $club = $this->club();
+        $this->paymob($club);
+        $owner = $this->owner($club);
+        $this->actingAs($owner)->post(route('club.payment-links.store'), $this->form())->assertSessionHasNoErrors();
+        $link = $this->link($club);
+
+        $this->asTenant($club, function () use ($link) {
+            $intent = PaymentIntent::create([
+                'invoice_id' => $link->invoice_id,
+                'provider' => 'paymob',
+                'reference' => 'PT-REVIEW-'.Str::upper(Str::random(8)),
+                'amount' => $link->invoice->total,
+                'currency' => 'OMR',
+                'status' => PaymentIntent::EXPIRED,
+                'channel' => 'whatsapp',
+                'expires_at' => now()->subDays(2),
+            ]);
+            PaymentReview::create([
+                'payment_intent_id' => $intent->id,
+                'invoice_id' => $link->invoice_id,
+                'gateway' => 'paymob',
+                'transaction_id' => 'review-'.Str::lower(Str::random(12)),
+                'reason' => 'amount',
+                'expected_minor' => Money::toMinor($link->invoice->total),
+                'received_minor' => Money::toMinor($link->invoice->total) - 10,
+                'expected_currency' => 'OMR',
+                'received_currency' => 'OMR',
+                'status' => PaymentReview::OPEN,
+            ]);
+        });
+
+        $this->actingAs($owner)->post(route('club.payment-links.cancel', $link->id))->assertSessionHasErrors('error');
+        $this->assertSame([Invoice::ISSUED, null], [$link->invoice->fresh()->status, $link->fresh()->cancelled_at]);
+    }
+
 }
