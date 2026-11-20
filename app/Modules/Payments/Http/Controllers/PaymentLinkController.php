@@ -10,11 +10,14 @@ use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Payments\Models\PaymentLink;
+use App\Modules\Payments\Models\PaymentLinkHistory;
 use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Payments\Services\PaymentLinks;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -48,9 +51,10 @@ class PaymentLinkController extends Controller
     public static function props(PaymentLinks $links, OnlinePaymentService $online): array
     {
         // A user tied to a branch sees the links of that branch's invoices only, as on the invoice list.
-        $rows = PaymentLink::whereIn('invoice_id', BranchContext::scope(Invoice::query())->select('id'))
-            ->with(['invoice:id,number,status,customer_name,customer_phone,billable_id,total,paid_total,credited_total,currency,public_token', 'creator:id,name'])
-            ->latest('id')->limit(50)->get();
+        $invoices = BranchContext::scope(Invoice::query())->select('id');
+        $with = ['invoice:id,number,status,customer_name,customer_phone,billable_id,total,paid_total,credited_total,currency,public_token', 'creator:id,name'];
+        $current = PaymentLink::whereIn('invoice_id', $invoices)->with($with)->orderByRaw('coalesce(issued_at, created_at) desc')->orderByDesc('id')->limit(50)->get();
+        $earlier = PaymentLinkHistory::whereIn('invoice_id', $invoices)->with($with)->latest('issued_at')->orderByDesc('id')->limit(50)->get();
 
         return [
             'paymentLinks' => [
@@ -59,28 +63,29 @@ class PaymentLinkController extends Controller
                 'currency' => app(TenantContext::class)->require()->currency,
                 'can_cancel' => (bool) request()->user()?->can('payments.links'),
                 'can_open_invoice' => (bool) request()->user()?->can('invoices.view'),
-                'rows' => self::rows($rows, $links),
+                'rows' => self::rows($current, $earlier, $links)->take(50)->values(),
             ],
         ];
     }
 
     /**
-     * An invoice's payment link, on its page: the live one (its address, copy, WhatsApp, cancel), whether a new one can
-     * be made now, and every link it had (owner's decision: kept, never deleted).
+     * An invoice's payment link, on its page: its current link (its address, copy, WhatsApp, cancel), whether a new one
+     * can be made now, and every link it had, newest first (owner's decision: kept, never deleted).
      *
      * @return array<string, mixed>
      */
     public static function forInvoice(Invoice $invoice, PaymentLinks $links, OnlinePaymentService $online): array
     {
-        $rows = PaymentLink::where('invoice_id', $invoice->id)->with(['invoice', 'creator:id,name'])->latest('id')->get();
-        $shown = self::rows($rows, $links);
+        $current = PaymentLink::where('invoice_id', $invoice->id)->with(['invoice', 'creator:id,name'])->get();
+        $earlier = PaymentLinkHistory::where('invoice_id', $invoice->id)->with(['invoice', 'creator:id,name'])->get();
+        $shown = self::rows($current, $earlier, $links);
         $live = $shown->first(fn (array $r) => $r['live']);
 
         return [
             'on' => $online->available(),
             'valid_days' => PaymentLink::VALID_DAYS,
             'can_manage' => (bool) request()->user()?->can('payments.links'),
-            // A new link: while something is owed and no live link still runs (an expired one is replaced by it).
+            // A new link: while something is owed and no link still runs (one past its time is replaced by it).
             'can_open' => $invoice->isOpen() && ! Money::isZero($invoice->balance()) && ($live === null || $live['status'] === PaymentLink::EXPIRED),
             'live' => $live,
             'history' => $shown->values(),
@@ -88,43 +93,48 @@ class PaymentLinkController extends Controller
     }
 
     /**
-     * @param  Collection<int, PaymentLink>  $rows
+     * The links as the log shows them, newest first: each invoice's current link (PaymentLink) and its earlier ones
+     * (PaymentLinkHistory, cancelled or replaced). What was paid and what is left are the invoice's.
+     *
+     * @param  Collection<int, PaymentLink>  $current
+     * @param  Collection<int, PaymentLinkHistory>  $earlier
      * @return Collection<int, array<string, mixed>>
      */
-    private static function rows(Collection $rows, PaymentLinks $links): Collection
+    private static function rows(Collection $current, Collection $earlier, PaymentLinks $links): Collection
     {
-        $ids = $rows->pluck('invoice_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+        $ids = $current->pluck('invoice_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
         $reviewed = $ids === [] ? collect() : PaymentReview::whereIn('invoice_id', $ids)->open()->pluck('invoice_id')->map(fn ($id) => (int) $id);
         $processing = PaymentLink::processing($ids);
         // The confirmed Paymob payment of each invoice: amount, when, the receipt and Paymob's transaction number.
         $paid = $ids === [] ? collect() : Payment::whereIn('invoice_id', $ids)->where('gateway', 'paymob')->where('kind', Payment::KIND_PAYMENT)
             ->where('status', Payment::COMPLETED)->orderBy('id')->get(['invoice_id', 'amount', 'paid_at', 'receipt_number', 'gateway_transaction_id'])->keyBy('invoice_id');
         $zone = (string) config('app.timezone');
+        $common = fn (PaymentLink|PaymentLinkHistory $l, Carbon $issued) => [
+            'invoice_id' => $l->invoice_id,
+            'number' => $l->invoice?->number,
+            'description' => $l->description,
+            'customer' => $l->invoice?->customer_name,
+            'phone' => $l->invoice?->customer_phone,
+            'amount' => $l->invoice?->total,
+            'paid' => $l->invoice?->paid_total,
+            'remaining' => $l->invoice?->balance(),
+            // What the invoice owed when this link was issued (links made before v2: unknown).
+            'asked' => $l->amount,
+            'currency' => $l->invoice?->currency,
+            'by' => $l->creator?->name,
+            'at' => $issued->copy()->timezone($zone)->format('Y-m-d H:i'),
+            'expires_at' => $l->expires_at->copy()->timezone($zone)->format('Y-m-d H:i'),
+            'sort' => $issued->getTimestamp(),
+        ];
 
-        return $rows->map(function (PaymentLink $l) use ($links, $reviewed, $processing, $paid, $zone) {
+        $now = $current->map(function (PaymentLink $l) use ($links, $reviewed, $processing, $paid, $zone, $common) {
             $status = $l->status(['review' => $reviewed->contains((int) $l->invoice_id), 'processing' => $processing->contains((int) $l->invoice_id)]);
-            $live = $l->cancelled_at === null && $l->replaced_at === null;
-            // Only the live link shows its invoice's payment (an ended link took none of it after it ended).
+            $live = $l->cancelled_at === null;
             $payment = $live ? $paid->get($l->invoice_id) : null;
             $endable = $live && in_array($status, [PaymentLink::PENDING, PaymentLink::EXPIRED], true);
 
-            return [
-                'id' => $l->id,
-                'invoice_id' => $l->invoice_id,
-                'number' => $l->invoice?->number,
-                'description' => $l->description,
-                'customer' => $l->invoice?->customer_name,
-                'phone' => $l->invoice?->customer_phone,
-                'amount' => $l->invoice?->total,
-                'paid' => $l->invoice?->paid_total,
-                'remaining' => $l->invoice?->balance(),
-                'currency' => $l->invoice?->currency,
-                'status' => $status,
-                'live' => $live,
-                'by' => $l->creator?->name,
-                'at' => $l->created_at->timezone($zone)->format('Y-m-d H:i'),
-                'expires_at' => $l->expires_at->timezone($zone)->format('Y-m-d H:i'),
-                'ended_at' => ($l->cancelled_at ?? $l->replaced_at)?->timezone($zone)->format('Y-m-d H:i'),
+            return ['key' => 'l'.$l->id, 'id' => $l->id, 'status' => $status, 'live' => $live,
+                'ended_at' => $l->cancelled_at?->copy()->timezone($zone)->format('Y-m-d H:i'),
                 'payment' => $payment ? [
                     'amount' => $payment->amount,
                     'at' => $payment->paid_at?->timezone($zone)->format('Y-m-d H:i'),
@@ -135,8 +145,15 @@ class PaymentLinkController extends Controller
                 'whatsapp' => $status === PaymentLink::PENDING ? $links->whatsapp($l) : null,
                 // Paymob pages of it with no recorded payment: what the staff look up at Paymob before ending it.
                 'unanswered' => $endable ? $l->unansweredPages() : [],
-            ];
+            ] + $common($l, $l->issuedAt());
         });
+        $before = $earlier->map(fn (PaymentLinkHistory $h) => ['key' => 'h'.$h->id, 'id' => $h->id, 'status' => $h->status(), 'live' => false,
+            'ended_at' => ($h->cancelled_at ?? $h->replaced_at)?->copy()->timezone($zone)->format('Y-m-d H:i'),
+            'payment' => null, 'url' => null, 'whatsapp' => null, 'unanswered' => [],
+        ] + $common($h, $h->issued_at));
+
+        // Newest first; within one second, an invoice's current link before its earlier ones, then the newer row.
+        return $now->concat($before)->sortByDesc(fn (array $r) => [$r['sort'], $r['key'][0] === 'l' ? 1 : 0, $r['id']])->map(fn (array $r) => Arr::except($r, 'sort'))->values();
     }
 
     public function store(Request $request, PaymentLinks $links): RedirectResponse

@@ -38,6 +38,8 @@ final class TenantTables
         'payment_intents',
         // Payment links refer to invoices and their creators.
         'payment_links',
+        // Each earlier link of an invoice, after the link row and the invoice it names (payment links v2).
+        'payment_link_history',
         'gym_journal_entries', 'gym_journal_lines', 'gym_accounting_periods',
         // After the intent and the invoice it names.
         'payment_reviews',

@@ -6,6 +6,9 @@ import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, Modal, Notic
 import { clientKey } from '@/Components/Inventory/parts';
 
 export interface PaymentLinkRow {
+    /** Unique in a list: the invoice's current link (l…) or an earlier one (h…). */
+    key: string;
+    /** The current link's id (cancel); an earlier link's own id. */
     id: number;
     invoice_id: number;
     number: string | null;
@@ -18,8 +21,10 @@ export interface PaymentLinkRow {
     remaining: string | null;
     currency: string | null;
     status: 'pending' | 'processing' | 'review' | 'paid' | 'expired' | 'cancelled' | 'replaced';
-    /** Neither cancelled nor replaced: the invoice's one live link. */
+    /** The invoice's current link, not cancelled. */
     live: boolean;
+    /** What the invoice owed when this link was issued (null for a link made before v2). */
+    asked?: string | null;
     /** When it was cancelled or replaced. */
     ended_at: string | null;
     /** Paymob references of its pages that brought no recorded payment: looked up at Paymob before it is ended. */
@@ -130,7 +135,7 @@ export function PaymentLinksLog({ data }: { data: PaymentLinksData }) {
                         <thead><tr><th>الرابط</th><th>العميل</th><th>المبلغ</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
                         <tbody>
                             {data.rows.map((r) => (
-                                <tr key={r.id}>
+                                <tr key={r.key}>
                                     <td>
                                         <p className="font-medium">{r.description}</p>
                                         <p className="num text-[11px] text-muted">{r.number} · {r.at}{r.by ? ` · ${r.by}` : ''}</p>
@@ -352,7 +357,7 @@ export function InvoicePaymentLink({ invoiceId, data }: { invoiceId: number; dat
                 <div className="mt-4">
                     <p className="mb-1 text-[12px] font-medium text-[#6b7280]">سجل روابط الفاتورة</p>
                     {data.history.map((r) => (
-                        <div key={r.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line py-2 text-[12px]">
+                        <div key={r.key} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line py-2 text-[12px]">
                             <span className="text-[#6b7280]"><Ltr>{r.at}</Ltr>{r.by ? ` · ${r.by}` : ''}</span>
                             <span className="text-[#9ca3af]">{r.ended_at ? <>انتهى <Ltr>{r.ended_at}</Ltr></> : <>حتى <Ltr>{r.expires_at}</Ltr></>}</span>
                             <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge>

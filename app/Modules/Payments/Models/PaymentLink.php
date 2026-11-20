@@ -11,15 +11,20 @@ use App\Modules\Finance\Models\Payment;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * A payment link of an invoice: made from the Paymob page (with its invoice), from an issued invoice, or with the invoice
- * from the editor. Its money, checkout and callback are its invoice's (OnlinePaymentService): what was paid and what is
- * left are the invoice's. The link adds its own secure address (token; links made before v2 have none and open their
- * invoice's pay page), who made it, until when it opens a payment page, and how it ended: cancelled, or replaced by a
- * newer link once its time was over. One live link per invoice (not cancelled, not replaced: a partial unique index);
- * the ended ones stay, as the invoice's link history.
+ * An invoice's current payment link (payment links v2, design B): one row per invoice (its unique key), live, past its
+ * time, or cancelled — as the code before v2 reads it too. Made from the Paymob page (with its invoice), from an issued
+ * invoice, or with the invoice from the editor. Its money, checkout and callback are its invoice's (OnlinePaymentService):
+ * what was paid and what is left are the invoice's.
+ *
+ * A new link of the invoice takes this row's place (PaymentLinks::open): what the row held goes to PaymentLinkHistory
+ * first, with how it ended (cancelled, or replaced once its time was over), and the row gets the new link's address,
+ * time and creator. So one live link per invoice holds by the row itself, and every earlier link is kept. A v2 link has
+ * its own secure address (token); a link made before has none and opens its invoice's pay page, as sent.
  */
 class PaymentLink extends Model implements BranchOwned
 {
@@ -33,7 +38,7 @@ class PaymentLink extends Model implements BranchOwned
 
     public const CANCELLED = 'cancelled';
 
-    /** Its time was over and a newer link of the invoice took its place: it opens nothing any more. */
+    /** Its time was over and a newer link of the invoice took its place (PaymentLinkHistory): it opens nothing any more. */
     public const REPLACED = 'replaced';
 
     /** A payment of its invoice waits for the bank's final word (a signed «pending», or a payment awaiting confirmation). */
@@ -52,7 +57,8 @@ class PaymentLink extends Model implements BranchOwned
         return [
             'expires_at' => 'datetime',
             'cancelled_at' => 'datetime',
-            'replaced_at' => 'datetime',
+            'issued_at' => 'datetime',
+            'paymob_checked' => 'array',
         ];
     }
 
@@ -66,16 +72,27 @@ class PaymentLink extends Model implements BranchOwned
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    /** The invoice's live link: neither cancelled nor replaced (at most one: payment_links_one_live_per_invoice). */
-    public function scopeLive(Builder $query): Builder
+    public function history(): HasMany
     {
-        return $query->whereNull('cancelled_at')->whereNull('replaced_at');
+        return $this->hasMany(PaymentLinkHistory::class);
     }
 
-    /** The invoice's live link, if any — read under the invoice's lock where it decides anything. */
-    public static function liveFor(int $invoiceId): ?self
+    /** Not cancelled (it may be past its time: then a new link replaces it). */
+    public function scopeLive(Builder $query): Builder
     {
-        return self::where('invoice_id', $invoiceId)->live()->latest('id')->first();
+        return $query->whereNull('cancelled_at');
+    }
+
+    /** The invoice's link row (its current link), if it ever had one — read under the invoice's lock where it decides anything. */
+    public static function currentFor(int $invoiceId): ?self
+    {
+        return self::where('invoice_id', $invoiceId)->first();
+    }
+
+    /** When this link was issued: a link made before v2 has no issued_at, its row's creation is its issue. */
+    public function issuedAt(): Carbon
+    {
+        return $this->issued_at ?? $this->created_at;
     }
 
     /**
@@ -90,9 +107,6 @@ class PaymentLink extends Model implements BranchOwned
         $invoice = $this->invoice;
         if ($this->cancelled_at !== null || $invoice === null || $invoice->status === Invoice::VOID) {
             return self::CANCELLED;
-        }
-        if ($this->replaced_at !== null) {
-            return self::REPLACED;
         }
         if ($invoice->status === Invoice::PAID) {
             return self::PAID;
@@ -137,10 +151,10 @@ class PaymentLink extends Model implements BranchOwned
         return $branch ? (int) $branch : null;
     }
 
-    /** Can it still open a payment page? Not cancelled, not replaced, and not past its time. */
+    /** Can it still open a payment page? Not cancelled and not past its time. */
     public function opensCheckout(): bool
     {
-        return $this->cancelled_at === null && $this->replaced_at === null && $this->expires_at->isFuture();
+        return $this->cancelled_at === null && $this->expires_at->isFuture();
     }
 
     /**
@@ -154,7 +168,7 @@ class PaymentLink extends Model implements BranchOwned
     public function unansweredPages(): array
     {
         return PaymentIntent::where('invoice_id', $this->invoice_id)->whereNotNull('checkout_url')
-            ->where('status', '!=', PaymentIntent::PAID)->where('created_at', '>=', $this->created_at)
+            ->where('status', '!=', PaymentIntent::PAID)->where('created_at', '>=', $this->issuedAt())
             ->orderBy('id')->pluck('reference')->all();
     }
 }

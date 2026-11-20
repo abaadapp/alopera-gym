@@ -258,17 +258,14 @@ final class MemberNotifier
 
     /**
      * Where the invoice is paid online (owner's decision, 2026-11-20: the invoice's message follows its live link): the
-     * live payment link's address while it runs; the invoice's pay page when it never had a link (as before); null when
-     * its links all ended — no link is made by a message.
+     * current payment link's address while it runs; the invoice's pay page when it never had a link (as before); null
+     * when its link is cancelled or past its time — no link is made by a message.
      */
     public function payPageOrNull(Invoice $invoice): ?string
     {
-        $live = PaymentLink::liveFor($invoice->id);
-        if ($live !== null) {
-            return $live->opensCheckout() ? app(PaymentLinks::class)->url($live) : null;
-        }
-        if (PaymentLink::where('invoice_id', $invoice->id)->exists()) {
-            return null;
+        $link = PaymentLink::currentFor($invoice->id);
+        if ($link !== null) {
+            return $link->opensCheckout() ? app(PaymentLinks::class)->url($link) : null;
         }
 
         return route('site.pay.show', ['club' => $this->tenants->require()->slug, 'token' => $invoice->public_token]);

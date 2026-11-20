@@ -12,6 +12,7 @@ use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\ManualInvoices;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentLink;
+use App\Modules\Payments\Models\PaymentLinkHistory;
 use App\Modules\Payments\Models\PaymentReview;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -80,10 +81,19 @@ final class PaymentLinks
 
     /**
      * A new link for an issued invoice, for what it owes when the customer opens it. Refused, with why: nothing owed (or
-     * a single baisa, which a card may round), online payments off, a live link still running (cancel it first), or money
-     * of the invoice not settled. Once the live link's time is over, the new one replaces it (owner's decision): like a
-     * cancel, only once nothing can still come through its pages — see end(). Under the invoice's lock, as the checkout
-     * and the callback take it: two requests at once make one link (and the partial unique index stops a second).
+     * a single baisa, which a card may round), online payments off, a link still running (cancel it first), or money of
+     * the invoice not settled — a payment awaiting confirmation, money held for review, an open Paymob review, a signed
+     * «pending» or authorization at the bank, whatever time has passed.
+     *
+     * Design B (owner's decision, 2026-11-21): the invoice keeps ONE link row. Its first link is that row; a later one
+     * takes the row's place: what the row held goes to PaymentLinkHistory first (cancelled, or replaced once its time was
+     * over — then, as a cancel, only when no page of it may still take money and its unanswered Paymob pages were checked
+     * at Paymob: end()), and the row gets the new address, time and creator. Pages opened from an earlier link keep their
+     * own Paymob reference and invoice (PaymentIntent): money Paymob took on them is still matched and recorded once,
+     * whatever address the row has now.
+     *
+     * All under the invoice's lock, then the row's, as the checkout, the cancel and the callback take the invoice's: two
+     * requests at once make one link, the second seeing the first's (and the unique key on invoice_id stops a second row).
      */
     public function open(Invoice $invoice, int $days, ?string $description = null, bool $paymobChecked = false, ?Carbon $expires = null, bool $whileOff = false): PaymentLink
     {
@@ -102,34 +112,46 @@ final class PaymentLinks
             if (! $whileOff && ! $this->online->available()) {
                 throw new BusinessRuleException('payment_link.off', 'الدفع الإلكتروني غير مفعّل، فلا يفتح رابط الدفع صفحة دفع. فعّل Paymob من الإعدادات ← الربط أولًا.');
             }
-            $live = PaymentLink::where('invoice_id', $invoice->id)->live()->lockForUpdate()->latest('id')->first();
-            if ($live && $live->expires_at->isFuture()) {
-                throw new BusinessRuleException('payment_link.live', 'لهذه الفاتورة رابط دفع نشط حتى '.$live->expires_at->timezone((string) config('app.timezone'))->format('Y-m-d H:i')
+            $row = PaymentLink::where('invoice_id', $invoice->id)->lockForUpdate()->first();
+            if ($row && $row->cancelled_at === null && $row->expires_at->isFuture()) {
+                throw new BusinessRuleException('payment_link.live', 'لهذه الفاتورة رابط دفع نشط حتى '.$row->expires_at->timezone((string) config('app.timezone'))->format('Y-m-d H:i')
                     .'. انسخه أو أرسله، أو ألغه أولًا لإنشاء رابط جديد.');
             }
-            // Money of the invoice not settled stops a new link; a page still open stops it only when it ends a link (a
-            // page opened from the invoice's own address is reused by the new link, or refused: never a second one).
-            self::refuseWhileMoneyIsUnsettled($invoice, pages: $live !== null);
-            if ($live) {
-                $this->end($invoice, $live, 'replaced', $paymobChecked);
-            }
-
-            $link = PaymentLink::create([
-                'invoice_id' => $invoice->id,
+            // Money of the invoice not settled stops a new link. A page still open stops it when it ends a running link
+            // (one past its time): a cancelled link was checked when it was cancelled and opened nothing since, and a page
+            // opened from the invoice's own address is reused by the new link, or refused — never a second one.
+            $replacing = $row !== null && $row->cancelled_at === null;
+            self::refuseWhileMoneyIsUnsettled($invoice, pages: $replacing);
+            $data = [
                 'token' => Str::random(48),
                 'description' => filled($description) ? trim((string) $description) : 'فاتورة '.$invoice->number,
                 'created_by' => Auth::id(),
+                'issued_at' => now(),
+                'amount' => $invoice->balance(),
                 'expires_at' => $expires ?? now()->addDays($days),
-            ]);
-            $this->audit->log('payment_link.created', $invoice, ['link' => $link->id, 'amount' => $invoice->balance(), 'expires_at' => $link->expires_at->toIso8601String()]
-                + ($live ? ['replaces' => $live->id] : []));
+                'cancelled_at' => null,
+                'cancelled_by' => null,
+                'paymob_checked' => null,
+            ];
 
-            return $link;
+            if ($row === null) {
+                $link = PaymentLink::create(['invoice_id' => $invoice->id] + $data);
+                $this->audit->log('payment_link.created', $invoice, ['link' => $link->id, 'amount' => $link->amount, 'expires_at' => $link->expires_at->toIso8601String()]);
+
+                return $link;
+            }
+
+            $kept = $replacing ? $this->end($invoice, $row, 'replaced', $paymobChecked) : $this->archive($invoice, $row, []);
+            $row->forceFill($data)->save();
+            $this->audit->log('payment_link.created', $invoice, ['link' => $row->id, 'amount' => $row->amount, 'expires_at' => $row->expires_at->toIso8601String(), 'after' => $kept->id]);
+
+            return $row;
         });
     }
 
     /**
-     * Cancel a link: it opens nothing any more. Refused once anything was paid on its invoice (a part too: owner's
+     * Cancel a link: it opens nothing any more; it stays the invoice's link row, «cancelled», until a new link takes its
+     * place (then it goes to the history as it was). Refused once anything was paid on its invoice (a part too: owner's
      * decision), and while money of it is not settled or a page of it may still take money (refuseWhileMoneyIsUnsettled),
      * and, for pages Paymob never answered, until the staff say they checked them at Paymob (end()).
      */
@@ -138,7 +160,7 @@ final class PaymentLinks
         return DB::transaction(function () use ($link, $paymobChecked) {
             $invoice = Invoice::whereKey($link->invoice_id)->lockForUpdate()->firstOrFail();
             $link = PaymentLink::whereKey($link->id)->lockForUpdate()->firstOrFail();
-            if ($link->cancelled_at !== null || $link->replaced_at !== null) {
+            if ($link->cancelled_at !== null) {
                 return $link;
             }
             if ($invoice->status === Invoice::PAID || ! Money::isZero($invoice->paid_total)) {
@@ -148,26 +170,60 @@ final class PaymentLinks
 
             // Owner's decision (2026-11-20): cancelling ends the link only. The invoice, what it owes and its entries stay
             // as they are; cancelling the invoice is its own action, on its own screen and permission (invoices.void).
-            return $this->end($invoice, $link, 'cancelled', $paymobChecked);
+            $this->end($invoice, $link, 'cancelled', $paymobChecked);
+
+            return $link;
         });
     }
 
     /**
-     * End a link (cancelled, or replaced by a newer one), under its invoice's lock, after refuseWhileMoneyIsUnsettled.
-     * Paymob's pages of it that brought no recorded payment (PaymentLink::unansweredPages) are past their time here, but
-     * the time alone is not taken as proof that Paymob took nothing on them (owner's decision, 2026-11-20): the staff
-     * confirm they looked each up at Paymob, and that confirmation is kept with the references in the audit log.
+     * End a running link — cancelled (the row is marked) or replaced (the row goes to the history, then takes the new
+     * link) — under its invoice's lock, after refuseWhileMoneyIsUnsettled. Paymob's pages of it that brought no recorded
+     * payment (PaymentLink::unansweredPages) are past their time here, but the time alone is not taken as proof that
+     * Paymob took nothing on them (owner's decision, 2026-11-20): the staff confirm they looked each up at Paymob, and
+     * that confirmation is kept with the references, on the link and in the audit log.
+     *
+     * @return PaymentLink|PaymentLinkHistory the cancelled row, or the history entry of the replaced link
      */
-    private function end(Invoice $invoice, PaymentLink $link, string $how, bool $paymobChecked): PaymentLink
+    private function end(Invoice $invoice, PaymentLink $link, string $how, bool $paymobChecked): PaymentLink|PaymentLinkHistory
     {
         $pages = $link->unansweredPages();
         if ($pages !== [] && ! $paymobChecked) {
             throw new BusinessRuleException('payment_link.unanswered', self::unansweredMessage($pages));
         }
-        $link->forceFill($how === 'cancelled' ? ['cancelled_at' => now(), 'cancelled_by' => Auth::id()] : ['replaced_at' => now()])->save();
         $this->audit->log('payment_link.'.$how, $invoice, ['link' => $link->id] + ($pages !== [] ? ['paymob_checked' => $pages] : []));
+        if ($how === 'cancelled') {
+            $link->forceFill(['cancelled_at' => now(), 'cancelled_by' => Auth::id(), 'paymob_checked' => $pages !== [] ? $pages : null])->save();
 
-        return $link;
+            return $link;
+        }
+
+        return $this->archive($invoice, $link, ['replaced_at' => now(), 'replaced_by' => Auth::id(), 'paymob_checked' => $pages !== [] ? $pages : null]);
+    }
+
+    /**
+     * The link the row holds, kept as it is before a new link takes the row: its address, what it asked, its time, and
+     * how it ended (cancelled — by this code or by the code before v2 —, or replaced: $ended). Written once.
+     *
+     * @param  array<string, mixed>  $ended
+     */
+    private function archive(Invoice $invoice, PaymentLink $row, array $ended): PaymentLinkHistory
+    {
+        // How it ended ($ended) over what the row held (a replaced link's confirmation over the row's none).
+        return PaymentLinkHistory::create($ended + [
+            'invoice_id' => $invoice->id,
+            'payment_link_id' => $row->id,
+            'token' => $row->token,
+            'description' => $row->description,
+            'amount' => $row->amount,
+            'balance_at_end' => $invoice->balance(),
+            'created_by' => $row->created_by,
+            'issued_at' => $row->issuedAt(),
+            'expires_at' => $row->expires_at,
+            'cancelled_at' => $row->cancelled_at,
+            'cancelled_by' => $row->cancelled_by,
+            'paymob_checked' => $row->paymob_checked,
+        ]);
     }
 
     /** @param  list<string>  $pages */

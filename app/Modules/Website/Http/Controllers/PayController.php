@@ -12,6 +12,7 @@ use App\Modules\Inventory\Models\Sale;
 use App\Modules\Messaging\Services\MemberNotifier;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentLink;
+use App\Modules\Payments\Models\PaymentLinkHistory;
 use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Http\RendersSite;
@@ -48,33 +49,41 @@ class PayController extends Controller
         return Inertia::location($intent->checkout_url);
     }
 
-    /** A payment link's own address: its invoice's pay page, payable only while it is the invoice's live link. */
+    /**
+     * A payment link's own address: its invoice's pay page, payable only while it is the invoice's current link. An
+     * earlier link's address (PaymentLinkHistory) shows the invoice and why it is not payable here.
+     */
     public function link(string $token, OnlinePaymentService $online): Response
     {
-        $link = PaymentLink::where('token', $token)->firstOrFail();
-
-        return $this->payPage(Invoice::findOrFail($link->invoice_id), $link, $online);
+        return $this->payPage($this->invoiceOfLink($token), $token, $online);
     }
 
     public function startLink(string $token, OnlinePaymentService $online): HttpResponse
     {
-        $link = PaymentLink::where('token', $token)->firstOrFail();
-        $intent = $online->start(Invoice::findOrFail($link->invoice_id), 'whatsapp', $link);
+        $intent = $online->start($this->invoiceOfLink($token), 'whatsapp', $token);
 
         return Inertia::location($intent->checkout_url);
+    }
+
+    private function invoiceOfLink(string $token): Invoice
+    {
+        $invoiceId = PaymentLink::where('token', $token)->value('invoice_id') ?? PaymentLinkHistory::where('token', $token)->value('invoice_id');
+        abort_if($invoiceId === null, 404);
+
+        return Invoice::findOrFail($invoiceId);
     }
 
     /**
      * The invoice and its pay button. With payment links, through the live one only: an ended link (over, cancelled,
      * replaced) shows the invoice with why it is not payable here, and opens nothing (OnlinePaymentService::linkFor).
      */
-    private function payPage(Invoice $invoice, ?PaymentLink $via, OnlinePaymentService $online): Response
+    private function payPage(Invoice $invoice, ?string $viaToken, OnlinePaymentService $online): Response
     {
         $invoice->load('items');
         $closed = null;
         if ($invoice->isOpen()) {
             try {
-                $link = OnlinePaymentService::linkFor($invoice, $via);
+                $link = OnlinePaymentService::linkFor($invoice, $viaToken);
                 if ($link && OnlinePaymentService::singleBaisa($invoice->balance())) {
                     $closed = OnlinePaymentService::singleBaisaMessage($invoice->balance());
                 }
@@ -86,7 +95,7 @@ class PayController extends Controller
         return $this->page('Site/Pay', [
             'invoice' => $this->present($invoice),
             'token' => $invoice->public_token,
-            'start_url' => $via ? route('site.pay.link.start', ['token' => $via->token]) : route('site.pay.start', ['token' => $invoice->public_token]),
+            'start_url' => $viaToken !== null ? route('site.pay.link.start', ['token' => $viaToken]) : route('site.pay.start', ['token' => $invoice->public_token]),
             'onlinePayments' => $online->available(),
             'closed' => $closed,
         ], __('دفع الفاتورة :number', ['number' => $invoice->number]));
