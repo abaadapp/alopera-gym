@@ -122,7 +122,7 @@ class PaymentLinksV2Test extends TestCase
         return $this->asTenant($club, fn () => PaymentIntent::where('invoice_id', $invoiceId)->count());
     }
 
-    private function paymobSays(PaymentIntent $intent, int $order, array $over = []): void
+    private function paymobSays(PaymentIntent $intent, int $order, array $over = [], ?string $hmac = null): void
     {
         $obj = array_replace_recursive([
             'id' => random_int(100000, 999999), 'pending' => false, 'amount_cents' => Money::toMinor($intent->amount), 'success' => true, 'is_auth' => false,
@@ -131,7 +131,8 @@ class PaymentLinksV2Test extends TestCase
             'created_at' => '2026-11-20T10:00:00', 'currency' => 'OMR', 'error_occured' => false, 'owner' => 1,
             'source_data' => ['pan' => '1234', 'sub_type' => 'Visa', 'type' => 'card'],
         ], $over);
-        $this->postJson(route('webhooks.paymob').'?hmac='.PaymobSignature::compute($obj, self::HMAC), ['type' => 'TRANSACTION', 'obj' => $obj])->assertOk();
+        $answer = $this->postJson(route('webhooks.paymob').'?hmac='.($hmac ?? PaymobSignature::compute($obj, self::HMAC)), ['type' => 'TRANSACTION', 'obj' => $obj]);
+        $hmac === null ? $answer->assertOk() : $answer->assertUnauthorized();
     }
 
     private function lastIntent(Tenant $club, int $invoiceId): PaymentIntent
@@ -389,6 +390,34 @@ class PaymentLinksV2Test extends TestCase
         // The old address stays closed.
         $this->payThrough($club, $old->token);
         Http::assertSentCount(2);
+    }
+
+    public function test_paymobs_word_on_an_earlier_links_page_counts_only_when_signed_and_matching(): void
+    {
+        Http::fake(['*/v1/intention/' => Http::sequence()->push(['client_secret' => 'cs_m1', 'intention_order_id' => 7601], 201)->push(['client_secret' => 'cs_m2', 'intention_order_id' => 7602], 201)]);
+        [$club, $owner] = $this->ready();
+        $invoice = $this->invoice($club, $owner);
+        $this->openLink($owner, $invoice->id, ['valid_days' => 1])->assertSessionHasNoErrors();
+        $old = $this->current($club, $invoice->id);
+        $this->payThrough($club, $old->token)->assertRedirect();
+        $oldPage = $this->lastIntent($club, $invoice->id);
+        $this->travel(25)->hours();
+        $this->openLink($owner, $invoice->id, ['paymob_checked' => 1])->assertSessionHasNoErrors();
+        $events = DB::table('payment_webhook_events')->max('id') ?? 0;
+
+        // On the replaced link's page: a wrong signature, amount, currency, order or integration records nothing.
+        $this->paymobSays($oldPage, 7601, ['id' => 760101], hmac: str_repeat('0', 128));
+        $this->paymobSays($oldPage, 7601, ['id' => 760102, 'amount_cents' => Money::toMinor($oldPage->amount) - 1]);
+        $this->paymobSays($oldPage, 7601, ['id' => 760103, 'currency' => 'EGP']);
+        $this->paymobSays($oldPage, 9999, ['id' => 760104]);
+        $this->paymobSays($oldPage, 7601, ['id' => 760105, 'integration_id' => 222]);
+        $this->assertSame(
+            ['rejected_signature', 'amount_mismatch', 'amount_mismatch', 'order_mismatch', 'integration_mismatch'],
+            DB::table('payment_webhook_events')->where('id', '>', $events)->orderBy('id')->pluck('outcome')->all(),
+        );
+        $this->assertSame(0, $this->asTenant($club, fn () => Payment::where('invoice_id', $invoice->id)->count()));
+        $this->assertSame([Invoice::ISSUED, '0.000'], [$invoice->fresh()->status, $invoice->fresh()->paid_total]);
+        $this->assertNotSame($old->token, $this->current($club, $invoice->id)->token, 'the row kept the new link');
     }
 
     public function test_money_paymob_took_on_a_cancelled_links_page_is_kept_once_and_no_new_link_asks_for_it_again(): void
