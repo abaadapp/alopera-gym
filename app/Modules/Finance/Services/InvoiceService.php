@@ -15,6 +15,7 @@ use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\InvoiceItem;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Payments\Models\PaymentLink;
+use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Services\PaymentLinks;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
@@ -191,6 +192,9 @@ final class InvoiceService
             if ($invoice->status === Invoice::VOID) {
                 return $invoice;
             }
+
+            // Paymob money under review on it (PaymentReview, open): not voided, from whichever path cancels it.
+            PaymentReview::refuseVoidWhileOpen($invoice);
 
             // Net money counts: a fully refunded invoice can be voided; a transfer awaiting confirmation blocks it.
             $hasPending = Payment::where('invoice_id', $invoice->id)->where('status', Payment::PENDING)->exists();

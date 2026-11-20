@@ -30,6 +30,9 @@ use Illuminate\Support\Str;
  */
 final class PaymentLinks
 {
+    /** What staff are told when a link is not cancelled or replaced because of an open Paymob review on its invoice. */
+    public const REVIEW_REFUSED = 'هناك دفعة إلكترونية من Paymob قيد المراجعة على هذه الفاتورة، فلا يُلغى رابط الدفع ولا يُنشأ رابط بدله حتى تُغلق المراجعة بدليل. الفاتورة نفسها لا تتغير.';
+
     public function __construct(
         private readonly ManualInvoices $invoices,
         private readonly TenantContext $tenants,
@@ -191,9 +194,12 @@ final class PaymentLinks
         if ($unsettled) {
             throw new BusinessRuleException('payment_link.money', 'على رابط الدفع لهذه الفاتورة دفعة قيد التنفيذ أو المراجعة، فلا تُلغى حتى تُسوّى. راجعها من «المدفوعات والتحصيل» أولًا.');
         }
-        // PR #216: an open signed-Paymob review may represent money even when its checkout expired.
+        // PR #216/#217: an open signed-Paymob review may represent money even when its checkout expired. An invoice's
+        // void is refused by PaymentReview::refuseVoidWhileOpen before it gets here (InvoiceService::void); here it is a
+        // link being cancelled or replaced, which never touches the invoice (owner's decision, 2026-11-20): the same
+        // rule, said of the link.
         if (PaymentReview::where('invoice_id', $invoice->id)->open()->exists()) {
-            throw new BusinessRuleException('payment_link.review', 'هناك دفعة من Paymob قيد المراجعة على هذه الفاتورة. لا يمكن إلغاء الرابط أو الفاتورة حتى إغلاق المراجعة بدليل.');
+            throw new BusinessRuleException('payment_link.review', PaymentLinks::REVIEW_REFUSED);
         }
         // The bank's word is still awaited (a signed «pending», or an authorization not captured): whatever time passed.
         if (PaymentLink::processing([$invoice->id])->isNotEmpty()) {
