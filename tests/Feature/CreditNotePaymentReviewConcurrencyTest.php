@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Tenancy\TenantContext;
 use App\Models\StaffNotification;
 use App\Models\Tenant;
 use App\Models\TenantIntegration;
+use App\Models\User;
 use App\Modules\Finance\Models\CreditNote;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
@@ -64,6 +66,20 @@ class CreditNotePaymentReviewConcurrencyTest extends TestCase
     {
         $obj = [
             'id' => 990901, 'pending' => false, 'amount_cents' => 24990, 'success' => true, 'is_auth' => false, 'is_capture' => false,
+            'is_standalone_payment' => true, 'is_voided' => false, 'is_refunded' => false, 'is_3d_secure' => true, 'integration_id' => 111,
+            'has_parent_transaction' => false, 'order' => ['id' => 7960, 'merchant_order_id' => $intent->reference],
+            'created_at' => '2026-11-20T10:00:00', 'currency' => 'OMR', 'error_occured' => false, 'owner' => 1,
+            'source_data' => ['pan' => '2346', 'sub_type' => 'Visa', 'type' => 'card'],
+        ];
+
+        return app(OnlinePaymentService::class)->handleWebhook(['type' => 'TRANSACTION', 'obj' => $obj], PaymobSignature::compute($obj, self::HMAC));
+    }
+
+    /** Paymob's signed confirmation of exactly what was asked (25.000). */
+    private static function deliverMatching(PaymentIntent $intent): string
+    {
+        $obj = [
+            'id' => 990902, 'pending' => false, 'amount_cents' => 25000, 'success' => true, 'is_auth' => false, 'is_capture' => false,
             'is_standalone_payment' => true, 'is_voided' => false, 'is_refunded' => false, 'is_3d_secure' => true, 'integration_id' => 111,
             'has_parent_transaction' => false, 'order' => ['id' => 7960, 'merchant_order_id' => $intent->reference],
             'created_at' => '2026-11-20T10:00:00', 'currency' => 'OMR', 'error_occured' => false, 'owner' => 1,
@@ -142,5 +158,94 @@ class CreditNotePaymentReviewConcurrencyTest extends TestCase
 
         // From now on the next note waits for the review to be closed.
         $this->assertSame('refused:credit.payment_review', self::credit($club, $membership->invoice_id));
+    }
+
+    public function test_a_note_taken_first_then_matching_money_is_recorded_once_its_excess_kept_as_credit(): void
+    {
+        [$club, $membership, $intent] = $this->pending();
+
+        $results = $this->concurrently([
+            function (string $dir) use ($club, $membership) {
+                self::pauseAfter('insert into "credit_notes"', $dir, 0.8); // issued, under the invoice's lock, not committed
+
+                return self::credit($club, $membership->invoice_id);
+            },
+            function (string $dir) use ($intent) {
+                self::waitFor("$dir/inside");
+
+                return is_file("$dir/inside") ? self::deliverMatching($intent) : 'not at the same time';
+            },
+        ]);
+
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $this->assertSame(['credited', 'processed'], array_column($results, 'value'));
+        $this->asTenant($club, function () use ($membership) {
+            $payment = Payment::where('invoice_id', $membership->invoice_id)->sole();
+            $this->assertSame(['25.000', '5.000'], [$payment->amount, $payment->credit_amount], 'once; what the note took off is the customer\'s credit');
+            $invoice = Invoice::find($membership->invoice_id);
+            $this->assertSame([Invoice::PAID, '20.000', '5.000', '25.000'], [$invoice->status, $invoice->paid_total, $invoice->credited_total, $invoice->total]);
+            $this->assertSame(Membership::ACTIVE, $membership->fresh()->status);
+            $this->assertSame([1, 0], [CreditNote::count(), PaymentReview::count()]);
+        });
+    }
+
+    public function test_matching_money_recorded_first_then_the_note_is_issued_on_the_paid_invoice(): void
+    {
+        [$club, $membership, $intent] = $this->pending();
+
+        $results = $this->concurrently([
+            function (string $dir) use ($intent) {
+                self::pauseAfter('insert into "payments"', $dir, 0.8); // the payment written, under the invoice's lock
+
+                return self::deliverMatching($intent);
+            },
+            function (string $dir) use ($club, $membership) {
+                self::waitFor("$dir/inside");
+
+                return is_file("$dir/inside") ? self::credit($club, $membership->invoice_id) : 'not at the same time';
+            },
+        ]);
+
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $this->assertSame(['processed', 'credited'], array_column($results, 'value'));
+        $this->asTenant($club, function () use ($membership) {
+            $this->assertSame(1, Payment::where('invoice_id', $membership->invoice_id)->count(), 'recorded once, no refund made');
+            $invoice = Invoice::find($membership->invoice_id);
+            $this->assertSame([Invoice::PAID, '25.000', '5.000', '5.000'], [$invoice->status, $invoice->paid_total, $invoice->credited_total, $invoice->refundDue()], 'overpaid by the note: refunded only by a separate, capped step');
+            $this->assertSame(Membership::ACTIVE, $membership->fresh()->status);
+        });
+    }
+
+    public function test_a_note_asked_while_the_review_is_being_closed_is_refused_and_issued_once_it_is_closed(): void
+    {
+        [$club, $membership, $intent] = $this->pending();
+        $owner = User::where('tenant_id', $club->id)->firstOrFail();
+        $this->assertSame('amount_mismatch', self::deliverShort($intent));
+        $refund = ['id' => 990951, 'pending' => false, 'amount_cents' => 24990, 'success' => true, 'is_auth' => false, 'is_capture' => false,
+            'is_standalone_payment' => false, 'is_voided' => false, 'is_refunded' => false, 'is_refund' => true, 'is_3d_secure' => false,
+            'integration_id' => 111, 'has_parent_transaction' => true, 'order' => ['id' => 7960], 'created_at' => '2026-11-21T09:00:00',
+            'currency' => 'OMR', 'error_occured' => false, 'owner' => 1, 'source_data' => ['pan' => '2346', 'sub_type' => 'Visa', 'type' => 'card']];
+        app(OnlinePaymentService::class)->handleWebhook(['type' => 'TRANSACTION', 'obj' => $refund], PaymobSignature::compute($refund, self::HMAC));
+        $review = $this->asTenant($club, fn () => PaymentReview::sole());
+
+        $results = $this->concurrently([
+            function (string $dir) use ($club, $review, $owner) {
+                self::pauseAfter('update "payment_reviews"', $dir, 0.8); // closed, not yet committed
+
+                return app(TenantContext::class)->run($club, fn () => PaymentReview::closeOn($review->id, PaymentReview::REFUNDED, 'رُدّ من لوحة Paymob', $owner->id, app(AuditLogger::class)) ? 'closed' : 'already');
+            },
+            function (string $dir) use ($club, $membership) {
+                self::waitFor("$dir/inside");
+
+                return is_file("$dir/inside") ? self::credit($club, $membership->invoice_id) : 'not at the same time';
+            },
+        ]);
+
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        // Not closed yet when asked: refused, nothing written. Closed: the note is issued.
+        $this->assertSame(['closed', 'refused:credit.payment_review'], array_column($results, 'value'));
+        $this->asTenant($club, fn () => $this->assertSame([PaymentReview::REFUNDED, 0], [$review->fresh()->status, CreditNote::count()]));
+        $this->assertSame('credited', self::credit($club, $membership->invoice_id));
+        $this->asTenant($club, fn () => $this->assertSame(['5.000', 0], [Invoice::find($membership->invoice_id)->credited_total, Payment::where('invoice_id', $membership->invoice_id)->count()]));
     }
 }

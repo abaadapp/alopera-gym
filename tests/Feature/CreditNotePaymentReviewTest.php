@@ -294,4 +294,133 @@ class CreditNotePaymentReviewTest extends TestCase
         }
         $this->assertSame(['app/Modules/Finance/Services/CreditNoteService.php'], $writers);
     }
+
+    /** @return array<string, mixed> what a payment arriving after a note must leave as it was */
+    private function sums(Tenant $club, int $invoiceId): array
+    {
+        return $this->asTenant($club, fn () => Invoice::find($invoiceId)->only('total', 'subtotal', 'tax_total', 'tax_rate', 'credited_total')
+            + ['notes' => CreditNote::where('invoice_id', $invoiceId)->get(['number', 'amount', 'tax_amount'])->toArray()]);
+    }
+
+    public function test_a_note_before_paymobs_payment_leaves_the_money_recorded_once_its_excess_the_customers_credit(): void
+    {
+        $club = $this->paymobClub();
+        $owner = $this->owner($club);
+        [$membership, $intent] = $this->pendingMembership($club);
+
+        // No review yet (the customer's page is open): the note is issued, the invoice owes 20.000 of its 25.000.
+        $this->actingAs($owner)->from('/app')->post(route('club.credit-notes.store', $membership->invoice_id), $this->noteForm('5.000'))->assertSessionHasNoErrors();
+        $sums = $this->sums($club, $membership->invoice_id);
+
+        // Paymob confirms the 25.000 the page asked: what is owed is applied, the rest is the customer's credit.
+        $this->deliver($intent, 0, 670301, 'processed');
+        $this->deliver($intent, 0, 670301, 'duplicate');
+        $this->asTenant($club, function () use ($membership) {
+            $payment = Payment::where('invoice_id', $membership->invoice_id)->sole();
+            $this->assertSame(['25.000', '5.000'], [$payment->amount, $payment->credit_amount], 'recorded once, its excess kept');
+            $invoice = Invoice::find($membership->invoice_id);
+            // 20.000 applied (what was owed), the 5.000 left the customer's credit on that payment, to allocate or refund.
+            $this->assertSame([Invoice::PAID, '20.000', '5.000', '0.000'], [$invoice->status, $invoice->paid_total, $invoice->credited_total, $invoice->refundDue()]);
+            $this->assertSame('5.000', Money::sub($payment->credit_amount, $payment->credit_used));
+            $this->assertSame(Membership::ACTIVE, $membership->fresh()->status, 'paid by confirmed money');
+            $this->assertSame(0, PaymentReview::count());
+        });
+        $this->assertSame($sums, $this->sums($club, $membership->invoice_id), 'total, tax and the note as they were');
+    }
+
+    public function test_a_late_confirmation_after_a_note_is_held_whole_never_applied_or_activated(): void
+    {
+        $club = $this->paymobClub();
+        $this->owner($club);
+        [$membership, $intent] = $this->pendingMembership($club);
+        $this->asTenant($club, fn () => app(CreditNoteService::class)->issue(Invoice::findOrFail($membership->invoice_id), '5.000', 'خصم'));
+        $sums = $this->sums($club, $membership->invoice_id);
+
+        $this->travelTo($intent->expires_at->copy()->addMinutes(OnlinePaymentService::LATE_CALLBACK_MINUTES + 5));
+        $this->deliver($intent, 0, 670311, 'held_for_review');
+        $this->deliver($intent, 0, 670311, 'duplicate');
+
+        $this->asTenant($club, function () use ($membership) {
+            $payment = Payment::where('invoice_id', $membership->invoice_id)->sole();
+            $this->assertSame(['25.000', '25.000'], [$payment->amount, $payment->credit_amount], 'in the books once, all of it held');
+            $invoice = Invoice::find($membership->invoice_id);
+            $this->assertSame([Invoice::ISSUED, '0.000', '20.000'], [$invoice->status, $invoice->paid_total, $invoice->balance()], 'what is owed is still owed');
+            $this->assertSame(Membership::PENDING, $membership->fresh()->status);
+        });
+        $this->assertSame($sums, $this->sums($club, $membership->invoice_id));
+    }
+
+    public function test_a_review_closed_on_paymobs_evidence_or_by_its_recording_frees_the_note(): void
+    {
+        $club = $this->paymobClub();
+        $owner = $this->owner($club);
+
+        // Short, then refunded from Paymob's dashboard: closed on its signed refund callback, the note is issued.
+        [$short, $intent] = $this->pendingMembership($club);
+        $this->deliver($intent, 10, 670401, 'amount_mismatch');
+        $this->actingAs($owner)->from('/app')->post(route('club.credit-notes.store', $short->invoice_id), $this->noteForm('5.000'))->assertSessionHasErrors(['error' => PaymentReview::CREDIT_REFUSED]);
+        $refund = [
+            'id' => 670402, 'pending' => false, 'amount_cents' => 24990, 'success' => true, 'is_auth' => false, 'is_capture' => false,
+            'is_standalone_payment' => false, 'is_voided' => false, 'is_refunded' => false, 'is_refund' => true, 'is_3d_secure' => false,
+            'integration_id' => 111, 'has_parent_transaction' => true, 'order' => ['id' => (int) $intent->provider_order_id],
+            'created_at' => '2026-11-21T09:00:00', 'currency' => 'OMR', 'error_occured' => false, 'owner' => 1,
+            'source_data' => ['pan' => '2346', 'sub_type' => 'Visa', 'type' => 'card'],
+        ];
+        $this->app->forgetScopedInstances();
+        $this->postJson(route('webhooks.paymob').'?hmac='.PaymobSignature::compute($refund, self::HMAC), ['type' => 'TRANSACTION', 'obj' => $refund])->assertOk();
+        $review = $this->asTenant($club, fn () => PaymentReview::where('invoice_id', $short->invoice_id)->sole());
+        $this->actingAs($owner)->post(route('club.payment-reviews.close', $review->id), ['outcome' => 'refunded', 'note' => 'رُدّ من لوحة Paymob'])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->from('/app')->post(route('club.credit-notes.store', $short->invoice_id), $this->noteForm('5.000'))->assertSessionHasNoErrors();
+        $this->asTenant($club, fn () => $this->assertSame([PaymentReview::REFUNDED, '5.000'], [$review->fresh()->status, Invoice::find($short->invoice_id)->credited_total]));
+
+        // Matching money the books could not take at first (a review, «error»): the resend records it and closes it.
+        [$failed, $intent] = $this->pendingMembership($club);
+        $fail = true;
+        Payment::creating(function () use (&$fail) {
+            if ($fail) {
+                throw new \RuntimeException('database busy');
+            }
+        });
+        $this->app->forgetScopedInstances();
+        $obj = ['id' => 670411, 'pending' => false, 'amount_cents' => 25000, 'success' => true, 'is_auth' => false, 'is_capture' => false,
+            'is_standalone_payment' => true, 'is_voided' => false, 'is_refunded' => false, 'is_3d_secure' => true, 'integration_id' => 111,
+            'has_parent_transaction' => false, 'order' => ['id' => (int) $intent->provider_order_id, 'merchant_order_id' => $intent->reference],
+            'created_at' => '2026-11-20T10:00:00', 'currency' => 'OMR', 'error_occured' => false, 'owner' => 1,
+            'source_data' => ['pan' => '2346', 'sub_type' => 'Visa', 'type' => 'card']];
+        $this->postJson(route('webhooks.paymob').'?hmac='.PaymobSignature::compute($obj, self::HMAC), ['type' => 'TRANSACTION', 'obj' => $obj])->assertStatus(500);
+        $fail = false;
+        $this->actingAs($owner)->from('/app')->post(route('club.credit-notes.store', $failed->invoice_id), $this->noteForm('5.000'))->assertSessionHasErrors(['error' => PaymentReview::CREDIT_REFUSED]);
+        $this->deliver($intent, 0, 670411, 'processed');
+        $this->asTenant($club, fn () => $this->assertSame(PaymentReview::RECORDED, PaymentReview::where('invoice_id', $failed->invoice_id)->sole()->status));
+        $this->actingAs($owner)->from('/app')->post(route('club.credit-notes.store', $failed->invoice_id), $this->noteForm('5.000'))->assertSessionHasNoErrors();
+        $this->asTenant($club, function () use ($failed) {
+            $this->assertSame(1, Payment::where('invoice_id', $failed->invoice_id)->count(), 'recorded once');
+            $this->assertSame('5.000', Invoice::find($failed->invoice_id)->refundDue());
+        });
+    }
+
+    public function test_a_note_issued_before_a_review_is_refunded_once_never_beyond_what_was_overpaid(): void
+    {
+        $club = $this->paymobClub();
+        $owner = $this->owner($club);
+        [$membership] = $this->pendingMembership($club);
+        $note = $this->asTenant($club, function () use ($membership) {
+            app(PaymentService::class)->record(Invoice::findOrFail($membership->invoice_id), '25.000', 'cash');
+
+            return app(CreditNoteService::class)->issue(Invoice::findOrFail($membership->invoice_id), '5.000', 'خصم');
+        });
+        $this->review($club, $membership->invoice_id);
+
+        // Paying back the note's 5.000 is the money already in the books, not what is under review: once, and no more.
+        $refund = fn () => $this->actingAs($owner)->from('/app')->post(route('club.credit-notes.refund', $note->id), ['amount' => '5.000', 'method' => 'cash', 'client_key' => (string) Str::uuid()]);
+        $refund()->assertSessionHasNoErrors();
+        $refund()->assertSessionHasErrors('amount');
+
+        $this->asTenant($club, function () use ($membership, $note) {
+            $this->assertSame('5.000', $note->fresh()->refunded_total);
+            $this->assertSame(['20.000', '0.000'], [Invoice::find($membership->invoice_id)->paid_total, Invoice::find($membership->invoice_id)->refundDue()]);
+            $this->assertSame(1, Payment::where('invoice_id', $membership->invoice_id)->where('kind', Payment::KIND_REFUND)->count());
+            $this->assertSame(1, PaymentReview::where('invoice_id', $membership->invoice_id)->open()->count(), 'the review is untouched');
+        });
+    }
 }
