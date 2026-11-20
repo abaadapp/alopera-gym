@@ -15,6 +15,7 @@ use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Payments\Services\PaymentLinks;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -50,12 +51,6 @@ class PaymentLinkController extends Controller
         $rows = PaymentLink::whereIn('invoice_id', BranchContext::scope(Invoice::query())->select('id'))
             ->with(['invoice:id,number,status,customer_name,customer_phone,billable_id,total,paid_total,credited_total,currency,public_token', 'creator:id,name'])
             ->latest('id')->limit(50)->get();
-        $ids = $rows->pluck('invoice_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
-        $reviewed = $ids === [] ? collect() : PaymentReview::whereIn('invoice_id', $ids)->open()->pluck('invoice_id')->map(fn ($id) => (int) $id);
-        $processing = PaymentLink::processing($ids);
-        // The confirmed Paymob payment of each invoice: amount, when, the receipt and Paymob's transaction number.
-        $paid = $ids === [] ? collect() : Payment::whereIn('invoice_id', $ids)->where('gateway', 'paymob')->where('kind', Payment::KIND_PAYMENT)
-            ->where('status', Payment::COMPLETED)->orderBy('id')->get(['invoice_id', 'amount', 'paid_at', 'receipt_number', 'gateway_transaction_id'])->keyBy('invoice_id');
 
         return [
             'paymentLinks' => [
@@ -64,37 +59,84 @@ class PaymentLinkController extends Controller
                 'currency' => app(TenantContext::class)->require()->currency,
                 'can_cancel' => (bool) request()->user()?->can('payments.links'),
                 'can_open_invoice' => (bool) request()->user()?->can('invoices.view'),
-                'rows' => $rows->map(function (PaymentLink $l) use ($links, $reviewed, $processing, $paid) {
-                    $status = $l->status(['review' => $reviewed->contains((int) $l->invoice_id), 'processing' => $processing->contains((int) $l->invoice_id)]);
-                    $payment = $paid->get($l->invoice_id);
-
-                    return [
-                        'id' => $l->id,
-                        'invoice_id' => $l->invoice_id,
-                        'number' => $l->invoice?->number,
-                        'description' => $l->description,
-                        'customer' => $l->invoice?->customer_name,
-                        'phone' => $l->invoice?->customer_phone,
-                        'amount' => $l->invoice?->total,
-                        'paid' => $l->invoice?->paid_total,
-                        'remaining' => $l->invoice?->balance(),
-                        'currency' => $l->invoice?->currency,
-                        'status' => $status,
-                        'by' => $l->creator?->name,
-                        'at' => $l->created_at->format('Y-m-d H:i'),
-                        'expires_at' => $l->expires_at->format('Y-m-d H:i'),
-                        'payment' => $payment ? [
-                            'amount' => $payment->amount,
-                            'at' => $payment->paid_at?->timezone((string) config('app.timezone'))->format('Y-m-d H:i'),
-                            'receipt' => $payment->receipt_number,
-                            'transaction' => $payment->gateway_transaction_id,
-                        ] : null,
-                        'url' => $status === PaymentLink::PENDING ? $links->url($l) : null,
-                        'whatsapp' => $status === PaymentLink::PENDING ? $links->whatsapp($l) : null,
-                    ];
-                }),
+                'rows' => self::rows($rows, $links),
             ],
         ];
+    }
+
+    /**
+     * An invoice's payment link, on its page: the live one (its address, copy, WhatsApp, cancel), whether a new one can
+     * be made now, and every link it had (owner's decision: kept, never deleted).
+     *
+     * @return array<string, mixed>
+     */
+    public static function forInvoice(Invoice $invoice, PaymentLinks $links, OnlinePaymentService $online): array
+    {
+        $rows = PaymentLink::where('invoice_id', $invoice->id)->with(['invoice', 'creator:id,name'])->latest('id')->get();
+        $shown = self::rows($rows, $links);
+        $live = $shown->first(fn (array $r) => $r['live']);
+
+        return [
+            'on' => $online->available(),
+            'valid_days' => PaymentLink::VALID_DAYS,
+            'can_manage' => (bool) request()->user()?->can('payments.links'),
+            // A new link: while something is owed and no live link still runs (an expired one is replaced by it).
+            'can_open' => $invoice->isOpen() && ! Money::isZero($invoice->balance()) && ($live === null || $live['status'] === PaymentLink::EXPIRED),
+            'live' => $live,
+            'history' => $shown->values(),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, PaymentLink>  $rows
+     * @return Collection<int, array<string, mixed>>
+     */
+    private static function rows(Collection $rows, PaymentLinks $links): Collection
+    {
+        $ids = $rows->pluck('invoice_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+        $reviewed = $ids === [] ? collect() : PaymentReview::whereIn('invoice_id', $ids)->open()->pluck('invoice_id')->map(fn ($id) => (int) $id);
+        $processing = PaymentLink::processing($ids);
+        // The confirmed Paymob payment of each invoice: amount, when, the receipt and Paymob's transaction number.
+        $paid = $ids === [] ? collect() : Payment::whereIn('invoice_id', $ids)->where('gateway', 'paymob')->where('kind', Payment::KIND_PAYMENT)
+            ->where('status', Payment::COMPLETED)->orderBy('id')->get(['invoice_id', 'amount', 'paid_at', 'receipt_number', 'gateway_transaction_id'])->keyBy('invoice_id');
+        $zone = (string) config('app.timezone');
+
+        return $rows->map(function (PaymentLink $l) use ($links, $reviewed, $processing, $paid, $zone) {
+            $status = $l->status(['review' => $reviewed->contains((int) $l->invoice_id), 'processing' => $processing->contains((int) $l->invoice_id)]);
+            $live = $l->cancelled_at === null && $l->replaced_at === null;
+            // Only the live link shows its invoice's payment (an ended link took none of it after it ended).
+            $payment = $live ? $paid->get($l->invoice_id) : null;
+            $endable = $live && in_array($status, [PaymentLink::PENDING, PaymentLink::EXPIRED], true);
+
+            return [
+                'id' => $l->id,
+                'invoice_id' => $l->invoice_id,
+                'number' => $l->invoice?->number,
+                'description' => $l->description,
+                'customer' => $l->invoice?->customer_name,
+                'phone' => $l->invoice?->customer_phone,
+                'amount' => $l->invoice?->total,
+                'paid' => $l->invoice?->paid_total,
+                'remaining' => $l->invoice?->balance(),
+                'currency' => $l->invoice?->currency,
+                'status' => $status,
+                'live' => $live,
+                'by' => $l->creator?->name,
+                'at' => $l->created_at->timezone($zone)->format('Y-m-d H:i'),
+                'expires_at' => $l->expires_at->timezone($zone)->format('Y-m-d H:i'),
+                'ended_at' => ($l->cancelled_at ?? $l->replaced_at)?->timezone($zone)->format('Y-m-d H:i'),
+                'payment' => $payment ? [
+                    'amount' => $payment->amount,
+                    'at' => $payment->paid_at?->timezone($zone)->format('Y-m-d H:i'),
+                    'receipt' => $payment->receipt_number,
+                    'transaction' => $payment->gateway_transaction_id,
+                ] : null,
+                'url' => $status === PaymentLink::PENDING ? $links->url($l) : null,
+                'whatsapp' => $status === PaymentLink::PENDING ? $links->whatsapp($l) : null,
+                // Paymob pages of it with no recorded payment: what the staff look up at Paymob before ending it.
+                'unanswered' => $endable ? $l->unansweredPages() : [],
+            ];
+        });
     }
 
     public function store(Request $request, PaymentLinks $links): RedirectResponse
@@ -120,10 +162,27 @@ class PaymentLinkController extends Controller
         return back()->with('success', 'أُنشئ رابط الدفع. انسخه أو أرسله بواتساب من السجل.');
     }
 
-    public function cancel(PaymentLink $paymentLink, PaymentLinks $links): RedirectResponse
+    /** A new link for an issued invoice (from its page), or in place of its link whose time is over. */
+    public function open(Request $request, Invoice $invoice, PaymentLinks $links): RedirectResponse
     {
-        $links->cancel($paymentLink);
+        $data = $request->validate([
+            'valid_days' => ['required', 'in:'.implode(',', PaymentLink::VALID_DAYS)],
+            'description' => ['nullable', 'string', 'max:250'],
+            'paymob_checked' => ['nullable', 'boolean'],
+            'client_key' => SubmittedOnce::RULE,
+        ], self::MESSAGES);
 
-        return back()->with('success', 'أُلغي رابط الدفع وفاتورته.');
+        // Pressed twice (a double click, a retry): one link.
+        SubmittedOnce::run($data['client_key'] ?? null, 'payment-link:'.$invoice->id, fn () => $links->open($invoice, (int) $data['valid_days'], $data['description'] ?? null, (bool) ($data['paymob_checked'] ?? false))->id);
+
+        return back()->with('success', 'أُنشئ رابط الدفع. انسخه أو أرسله بواتساب.');
+    }
+
+    public function cancel(Request $request, PaymentLink $paymentLink, PaymentLinks $links): RedirectResponse
+    {
+        $data = $request->validate(['paymob_checked' => ['nullable', 'boolean']]);
+        $links->cancel($paymentLink, (bool) ($data['paymob_checked'] ?? false));
+
+        return back()->with('success', 'أُلغي رابط الدفع. الفاتورة ومستحقاتها كما هي.');
     }
 }

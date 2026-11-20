@@ -38,6 +38,9 @@ Route::post('/join', [PortalAuthController::class, 'storeRegistration'])->middle
 // Online payment: pay link (WhatsApp/portal) and gateway return page. The return page never activates anything.
 Route::get('/pay/return/{reference}', [PayController::class, 'return'])->name('site.pay.return');
 Route::get('/pay/status/{reference}', [PayController::class, 'status'])->name('site.pay.status');
+// A payment link's own address (v2): opens a page only while it is its invoice's live link.
+Route::get('/pay/link/{token}', [PayController::class, 'link'])->where('token', '[A-Za-z0-9]{48}')->name('site.pay.link');
+Route::post('/pay/link/{token}', [PayController::class, 'startLink'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:public-forms')->name('site.pay.link.start');
 Route::get('/pay/{token}', [PayController::class, 'show'])->where('token', '[A-Za-z0-9]{48}')->name('site.pay.show');
 Route::post('/pay/{token}', [PayController::class, 'start'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:public-forms')->name('site.pay.start');
 Route::get('/invoice/{token}', [PayController::class, 'invoice'])->where('token', '[A-Za-z0-9]{48}')->name('site.invoice');

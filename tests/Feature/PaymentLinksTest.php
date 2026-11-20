@@ -107,7 +107,10 @@ class PaymentLinksTest extends TestCase
         $this->assertSame(PaymentLink::PENDING, $this->asTenant($club, fn () => $link->status()));
         $this->assertEqualsWithDelta(now()->addDays(7)->getTimestamp(), $link->expires_at->getTimestamp(), 5);
 
-        $url = route('site.pay.show', ['club' => $club->slug, 'token' => $invoice->public_token]);
+        // Its own secure address (v2), not the invoice's: 48 random characters, unique.
+        $this->assertMatchesRegularExpression('/^[A-Za-z0-9]{48}$/', (string) $link->token);
+        $this->assertNotSame($invoice->public_token, $link->token);
+        $url = route('site.pay.link', ['club' => $club->slug, 'token' => $link->token]);
         $page = $this->actingAs($owner)->get(route('club.payment-links.index'))->assertOk()
             ->assertInertia(fn ($p) => $p->component('Finance/PaymentLinks/Index')
                 ->where('paymentLinks.on', true)

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { router, useForm } from '@inertiajs/react';
-import { Info, Paperclip, Plus, PlusCircle, RefreshCw, Save, Search, Send, Settings2, Trash2, UserPlus, UserRound, Users, X } from 'lucide-react';
+import { Info, Link2, Paperclip, Plus, PlusCircle, RefreshCw, Save, Search, Send, Settings2, Trash2, UserPlus, UserRound, Users, X } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import PaperFrame from '@/Components/Papers/PaperFrame';
 import { clientKey } from '@/Components/Inventory/parts';
@@ -83,7 +83,10 @@ interface Props {
     terms: number[];
     paper_lang: PaperLang;
     methods: Method[];
-    may: { issue: boolean; pay: boolean; design: boolean };
+    /** link: «إصدار الفاتورة وإنشاء رابط دفع» (the links permission, online payments on). */
+    may: { issue: boolean; pay: boolean; design: boolean; link?: boolean };
+    /** How long a payment link opens a payment page, in days. */
+    link_days?: number[];
     draft?: Draft;
     /** The paper as the editor opens: drawn by the server with the form's first values, nothing on it yet. */
     paper: Paper;
@@ -126,7 +129,7 @@ function addDays(from: string, days: number): string {
  * shelf allows): chosen when the product is taken, from its line, or from «إضافة من الإضافات». Each is billed on a line
  * of its own under the product's; the server prices them and checks they go with it.
  */
-export default function InvoiceCreate({ products, catalog_truncated, addons, tax_rate, due_days, today, terms, paper_lang, methods, may, draft, paper: firstPaper }: Props) {
+export default function InvoiceCreate({ products, catalog_truncated, addons, tax_rate, due_days, today, terms, paper_lang, methods, may, link_days = [], draft, paper: firstPaper }: Props) {
     const currency = useCurrency();
     const symbol = currencyLabel(currency);
     const m = (v: string | number) => money(v, currency);
@@ -139,6 +142,9 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
     const [pickingAddon, setPickingAddon] = useState(false);
     const [editing, setEditing] = useState<number | null>(null);
     const [discarding, setDiscarding] = useState(false);
+    // «إصدار الفاتورة وإنشاء رابط دفع»: the link's validity, asked before issuing.
+    const [linking, setLinking] = useState(false);
+    const [linkDays, setLinkDays] = useState(String(link_days.includes(7) ? 7 : (link_days[0] ?? 7)));
     const discard = useDialogRequest();
     const [kept, setKept] = useState(draft?.attachments ?? []);
     const dueRef = useRef<HTMLInputElement>(null);
@@ -279,17 +285,26 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
 
     // One key per submission: a double click or a retry saves or issues once (SubmittedOnce); a new one after success.
     const key = useRef(clientKey());
-    const submit = (issue: boolean) => {
+    const submit = (issue: boolean, withLink = false) => {
         form.transform((x) => ({
             ...payload,
             client_key: key.current,
             issue: issue ? 1 : 0,
+            // Issued and its payment link made together, or neither (one transaction on the server).
+            ...(issue && withLink ? { with_link: 1, link_days: linkDays } : {}),
             attachments: x.attachments,
             remove_attachments: x.remove_attachments,
             ...(issue && !credit ? { payment_method: x.payment_method, paid_amount: x.paid_amount, payment_date: x.payment_date, payment_reference: x.payment_reference, payment_proof: x.payment_proof } : { payment_method: 'credit' }),
         }));
         const files = d.attachments.length > 0 || (issue && !credit && d.payment_proof !== null);
-        form.post(draft ? route('club.invoices.drafts.update', draft.id) : route('club.invoices.store'), { preserveScroll: true, forceFormData: files, onSuccess: () => (key.current = clientKey()) });
+        form.post(draft ? route('club.invoices.drafts.update', draft.id) : route('club.invoices.store'), {
+            preserveScroll: true,
+            forceFormData: files,
+            onSuccess: () => {
+                key.current = clientKey();
+                setLinking(false);
+            },
+        });
     };
 
     const addFiles = (list: FileList | null) => {
@@ -310,6 +325,9 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
                     {draft && <Button variant="outline" className="text-[#b91c1c]" disabled={form.processing} icon={<Trash2 />} onClick={() => setDiscarding(true)}>حذف المسودة</Button>}
                     {/* A draft carries no money: with a payment chosen, only issuing records it. */}
                     {(credit || !may.issue) && <Button variant="outline" disabled={form.processing} icon={<Save />} onClick={() => submit(false)}>حفظ كمسودة</Button>}
+                    {may.issue && may.link && link_days.length > 0 && (
+                        <Button variant="outline" disabled={form.processing || paidNow >= total} icon={<Link2 />} onClick={() => setLinking(true)}>إصدار الفاتورة وإنشاء رابط دفع</Button>
+                    )}
                     {may.issue && <Button loading={form.processing} icon={<Send />} onClick={() => submit(true)}>إصدار الفاتورة</Button>}
                 </>}
             />
@@ -648,6 +666,23 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
                         setEditing(null);
                     }}
                 />
+            )}
+
+            {may.link && (
+                <Modal
+                    open={linking}
+                    onClose={() => setLinking(false)} size="confirm"
+                    title="إصدار الفاتورة وإنشاء رابط دفع"
+                    description="تُصدر الفاتورة ويُنشأ لها رابط دفع آمن يطلب ما تبقى منها عند فتحه، معًا أو لا شيء منهما. تنسخ الرابط أو ترسله بواتساب من صفحة الفاتورة."
+                    footer={<><Button variant="outline" onClick={() => setLinking(false)} disabled={form.processing}>تراجع</Button><Button loading={form.processing} icon={<Link2 />} onClick={() => submit(true, true)}>إصدار وإنشاء الرابط</Button></>}
+                >
+                    <Field label="صلاحية الرابط" error={errors.link_days} hint="بعدها لا يفتح الرابط صفحة دفع، ويمكن إنشاء رابط جديد من صفحة الفاتورة.">
+                        <Select value={linkDays} onChange={(e) => setLinkDays(e.target.value)}>
+                            {link_days.map((d) => <option key={d} value={String(d)}>{d === 1 ? 'يوم واحد' : d === 30 ? '30 يومًا' : `${d} أيام`}</option>)}
+                        </Select>
+                    </Field>
+                    {errors.error && <p className="mt-2 text-sm text-red-600" role="alert">{errors.error}</p>}
+                </Modal>
             )}
 
             {draft && (

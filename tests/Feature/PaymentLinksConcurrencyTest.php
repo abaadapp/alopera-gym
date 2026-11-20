@@ -70,6 +70,39 @@ class PaymentLinksConcurrencyTest extends TestCase
         }
     }
 
+    private static function newLink(Tenant $club, int $invoiceId): string
+    {
+        try {
+            return 'made:'.app(TenantContext::class)->run($club, fn () => app(PaymentLinks::class)->open(Invoice::findOrFail($invoiceId), 7)->id);
+        } catch (BusinessRuleException $e) {
+            return 'refused:'.$e->rule;
+        }
+    }
+
+    public function test_two_new_links_asked_for_one_invoice_at_once_make_one(): void
+    {
+        [$club, $link] = $this->link();
+        $this->asTenant($club, fn () => app(PaymentLinks::class)->cancel($link)); // the invoice without a live link
+
+        $results = $this->concurrently([
+            function (string $dir) use ($club, $link) {
+                self::pauseAfter('insert into "payment_links"', $dir, 0.8); // the new link written, the invoice still locked
+
+                return self::newLink($club, $link->invoice_id);
+            },
+            function (string $dir) use ($club, $link) {
+                self::waitFor("$dir/inside");
+
+                return is_file("$dir/inside") ? self::newLink($club, $link->invoice_id) : 'not at the same time';
+            },
+        ]);
+
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results, JSON_UNESCAPED_UNICODE));
+        $this->assertStringStartsWith('made:', $results[0]['value']);
+        $this->assertSame('refused:payment_link.live', $results[1]['value'], 'the second sees the first and makes none');
+        $this->asTenant($club, fn () => $this->assertSame([2, 1], [PaymentLink::where('invoice_id', $link->invoice_id)->count(), PaymentLink::where('invoice_id', $link->invoice_id)->live()->count()]));
+    }
+
     public function test_a_page_opening_while_the_link_is_cancelled(): void
     {
         [$club, $link] = $this->link();

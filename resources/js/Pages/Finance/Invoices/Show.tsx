@@ -13,6 +13,7 @@ import { invoiceStatus, invoiceType, label, paymentMethod, paymentStatus, refund
 import { INVOICE_STATES } from './Index';
 import PrintButton, { PrintLink } from '@/Components/Printing/PrintButton';
 import PaymentReviews, { type PaymentReviewRow } from '@/Components/PaymentReviews';
+import { InvoicePaymentLink, type InvoicePaymentLinkData } from '@/Components/PaymentLinks';
 
 interface Item {
     id: number;
@@ -121,6 +122,7 @@ interface Props {
     moneyAccounts: MoneyAccount[];
     creditTargets: { id: number; number: string; balance: string }[];
     isSale: boolean;
+    paymentLink: InvoicePaymentLinkData;
 }
 
 const intentStatus: Record<string, ['green' | 'amber' | 'red' | 'gray', string]> = {
@@ -132,7 +134,7 @@ const intentStatus: Record<string, ['green' | 'amber' | 'red' | 'gray', string]>
 
 const channelLabel: Record<string, string> = { portal: 'البوابة', website: 'الموقع', whatsapp: 'رابط واتساب', reception: 'الاستقبال' };
 
-export default function InvoiceShow({ invoice, intents, paymentReviews = [], onlinePayments, whatsappEnabled, paper, moneyAccounts, creditTargets, isSale }: Props) {
+export default function InvoiceShow({ invoice, intents, paymentReviews = [], onlinePayments, whatsappEnabled, paper, moneyAccounts, creditTargets, isSale, paymentLink }: Props) {
     const mayPrint = useCan()('papers.print');
     const can = useCan();
     const currency = useCurrency() || invoice.currency;
@@ -169,7 +171,7 @@ export default function InvoiceShow({ invoice, intents, paymentReviews = [], onl
                         {isOpen && can('payments.record') && <Button icon={<Wallet />} onClick={() => setPayOpen(true)}>تسجيل دفعة</Button>}
                         {canCredit && <Button variant="outline" icon={<Undo2 />} onClick={() => setCreditOpen(true)}>إشعار دائن</Button>}
                         {can('whatsapp.send') && invoice.billable_type === 'member' && isOpen && whatsappEnabled && (
-                            <ConfirmAction url={route('club.invoices.send', invoice.id)} title="إرسال عبر واتساب" message="ستُرسل الفاتورة ورابط الدفع للعضو بقالب «إرسال الفاتورة» المعتمد." confirmLabel="إرسال" tone="primary" variant="outline" size="md" icon={<MessageCircle />}>
+                            <ConfirmAction url={route('club.invoices.send', invoice.id)} title="إرسال عبر واتساب" message={paymentLink.history.length > 0 ? 'ستُرسل الفاتورة برابط الدفع النشط للعضو بقالب «إرسال الفاتورة» المعتمد. إن لم يكن لها رابط نشط فلا تُرسل حتى تنشئ رابطًا جديدًا.' : 'ستُرسل الفاتورة ورابط الدفع للعضو بقالب «إرسال الفاتورة» المعتمد.'} confirmLabel="إرسال" tone="primary" variant="outline" size="md" icon={<MessageCircle />}>
                                 إرسال عبر واتساب
                             </ConfirmAction>
                         )}
@@ -363,10 +365,13 @@ export default function InvoiceShow({ invoice, intents, paymentReviews = [], onl
                         </Card>
                     )}
 
+                    <InvoicePaymentLink invoiceId={invoice.id} data={paymentLink} />
+
                     <Card className="p-4">
                         <h2 className="mb-3 font-bold text-ink">المشاركة والدفع الإلكتروني</h2>
                         <div className="space-y-3 text-[13px]">
-                            {invoice.pay_link && (
+                            {/* An invoice with payment links is paid through its live one (the card above). */}
+                            {invoice.pay_link && paymentLink.history.length === 0 && (
                                 <div>
                                     <p className="mb-1 text-[12px] text-[#6b7280]">رابط الدفع</p>
                                     {onlinePayments ? (

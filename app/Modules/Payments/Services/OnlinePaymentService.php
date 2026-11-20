@@ -105,7 +105,7 @@ final class OnlinePaymentService
      * The checkout for what the invoice still owes. A checkout already opened for that same amount and still valid is
      * given again rather than a second one, so a customer who opens the link twice cannot pay the invoice twice.
      */
-    public function start(Invoice $invoice, string $channel = 'portal'): PaymentIntent
+    public function start(Invoice $invoice, string $channel = 'portal', ?PaymentLink $via = null): PaymentIntent
     {
         $tenant = $this->tenants->require();
         $integration = $this->integration();
@@ -127,7 +127,7 @@ final class OnlinePaymentService
         // request (two tabs, a double press), or claimed here. Paymob itself is asked after the lock is let go, so a
         // slow gateway keeps no one waiting on the invoice. The lock is the one the callback takes after its intent's
         // (intent → invoice); nothing here waits on an intent's row, so the two never wait on each other.
-        [$invoice, $intent] = DB::transaction(function () use ($invoice, $prefix, $channel) {
+        [$invoice, $intent] = DB::transaction(function () use ($invoice, $prefix, $channel, $via) {
             $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
             if (! $invoice->isOpen() || Money::isZero($invoice->balance())) {
                 throw new BusinessRuleException('invoice.not_open', 'لا يوجد مبلغ مستحق على هذه الفاتورة.');
@@ -151,11 +151,9 @@ final class OnlinePaymentService
             if ($gift && $gift->source === 'site' && ! $gift->phoneVerified()) {
                 throw new BusinessRuleException('gift.phone_unverified', 'أكّد رقم واتساب المستلمة أولًا، ثم ادفع قيمة الهدية.');
             }
-            // A payment link from the Paymob page (PaymentLink) opens a page only until its time, never once cancelled.
-            $paymentLink = PaymentLink::where('invoice_id', $invoice->id)->first();
-            if ($paymentLink && ! $paymentLink->opensCheckout()) {
-                throw new BusinessRuleException('payment_link.closed', self::closedLinkMessage($paymentLink));
-            }
+            // An invoice with payment links opens a page only through its live one, until its time (read under the
+            // invoice's lock, which cancelling and replacing a link take too); an ended link opens nothing, ever.
+            $paymentLink = self::linkFor($invoice, $via);
             // What a link still owes may end in a single baisa (a part paid at the desk): not opened online, never rounded.
             if ($paymentLink && self::singleBaisa($invoice->balance())) {
                 throw new BusinessRuleException('payment_link.single_baisa', self::singleBaisaMessage($invoice->balance()));
@@ -280,9 +278,35 @@ final class OnlinePaymentService
     /** What the customer is told by a payment link that no longer opens a page. */
     public static function closedLinkMessage(PaymentLink $link): string
     {
-        return $link->cancelled_at !== null
-            ? 'أُلغي رابط الدفع هذا. تواصل مع النادي إن كان عليك مبلغ.'
-            : 'انتهت صلاحية رابط الدفع هذا. اطلب من النادي رابطًا جديدًا، أو ادفع في الاستقبال.';
+        return match (true) {
+            $link->cancelled_at !== null => 'أُلغي رابط الدفع هذا. تواصل مع النادي إن كان عليك مبلغ.',
+            $link->replaced_at !== null => 'هذا رابط دفع قديم حلّ محله رابط أحدث. اطلب من النادي الرابط الجديد، أو ادفع في الاستقبال.',
+            default => 'انتهت صلاحية رابط الدفع هذا. اطلب من النادي رابطًا جديدًا، أو ادفع في الاستقبال.',
+        };
+    }
+
+    /**
+     * The payment link a page of this invoice opens under: its live link while that runs — asked from the link's own
+     * address ($via, which must be that live link) or from the invoice's (the member's invoice message, the portal).
+     * Null when the invoice never had a link (its pay page works as before). An invoice whose links all ended (over,
+     * cancelled or replaced) opens nothing until a new link is made; a link no longer live opens nothing, ever.
+     *
+     * @throws BusinessRuleException payment_link.closed, with what the customer is told
+     */
+    public static function linkFor(Invoice $invoice, ?PaymentLink $via = null): ?PaymentLink
+    {
+        $live = PaymentLink::liveFor($invoice->id);
+        if ($via !== null && ($live === null || $live->id !== $via->id)) {
+            throw new BusinessRuleException('payment_link.closed', self::closedLinkMessage(PaymentLink::find($via->id) ?? $via));
+        }
+        if ($live === null && ($ended = PaymentLink::where('invoice_id', $invoice->id)->latest('id')->first())) {
+            throw new BusinessRuleException('payment_link.closed', self::closedLinkMessage($ended));
+        }
+        if ($live !== null && ! $live->opensCheckout()) {
+            throw new BusinessRuleException('payment_link.closed', self::closedLinkMessage($live));
+        }
+
+        return $live;
     }
 
     /**

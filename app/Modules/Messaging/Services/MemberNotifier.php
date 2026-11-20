@@ -9,7 +9,9 @@ use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Messaging\Models\Message;
+use App\Modules\Payments\Models\PaymentLink;
 use App\Modules\Payments\Services\OnlinePaymentService;
+use App\Modules\Payments\Services\PaymentLinks;
 
 /**
  * Builds the values for each event and hands the message to WhatsAppService.
@@ -240,11 +242,33 @@ final class MemberNotifier
         return number_format((float) $amount, 3).' '.$this->tenants->require()->currency;
     }
 
-    /** The online pay page when the club takes online payments; otherwise the invoice page (no dead pay button). */
+    /**
+     * The online pay page when the club takes online payments; otherwise the invoice page (no dead pay button). With
+     * payment links, the live one's address; once they all ended, the invoice page, which says why it is not payable
+     * online (payPageOrNull).
+     */
     public function paymentLink(Invoice $invoice): string
     {
         if (! app(OnlinePaymentService::class)->available()) {
             return $this->invoiceLink($invoice);
+        }
+
+        return $this->payPageOrNull($invoice) ?? $this->invoiceLink($invoice);
+    }
+
+    /**
+     * Where the invoice is paid online (owner's decision, 2026-11-20: the invoice's message follows its live link): the
+     * live payment link's address while it runs; the invoice's pay page when it never had a link (as before); null when
+     * its links all ended — no link is made by a message.
+     */
+    public function payPageOrNull(Invoice $invoice): ?string
+    {
+        $live = PaymentLink::liveFor($invoice->id);
+        if ($live !== null) {
+            return $live->opensCheckout() ? app(PaymentLinks::class)->url($live) : null;
+        }
+        if (PaymentLink::where('invoice_id', $invoice->id)->exists()) {
+            return null;
         }
 
         return route('site.pay.show', ['club' => $this->tenants->require()->slug, 'token' => $invoice->public_token]);

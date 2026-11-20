@@ -40,7 +40,8 @@ export function InvoiceTotals({ invoice, currency }: { invoice: PublicInvoice; c
     );
 }
 
-export default function Pay({ site, seo, invoice, token, onlinePayments, closed = null }: { site: SiteInfo; seo: { title: string }; invoice: PublicInvoice; token: string; onlinePayments: boolean; closed?: string | null }) {
+/** `start_url`: where the pay button posts — a payment link's own address (v2), or the invoice's. */
+export default function Pay({ site, seo, invoice, token, start_url, onlinePayments, closed = null }: { site: SiteInfo; seo: { title: string }; invoice: PublicInvoice; token: string; start_url?: string; onlinePayments: boolean; closed?: string | null }) {
     const currency = useCurrency();
     const t = useT();
     const [busy, setBusy] = useState(false);
@@ -48,7 +49,7 @@ export default function Pay({ site, seo, invoice, token, onlinePayments, closed 
 
     const pay = () => {
         setBusy(true);
-        router.post(route('site.pay.start', { token }), {}, { onFinish: () => setBusy(false) });
+        router.post(start_url ?? route('site.pay.start', { token }), {}, { onFinish: () => setBusy(false) });
     };
 
     return (
