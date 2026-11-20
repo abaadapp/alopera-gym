@@ -17,11 +17,13 @@ use App\Modules\Messaging\Models\MessageTemplate;
 use App\Modules\Messaging\Models\WebhookEvent;
 use App\Modules\Messaging\Models\WhatsAppContact;
 use App\Modules\Messaging\Services\TemplateCatalog;
+use App\Modules\Payments\Http\Controllers\PaymentLinkController;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobClient;
 use App\Modules\Payments\Paymob\PaymobMethods;
 use App\Modules\Payments\Services\OnlinePaymentService;
+use App\Modules\Payments\Services\PaymentLinks;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -90,6 +92,8 @@ class IntegrationController extends Controller
             'methods' => PaymobMethods::states($row),
             // Pay links: the club's own invoice links (/pay/{token}) through the checkout; Paymob QuickLink is not used.
             'links' => ['on' => $ready, 'invoices_route' => 'club.invoices.index', 'create_route' => 'club.invoices.create'],
+            // «إنشاء رابط دفع» and its log, for whoever may make links (payments.links).
+            'paymentLinks' => request()->user()?->can('payments.links') ? PaymentLinkController::props(app(PaymentLinks::class), app(OnlinePaymentService::class))['paymentLinks'] : null,
             'checks' => [
                 ['label' => 'المفاتيح الثلاثة مُدخلة ورقم ربط واحد على الأقل', 'ok' => $row !== null && array_filter(PaymobClient::REQUIRED, fn ($k) => $row->credential($k) === null) === [] && PaymobClient::checkoutIds($row) !== [], 'at' => null],
                 ['label' => 'قبلت Paymob المفتاح السري وأرقام الربط', 'ok' => $row?->verified_at !== null && ! $row->failing(), 'at' => $row?->verified_at?->format('Y-m-d H:i')],

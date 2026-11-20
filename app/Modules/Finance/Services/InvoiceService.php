@@ -14,6 +14,8 @@ use App\Modules\Finance\Events\InvoiceVoided;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\InvoiceItem;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Payments\Models\PaymentLink;
+use App\Modules\Payments\Services\PaymentLinks;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -199,6 +201,10 @@ final class InvoiceService
             // A credit note already took back part of it in the books; voiding would take that part back a second time.
             if (! Money::isZero($invoice->credited_total)) {
                 throw new BusinessRuleException('invoice.credited', 'على الفاتورة إشعار دائن، فلا تُلغى. أصدر إشعارًا دائنًا بما بقي منها بدل الإلغاء.');
+            }
+            // A payment link's invoice (#213): not while a payment on it is in progress or under review.
+            if (PaymentLink::where('invoice_id', $invoice->id)->exists()) {
+                PaymentLinks::refuseWhileMoneyIsUnsettled($invoice);
             }
 
             $invoice->forceFill([

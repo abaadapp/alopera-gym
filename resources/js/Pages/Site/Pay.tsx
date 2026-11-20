@@ -40,7 +40,7 @@ export function InvoiceTotals({ invoice, currency }: { invoice: PublicInvoice; c
     );
 }
 
-export default function Pay({ site, seo, invoice, token, onlinePayments }: { site: SiteInfo; seo: { title: string }; invoice: PublicInvoice; token: string; onlinePayments: boolean }) {
+export default function Pay({ site, seo, invoice, token, onlinePayments, closed = null }: { site: SiteInfo; seo: { title: string }; invoice: PublicInvoice; token: string; onlinePayments: boolean; closed?: string | null }) {
     const currency = useCurrency();
     const t = useT();
     const [busy, setBusy] = useState(false);
@@ -83,7 +83,10 @@ export default function Pay({ site, seo, invoice, token, onlinePayments }: { sit
                             {invoice.status === 'void' && (
                                 <p className="flex items-center justify-center gap-2 rounded-2xl bg-red-50 p-4 text-sm font-medium text-red-700"><XCircle className="size-5" /> {t('هذه الفاتورة ملغاة.')}</p>
                             )}
-                            {open && onlinePayments && (
+                            {open && closed && (
+                                <p className="flex items-start gap-3 rounded-2xl bg-amber-50 p-4 text-sm text-amber-800"><XCircle className="mt-0.5 size-5 shrink-0" /> {closed}</p>
+                            )}
+                            {open && !closed && onlinePayments && (
                                 <>
                                     <Button size="lg" className="w-full rounded-full" loading={busy} onClick={pay} icon={<CreditCard className="size-5" />}>
                                         {t('ادفع الآن')} <span className="num">{money(invoice.balance, currency)}</span>
@@ -91,7 +94,7 @@ export default function Pay({ site, seo, invoice, token, onlinePayments }: { sit
                                     <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted"><Lock className="size-3.5" /> {t('دفع آمن عبر بوابة الدفع. يتم التفعيل تلقائيًا بعد تأكيد البنك.')}</p>
                                 </>
                             )}
-                            {open && !onlinePayments && (
+                            {open && !closed && !onlinePayments && (
                                 <p className="flex items-start gap-3 rounded-2xl bg-amber-50 p-4 text-sm text-amber-800">
                                     <Store className="mt-0.5 size-5 shrink-0" /> {t('الدفع الإلكتروني غير متاح حاليًا. يمكنك السداد في استقبال النادي نقدًا أو بالبطاقة أو بالتحويل البنكي.')}
                                 </p>

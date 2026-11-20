@@ -18,6 +18,7 @@ use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Payments\Events\OnlinePaymentFailed;
 use App\Modules\Payments\Models\PaymentIntent;
+use App\Modules\Payments\Models\PaymentLink;
 use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobClient;
@@ -150,6 +151,15 @@ final class OnlinePaymentService
             if ($gift && $gift->source === 'site' && ! $gift->phoneVerified()) {
                 throw new BusinessRuleException('gift.phone_unverified', 'أكّد رقم واتساب المستلمة أولًا، ثم ادفع قيمة الهدية.');
             }
+            // A payment link from the Paymob page (PaymentLink) opens a page only until its time, never once cancelled.
+            $paymentLink = PaymentLink::where('invoice_id', $invoice->id)->first();
+            if ($paymentLink && ! $paymentLink->opensCheckout()) {
+                throw new BusinessRuleException('payment_link.closed', self::closedLinkMessage($paymentLink));
+            }
+            // What a link still owes may end in a single baisa (a part paid at the desk): not opened online, never rounded.
+            if ($paymentLink && self::singleBaisa($invoice->balance())) {
+                throw new BusinessRuleException('payment_link.single_baisa', self::singleBaisaMessage($invoice->balance()));
+            }
 
             // A website order holds its stock only until reserved_until: its checkout must not outlive the hold, or the
             // customer could pay for an order already cancelled whose stock was sold to someone else.
@@ -161,6 +171,13 @@ final class OnlinePaymentService
                     throw new BusinessRuleException('order.not_payable', 'انتهت مهلة الدفع لهذا الطلب.');
                 }
                 $expires = $hold->lt($expires) ? $hold : $expires;
+            }
+            // Nor a payment link's page its link: what is paid on it after the link's time is held for review, not applied.
+            if ($paymentLink) {
+                if ($paymentLink->expires_at->lte(now()->addMinute())) {
+                    throw new BusinessRuleException('payment_link.closed', self::closedLinkMessage($paymentLink));
+                }
+                $expires = $paymentLink->expires_at->lt($expires) ? $paymentLink->expires_at : $expires;
             }
 
             // The invoice's checkouts, read in ONE statement: the claim of another request and its URL are saved at
@@ -243,6 +260,29 @@ final class OnlinePaymentService
         $intent->forceFill(['checkout_url' => $checkout['url'], 'provider_order_id' => $checkout['order_id']])->save();
 
         return $intent;
+    }
+
+    /**
+     * An amount ending in a single baisa (4.725). Until Paymob's test environment shows such an amount charged and called
+     * back to the baisa (a pre-launch condition, docs/REMAINING.md), a payment link does not take it online: the card may
+     * be charged a rounded amount, and the callback's exact check would then leave it unrecorded. Nothing is rounded.
+     */
+    public static function singleBaisa(string $amount): bool
+    {
+        return Money::toMinor($amount) % 10 !== 0;
+    }
+
+    public static function singleBaisaMessage(string $amount): string
+    {
+        return 'المبلغ المستحق '.$amount.' ينتهي ببيسة مفردة، والدفع الإلكتروني لمثل هذا المبلغ غير متاح مؤقتًا. ادفع في الاستقبال أو اطلب من النادي رابطًا جديدًا.';
+    }
+
+    /** What the customer is told by a payment link that no longer opens a page. */
+    public static function closedLinkMessage(PaymentLink $link): string
+    {
+        return $link->cancelled_at !== null
+            ? 'أُلغي رابط الدفع هذا. تواصل مع النادي إن كان عليك مبلغ.'
+            : 'انتهت صلاحية رابط الدفع هذا. اطلب من النادي رابطًا جديدًا، أو ادفع في الاستقبال.';
     }
 
     /**

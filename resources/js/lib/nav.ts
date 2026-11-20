@@ -121,6 +121,7 @@ export const NAV: NavGroup[] = [
                 tabs: [
                     { label: 'الملخص المالي', route: 'club.finance.summary', permission: 'accounting.view', clubWide: true },
                     { label: 'المدفوعات والتحصيل', route: 'club.payments.index', permission: 'invoices.view', match: 'club.payments.*' },
+                    { label: 'روابط الدفع', route: 'club.payment-links.index', permission: 'payments.links', match: 'club.payment-links.*' },
                     { label: 'المستحقات', route: 'club.dues', permission: 'dues.view' },
                     { label: 'المصروفات', route: 'club.expenses.index', permission: 'expenses.manage', match: 'club.expenses.*' },
                     { label: 'ورديات الصندوق', route: 'club.cash-shifts.index', permission: ['cash_shifts.view', 'cash_shifts.manage'], match: 'club.cash-shifts.*' },
