@@ -546,5 +546,4 @@ class PaymentLinksTest extends TestCase
         $this->actingAs($owner)->post(route('club.payment-links.cancel', $link->id))->assertSessionHasErrors('error');
         $this->assertSame([Invoice::ISSUED, null], [$link->invoice->fresh()->status, $link->fresh()->cancelled_at]);
     }
-
 }
