@@ -54,6 +54,9 @@ const STATUS: Record<PaymentLinkRow['status'], { label: string; tone: 'green' | 
 
 const CANCEL_MESSAGE = 'يُلغى رابط الدفع فقط، فلا يفتح صفحة دفع بعد ذلك. تبقى الفاتورة ومستحقاتها وقيودها كما هي، وإلغاء الفاتورة إجراء منفصل من صفحتها.';
 
+/** A date and time inside Arabic text: kept left to right («2026-11-27 22:23», not reversed by the paragraph). */
+const Ltr = ({ children }: { children: string | null }) => <bdi dir="ltr" className="num">{children}</bdi>;
+
 const DAYS: Record<number, string> = { 1: 'يوم واحد', 3: '3 أيام', 7: '7 أيام', 30: '30 يومًا' };
 
 async function copy(text: string) {
@@ -144,13 +147,13 @@ export function PaymentLinksLog({ data }: { data: PaymentLinksData }) {
                                     </td>
                                     <td>
                                         <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge>
-                                        {r.status === 'pending' && <p className="num mt-0.5 text-[11px] text-muted">حتى {r.expires_at}</p>}
-                                        {(r.status === 'cancelled' || r.status === 'replaced') && r.ended_at && <p className="num mt-0.5 text-[11px] text-muted">{r.ended_at}</p>}
+                                        {r.status === 'pending' && <p className="mt-0.5 text-[11px] text-muted">حتى <Ltr>{r.expires_at}</Ltr></p>}
+                                        {(r.status === 'cancelled' || r.status === 'replaced') && r.ended_at && <p className="mt-0.5 text-[11px] text-muted"><Ltr>{r.ended_at}</Ltr></p>}
                                         {r.status === 'processing' && <p className="mt-0.5 text-[11px] text-muted">دفعة تنتظر نتيجة البنك.</p>}
                                         {r.status === 'review' && <p className="mt-0.5 text-[11px] text-muted">دفعة من Paymob لم تطابق: راجعها من الفاتورة.</p>}
                                         {r.payment && r.status !== 'cancelled' && (
-                                            <p className="num mt-0.5 text-[11px] text-muted">
-                                                دُفع {Number(r.payment.amount).toFixed(3)}{r.payment.at ? ` · ${r.payment.at}` : ''}{r.payment.transaction ? ` · عملية ${r.payment.transaction}` : ''}
+                                            <p className="mt-0.5 text-[11px] text-muted">
+                                                دُفع <Ltr>{Number(r.payment.amount).toFixed(3)}</Ltr>{r.payment.at && <> · <Ltr>{r.payment.at}</Ltr></>}{r.payment.transaction && <> · عملية <Ltr>{r.payment.transaction}</Ltr></>}
                                             </p>
                                         )}
                                     </td>
@@ -159,7 +162,8 @@ export function PaymentLinksLog({ data }: { data: PaymentLinksData }) {
                                             {r.status === 'pending' && r.url && <Button variant="outline" size="sm" onClick={() => copy(r.url!)} icon={<Copy />}>نسخ</Button>}
                                             {r.status === 'pending' && r.whatsapp && <Button variant="outline" size="sm" href={r.whatsapp} external icon={<MessageCircle />}>واتساب</Button>}
                                             {data.can_open_invoice && <Button variant="ghost" size="sm" href={route('club.invoices.show', r.invoice_id)} icon={<ExternalLink />}>الفاتورة</Button>}
-                                            {r.status === 'pending' && r.url && data.can_cancel && <CancelLinkButton row={r} />}
+                                            {/* A part paid: not cancelled (owner's decision). */}
+                                            {r.status === 'pending' && r.url && data.can_cancel && Number(r.paid ?? 0) === 0 && <CancelLinkButton row={r} />}
                                             {!(r.status === 'pending' && r.url) && !data.can_open_invoice && <span className="text-muted">—</span>}
                                         </div>
                                     </td>
@@ -301,15 +305,15 @@ export function InvoicePaymentLink({ invoiceId, data }: { invoiceId: number; dat
                 <div className="space-y-3 text-[13px]">
                     <div className="flex flex-wrap items-center gap-2">
                         <Badge tone={STATUS[live.status].tone}>{STATUS[live.status].label}</Badge>
-                        {live.status === 'pending' && <span className="num text-[12px] text-[#6b7280]">صالح حتى {live.expires_at}</span>}
-                        {live.status === 'expired' && <span className="num text-[12px] text-[#6b7280]">انتهى في {live.expires_at}</span>}
+                        {live.status === 'pending' && <span className="text-[12px] text-[#6b7280]">صالح حتى <Ltr>{live.expires_at}</Ltr></span>}
+                        {live.status === 'expired' && <span className="text-[12px] text-[#6b7280]">انتهى في <Ltr>{live.expires_at}</Ltr></span>}
                     </div>
                     <Amounts row={live} />
                     {live.status === 'processing' && <p className="text-[12px] text-[#1d4ed8]">دفعة تنتظر نتيجة البنك النهائية. لا يُلغى الرابط ولا يُستبدل حتى تصل.</p>}
                     {live.status === 'review' && <p className="text-[12px] text-[#b91c1c]">دفعة من Paymob لم تطابق الفاتورة وهي قيد المراجعة أدناه. لا يُلغى الرابط حتى تُغلق بدليل.</p>}
                     {live.payment && (
-                        <p className="num rounded-[10px] bg-[#f0fdf4] px-3 py-2 text-[12px] text-[#166534]">
-                            دُفع {Number(live.payment.amount).toFixed(3)}{live.payment.at ? ` · ${live.payment.at}` : ''}{live.payment.receipt ? ` · إيصال ${live.payment.receipt}` : ''}{live.payment.transaction ? ` · عملية Paymob ${live.payment.transaction}` : ''}
+                        <p className="rounded-[10px] bg-[#f0fdf4] px-3 py-2 text-[12px] text-[#166534]">
+                            دُفع <Ltr>{Number(live.payment.amount).toFixed(3)}</Ltr>{live.payment.at && <> · <Ltr>{live.payment.at}</Ltr></>}{live.payment.receipt && <> · إيصال <Ltr>{live.payment.receipt}</Ltr></>}{live.payment.transaction && <> · عملية Paymob <Ltr>{live.payment.transaction}</Ltr></>}
                         </p>
                     )}
                     {live.url && (
@@ -322,7 +326,7 @@ export function InvoicePaymentLink({ invoiceId, data }: { invoiceId: number; dat
                         <div className="flex flex-wrap gap-2">
                             {live.url && <Button variant="outline" size="sm" onClick={() => copy(live.url!)} icon={<Copy />}>نسخ</Button>}
                             {live.whatsapp && <Button variant="outline" size="sm" href={live.whatsapp} external icon={<MessageCircle />}>مشاركة بواتساب</Button>}
-                            {data.can_manage && live.status === 'pending' && <CancelLinkButton row={live} />}
+                            {data.can_manage && live.status === 'pending' && Number(live.paid ?? 0) === 0 && <CancelLinkButton row={live} />}
                         </div>
                     )}
                 </div>
@@ -349,8 +353,8 @@ export function InvoicePaymentLink({ invoiceId, data }: { invoiceId: number; dat
                     <p className="mb-1 text-[12px] font-medium text-[#6b7280]">سجل روابط الفاتورة</p>
                     {data.history.map((r) => (
                         <div key={r.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-line py-2 text-[12px]">
-                            <span className="text-[#6b7280]"><span className="num">{r.at}</span>{r.by ? ` · ${r.by}` : ''}</span>
-                            <span className="num text-[#9ca3af]">{r.ended_at ? `انتهى ${r.ended_at}` : `حتى ${r.expires_at}`}</span>
+                            <span className="text-[#6b7280]"><Ltr>{r.at}</Ltr>{r.by ? ` · ${r.by}` : ''}</span>
+                            <span className="text-[#9ca3af]">{r.ended_at ? <>انتهى <Ltr>{r.ended_at}</Ltr></> : <>حتى <Ltr>{r.expires_at}</Ltr></>}</span>
                             <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge>
                         </div>
                     ))}
