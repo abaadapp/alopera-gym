@@ -52,6 +52,8 @@ final class SystemRoles
                     'documents.confidential',
                     // Undoing money, the books' closed months and the drawer's shifts stay the owner's until granted by name.
                     'payments.cancel', 'accounting.close', 'accounting.reopen', 'cash_shifts.manage', 'cash_shifts.view',
+                    // Paymob money that did not match its invoice: the owner's to review, or whom the owner names.
+                    'payments.review',
                 ])),
                 'home' => 'club.dashboard',
             ],

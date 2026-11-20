@@ -22,6 +22,7 @@ use App\Modules\Inventory\Models\Sale;
 use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Services\ConversationAccess;
 use App\Modules\Payments\Models\PaymentIntent;
+use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Website\Models\ContactMessage;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
@@ -115,6 +116,35 @@ final class StaffAlerts
                 },
             route('club.invoices.show', $payment->invoice_id),
             fn (User $u) => $this->branches->allows($u, $payment->owningBranchId()));
+    }
+
+    /**
+     * Paymob confirmed money that did not match its invoice (PaymentReview): whoever reviews such payments
+     * (payments.review — the owner, or whom the owner grants it by name) is told what was expected, what came, the
+     * references to find it at Paymob and why it was not recorded. Nothing was recorded or activated.
+     */
+    public function paymentReview(PaymentReview $review): void
+    {
+        $review->loadMissing('invoice:id,number', 'intent:id,reference');
+        $received = $review->received() !== null ? trim($review->received().' '.($review->received_currency ?? '')) : 'غير معروف';
+        // Within the alert's 300 characters, what to look for first: the invoice, the two amounts, why, the references.
+        // A review handed over for «pending» and then confirmed with a mismatch is told again, under its new reason.
+        $this->notifier->notify('payments.review', 'payment-review:'.$review->id.':'.$review->reason, 'payment',
+            match ($review->reason) {
+                'pending' => 'عملية Paymob على الفاتورة '.$review->invoice?->number.' قيد التنفيذ لدى البنك منذ يوم دون نتيجة: '.$review->expected().' '.$review->expected_currency
+                    .'. عملية Paymob '.$review->transaction_id.'، المرجع '.$review->intent?->reference
+                    .'. تحقق منها في لوحة Paymob؛ لا تُفتح صفحة دفع ثانية للفاتورة حتى تُحسم.',
+                'error' => 'دفعة Paymob مؤكدة ومطابقة على الفاتورة '.$review->invoice?->number.' بمبلغ '.$review->expected().' '.$review->expected_currency
+                    .' تعذّر تسجيلها بسبب خطأ في النظام. عملية Paymob '.$review->transaction_id.'، المرجع '.$review->intent?->reference
+                    .'. لم يُسجَّل مبلغ ولم يُفعَّل شيء؛ تُسجَّل تلقائيًا إن أعادت Paymob الإشعار، وإلا فراجعها.',
+                default => 'دفعة Paymob مؤكدة لا تطابق الفاتورة '.$review->invoice?->number
+                    .': المطلوب '.$review->expected().' '.$review->expected_currency.'، المستلم '.$received
+                    .'. '.(PaymentReview::REASONS[$review->reason] ?? $review->reason)
+                    .'. عملية Paymob '.$review->transaction_id.'، المرجع '.$review->intent?->reference
+                    .'. لم يُسجَّل مبلغ ولم يُفعَّل شيء.',
+            },
+            route('club.invoices.show', $review->invoice_id),
+            fn (User $u) => $this->branches->allows($u, $review->owningBranchId()));
     }
 
     /** Once a day: how many memberships end within a week — for each recipient, in their own branch when tied to one. */

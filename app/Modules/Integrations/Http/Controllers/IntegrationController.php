@@ -45,7 +45,7 @@ class IntegrationController extends Controller
 
     private const WEBHOOK_OUTCOMES = [
         'processed' => 'سُجّلت الدفعة', 'duplicate' => 'مكرر — لم يُسجَّل مرة أخرى', 'failed_payment' => 'دفع مرفوض من البنك',
-        'amount_mismatch' => 'المبلغ لا يطابق — لم يُسجَّل', 'rejected_signature' => 'توقيع غير صحيح — رُفض', 'unknown_intent' => 'عملية غير معروفة',
+        'amount_mismatch' => 'المبلغ لا يطابق — لم يُسجَّل، وفُتحت مراجعة على الفاتورة', 'pending' => 'قيد التنفيذ لدى البنك — بانتظار النتيجة', 'rejected_signature' => 'توقيع غير صحيح — رُفض', 'unknown_intent' => 'عملية غير معروفة',
         'ignored_refund' => 'رد أو إلغاء من Paymob — لم يُسجَّل دفعة', 'order_mismatch' => 'رقم الطلب لا يطابق — لم يُسجَّل',
         'error' => 'لم تُسجَّل الدفعة (خطأ عند تسجيلها) — تُسجَّل إن أُعيد الإشعار، وإلا تُطابق من لوحة Paymob',
         'recorded_with_error' => 'سُجّلت الدفعة — وتعذّرت خطوة بعدها (في سجل الأخطاء)',

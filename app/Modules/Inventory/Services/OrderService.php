@@ -19,6 +19,8 @@ use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\Sale;
+use App\Modules\Payments\Models\PaymentReview;
+use App\Modules\Payments\Services\OnlinePaymentService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -245,6 +247,32 @@ final class OrderService
         }));
     }
 
+    /**
+     * The scheduler's cancellation of an order whose time to pay is over — not while Paymob confirmed money for it that
+     * did not match and the club checks it (PaymentReview), nor while the bank has not decided an attempt of it (handed
+     * to staff after a day): the stock stays held until that is settled. Read under the invoice's lock, the lock the
+     * review is written under.
+     */
+    private function expire(Sale $sale): bool
+    {
+        $invoice = $sale->invoice_id ? Invoice::find($sale->invoice_id) : null;
+        if ($invoice && app(OnlinePaymentService::class)->awaitsBank($invoice)) {
+            return false;
+        }
+
+        return DB::transaction(function () use ($sale) {
+            if ($sale->invoice_id) {
+                $invoice = Invoice::whereKey($sale->invoice_id)->lockForUpdate()->first();
+                if (PaymentReview::where('invoice_id', $sale->invoice_id)->open()->exists() || ($invoice && OnlinePaymentService::unresolvedAtBank($invoice) !== null)) {
+                    return false;
+                }
+            }
+            $this->cancel($sale, 'انتهت مهلة الدفع الإلكتروني');
+
+            return true;
+        });
+    }
+
     /** The invoice of a pending order was voided from the finance screens: release the order too. */
     public function cancelForVoidedInvoice(Invoice $invoice): void
     {
@@ -265,8 +293,9 @@ final class OrderService
             ->whereNotNull('reserved_until')->where('reserved_until', '<', now()->subMinutes(self::PAYMENT_GRACE_MINUTES))->orderBy('id')
             ->each(function (Sale $sale) use (&$count) {
                 try {
-                    $this->audit->as('system', null, 'scheduler', fn () => $this->cancel($sale, 'انتهت مهلة الدفع الإلكتروني'));
-                    $count++;
+                    if ($this->audit->as('system', null, 'scheduler', fn () => $this->expire($sale))) {
+                        $count++;
+                    }
                 } catch (BusinessRuleException) {
                     // Paid meanwhile, or a payment awaits confirmation: staff decide.
                 }

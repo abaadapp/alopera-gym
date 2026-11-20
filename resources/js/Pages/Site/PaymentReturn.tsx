@@ -77,6 +77,16 @@ export default function PaymentReturn({ site, seo, reference, status: initial, h
     }, [status, reference]);
 
     const view = (() => {
+        // Paymob confirmed a payment that did not match what was asked, and the club checks it: neither a failure nor
+        // «paid», and not a reason to pay again.
+        if (status === 'review') {
+            return {
+                icon: <Clock className="size-14 text-amber-500" />,
+                title: t('جارٍ التحقق من الدفع'),
+                text: t('استلمنا نتيجة الدفع، وجارٍ التحقق منها. يرجى عدم إعادة الدفع حتى تتأكد الحالة.'),
+                tone: 'bg-amber-50',
+            };
+        }
         // Confirmed and in the books, but held for the club's review: neither a failure nor «all done».
         if (status === 'paid' && held) {
             return {
