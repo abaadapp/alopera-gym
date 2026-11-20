@@ -330,6 +330,66 @@ class PaymentLinksV2Test extends TestCase
         $this->assertSame(['5.000', '20.000'], [$this->asTenant($club, fn () => Payment::where('invoice_id', $part->id)->where('gateway', null)->value('amount')), $part->fresh()->paid_total]);
     }
 
+    public function test_a_late_callback_for_a_replaced_links_page_is_held_once_for_review_never_applied_twice(): void
+    {
+        Http::fake(['*/v1/intention/' => Http::sequence()->push(['client_secret' => 'cs_l1', 'intention_order_id' => 7501], 201)->push(['client_secret' => 'cs_l2', 'intention_order_id' => 7502], 201)]);
+        [$club, $owner] = $this->ready();
+        $invoice = $this->invoice($club, $owner);
+        $this->openLink($owner, $invoice->id, ['valid_days' => 1])->assertSessionHasNoErrors();
+        [$old] = $this->links($club, $invoice->id);
+        $this->payThrough($club, $old)->assertRedirect(); // the customer reached Paymob on the old link's page
+        $oldPage = $this->lastIntent($club, $invoice->id);
+
+        // Its time over, checked at Paymob: replaced; the new link is paid, once.
+        $this->travel(25)->hours();
+        $this->openLink($owner, $invoice->id, ['paymob_checked' => 1])->assertSessionHasNoErrors();
+        [, $new] = $this->links($club, $invoice->id);
+        $this->payThrough($club, $new)->assertRedirect();
+        $newPage = $this->lastIntent($club, $invoice->id);
+        $this->assertNotSame($oldPage->id, $newPage->id);
+        $this->paymobSays($newPage, 7502, ['id' => 750200]);
+        $journal = fn () => DB::table('gym_journal_lines')->count();
+        $this->assertSame([Invoice::PAID, '20.000'], [$invoice->fresh()->status, $invoice->fresh()->paid_total]);
+        $linesAfterPayment = $journal();
+
+        // Paymob's word on the old page comes late (money Paymob says it took after all), twice: kept once, as the
+        // customer's credit held for review — the invoice is not paid twice, nothing applied to it, no money lost.
+        $this->paymobSays($oldPage, 7501, ['id' => 750100]);
+        $this->paymobSays($oldPage, 7501, ['id' => 750100]);
+        $this->assertSame([Invoice::PAID, '20.000'], [$invoice->fresh()->status, $invoice->fresh()->paid_total]);
+        $payments = $this->asTenant($club, fn () => Payment::where('invoice_id', $invoice->id)->where('gateway', 'paymob')->orderBy('id')->get());
+        $this->assertCount(2, $payments, 'the late money is recorded, once');
+        $this->assertSame(['750200', '750100'], $payments->pluck('gateway_transaction_id')->all());
+        $this->assertSame('20.000', $this->asTenant($club, fn () => $payments[1]->creditLeft()), 'held as the customer\'s credit, applied to nothing');
+        $this->assertSame(1, $this->asTenant($club, fn () => Payment::where('invoice_id', $invoice->id)->gatewayCreditLeft()->count()));
+        $this->assertGreaterThan($linesAfterPayment, $journal(), 'the money received is in the books');
+        // The old link stays replaced and still opens nothing.
+        $this->asTenant($club, fn () => $this->assertSame(PaymentLink::REPLACED, $old->fresh()->status()));
+        $this->payThrough($club, $old);
+        Http::assertSentCount(2);
+    }
+
+    public function test_a_subscription_paid_in_part_is_not_activated_until_its_link_takes_what_is_left(): void
+    {
+        Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_sub', 'intention_order_id' => 7601], 201)]);
+        [$club, $owner] = $this->ready();
+        $plan = $this->plan($club, ['price' => 25]);
+        $membership = $this->asTenant($club, fn () => app(MembershipService::class)->sell($this->member($club), $plan));
+        $invoice = $this->asTenant($club, fn () => Invoice::findOrFail($membership->invoice_id));
+        $this->asTenant($club, fn () => app(PaymentService::class)->record($invoice->fresh(), '5.000', 'cash'));
+        $this->asTenant($club, fn () => $this->assertSame(Membership::PENDING, $membership->fresh()->status, 'a part paid activates nothing'));
+
+        $this->openLink($owner, $invoice->id)->assertSessionHasNoErrors();
+        $this->actingAs($owner)->get(route('club.invoices.show', $invoice->id))->assertInertia(fn ($p) => $p
+            ->where('paymentLink.live.paid', '5.000')->where('paymentLink.live.remaining', '20.000'));
+        $this->payThrough($club, $this->links($club, $invoice->id)[0])->assertRedirect();
+        $intent = $this->lastIntent($club, $invoice->id);
+        $this->assertSame('20.000', $intent->amount, 'the page asks what is left');
+        $this->paymobSays($intent, 7601, ['id' => 760100]);
+        $this->asTenant($club, fn () => $this->assertSame(Membership::ACTIVE, $membership->fresh()->status));
+        $this->assertSame([Invoice::PAID, '25.000'], [$invoice->fresh()->status, $invoice->fresh()->paid_total]);
+    }
+
     public function test_nothing_owed_a_single_baisa_or_payments_off_makes_no_link(): void
     {
         Http::fake();
