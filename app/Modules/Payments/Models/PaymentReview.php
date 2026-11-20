@@ -3,6 +3,7 @@
 namespace App\Modules\Payments\Models;
 
 use App\Core\Audit\AuditLogger;
+use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
 use App\Core\Tenancy\BelongsToTenant;
 use App\Core\Tenancy\BranchOwned;
@@ -59,6 +60,9 @@ class PaymentReview extends Model implements BranchOwned
     /** What the customer is told while it is open. */
     public const CUSTOMER_MESSAGE = 'استلمنا نتيجة الدفع، وجارٍ التحقق منها. يرجى عدم إعادة الدفع حتى تتأكد الحالة.';
 
+    /** What staff are told when an invoice is not voided because of it (refuseVoidWhileOpen). */
+    public const VOID_REFUSED = 'لا يمكن إلغاء هذه الفاتورة لوجود دفعة إلكترونية قيد المراجعة. يرجى مراجعة مسؤول النظام.';
+
     protected $guarded = ['id', 'tenant_id'];
 
     protected function casts(): array
@@ -88,6 +92,21 @@ class PaymentReview extends Model implements BranchOwned
     public function scopeOpen(Builder $query): Builder
     {
         return $query->where($query->qualifyColumn('status'), self::OPEN);
+    }
+
+    /**
+     * An invoice with an open review is not voided, whatever cancels it — the invoice screen, a membership, gift or
+     * website order cancelled, a payment link (all through InvoiceService::void): the money under review may be the
+     * customer's payment for it, and a void invoice would leave that money nothing to pay. Asked under the invoice's lock
+     * (FOR UPDATE), the lock a review is written under (OnlinePaymentService::keepForReview: the intent, then the
+     * invoice): a review written first is seen here; one coming after the void waits for it and is kept all the same,
+     * open on the void invoice, its money not lost. A closed review no longer stops it. Moves no money.
+     */
+    public static function refuseVoidWhileOpen(Invoice $invoice): void
+    {
+        if (self::where('invoice_id', $invoice->id)->open()->exists()) {
+            throw new BusinessRuleException('invoice.payment_review', self::VOID_REFUSED);
+        }
     }
 
     /** Its invoice's branch: a user tied to another branch gets 404 for it, as for the invoice. */
