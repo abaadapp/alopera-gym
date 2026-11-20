@@ -71,6 +71,20 @@ class InvoiceVoidPaymentReviewConcurrencyTest extends TestCase
         return app(OnlinePaymentService::class)->handleWebhook(['type' => 'TRANSACTION', 'obj' => $obj], PaymobSignature::compute($obj, self::HMAC));
     }
 
+    /** Paymob's signed confirmation of exactly what was asked (25.000). */
+    private static function deliverMatching(PaymentIntent $intent): string
+    {
+        $obj = [
+            'id' => 990802, 'pending' => false, 'amount_cents' => 25000, 'success' => true, 'is_auth' => false, 'is_capture' => false,
+            'is_standalone_payment' => true, 'is_voided' => false, 'is_refunded' => false, 'is_3d_secure' => true, 'integration_id' => 111,
+            'has_parent_transaction' => false, 'order' => ['id' => 7950, 'merchant_order_id' => $intent->reference],
+            'created_at' => '2026-11-20T10:00:00', 'currency' => 'OMR', 'error_occured' => false, 'owner' => 1,
+            'source_data' => ['pan' => '2346', 'sub_type' => 'Visa', 'type' => 'card'],
+        ];
+
+        return app(OnlinePaymentService::class)->handleWebhook(['type' => 'TRANSACTION', 'obj' => $obj], PaymobSignature::compute($obj, self::HMAC));
+    }
+
     private static function void(Tenant $club, int $invoiceId): string
     {
         try {
@@ -135,5 +149,58 @@ class InvoiceVoidPaymentReviewConcurrencyTest extends TestCase
             $this->assertSame(0, Payment::where('invoice_id', $membership->invoice_id)->count());
         });
         $this->assertSame(1, StaffNotification::withoutGlobalScopes()->where('tenant_id', $club->id)->where('key', 'like', 'payment-review:%')->count());
+    }
+
+    public function test_matching_money_recorded_first_makes_the_void_wait_and_refuse(): void
+    {
+        [$club, $membership, $intent] = $this->pending();
+
+        $results = $this->concurrently([
+            function (string $dir) use ($intent) {
+                self::pauseAfter('insert into "payments"', $dir, 0.8); // the payment written, under the invoice's lock
+
+                return self::deliverMatching($intent);
+            },
+            function (string $dir) use ($club, $membership) {
+                self::waitFor("$dir/inside");
+
+                return is_file("$dir/inside") ? self::void($club, $membership->invoice_id) : 'not at the same time';
+            },
+        ]);
+
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $this->assertSame(['processed', 'refused:invoice.has_payments'], array_column($results, 'value'));
+        $this->asTenant($club, function () use ($membership) {
+            $this->assertSame(Invoice::PAID, Invoice::find($membership->invoice_id)->status);
+            $this->assertSame(Membership::ACTIVE, $membership->fresh()->status);
+            $this->assertSame(1, Payment::where('invoice_id', $membership->invoice_id)->count());
+        });
+    }
+
+    public function test_matching_money_after_the_void_is_recorded_once_and_held_never_lost_or_activated(): void
+    {
+        [$club, $membership, $intent] = $this->pending();
+
+        $results = $this->concurrently([
+            function (string $dir) use ($club, $membership) {
+                self::pauseAfter('update "invoices"', $dir, 0.8); // voided, under the invoice's lock, not committed
+
+                return self::void($club, $membership->invoice_id);
+            },
+            function (string $dir) use ($intent) {
+                self::waitFor("$dir/inside");
+
+                return is_file("$dir/inside") ? self::deliverMatching($intent) : 'not at the same time';
+            },
+        ]);
+
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $this->assertSame(['voided', 'held_for_review'], array_column($results, 'value'));
+        $this->asTenant($club, function () use ($membership) {
+            $this->assertSame(Invoice::VOID, Invoice::find($membership->invoice_id)->status);
+            $this->assertNotSame(Membership::ACTIVE, $membership->fresh()->status, 'nothing activated on a void invoice');
+            $payment = Payment::where('invoice_id', $membership->invoice_id)->sole();
+            $this->assertSame(['990802', '25.000'], [$payment->gateway_transaction_id, $payment->amount], 'the money is in the books once, held for staff');
+        });
     }
 }

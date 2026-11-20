@@ -207,6 +207,44 @@ class InvoiceVoidPaymentReviewTest extends TestCase
         $this->assertNotSame(GiftMembership::CANCELLED, $this->asTenant($club, fn () => $gift->fresh()->status));
     }
 
+    public function test_reviews_handed_over_for_pending_or_for_a_failed_recording_also_stop_the_void(): void
+    {
+        $club = $this->paymobClub();
+        $owner = $this->owner($club);
+
+        // «Pending» at the bank for a day: handed to staff when the customer asks again (OnlinePaymentService::awaitsBank).
+        [$waiting, $intent] = $this->pendingMembership($club);
+        $obj = $this->obj($intent, ['id' => 660101, 'amount_cents' => 25000, 'success' => false, 'pending' => true]);
+        $this->postJson(route('webhooks.paymob').'?hmac='.PaymobSignature::compute($obj, self::HMAC), ['type' => 'TRANSACTION', 'obj' => $obj])->assertOk();
+        $this->travel(25)->hours();
+        try {
+            $this->asTenant($club, fn () => app(OnlinePaymentService::class)->start(Invoice::findOrFail($waiting->invoice_id), 'portal'));
+        } catch (BusinessRuleException) {
+            // refused: handed to staff
+        }
+        $this->asTenant($club, fn () => $this->assertSame('pending', PaymentReview::where('invoice_id', $waiting->invoice_id)->open()->sole()->reason));
+        $this->actingAs($owner)->from('/app')->post(route('club.invoices.void', $waiting->invoice_id), ['reason' => 'خطأ'])->assertSessionHasErrors(['error' => PaymentReview::VOID_REFUSED]);
+        $this->travelBack();
+
+        // Matching money the books could not take (outcome error, 500): its review stops the void too.
+        [$failed, $intent] = $this->pendingMembership($club);
+        $fail = true;
+        Payment::creating(function () use (&$fail) {
+            if ($fail) {
+                throw new \RuntimeException('database busy');
+            }
+        });
+        $obj = $this->obj($intent, ['id' => 660102, 'amount_cents' => 25000]);
+        $this->postJson(route('webhooks.paymob').'?hmac='.PaymobSignature::compute($obj, self::HMAC), ['type' => 'TRANSACTION', 'obj' => $obj])->assertStatus(500);
+        $fail = false;
+        $this->asTenant($club, fn () => $this->assertSame('error', PaymentReview::where('invoice_id', $failed->invoice_id)->open()->sole()->reason));
+        $this->actingAs($owner)->from('/app')->post(route('club.invoices.void', $failed->invoice_id), ['reason' => 'خطأ'])->assertSessionHasErrors(['error' => PaymentReview::VOID_REFUSED]);
+
+        foreach ([$waiting, $failed] as $membership) {
+            $this->asTenant($club, fn () => $this->assertNotSame(Invoice::VOID, Invoice::find($membership->invoice_id)->status));
+        }
+    }
+
     public function test_without_a_review_or_with_a_closed_one_voiding_is_as_before(): void
     {
         $club = $this->paymobClub();
