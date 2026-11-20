@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Tenancy\TenantContext;
 use App\Models\StaffNotification;
 use App\Models\Tenant;
 use App\Models\TenantIntegration;
+use App\Models\User;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\Membership;
@@ -15,6 +17,7 @@ use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Paymob\PaymobSignature;
 use App\Modules\Payments\Services\OnlinePaymentService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\Concerns\BuildsClubs;
 use Tests\Concerns\RunsConcurrently;
@@ -128,5 +131,36 @@ class PaymobReconciliationConcurrencyTest extends TestCase
         $this->assertSame('amount_mismatch', $results[0]['value']);
         $this->assertSame('refused:paymob.review', $results[1]['value'], 'it waited for the review and saw it');
         $this->asTenant($club, fn () => $this->assertSame(1, PaymentIntent::where('invoice_id', $membership->invoice_id)->count(), 'no second checkout'));
+    }
+
+    public function test_two_staff_closing_the_same_review_at_once_close_it_once(): void
+    {
+        [$club, , $intent] = $this->pending();
+        $owner = User::where('tenant_id', $club->id)->firstOrFail();
+        self::deliver(self::short($intent));
+        $refund = ['id' => 990951, 'pending' => false, 'amount_cents' => 24990, 'success' => true, 'is_auth' => false, 'is_capture' => false,
+            'is_standalone_payment' => false, 'is_voided' => false, 'is_refunded' => false, 'is_refund' => true, 'is_3d_secure' => false,
+            'integration_id' => 111, 'has_parent_transaction' => true, 'order' => ['id' => 7900], 'created_at' => '2026-11-21T09:00:00',
+            'currency' => 'OMR', 'error_occured' => false, 'owner' => 1, 'source_data' => ['pan' => '2346', 'sub_type' => 'Visa', 'type' => 'card']];
+        self::deliver($refund);
+        $review = $this->asTenant($club, fn () => PaymentReview::sole());
+        $close = fn () => app(TenantContext::class)->run($club, fn () => PaymentReview::closeOn($review->id, PaymentReview::REFUNDED, 'رُدّ من لوحة Paymob', $owner->id, app(AuditLogger::class)) ? 'closed' : 'already');
+
+        $results = $this->concurrently([
+            function (string $dir) use ($close) {
+                self::pauseAfter('update "payment_reviews"', $dir, 0.8); // closed, not yet committed
+
+                return $close();
+            },
+            function (string $dir) use ($close) {
+                self::waitFor("$dir/inside");
+
+                return is_file("$dir/inside") ? $close() : 'not at the same time';
+            },
+        ]);
+
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results));
+        $this->assertSame(['closed', 'already'], array_column($results, 'value'));
+        $this->assertSame(1, DB::table('audit_logs')->where('event', 'payment.review_closed')->count(), 'closed once');
     }
 }

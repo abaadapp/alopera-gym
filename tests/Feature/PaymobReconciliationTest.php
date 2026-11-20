@@ -321,8 +321,10 @@ class PaymobReconciliationTest extends TestCase
             $this->assertSame('4.000', $product->fresh()->stock_quantity, 'its unit stays held');
         });
 
+        // Refunded from Paymob's dashboard: its signed refund callback is the evidence the review closes on.
+        $this->deliver($this->refund(7800, 1570, 990901))->assertOk()->assertJson(['outcome' => 'ignored_refund']);
         $review = $this->asTenant($club, fn () => PaymentReview::sole());
-        $this->actingAs($owner)->post(route('club.payment-reviews.close', $review->id), ['note' => 'رُدّ المبلغ من لوحة Paymob'])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.payment-reviews.close', $review->id), ['outcome' => 'refunded', 'note' => 'رُدّ المبلغ من لوحة Paymob'])->assertSessionHasNoErrors();
         Artisan::call('sales:expire-orders');
         $this->asTenant($club, function () use ($sale, $product) {
             $this->assertSame(Sale::CANCELLED, $sale->fresh()->status, 'closed: the scheduler goes on as before');
@@ -330,32 +332,61 @@ class PaymobReconciliationTest extends TestCase
         });
     }
 
-    public function test_closing_a_review_takes_its_permission_and_branch_moves_no_money_and_is_audited(): void
+    public function test_closing_takes_payments_review_in_the_invoices_branch(): void
     {
         $club = $this->paymobClub();
-        $owner = $this->owner($club);
         $reception = $this->staff($club, 'reception');
         [$membership, $intent] = $this->pending($club);
         $this->deliver($this->obj($intent, ['amount_cents' => 24990]))->assertOk();
+        $this->deliver($this->refund(7700, 24990, 990902))->assertOk();
         $review = $this->asTenant($club, fn () => PaymentReview::sole());
+        $close = ['outcome' => 'refunded', 'note' => 'تمت المعالجة'];
 
-        $this->actingAs($reception)->post(route('club.payment-reviews.close', $review->id), ['note' => 'تم'])->assertForbidden();
+        $this->actingAs($reception)->post(route('club.payment-reviews.close', $review->id), $close)->assertForbidden();
 
         // A reviewer tied to another branch does not see this invoice's review.
         [$here, $there] = $this->asTenant($club, fn () => [Branch::create(['name' => 'الخوض', 'is_active' => true]), Branch::create(['name' => 'صلالة', 'is_active' => true])]);
         $this->asTenant($club, fn () => Invoice::whereKey($membership->invoice_id)->update(['branch_id' => $here->id]));
-        $role = $this->asTenant($club, fn () => Role::create(['key' => 'payments-reviewer', 'name' => 'مراجع الدفعات', 'permissions' => ['invoices.view', 'payments.review']]));
-        $elsewhere = $this->staff($club, 'payments-reviewer', ['branch_id' => $there->id]);
-        $this->actingAs($elsewhere)->post(route('club.payment-reviews.close', $review->id), ['note' => 'تمت المعالجة'])->assertNotFound();
-        $this->assertNotNull($role);
+        $this->asTenant($club, fn () => Role::create(['key' => 'payments-reviewer', 'name' => 'مراجع الدفعات', 'permissions' => ['invoices.view', 'payments.review']]));
+        $this->actingAs($this->staff($club, 'payments-reviewer', ['branch_id' => $there->id]))->post(route('club.payment-reviews.close', $review->id), $close)->assertNotFound();
+        $this->actingAs($this->staff($club, 'payments-reviewer', ['branch_id' => $here->id]))->post(route('club.payment-reviews.close', $review->id), $close)->assertSessionHasNoErrors();
 
-        $this->actingAs($owner)->post(route('club.payment-reviews.close', $review->id), ['note' => ''])->assertSessionHasErrors('note');
-        $this->actingAs($owner)->post(route('club.payment-reviews.close', $review->id), ['note' => 'رُدّ المبلغ من لوحة Paymob'])->assertSessionHasNoErrors();
+        $this->asTenant($club, fn () => $this->assertSame(PaymentReview::REFUNDED, $review->fresh()->status));
+    }
+
+    public function test_a_review_closes_only_on_what_paymob_said_about_the_money_never_on_a_note(): void
+    {
+        $club = $this->paymobClub();
+        $owner = $this->owner($club);
+        [$membership, $intent] = $this->pending($club);
+        $this->deliver($this->obj($intent, ['amount_cents' => 24990]))->assertOk();
+        $review = $this->asTenant($club, fn () => PaymentReview::sole());
+        $close = fn (array $data) => $this->actingAs($owner)->post(route('club.payment-reviews.close', $review->id), $data);
+
+        $close(['note' => 'تم الحل'])->assertSessionHasErrors('outcome');
+        $close(['outcome' => 'refunded', 'note' => ''])->assertSessionHasErrors('note');
+        foreach (['refunded', 'not_collected', 'recorded'] as $outcome) {
+            $close(['outcome' => $outcome, 'note' => 'تمت المعالجة'])->assertSessionHasErrors('outcome');
+        }
+        // A part refunded is not the money returned.
+        $this->deliver($this->refund(7700, 10000, 990903))->assertOk();
+        $close(['outcome' => 'refunded', 'note' => 'رُدّ جزء'])->assertSessionHasErrors('outcome');
+        $this->asTenant($club, fn () => $this->assertSame(PaymentReview::OPEN, $review->fresh()->status, 'still open: nothing proved what became of the money'));
+
+        // The whole amount refunded by Paymob, signed: closed on it, the evidence kept with the note.
+        $this->deliver($this->refund(7700, 24990, 990904))->assertOk();
+        $close(['outcome' => 'refunded', 'note' => 'رُدّ المبلغ من لوحة Paymob'])->assertSessionHasNoErrors();
+        $close(['outcome' => 'refunded', 'note' => 'مرة ثانية'])->assertSessionHas('success', 'هذه المراجعة مغلقة من قبل.');
 
         $this->asTenant($club, function () use ($review, $membership, $owner) {
-            $this->assertSame([PaymentReview::CLOSED, $owner->id, 'رُدّ المبلغ من لوحة Paymob'], [$review->fresh()->status, $review->fresh()->closed_by, $review->fresh()->close_note]);
+            $closed = $review->fresh();
+            $this->assertSame([PaymentReview::REFUNDED, $owner->id], [$closed->status, $closed->closed_by]);
+            $this->assertStringContainsString('990904', $closed->close_note);
+            $this->assertStringContainsString('رُدّ المبلغ من لوحة Paymob', $closed->close_note);
+            $this->assertSame([25000, 24990, '880001'], [$closed->expected_minor, $closed->received_minor, $closed->transaction_id], 'the original amounts and references stay');
             $this->assertSame(0, Payment::where('invoice_id', $membership->invoice_id)->count(), 'closing moves no money');
-            $this->assertSame(1, DB::table('audit_logs')->where('event', 'payment.review_closed')->count());
+            $audit = DB::table('audit_logs')->where('event', 'payment.review_closed')->sole();
+            $this->assertSame('refunded', json_decode($audit->properties, true)['outcome']);
             $this->assertSame(1, DB::table('audit_logs')->where('event', 'payment.review_opened')->count());
         });
 
@@ -363,5 +394,140 @@ class PaymobReconciliationTest extends TestCase
         $again = $this->asTenant($club, fn () => app(OnlinePaymentService::class)->start(Invoice::find($membership->invoice_id), 'portal'));
         $this->assertNotNull($again->checkout_url);
         $this->assertSame(1, PaymentWebhookEvent::where('outcome', 'amount_mismatch')->count());
+    }
+
+    public function test_pending_then_success_is_recorded_once_and_opens_no_review(): void
+    {
+        $club = $this->paymobClub();
+        $this->owner($club);
+        [$membership, $intent] = $this->pending($club);
+
+        $this->deliver($this->obj($intent, ['success' => false, 'pending' => true]))->assertOk()->assertJson(['outcome' => 'pending']);
+        $this->deliver($this->obj($intent))->assertOk()->assertJson(['outcome' => 'processed']);
+        $this->deliver($this->obj($intent))->assertOk()->assertJson(['outcome' => 'duplicate']);
+
+        $this->asTenant($club, function () use ($membership) {
+            $this->assertSame(1, Payment::where('invoice_id', $membership->invoice_id)->count());
+            $this->assertSame(Membership::ACTIVE, $membership->fresh()->status);
+            $this->assertSame(0, PaymentReview::count());
+        });
+    }
+
+    public function test_a_pending_left_undecided_for_a_day_goes_to_staff_and_never_opens_a_second_checkout(): void
+    {
+        $club = $this->paymobClub();
+        $this->owner($club);
+        [$membership, $intent] = $this->pending($club);
+        Event::fake([OnlinePaymentFailed::class]);
+        $this->deliver($this->obj($intent, ['success' => false, 'pending' => true]))->assertOk()->assertJson(['outcome' => 'pending']);
+        $start = function () use ($club, $membership) {
+            try {
+                $this->asTenant($club, fn () => app(OnlinePaymentService::class)->start(Invoice::find($membership->invoice_id), 'portal'));
+
+                return 'opened';
+            } catch (BusinessRuleException $e) {
+                return $e->rule;
+            }
+        };
+
+        $this->assertSame('paymob.pending', $start());
+        $this->travel(OnlinePaymentService::PENDING_AT_BANK_HOURS + 1)->hours();
+        $this->assertSame('paymob.review', $start(), 'a day without news is no failure: handed to staff, still no second checkout');
+        $this->assertSame('paymob.review', $start());
+
+        Event::assertNotDispatched(OnlinePaymentFailed::class);
+        $review = $this->asTenant($club, fn () => PaymentReview::sole());
+        $this->assertSame(['pending', PaymentReview::OPEN, 25000, '880001'], [$review->reason, $review->status, $review->expected_minor, $review->transaction_id]);
+        $this->assertSame(1, $this->alerts($club), 'staff told once');
+        $this->assertStringContainsString('قيد التنفيذ لدى البنك', StaffNotification::withoutGlobalScopes()->where('key', 'like', 'payment-review:%')->value('text'));
+        $this->getJson(route('site.pay.status', ['club' => $club->slug, 'reference' => $intent->reference]))->assertJson(['status' => 'review']);
+        $this->assertSame(PaymentIntent::PENDING, $intent->fresh()->status, 'not «failed»');
+
+        // The bank's result comes late: recorded once (held, its page being over), and the review ends on it by itself.
+        $this->deliver($this->obj($intent))->assertOk()->assertJson(['outcome' => 'held_for_review']);
+        $this->deliver($this->obj($intent))->assertOk()->assertJson(['outcome' => 'duplicate']);
+        $this->asTenant($club, function () use ($membership, $review) {
+            $this->assertSame(1, Payment::where('invoice_id', $membership->invoice_id)->count());
+            $this->assertSame(PaymentReview::RECORDED, $review->fresh()->status);
+            $this->assertSame(1, DB::table('audit_logs')->where('event', 'payment.review_closed')->count());
+        });
+        $this->assertSame('paymob.held', $start(), 'the money arrived: still no second checkout');
+    }
+
+    public function test_a_pending_declined_after_a_day_ends_its_review_and_the_invoice_can_be_paid_again(): void
+    {
+        $club = $this->paymobClub();
+        $this->owner($club);
+        [$membership, $intent] = $this->pending($club);
+        $this->deliver($this->obj($intent, ['success' => false, 'pending' => true]))->assertOk();
+        $this->travel(OnlinePaymentService::PENDING_AT_BANK_HOURS + 1)->hours();
+        $this->asTenant($club, fn () => app(OnlinePaymentService::class)->awaitsBank(Invoice::find($membership->invoice_id)));
+        $review = $this->asTenant($club, fn () => PaymentReview::sole());
+
+        $this->deliver($this->obj($intent, ['success' => false, 'pending' => false, 'data' => ['message' => 'Do not honour']]))->assertOk()->assertJson(['outcome' => 'failed_payment']);
+
+        $this->asTenant($club, fn () => $this->assertSame(PaymentReview::NOT_COLLECTED, $review->fresh()->status));
+        $again = $this->asTenant($club, fn () => app(OnlinePaymentService::class)->start(Invoice::find($membership->invoice_id), 'portal'));
+        $this->assertNotSame($intent->id, $again->id);
+    }
+
+    public function test_a_pending_then_confirmed_with_another_amount_becomes_that_mismatchs_review(): void
+    {
+        $club = $this->paymobClub();
+        $this->owner($club);
+        [$membership, $intent] = $this->pending($club);
+        $this->deliver($this->obj($intent, ['success' => false, 'pending' => true]))->assertOk();
+        $this->travel(OnlinePaymentService::PENDING_AT_BANK_HOURS + 1)->hours();
+        $this->asTenant($club, fn () => app(OnlinePaymentService::class)->awaitsBank(Invoice::find($membership->invoice_id)));
+
+        $this->deliver($this->obj($intent, ['amount_cents' => 24990]))->assertOk()->assertJson(['outcome' => 'amount_mismatch']);
+
+        $review = $this->asTenant($club, fn () => PaymentReview::sole());
+        $this->assertSame(['amount', PaymentReview::OPEN, 24990], [$review->reason, $review->status, $review->received_minor]);
+        $this->assertSame(2, $this->alerts($club), 'told again, now of the mismatch');
+        $this->asTenant($club, fn () => $this->assertSame(0, Payment::where('invoice_id', $membership->invoice_id)->count()));
+    }
+
+    public function test_a_website_order_waiting_for_the_bank_is_kept_and_handed_to_staff_after_a_day(): void
+    {
+        $club = $this->paymobClub();
+        $this->owner($club);
+        Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_w', 'intention_order_id' => 7810], 201)]);
+        $product = $this->asTenant($club, function () {
+            $product = Product::create(['name' => 'Shaker', 'price' => 2, 'show_on_website' => true]);
+            app(StockService::class)->move($product, 3, 'adjustment', null, 'opening', 1);
+
+            return $product;
+        });
+        $this->post(route('site.shop.order.store', ['club' => $club->slug]), [
+            'items' => [['product_id' => $product->id, 'quantity' => 1]], 'name' => 'Online', 'phone' => '91234567', 'payment_method' => 'paymob',
+        ])->assertRedirectContains('clientSecret=cs_w');
+        [$sale, $intent] = $this->asTenant($club, fn () => [Sale::latest('id')->firstOrFail(), PaymentIntent::latest('id')->firstOrFail()]);
+        $this->deliver($this->obj($intent, ['amount_cents' => 2000, 'order' => ['id' => 7810], 'success' => false, 'pending' => true]))->assertOk()->assertJson(['outcome' => 'pending']);
+
+        $this->asTenant($club, fn () => $sale->forceFill(['reserved_until' => now()->subMinutes(30)])->save());
+        Artisan::call('sales:expire-orders');
+        $this->asTenant($club, fn () => $this->assertSame([Sale::PENDING, 0], [$sale->fresh()->status, PaymentReview::count()], 'the bank has not decided: the order stays'));
+
+        $this->travel(OnlinePaymentService::PENDING_AT_BANK_HOURS + 1)->hours();
+        Artisan::call('sales:expire-orders');
+        $this->asTenant($club, function () use ($sale, $product) {
+            $this->assertSame(Sale::PENDING, $sale->fresh()->status);
+            $this->assertSame('2.000', $product->fresh()->stock_quantity, 'its unit stays held');
+            $this->assertSame('pending', PaymentReview::sole()->reason, 'handed to staff by the scheduler');
+        });
+        $this->assertSame(1, $this->alerts($club));
+    }
+
+    /** Paymob's signed refund of $amount on $order: its own child transaction. */
+    private function refund(int $order, int $amount, int $id): array
+    {
+        return [
+            'id' => $id, 'pending' => false, 'amount_cents' => $amount, 'success' => true, 'is_auth' => false, 'is_capture' => false,
+            'is_standalone_payment' => false, 'is_voided' => false, 'is_refunded' => false, 'is_refund' => true, 'is_3d_secure' => false,
+            'integration_id' => 111, 'has_parent_transaction' => true, 'order' => ['id' => $order],
+            'created_at' => '2026-11-21T09:00:00', 'currency' => 'OMR', 'error_occured' => false, 'owner' => 1,
+            'source_data' => ['pan' => '2346', 'sub_type' => 'Visa', 'type' => 'card'],
+        ];
     }
 }
