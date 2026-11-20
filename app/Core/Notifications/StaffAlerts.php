@@ -130,15 +130,19 @@ final class StaffAlerts
         // Within the alert's 300 characters, what to look for first: the invoice, the two amounts, why, the references.
         // A review handed over for «pending» and then confirmed with a mismatch is told again, under its new reason.
         $this->notifier->notify('payments.review', 'payment-review:'.$review->id.':'.$review->reason, 'payment',
-            ($review->reason === 'pending'
-                ? 'عملية Paymob على الفاتورة '.$review->invoice?->number.' قيد التنفيذ لدى البنك منذ يوم دون نتيجة: '.$review->expected().' '.$review->expected_currency
+            match ($review->reason) {
+                'pending' => 'عملية Paymob على الفاتورة '.$review->invoice?->number.' قيد التنفيذ لدى البنك منذ يوم دون نتيجة: '.$review->expected().' '.$review->expected_currency
                     .'. عملية Paymob '.$review->transaction_id.'، المرجع '.$review->intent?->reference
-                    .'. تحقق منها في لوحة Paymob؛ لا تُفتح صفحة دفع ثانية للفاتورة حتى تُحسم.'
-                : 'دفعة Paymob مؤكدة لا تطابق الفاتورة '.$review->invoice?->number
+                    .'. تحقق منها في لوحة Paymob؛ لا تُفتح صفحة دفع ثانية للفاتورة حتى تُحسم.',
+                'error' => 'دفعة Paymob مؤكدة ومطابقة على الفاتورة '.$review->invoice?->number.' بمبلغ '.$review->expected().' '.$review->expected_currency
+                    .' تعذّر تسجيلها بسبب خطأ في النظام. عملية Paymob '.$review->transaction_id.'، المرجع '.$review->intent?->reference
+                    .'. لم يُسجَّل مبلغ ولم يُفعَّل شيء؛ تُسجَّل تلقائيًا إن أعادت Paymob الإشعار، وإلا فراجعها.',
+                default => 'دفعة Paymob مؤكدة لا تطابق الفاتورة '.$review->invoice?->number
                     .': المطلوب '.$review->expected().' '.$review->expected_currency.'، المستلم '.$received
                     .'. '.(PaymentReview::REASONS[$review->reason] ?? $review->reason)
                     .'. عملية Paymob '.$review->transaction_id.'، المرجع '.$review->intent?->reference
-                    .'. لم يُسجَّل مبلغ ولم يُفعَّل شيء.'),
+                    .'. لم يُسجَّل مبلغ ولم يُفعَّل شيء.',
+            },
             route('club.invoices.show', $review->invoice_id),
             fn (User $u) => $this->branches->allows($u, $review->owningBranchId()));
     }

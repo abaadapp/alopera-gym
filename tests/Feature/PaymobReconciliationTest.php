@@ -265,6 +265,51 @@ class PaymobReconciliationTest extends TestCase
         $this->assertSame(1, $this->alerts($club));
     }
 
+    public function test_confirmed_matching_money_the_books_could_not_take_goes_to_staff_and_ends_when_the_resend_records_it(): void
+    {
+        $club = $this->paymobClub();
+        $this->owner($club);
+        [$membership, $intent] = $this->pending($club);
+        $fail = true;
+        Payment::creating(function () use (&$fail) {
+            if ($fail) {
+                throw new RuntimeException('database busy');
+            }
+        });
+
+        // Paymob took the right amount; the books could not: not acknowledged (Paymob may send it again), not silent.
+        $this->deliver($this->obj($intent))->assertStatus(500);
+        $review = $this->asTenant($club, fn () => PaymentReview::sole());
+        $this->assertSame(['error', PaymentReview::OPEN, '880001', 25000, 25000],
+            [$review->reason, $review->status, $review->transaction_id, (int) $review->expected_minor, (int) $review->received_minor]);
+        $this->assertSame(['payments' => 0, 'membership' => Membership::PENDING], array_intersect_key($this->books($club, $membership, $intent), ['payments' => 0, 'membership' => 0]));
+        $alert = StaffNotification::withoutGlobalScopes()->where('tenant_id', $club->id)->where('key', 'like', 'payment-review:%')->sole();
+        foreach (['25.000 OMR', 'تعذّر تسجيلها', '880001', $intent->reference] as $part) {
+            $this->assertStringContainsString($part, $alert->text, $part);
+        }
+        $this->assertLessThan(300, mb_strlen($alert->text));
+        try {
+            $this->asTenant($club, fn () => app(OnlinePaymentService::class)->start(Invoice::findOrFail($membership->invoice_id), 'portal'));
+            $this->fail('a second checkout opened while the first money waits');
+        } catch (BusinessRuleException $e) {
+            $this->assertSame('paymob.review', $e->rule);
+        }
+
+        // Another transaction's success does not end it; a decline does not either: only this money, recorded.
+        $this->deliver($this->obj($intent, ['id' => 880002, 'success' => false]))->assertOk();
+        $this->assertSame(PaymentReview::OPEN, $this->asTenant($club, fn () => $review->fresh()->status));
+
+        $fail = false;
+        $this->deliver($this->obj($intent))->assertOk()->assertJson(['outcome' => 'processed']);
+        $this->deliver($this->obj($intent))->assertOk()->assertJson(['outcome' => 'duplicate']);
+        $this->asTenant($club, function () use ($membership, $review) {
+            $this->assertSame(1, Payment::where('invoice_id', $membership->invoice_id)->count(), 'recorded once');
+            $this->assertSame(Membership::ACTIVE, $membership->fresh()->status);
+            $this->assertSame([PaymentReview::RECORDED, null], [$review->fresh()->status, $review->fresh()->closed_by]);
+        });
+        $this->assertSame(1, $this->alerts($club), 'told once');
+    }
+
     public function test_a_pending_from_the_bank_is_no_failure_and_no_second_checkout_opens_until_its_result(): void
     {
         $club = $this->paymobClub();

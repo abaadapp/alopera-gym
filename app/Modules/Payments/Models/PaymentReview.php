@@ -53,6 +53,7 @@ class PaymentReview extends Model implements BranchOwned
         'order' => 'رقم طلب Paymob الموقّع لا يطابق هذه العملية',
         'integration' => 'وصلت عبر تكامل Paymob غير مُدخل في إعدادات النادي',
         'pending' => 'عملية «قيد التنفيذ» لدى البنك لم تُحسم بعد يوم',
+        'error' => 'دفعة مؤكدة مطابقة تعذّر تسجيلها في الدفاتر بسبب خطأ',
     ];
 
     /** What the customer is told while it is open. */

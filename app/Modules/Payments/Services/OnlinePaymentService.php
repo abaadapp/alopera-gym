@@ -461,6 +461,13 @@ final class OnlinePaymentService
             } catch (Throwable $e) {
                 report($e);
                 $outcome = $this->recorded($transactionId, $intent->reference) ? 'recorded_with_error' : 'error';
+                // Confirmed, matching money the books could not take: still answered as an error (Paymob may send it
+                // again, and the resend records it), but handed to staff meanwhile — told, no second checkout — and the
+                // review ends by itself when this transaction is recorded. When even that cannot be written, the error
+                // stands as before.
+                if ($outcome === 'error') {
+                    $this->reviewIfCaptured($intent, $obj, 'error', $transactionId);
+                }
             }
 
             // The order checked again under the lock no longer matched: the same confirmed money, kept for review.
@@ -675,13 +682,17 @@ final class OnlinePaymentService
 
     /**
      * An attempt handed to staff for being «pending» ends once Paymob's signed result for it came: recorded in the books,
-     * or declined. Nothing else closes it automatically; moves no money.
+     * or declined. Confirmed money that could not be recorded («error») ends only when that same transaction is recorded.
+     * Nothing else closes it automatically; moves no money.
      */
     private function endPendingReviews(PaymentIntent $intent, string $outcome, string $transactionId): void
     {
         try {
             DB::transaction(function () use ($intent, $outcome, $transactionId) {
-                PaymentReview::where('payment_intent_id', $intent->id)->where('reason', 'pending')->open()->lockForUpdate()->get()
+                PaymentReview::where('payment_intent_id', $intent->id)
+                    ->where(fn ($q) => $q->where('reason', 'pending')->when($outcome === PaymentReview::RECORDED,
+                        fn ($q) => $q->orWhere(fn ($q) => $q->where('reason', 'error')->where('transaction_id', $transactionId))))
+                    ->open()->lockForUpdate()->get()
                     ->each(function (PaymentReview $review) use ($outcome, $transactionId) {
                         $review->forceFill([
                             'status' => $outcome,

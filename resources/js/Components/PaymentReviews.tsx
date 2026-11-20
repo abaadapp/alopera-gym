@@ -66,7 +66,7 @@ export default function PaymentReviews({ reviews }: { reviews: PaymentReviewRow[
                 <AlertTriangle className="size-4 text-amber-600" />
                 دفعات Paymob تحتاج مراجعة
             </h2>
-            <p className="mb-3 text-[12px] text-[#9ca3af]">عمليات Paymob لم تُسجَّل على هذه الفاتورة: مؤكدة لا تطابقها، أو قيد التنفيذ لدى البنك منذ يوم. لم يُفعَّل شيء. ابحث عنها في لوحة Paymob برقم العملية.</p>
+            <p className="mb-3 text-[12px] text-[#9ca3af]">عمليات Paymob لم تُسجَّل على هذه الفاتورة: مؤكدة لا تطابقها، أو مطابقة تعذّر تسجيلها، أو قيد التنفيذ لدى البنك منذ يوم. لم يُفعَّل شيء. ابحث عنها في لوحة Paymob برقم العملية.</p>
             {reviews.map((r) => (
                 <div key={r.id} className="border-t border-line py-2 text-[13px]">
                     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
