@@ -20,7 +20,7 @@ class RollbackCodePaymentLinksTest extends TestCase
     /** PaymentLinks::cancel as v0.139 had it (voids the invoice), or as R1 (v0.140) has it (the link only). */
     private function linksCode(bool $voids): void
     {
-        @mkdir(dirname($this->dir.'/'.self::LINKS), 0777, true);
+        is_dir(dirname($this->dir.'/'.self::LINKS)) || mkdir(dirname($this->dir.'/'.self::LINKS), 0777, true);
         file_put_contents($this->dir.'/'.self::LINKS, $voids
             ? "<?php\n// v0.139\n\$this->engine->void(\$invoice, 'إلغاء رابط الدفع');\n"
             : "<?php\n// R1: the link only\n\$link->forceFill(['cancelled_at' => now()])->save();\n");
