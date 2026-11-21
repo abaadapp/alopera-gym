@@ -38,12 +38,31 @@ final class PtService
      */
     public function sell(Member $member, PtPackage $package, ?Trainer $trainer = null, ?int $branchId = null): PtSubscription
     {
-        if (! $package->is_active) {
-            throw new BusinessRuleException('pt.package_inactive', 'الباقة غير متاحة.', 'pt_package_id');
-        }
         $branchId ??= app(BranchContext::class)->assign() ?? $member->branch_id;
 
         return DB::transaction(function () use ($member, $package, $trainer, $branchId) {
+            [$subscription, $line] = $this->pendingForInvoice($member, $package, $trainer);
+            $invoice = $this->invoices->issue($member, [$line], ['type' => 'pt', 'branch_id' => $branchId]);
+
+            return $this->issuedOn($subscription, $invoice);
+        });
+    }
+
+    /**
+     * A package on a customer invoice of several lines (the invoice editor's catalogue, owner's decision 2026-11-21):
+     * pending, with sell()'s checks (on sale; the same package not already awaiting payment) and its line, but no invoice
+     * of its own: the caller puts the line on its one invoice, then calls issuedOn(). It is activated as any package is,
+     * by ActivatePaidItems once that invoice is paid in full; nothing is booked.
+     *
+     * @return array{0: PtSubscription, 1: array<string, mixed>}
+     */
+    public function pendingForInvoice(Member $member, PtPackage $package, ?Trainer $trainer = null): array
+    {
+        if (! $package->is_active) {
+            throw new BusinessRuleException('pt.package_inactive', 'الباقة غير متاحة.', 'pt_package_id');
+        }
+
+        return DB::transaction(function () use ($member, $package, $trainer) {
             // The same package waiting for payment is not sold again: a resent request (a double click) made two
             // subscriptions and two invoices.
             Member::whereKey($member->id)->lockForUpdate()->first();
@@ -61,16 +80,20 @@ final class PtService
                 'created_by' => Auth::guard('web')->id(),
             ]);
 
-            $invoice = $this->invoices->issue($member, [[
+            return [$subscription, [
                 'description' => 'تدريب شخصي — '.$package->name.' ('.$package->sessions_count.' جلسات)',
                 'unit_price' => $package->price,
                 'itemable' => $subscription,
-            ]], ['type' => 'pt', 'branch_id' => $branchId]);
-
-            $subscription->forceFill(['invoice_id' => $invoice->id])->save();
-
-            return $subscription->refresh();
+            ]];
         });
+    }
+
+    /** The invoice the line of pendingForInvoice() was issued on. */
+    public function issuedOn(PtSubscription $subscription, Invoice $invoice): PtSubscription
+    {
+        $subscription->forceFill(['invoice_id' => $invoice->id])->save();
+
+        return $subscription->refresh();
     }
 
     public function activate(PtSubscription $subscription, ?CarbonImmutable $today = null): PtSubscription

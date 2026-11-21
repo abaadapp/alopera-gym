@@ -22,6 +22,9 @@ use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\MembershipPlan;
+use App\Modules\Gym\Models\Program;
+use App\Modules\Gym\Models\PtPackage;
 use App\Modules\Gym\Models\PtSession;
 use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Inventory\Models\GoodsReceipt;
@@ -95,6 +98,10 @@ class AppServiceProvider extends ServiceProvider
             'membership' => Membership::class,
             'gift_membership' => GiftMembership::class,
             'pt_subscription' => PtSubscription::class,
+            // The invoice catalogue's services (a draft's lines, a program sold): billed from them, nothing activated.
+            'membership_plan' => MembershipPlan::class,
+            'pt_package' => PtPackage::class,
+            'program' => Program::class,
             'pt_session' => PtSession::class,
             'booking' => Booking::class,
             'class_session' => ClassSession::class,

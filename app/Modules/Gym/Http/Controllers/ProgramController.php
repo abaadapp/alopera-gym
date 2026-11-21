@@ -19,7 +19,7 @@ class ProgramController extends Controller
     {
         return Inertia::render('Gym/Programs/Index', [
             'programs' => Program::withCount('schedules')->orderBy('sort')->orderBy('name')->get()->map(fn (Program $p) => $p->only(
-                'id', 'name', 'name_en', 'slug', 'category', 'level', 'description', 'description_en', 'color', 'duration_minutes', 'default_capacity', 'is_public', 'is_active', 'sort', 'schedules_count'
+                'id', 'name', 'name_en', 'slug', 'category', 'level', 'description', 'description_en', 'color', 'duration_minutes', 'default_capacity', 'price', 'is_public', 'is_active', 'sort', 'schedules_count'
             ) + ['image_url' => $p->imageUrl(), 'image_download_url' => $p->image_path ? route('club.programs.image', $p) : null, 'image_has_original' => ImageStore::hasOriginal($p->image_path)]),
         ]);
     }
@@ -103,6 +103,8 @@ class ProgramController extends Controller
             'color' => ['required', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'duration_minutes' => ['required', 'integer', 'min:10', 'max:300'],
             'default_capacity' => ['required', 'integer', 'min:1', 'max:500'],
+            // Its price on a customer invoice; empty: not billed until set (owner's decision, 2026-11-21).
+            'price' => ['nullable', 'numeric', 'decimal:0,3', 'min:0.001', 'max:99999'],
             'is_public' => ['boolean'],
             'is_active' => ['boolean'],
             'sort' => ['nullable', 'integer'],

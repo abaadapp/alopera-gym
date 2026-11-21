@@ -21,6 +21,9 @@ use App\Modules\Finance\Models\PaymentAllocation;
 use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Finance\Services\ManualInvoices;
 use App\Modules\Gym\Models\Member;
+use App\Modules\Gym\Models\MembershipPlan;
+use App\Modules\Gym\Models\Program;
+use App\Modules\Gym\Models\PtPackage;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Models\Sale;
@@ -157,6 +160,32 @@ class InvoiceController extends Controller
         ])]);
     }
 
+    /**
+     * The services the invoice editor's catalogue offers this user, each with what the picker shows: membership plans
+     * (memberships.sell) and personal-training packages (pt.sell) on sale, sold to a member and activated once the
+     * invoice is paid in full; programs on sale with their price (none: shown, billed only by whoever manages them).
+     *
+     * @return array{plans: list<array<string, mixed>>, pt: list<array<string, mixed>>, programs: list<array<string, mixed>>, price_programs: bool}
+     */
+    private function services($user): array
+    {
+        $kinds = ['class' => 'حصة جماعية', 'program' => 'برنامج تدريبي', 'pt' => 'تدريب شخصي'];
+
+        return [
+            'plans' => $user->can('memberships.sell') ? MembershipPlan::where('is_active', true)->orderBy('sort')->orderBy('name')->get()
+                ->map(fn (MembershipPlan $p) => ['id' => $p->id, 'name' => $p->name, 'price' => Money::normalize($p->price),
+                    'detail' => $p->durationLabel().($p->sessions_limit ? ' · '.$p->sessions_limit.' حصة' : ''),
+                    'note' => Money::isZero($p->signup_fee) ? null : 'رسوم تسجيل '.Money::normalize($p->signup_fee).' لأول اشتراك'])->values()->all() : [],
+            'pt' => $user->can('pt.sell') ? PtPackage::where('is_active', true)->orderBy('name')->get()
+                ->map(fn (PtPackage $p) => ['id' => $p->id, 'name' => $p->name, 'price' => Money::normalize($p->price),
+                    'detail' => $p->sessions_count.' جلسات · '.$p->session_minutes.' دقيقة · صالحة '.$p->validity_days.' يومًا', 'note' => null])->values()->all() : [],
+            'programs' => Program::where('is_active', true)->orderBy('sort')->orderBy('name')->get()
+                ->map(fn (Program $p) => ['id' => $p->id, 'name' => $p->name, 'price' => $p->price !== null ? Money::normalize($p->price) : null,
+                    'detail' => ($kinds[$p->category] ?? 'برنامج').' · '.$p->duration_minutes.' دقيقة', 'note' => null])->values()->all(),
+            'price_programs' => (bool) $user->can('classes.manage'),
+        ];
+    }
+
     /** A saved draft, reopened in the editor with its paper as it was left. */
     public function edit(Request $request, ManualInvoices $invoices, int $draft): Response
     {
@@ -177,20 +206,30 @@ class InvoiceController extends Controller
             'notes' => (string) $invoice->notes,
             'internal_notes' => (string) $invoice->internal_notes,
             'paper_lang' => $invoice->paper_lang,
-            // Each product line with the add-ons sold with it (how many per piece), as the editor chose them.
-            'lines' => $invoice->items->whereNull('parent_id')->values()->map(fn ($i) => [
-                'product_id' => $i->itemable instanceof Product ? (string) $i->itemable->id : '',
-                'description' => $i->description,
-                'quantity' => Money::normalize($i->quantity),
-                'unit_price' => Money::normalize($i->unit_price),
-                'discount' => Money::normalize($i->discount),
-                'addons' => $invoice->items->where('parent_id', $i->id)->values()->map(fn ($a) => [
-                    'id' => (int) $a->itemable_id,
-                    'qty' => max(1, (int) round((float) $a->quantity / max((float) $i->quantity, 0.001))),
-                    'name' => $a->itemable instanceof ProductAddon ? $a->itemable->name : ltrim(explode(' — ', $a->description)[0], '+ '),
-                    'price' => Money::normalize($a->unit_price),
+            // Each product line with the add-ons sold with it (how many per piece), as the editor chose them; each
+            // service as the catalogue row it was taken from (a plan's signup fee is its sale's, not a line of its own).
+            'lines' => $invoice->items->whereNull('parent_id')
+                ->reject(fn ($i) => $i->itemable instanceof MembershipPlan && $invoice->items->first(fn ($o) => $o->itemable instanceof MembershipPlan)?->id !== $i->id)
+                ->values()->map(fn ($i) => [
+                    'product_id' => $i->itemable instanceof Product ? (string) $i->itemable->id : '',
+                    'item_type' => match (true) {
+                        $i->itemable instanceof MembershipPlan => 'plan',
+                        $i->itemable instanceof PtPackage => 'pt',
+                        $i->itemable instanceof Program => 'program',
+                        default => '',
+                    },
+                    'item_id' => $i->itemable instanceof MembershipPlan || $i->itemable instanceof PtPackage || $i->itemable instanceof Program ? (string) $i->itemable->id : '',
+                    'description' => $i->description,
+                    'quantity' => Money::normalize($i->quantity),
+                    'unit_price' => Money::normalize($i->unit_price),
+                    'discount' => Money::normalize($i->discount),
+                    'addons' => $invoice->items->where('parent_id', $i->id)->values()->map(fn ($a) => [
+                        'id' => (int) $a->itemable_id,
+                        'qty' => max(1, (int) round((float) $a->quantity / max((float) $i->quantity, 0.001))),
+                        'name' => $a->itemable instanceof ProductAddon ? $a->itemable->name : ltrim(explode(' — ', $a->description)[0], '+ '),
+                        'price' => Money::normalize($a->unit_price),
+                    ])->all(),
                 ])->all(),
-            ])->all(),
             'attachments' => $invoice->attachments->map(fn ($a) => $a->only('id', 'name', 'size') + ['url' => route('club.invoices.attachments.show', $a)])->all(),
             'updated_at' => $invoice->updated_at?->format('Y-m-d H:i'),
         ];
@@ -291,9 +330,10 @@ class InvoiceController extends Controller
         $request->mergeIfMissing(['customer_mode' => $request->filled('member_id') ? 'member' : 'walk_in', 'issue_date' => today()->toDateString(), 'issue' => $draft === null && ! $request->has('customer_mode')]);
         $issue = $request->boolean('issue');
         $data = $request->validate($this->rules(issue: $issue), self::MESSAGES);
-        // A discount larger than its line is named on that line, not refused for the whole invoice.
+        // A discount larger than its line is named on that line, not refused for the whole invoice. A service's line is
+        // priced by the server, which names it there (ManualInvoices).
         foreach ($data['lines'] as $i => $line) {
-            if (Money::toMinor($line['discount'] ?? 0) > Money::toMinor(Money::mul($line['unit_price'], (float) $line['quantity']))) {
+            if (! in_array($line['item_type'] ?? null, ['plan', 'pt', 'program'], true) && Money::toMinor($line['discount'] ?? 0) > Money::toMinor(Money::mul($line['unit_price'], (float) $line['quantity']))) {
                 throw ValidationException::withMessages(["lines.$i.discount" => 'الخصم أكبر من قيمة البند.']);
             }
         }
@@ -359,6 +399,10 @@ class InvoiceController extends Controller
             'paper_lang' => ['nullable', 'in:ar,en'],
             'lines' => [$preview ? 'nullable' : 'required', 'array', ...($preview ? [] : ['min:1']), 'max:50'],
             'lines.*.product_id' => ['nullable', TenantRule::exists('products')],
+            // A service from the catalogue (plan, personal training, program): which one; what it is and its price are
+            // the server's (ManualInvoices), checked against the club's own catalogue.
+            'lines.*.item_type' => ['nullable', 'in:'.implode(',', ManualInvoices::ITEM_TYPES)],
+            'lines.*.item_id' => ['nullable', 'required_if:lines.*.item_type,plan,pt,program', 'integer', 'min:1'],
             'lines.*.description' => [$preview ? 'nullable' : 'required', 'string', 'max:250'],
             // Three decimals at most, as money is kept: the editor's line totals are then the server's to the baisa.
             'lines.*.quantity' => [$preview ? 'nullable' : 'required', 'numeric', 'decimal:0,3', $preview ? 'min:0' : 'min:0.001', 'max:10000'],
@@ -412,6 +456,9 @@ class InvoiceController extends Controller
                 'addons' => $addons->filter(fn (ProductAddon $a) => $a->fits($p))->pluck('id')->values(),
             ])->values(),
             'catalog_truncated' => $products->count() > 500,
+            // The club's services on the same invoice (owner's decision, 2026-11-21), for whoever may sell each: what
+            // the picker shows — name, price, period or sessions. The server prices them again when saving.
+            'services' => $this->services($user),
             'addons' => $addons->map(fn (ProductAddon $a) => $a->only('id', 'name', 'description', 'price') + [
                 'max' => max(1, $a->max_quantity),
                 'available' => app(ProductAddons::class)->available($a, $stock),

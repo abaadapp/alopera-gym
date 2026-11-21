@@ -25,7 +25,7 @@ class Program extends Model
 
     protected function casts(): array
     {
-        return ['is_public' => 'boolean', 'is_active' => 'boolean'];
+        return ['is_public' => 'boolean', 'is_active' => 'boolean', 'price' => 'decimal:3'];
     }
 
     public function schedules(): HasMany

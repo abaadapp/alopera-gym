@@ -19,6 +19,8 @@ type Program = {
     color: string;
     duration_minutes: number;
     default_capacity: number;
+    /** Its price on a customer invoice; null: not billed until set. */
+    price: string | null;
     is_public: boolean;
     is_active: boolean;
     sort: number;
@@ -41,6 +43,7 @@ type FormData = {
     color: string;
     duration_minutes: number | string;
     default_capacity: number | string;
+    price: string;
     is_public: boolean;
     is_active: boolean;
     sort: number | string;
@@ -59,6 +62,7 @@ const empty: FormData = {
     color: '#db2777',
     duration_minutes: 60,
     default_capacity: 15,
+    price: '',
     is_public: true,
     is_active: true,
     sort: 0,
@@ -95,6 +99,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
             color: p.color,
             duration_minutes: p.duration_minutes,
             default_capacity: p.default_capacity,
+            price: p.price ?? '',
             is_public: p.is_public,
             is_active: p.is_active,
             sort: p.sort,
@@ -174,6 +179,7 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                                 <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted">
                                     <span className="inline-flex items-center gap-1"><Clock className="size-3.5" /><span className="num">{p.duration_minutes}</span> دقيقة</span>
                                     <span className="inline-flex items-center gap-1"><Users className="size-3.5" />سعة <span className="num">{p.default_capacity}</span></span>
+                                    <span>{p.price !== null ? <>السعر في الفاتورة <span className="num">{Number(p.price).toFixed(3)}</span></> : 'بلا سعر للفوترة'}</span>
                                     <span>في الجدول: <span className="num">{number(p.schedules_count)}</span></span>
                                 </div>
                                 <CardFooter>
@@ -229,6 +235,9 @@ export default function ProgramsIndex({ programs }: { programs: Program[] }) {
                     </Field>
                     <Field label="السعة الافتراضية" error={form.errors.default_capacity} hint="عدد المقاعد عند إضافة الحصة للجدول">
                         <Input type="number" min={1} max={500} value={form.data.default_capacity} onChange={(e) => form.setData('default_capacity', e.target.value)} />
+                    </Field>
+                    <Field label="السعر في فاتورة العميل (اختياري)" error={form.errors.price} hint="يظهر تلقائيًا عند إضافته من الكتالوج إلى فاتورة. فارغ: لا يُفوتر حتى يُحدد. بيعه لا يحجز موعدًا.">
+                        <Input inputMode="decimal" dir="ltr" placeholder="0.000" value={form.data.price} onChange={(e) => form.setData('price', e.target.value)} />
                     </Field>
                     <Field label="اللون في الجدول" error={form.errors.color}>
                         <div className="flex items-center gap-2">
