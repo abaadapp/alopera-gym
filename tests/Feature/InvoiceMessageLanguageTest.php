@@ -13,6 +13,7 @@ use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Services\MembershipService;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Models\MessageTemplate;
+use App\Modules\Messaging\Services\MemberNotifier;
 use App\Modules\Messaging\Services\TemplateCatalog;
 use App\Modules\Messaging\Services\WhatsAppService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -198,6 +199,59 @@ class InvoiceMessageLanguageTest extends TestCase
         $this->actingAs($owner)->postJson(route('club.whatsapp.invoice-messages.send'), ['member_id' => $member->id, 'invoice_id' => $ours->id, 'language' => 'fr'])->assertStatus(422);
 
         $this->assertSame($before, $invoiceMessages());
+    }
+
+    /**
+     * What leaves for Meta (owner, 2026-11-21: both languages approved there): the approved name, the language code
+     * and the four values in order, positional {{1}}..{{4}} — automatically once, by hand in either language — and the
+     * link opens that very invoice.
+     */
+    public function test_what_leaves_for_meta_is_the_approved_name_its_language_code_and_the_four_values_and_the_link_opens_the_invoice(): void
+    {
+        // The real Meta gateway, Meta answered by a fake: what it is sent is what Meta would receive.
+        config(['services.whatsapp.driver' => 'meta']);
+        Http::fake(['https://graph.facebook.com/*' => fn () => Http::response(['messaging_product' => 'whatsapp', 'messages' => [['id' => 'wamid.'.Str::random(8)]]], 200)]);
+        $club = $this->club();
+        $this->whatsapp($club);
+        $owner = $this->owner($club);
+        $sara = $this->member($club, ['full_name' => 'سارة الهنائي', 'phone' => '96891234571']);
+        $lina = $this->member($club, ['full_name' => 'Lina Smith', 'phone' => '96891234572', 'message_language' => 'en']);
+        $arInvoice = $this->membershipInvoice($club, $sara);
+        $enInvoice = $this->membershipInvoice($club, $lina);
+
+        $out = fn (string $to) => collect(Http::recorded())->map(fn ($pair) => $pair[0])
+            ->filter(fn ($r) => str_ends_with($r->url(), '/PNID-3/messages') && ($r->data()['to'] ?? null) === $to && str_starts_with($r->data()['template']['name'] ?? '', 'alopera_invoice_issued'))
+            ->map(fn ($r) => $r->data()['template'])->values();
+        $expect = function (array $template, string $language, Member $member, Invoice $invoice) use ($club) {
+            $this->assertSame('alopera_invoice_issued_membership', $template['name']);
+            $this->assertSame(['code' => $language], $template['language']);
+            $params = array_column($template['components'][0]['parameters'], 'text');
+            $link = $this->asTenant($club, fn () => app(MemberNotifier::class)->paymentLink($invoice->fresh()));
+            $this->assertSame([explode(' ', $member->full_name)[0], $invoice->number, number_format((float) $invoice->total, 3).' '.$invoice->currency, $link], $params);
+            $this->assertSame(['body'], array_column($template['components'], 'type'));
+
+            return $link;
+        };
+
+        // Automatically, in each member's language, once.
+        $this->assertCount(1, $out('96891234571'));
+        $this->assertCount(1, $out('96891234572'));
+        $arLink = $expect($out('96891234571')[0], 'ar', $sara, $arInvoice);
+        $enLink = $expect($out('96891234572')[0], 'en', $lina, $enInvoice);
+
+        // Announced again (a second save, a retry): nothing leaves a second time.
+        $this->asTenant($club, fn () => app(MemberNotifier::class)->invoiceIssued($sara->fresh(), $arInvoice->fresh()));
+        $this->assertCount(1, $out('96891234571'));
+
+        // By hand, in the other language each: the same name, that language's code, the same values.
+        $this->send($owner, $sara, $arInvoice, 'en')->assertOk()->assertJsonPath('template_key', 'invoice_issued_membership_en');
+        $this->send($owner, $lina, $enInvoice, 'ar')->assertOk()->assertJsonPath('template_key', 'invoice_issued_membership');
+        $this->assertSame($arLink, $expect($out('96891234571')[1], 'en', $sara, $arInvoice));
+        $this->assertSame($enLink, $expect($out('96891234572')[1], 'ar', $lina, $enInvoice));
+
+        // Each link opens its own invoice, not the other's.
+        $this->get($arLink)->assertOk()->assertSee($arInvoice->number)->assertDontSee($enInvoice->number);
+        $this->get($enLink)->assertOk()->assertSee($enInvoice->number)->assertDontSee($arInvoice->number);
     }
 
     public function test_a_second_send_of_the_same_invoice_within_a_minute_is_not_sent_again(): void
