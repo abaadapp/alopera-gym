@@ -30,6 +30,15 @@ final class TemplateCatalog
             'variables' => ['member_name', 'invoice_number', 'amount', 'payment_link'],
             'body' => 'مرحبًا {{1}}، تم إصدار الفاتورة رقم {{2}} بمبلغ {{3}}. تفاصيل الفاتورة والدفع: {{4}}',
         ],
+        // The same message when the invoice carries a membership (alone, or with other lines: the invoice catalogue,
+        // owner's decision 2026-11-21), saying it starts only once the invoice is paid in full. Sent in place of
+        // invoice_issued only once Meta approved it; until then invoice_issued is, once per invoice either way.
+        'invoice_issued_membership' => [
+            'label' => 'إرسال الفاتورة ورابطها (فيها اشتراك)',
+            'category' => 'utility',
+            'variables' => ['member_name', 'invoice_number', 'amount', 'payment_link'],
+            'body' => 'مرحبًا {{1}}، تم إصدار الفاتورة رقم {{2}} بمبلغ {{3}}. الاشتراك فيها يتفعّل بعد سداد الفاتورة كاملة. تفاصيل الفاتورة والدفع: {{4}}',
+        ],
         'payment_received' => [
             'label' => 'تأكيد استلام الدفعة والإيصال',
             'category' => 'utility',

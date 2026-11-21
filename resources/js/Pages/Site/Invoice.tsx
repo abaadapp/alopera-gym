@@ -8,6 +8,8 @@ import { money } from '@/lib/format';
 import { useT } from '@/lib/i18n';
 
 interface Props {
+    /** A membership or training package on it starts once it is paid in full. */
+    starts_when_paid?: boolean;
     site: SiteInfo;
     seo: { title: string };
     invoice: { number: string; balance: string; status: string };
@@ -21,7 +23,7 @@ interface Props {
  * The invoice link sent to the member: the invoice paper itself — the same paper the club prints and downloads as a
  * PDF — with print, download and (when something is owed and online payment is on) pay.
  */
-export default function Invoice({ seo, invoice, paper, pay_url, print_url, pdf_url }: Props) {
+export default function Invoice({ seo, invoice, paper, pay_url, print_url, pdf_url, starts_when_paid = false }: Props) {
     const currency = useCurrency();
     const { tenant } = useShared();
     const t = useT();
@@ -46,6 +48,11 @@ export default function Invoice({ seo, invoice, paper, pay_url, print_url, pdf_u
                         </a>
                     </div>
                 </div>
+                {starts_when_paid && (
+                    <p className="mx-auto mb-4 max-w-4xl rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        {t('الاشتراك أو باقة التدريب في هذه الفاتورة يتفعّل بعد سدادها كاملة.')}
+                    </p>
+                )}
                 <div className="mx-auto max-w-4xl">
                     <PaperFrame html={paper.html} paper={paper.size} height="auto" title={t('فاتورة :number', { number: invoice.number })} className="border-0 bg-transparent p-0" />
                 </div>

@@ -9,6 +9,7 @@ use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Messaging\Models\Message;
+use App\Modules\Messaging\Models\MessageTemplate;
 use App\Modules\Payments\Models\PaymentLink;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Payments\Services\PaymentLinks;
@@ -40,7 +41,12 @@ final class MemberNotifier
             return;
         }
 
-        $this->whatsapp->queueTemplate($member, 'invoice_issued', $this->base($member) + [
+        // With a membership waiting on it: the message that says it starts once the invoice is paid in full, when Meta
+        // approved it (else the plain one). One message per invoice either way (the same dedupe key).
+        $waits = Membership::where('invoice_id', $invoice->id)->where('status', Membership::PENDING)->exists();
+        $key = $waits && MessageTemplate::where('key', 'invoice_issued_membership')->first()?->isUsable() ? 'invoice_issued_membership' : 'invoice_issued';
+
+        $this->whatsapp->queueTemplate($member, $key, $this->base($member) + [
             'invoice_number' => $invoice->number,
             'amount' => $this->money($invoice->balance()),
             'payment_link' => $this->paymentLink($invoice),

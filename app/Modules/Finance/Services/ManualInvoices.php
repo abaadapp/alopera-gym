@@ -131,7 +131,7 @@ final class ManualInvoices
             $options['type'] = self::typeOf($lines);
             $invoice = $this->invoices->issue($member, $lines, $options, $name);
             foreach ($made as $record) {
-                $record instanceof Membership ? $this->memberships->issuedOn($record, $invoice) : $this->pt->issuedOn($record, $invoice);
+                $record instanceof Membership ? $this->memberships->issuedOn($record, $invoice, announce: false) : $this->pt->issuedOn($record, $invoice);
             }
 
             // Products from the catalogue leave the shelf of the invoice's branch (none: the main branch), and so does
@@ -171,6 +171,14 @@ final class ManualInvoices
                         'proof_path' => $proof instanceof UploadedFile ? $this->store($proof, 'tenants/'.$invoice->tenant_id.'/payment-proofs', 'payment_proof') : null,
                         'notes' => 'عند إصدار الفاتورة',
                     ]);
+                }
+            }
+
+            // A membership on it is announced as its own sale announces it (the invoice message, owner's decision
+            // 2026-11-21: one, with the member's consent) — after the money taken now, so it asks only what is owed.
+            foreach ($made as $record) {
+                if ($record instanceof Membership) {
+                    $this->memberships->announce($record);
                 }
             }
 

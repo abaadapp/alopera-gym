@@ -8,6 +8,8 @@ use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\GiftMembership;
+use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Messaging\Services\MemberNotifier;
 use App\Modules\Payments\Models\PaymentIntent;
@@ -158,6 +160,9 @@ class PayController extends Controller
             'pay_url' => $invoice->isOpen() && $online->available() ? app(MemberNotifier::class)->payPageOrNull($invoice) : null,
             'print_url' => route('site.invoice.print', ['token' => $token]),
             'pdf_url' => route('site.invoice.pdf', ['token' => $token]),
+            // A membership or training package waiting on it starts once it is paid in full: said to the customer.
+            'starts_when_paid' => $invoice->isOpen() && (Membership::where('invoice_id', $invoice->id)->where('status', Membership::PENDING)->exists()
+                || PtSubscription::where('invoice_id', $invoice->id)->where('status', PtSubscription::PENDING)->exists()),
         ], __('فاتورة :number', ['number' => $invoice->number]));
     }
 

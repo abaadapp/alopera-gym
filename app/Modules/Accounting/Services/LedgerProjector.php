@@ -23,6 +23,8 @@ use Throwable;
  * So the books can also be built for records from before the books existed (accounting:sync).
  *
  *   invoice issued       Dr receivable (total)          Cr revenue of its type (net of tax), Cr VAT payable
+ *                        (an invoice of the editor, «other», since 2026-11-21: Cr each line's revenue — memberships,
+ *                        personal training, store products, other services — net of its discount)
  *   invoice voided       the issue entry is reversed
  *   payment completed    Dr the money account it went into          Cr receivable (Cr customer credits for what was not applied)
  *   payment cancelled    the receipt entry is reversed (in an open period)
@@ -39,6 +41,20 @@ use Throwable;
  */
 final class LedgerProjector
 {
+    /** The revenue account of an editor invoice's line, by what it sells (the rest: other revenue). */
+    private const LINE_REVENUE = [
+        'membership' => 'revenue_membership',
+        'pt_subscription' => 'revenue_pt',
+        'product' => 'revenue_pos',
+        'product_addon' => 'revenue_pos',
+    ];
+
+    /**
+     * Editor invoices made from this day are credited line by line (owner's decision); one made before keeps the account
+     * of its kind even if the books reach it only now (accounting:sync), so nothing booked before is booked otherwise.
+     */
+    public const LINE_REVENUE_FROM = '2026-11-21';
+
     public function __construct(private readonly Ledger $ledger, private readonly ChartOfAccounts $chart, private readonly TenantContext $tenants) {}
 
     public function project(Model $record, bool $deleted = false): void
@@ -81,9 +97,47 @@ final class LedgerProjector
             ...$this->key('invoice', $invoice->id, 'issue'),
         ], [
             ['account' => $this->chart->account('receivable'), 'debit' => $invoice->total],
-            ['account' => $this->chart->forInvoiceType($invoice->type), 'credit' => Money::sub($invoice->total, $tax)],
+            ...$this->revenue($invoice, Money::sub($invoice->total, $tax)),
             ['account' => $this->chart->account('vat_payable'), 'credit' => $tax],
         ]);
+    }
+
+    /**
+     * Where an invoice's revenue (net of tax) is credited. An invoice of one kind (a membership, a package, a till sale,
+     * a gift) to its kind's account, as always. An invoice of the editor («other») may carry several (owner's decision,
+     * 2026-11-21): each line's net (its total after its own discount, which is what the revenue is the sum of) to its
+     * kind's account — memberships, personal training, store products and their add-ons — and the rest (programs,
+     * lines typed in) to other revenue. Only an entry not posted yet is built so (one posted stays as it is), and only
+     * for an invoice made from LINE_REVENUE_FROM on. Tax and discounts are as before: the VAT on its own line, each
+     * line's discount inside its net; a void reverses the entry as posted, a credit note goes to returns as any does.
+     *
+     * @return list<array{account: Account, credit: string}>
+     */
+    private function revenue(Invoice $invoice, string $net): array
+    {
+        $single = [['account' => $this->chart->forInvoiceType($invoice->type), 'credit' => $net]];
+        if ($invoice->type !== 'other' || ($invoice->created_at && $invoice->created_at->lt(self::LINE_REVENUE_FROM))) {
+            return $single;
+        }
+
+        $by = [];
+        foreach ($invoice->items()->get(['itemable_type', 'line_total']) as $item) {
+            $key = self::LINE_REVENUE[$item->itemable_type] ?? 'revenue_other';
+            $by[$key] = Money::add($by[$key] ?? '0', $item->line_total);
+        }
+        // The lines are the revenue to the baisa (InvoiceService); were they ever not, the whole goes to other revenue.
+        if (Money::cmp(array_reduce($by, fn ($t, $v) => Money::add($t, $v), '0'), $net) !== 0) {
+            return $single;
+        }
+
+        $lines = [];
+        foreach (['revenue_membership', 'revenue_pt', 'revenue_pos', 'revenue_other'] as $key) {
+            if (isset($by[$key]) && ! Money::isZero($by[$key])) {
+                $lines[] = ['account' => $this->chart->account($key), 'credit' => $by[$key]];
+            }
+        }
+
+        return $lines ?: $single;
     }
 
     public function payment(Payment $payment): void

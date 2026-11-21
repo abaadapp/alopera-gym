@@ -104,14 +104,25 @@ final class MembershipService
         ];
     }
 
-    /** The invoice the lines of pendingForInvoice() were issued on: the membership is tied to it, as a sale is. */
-    public function issuedOn(Membership $membership, Invoice $invoice): Membership
+    /**
+     * The invoice the lines of pendingForInvoice() were issued on: the membership is tied to it, as a sale is, and
+     * announced (MembershipCreated: the invoice message to the member) — or later by announce(), once the money taken
+     * with the invoice is recorded, so the message asks only what is still owed (none: no message).
+     */
+    public function issuedOn(Membership $membership, Invoice $invoice, bool $announce = true): Membership
     {
         $membership->forceFill(['invoice_id' => $invoice->id])->save();
         $membership->refresh();
-        MembershipCreated::dispatch($membership);
+        if ($announce) {
+            $this->announce($membership);
+        }
 
         return $membership;
+    }
+
+    public function announce(Membership $membership): void
+    {
+        MembershipCreated::dispatch($membership->refresh());
     }
 
     /**
