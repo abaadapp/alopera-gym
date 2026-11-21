@@ -110,7 +110,7 @@ interface Props {
     paper_lang: PaperLang;
     methods: Method[];
     /** link: «إصدار الفاتورة وإنشاء رابط دفع» (the links permission, online payments on). */
-    may: { issue: boolean; pay: boolean; design: boolean; link?: boolean };
+    may: { issue: boolean; pay: boolean; design: boolean; link?: boolean; register?: boolean };
     /** Why «إصدار الفاتورة وإنشاء رابط دفع» is not offered (the permission, Paymob not ready); shown in its place. */
     link_reason?: string | null;
     /** How long a payment link opens a payment page, in days. */
@@ -127,6 +127,9 @@ const CUSTOM = 'custom';
 const METHOD_LABEL: Record<Method, string> = { credit: 'آجل — لا يُقبض الآن', cash: 'مدفوع نقدًا', card: 'مدفوع بالبطاقة (جهاز الشبكة)', bank_transfer: 'تحويل بنكي' };
 const ACCEPT = '.jpg,.jpeg,.png,.pdf,.webp,.heic';
 const N = (v: string) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+/** Shown with the form and its preview when issuing will register a new customer as a member (owner's wording). */
+const NEW_MEMBER_NOTICE = 'سيتم إنشاء ملف عضو تلقائيًا عند إصدار الفاتورة، وستُفعّل العضوية بعد السداد الكامل';
+
 const blank = (): Line => ({ product_id: '', item_type: '', item_id: '', description: '', quantity: '1', unit_price: '0', discount: '0', addons: [] });
 const NO_SERVICES: Services = { plans: [], pt: [], programs: [], price_programs: false };
 /** An add-on's count on a line: per piece × the pieces, to the thousandth as the server keeps it. */
@@ -236,6 +239,16 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, ser
             return empty ? [line] : [...prev, line];
         });
     const needsMember = lines.some((l) => l.item_type === 'plan' || l.item_type === 'pt');
+    // A new customer sold a membership or training: the invoice registers them as a member on issue.
+    const registers = needsMember && d.customer_mode === 'new' && may.register === true;
+    // The number is already a member's: choose them instead (named only to whoever may see that member).
+    const takenBy = errors.existing_member_id ? { id: Number(errors.existing_member_id), label: errors.existing_member_label ?? '' } : null;
+    const chooseRegistered = () => {
+        if (!takenBy) return;
+        setMember({ id: takenBy.id, label: takenBy.label });
+        form.setData('customer_mode', 'member');
+        form.clearErrors();
+    };
 
     // ── Add-ons: those that go with a product, how many of one the other lines already use, and how many per piece the
     // shelf still allows on a line (within the add-on's own limit). ──
@@ -379,7 +392,7 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, ser
 
             {Object.keys(errors).length > 0 && (
                 <p className="mb-4 rounded-[10px] border border-[#fecaca] bg-[#fef2f2] p-3 text-[13px] text-[#b91c1c]" role="alert">
-                    راجع الحقول المعلَّمة: {Object.values(errors).filter(Boolean).slice(0, 2).join(' · ')}
+                    راجع الحقول المعلَّمة: {Object.entries(errors).filter(([k, v]) => v && !k.startsWith('existing_member_')).map(([, v]) => v).slice(0, 2).join(' · ')}
                 </p>
             )}
 
@@ -447,7 +460,10 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, ser
                         {d.customer_mode === 'new' && (
                             <div className="mt-3 grid grid-cols-1 gap-3 rounded-[12px] border border-line bg-[#fafafa] p-4 sm:grid-cols-3">
                                 <Field label="اسم العميل" required error={errors.customer_name}><Input value={d.customer_name} onChange={(e) => form.setData('customer_name', e.target.value)} maxLength={160} /></Field>
-                                <Field label="الهاتف" error={errors.customer_phone}><Input dir="ltr" inputMode="tel" value={d.customer_phone} onChange={(e) => form.setData('customer_phone', e.target.value)} maxLength={32} /></Field>
+                                <Field label="الهاتف" required={needsMember} error={errors.customer_phone}>
+                                    <Input dir="ltr" inputMode="tel" value={d.customer_phone} onChange={(e) => form.setData('customer_phone', e.target.value)} maxLength={32} />
+                                    {takenBy && <Button variant="outline" size="sm" className="mt-2" icon={<UserRound />} onClick={chooseRegistered}>اختيار هذا العضو</Button>}
+                                </Field>
                                 <Field label="البريد" error={errors.customer_email}><Input dir="ltr" type="email" value={d.customer_email} onChange={(e) => form.setData('customer_email', e.target.value)} maxLength={160} /></Field>
                             </div>
                         )}
@@ -468,8 +484,12 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, ser
                             <Button size="sm" icon={<Plus />} onClick={() => setLines((p) => [...p, blank()])} disabled={lines.length >= 50}>إضافة بند</Button>
                             <Button variant="outline" size="sm" className="text-[#b91c1c]" title="تفريغ كل البنود" aria-label="تفريغ كل البنود" icon={<Trash2 />} onClick={() => setLines([blank()])} />
                         </div>
-                        {needsMember && d.customer_mode !== 'member' && (
-                            <Notice tone="amber" icon={<Info />} className="mb-3">العضوية والتدريب الشخصي يُباعان لعضو: اختر «عضو» في العميل ثم العضو، فتُنشأ له معلّقة وتُفعَّل بعد سداد الفاتورة كاملة.</Notice>
+                        {registers && <Notice tone="blue" icon={<UserPlus />} className="mb-3">{NEW_MEMBER_NOTICE}</Notice>}
+                        {needsMember && d.customer_mode === 'new' && !may.register && (
+                            <Notice tone="amber" icon={<Info />} className="mb-3">إنشاء ملف عضو للعميل الجديد يتطلب صلاحية «إدارة الأعضاء»: اختر عضوًا مسجّلًا.</Notice>
+                        )}
+                        {needsMember && d.customer_mode === 'walk_in' && (
+                            <Notice tone="amber" icon={<Info />} className="mb-3">العضوية والتدريب الشخصي يُباعان لعضو: اختر عضوًا، أو «عميل جديد» فيُنشأ له ملف عضو عند إصدار الفاتورة، وتُفعَّل بعد سدادها كاملة.</Notice>
                         )}
                         {/* The lines fit the card at any width: one row each where there is room (a header over them), else
                             the description on one row and the quantity, price, discount and total under it. */}
@@ -707,6 +727,7 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, ser
                         {may.design && <Button variant="outline" size="sm" icon={<Settings2 />} href={route('club.settings.papers.edit', 'invoice')} external>تخصيص التصميم</Button>}
                     </div>
                     {/* As tall as the sheet, up to most of the screen: a phone shows the whole page without a grey well under it. */}
+                    {registers && <Notice tone="blue" icon={<UserPlus />}>{NEW_MEMBER_NOTICE}</Notice>}
                     <PaperFrame html={paper.html} paper={paper.size} height="auto" title="معاينة الفاتورة" className="max-h-[min(72svh,1000px)]" />
                     <p className="px-1 text-[12px] leading-relaxed text-[#9ca3af]">الملاحظات الداخلية والمرفقات لا تظهر في الورقة المطبوعة. والرقم يظهر بعد الإصدار.</p>
                 </div>

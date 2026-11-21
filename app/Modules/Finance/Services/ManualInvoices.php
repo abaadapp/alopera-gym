@@ -6,6 +6,7 @@ use App\Core\Audit\AuditLogger;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Files\SafeFiles;
 use App\Core\Support\Money;
+use App\Core\Support\Phone;
 use App\Core\Tenancy\BranchContext;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\InvoiceAttachment;
@@ -15,17 +16,21 @@ use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Models\Program;
 use App\Modules\Gym\Models\PtPackage;
 use App\Modules\Gym\Models\PtSubscription;
+use App\Modules\Gym\Services\MemberService;
 use App\Modules\Gym\Services\MembershipService;
 use App\Modules\Gym\Services\PtService;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Services\StockService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The invoice editor's two doors, over the invoice engine (InvoiceService) — the same arithmetic, tax and numbering as
@@ -47,6 +52,12 @@ use Illuminate\Support\Str;
  * screens make them (MembershipService / PtService::pendingForInvoice) — no invoice of their own — and are activated by
  * ActivatePaidItems only once this invoice is paid in full; voiding it withdraws them. A program is billed at its price
  * (none set: only by whoever manages programs, at a price typed) and books nothing. None of them touches the stock.
+ *
+ * A new customer may be sold a plan or a package too (owner's decision, 2026-11-21): issuing registers their member
+ * file first (MemberService::create — its rules, the phone normalized, never a second member for a number already
+ * registered: staff are sent to that member instead), in the same transaction as the invoice, its lines, the pending
+ * membership or package and any money taken now, so a failure leaves none of them. A new customer's invoice without
+ * a plan or a package registers no one, as before.
  *
  * @phpstan-type Data array{customer_mode: string, member_id?: int|null, customer_name?: string|null, customer_phone?: string|null, customer_email?: string|null, issue_date: string, due_date?: string|null, payment_terms_days?: int|string|null, notes?: string|null, internal_notes?: string|null, paper_lang?: string|null, lines: list<array{product_id?: int|string|null, description: string, quantity: string|float, unit_price: string|float, discount?: string|float|null, addons?: list<array{addon_id: int|string, quantity: int|string}>}>}
  */
@@ -72,6 +83,7 @@ final class ManualInvoices
         private readonly AuditLogger $audit,
         private readonly MembershipService $memberships,
         private readonly PtService $pt,
+        private readonly MemberService $members,
     ) {}
 
     /**
@@ -125,6 +137,12 @@ final class ManualInvoices
                 ($line['itemable'] ?? null) instanceof ProductAddon => $line['itemable']->stock_product_id,
                 default => null,
             }));
+            // A new customer sold a plan or a package: their member file first, the invoice and the sale theirs.
+            $registered = null;
+            if ($member === null && ($data['customer_mode'] ?? null) === 'new' && self::sellsToMember($lines)) {
+                $member = $registered = $this->registerCustomer($data, $options['branch_id']);
+                $name = null;
+            }
             // The services: memberships and packages made pending for this invoice, their lines in place of the
             // catalogue's — after the shelf's locks, before the number (the member's lock, as their own sale takes it).
             [$lines, $made] = $this->services($member, $lines, $options['branch_id']);
@@ -132,6 +150,9 @@ final class ManualInvoices
             $invoice = $this->invoices->issue($member, $lines, $options, $name);
             foreach ($made as $record) {
                 $record instanceof Membership ? $this->memberships->issuedOn($record, $invoice, announce: false) : $this->pt->issuedOn($record, $invoice);
+            }
+            if ($registered) {
+                $this->audit->log('member.registered_on_invoice', $registered, ['invoice' => $invoice->number, 'member_no' => $registered->member_no]);
             }
 
             // Products from the catalogue leave the shelf of the invoice's branch (none: the main branch), and so does
@@ -250,7 +271,7 @@ final class ManualInvoices
         foreach ($rows as $i => $l) {
             $type = $l['item_type'] ?? null;
             if (in_array($type, ['plan', 'pt', 'program'], true)) {
-                if ($line = $this->serviceLine($type, $catalogue[$type]->get((int) ($l['item_id'] ?? 0)), $l, $member, $rows, $strict, "lines.$i")) {
+                if ($line = $this->serviceLine($type, $catalogue[$type]->get((int) ($l['item_id'] ?? 0)), $l, $member, $mode === 'new', $rows, $strict, "lines.$i")) {
                     array_push($lines, ...$line);
                 }
 
@@ -291,14 +312,15 @@ final class ManualInvoices
      * A service from the catalogue as the invoice bills it: what it is and its price from the database (the form gives
      * only which one, how many of a program, and a discount); a plan's period and a first membership's signup fee as
      * its sale would bill them. Checked here, refused when saving (named on the line), left out of the paper while the
-     * form is unfinished: a plan or a package is sold to a member chosen, once, by whoever may sell it; a plan or a
-     * package or a program not on sale is not billed; a program without a price only by whoever manages programs.
+     * form is unfinished: a plan or a package is sold to a member chosen — or to a new customer, whose member file the
+     * invoice makes, by whoever may register members — once, by whoever may sell it; a plan or a package or a program
+     * not on sale is not billed; a program without a price only by whoever manages programs.
      *
      * @param  array<string, mixed>  $line  the form's line
      * @param  Collection<int, array<string, mixed>>  $rows  the form's lines
      * @return list<array<string, mixed>>|null
      */
-    private function serviceLine(string $type, MembershipPlan|PtPackage|Program|null $item, array $line, ?Member $member, Collection $rows, bool $strict, string $field): ?array
+    private function serviceLine(string $type, MembershipPlan|PtPackage|Program|null $item, array $line, ?Member $member, bool $newCustomer, Collection $rows, bool $strict, string $field): ?array
     {
         $user = Auth::guard('web')->user();
         $same = $rows->filter(fn ($l) => ($l['item_type'] ?? null) === $type && (int) ($l['item_id'] ?? 0) === (int) ($line['item_id'] ?? 0))->count();
@@ -309,7 +331,8 @@ final class ManualInvoices
             ! $item->is_active => ['item_id', '«'.$item->name.'» غير متاح للبيع.'],
             $type === 'plan' && ! $user?->can('memberships.sell') => ['item_id', 'بيع العضويات يتطلب صلاحية «بيع وتجديد العضويات».'],
             $type === 'pt' && ! $user?->can('pt.sell') => ['item_id', 'بيع باقات التدريب الشخصي يتطلب صلاحية «بيع باقات التدريب الشخصي».'],
-            $type !== 'program' && $member === null => ['item_id', '«'.$item->name.'» يُباع لعضو: اختر «عضو» ثم العضو، فتُنشأ له وتُفعَّل بعد السداد الكامل.'],
+            $type !== 'program' && $member === null && ! $newCustomer => ['item_id', '«'.$item->name.'» يُباع لعضو: اختر عضوًا، أو «عميل جديد» فيُنشأ له ملف عضو عند الإصدار، وتُفعَّل بعد السداد الكامل.'],
+            $type !== 'program' && $member === null && ! $user?->can('members.manage') => ['item_id', 'إنشاء ملف عضو للعميل الجديد يتطلب صلاحية «إدارة الأعضاء»: اختر عضوًا مسجّلًا.'],
             $type === 'plan' && $rows->filter(fn ($l) => ($l['item_type'] ?? null) === 'plan')->count() > 1 => ['item_id', 'عضوية واحدة في الفاتورة: للعضو اشتراك واحد بانتظار الدفع.'],
             $type === 'pt' && $same > 1 => ['item_id', '«'.$item->name.'» مكررة في الفاتورة: باقة واحدة منها بانتظار الدفع.'],
             $type !== 'program' && abs($quantity - 1) > 0.0001 => ['quantity', 'الكمية واحدة: يُباع «'.$item->name.'» مرة في الفاتورة.'],
@@ -330,7 +353,7 @@ final class ManualInvoices
         }
 
         if ($item instanceof MembershipPlan) {
-            $quote = $member ? $this->memberships->quote($member, $item) : ['description' => MembershipService::KIND_LABELS['new'].' — '.$item->name, 'signup_fee' => '0.000'];
+            $quote = $member ? $this->memberships->quote($member, $item) : $this->memberships->quoteForNewMember($item);
             $lines = [['description' => $quote['description'], 'quantity' => 1, 'unit_price' => Money::normalize($item->price), 'discount' => $discount, 'itemable' => $item, 'field' => $field]];
             if (! Money::isZero($quote['signup_fee'])) {
                 $lines[] = ['description' => 'رسوم التسجيل', 'quantity' => 1, 'unit_price' => $quote['signup_fee'], 'discount' => 0, 'itemable' => $item, 'signup' => true];
@@ -397,6 +420,66 @@ final class ManualInvoices
         }
 
         return [$out, $made];
+    }
+
+    /** Whether the lines sell a plan or a package: those go to a member. */
+    private static function sellsToMember(array $lines): bool
+    {
+        return collect($lines)->contains(fn (array $l) => ($l['itemable'] ?? null) instanceof MembershipPlan || ($l['itemable'] ?? null) instanceof PtPackage);
+    }
+
+    /**
+     * The member file of a new customer the invoice sells a plan or a package to, made as the members' form makes one
+     * (MemberService: its rules, the phone normalized) in the invoice's branch, inside the issue's transaction. A number
+     * already registered makes no second member: staff are sent to the member who has it (named, with a way to choose
+     * them, to whoever may see members in that branch) — the same refusal if another request registered it a moment
+     * before (the club's one-member-per-phone index).
+     *
+     * @param  Data  $data
+     */
+    private function registerCustomer(array $data, ?int $branchId): Member
+    {
+        $email = is_string($data['customer_email'] ?? null) ? Str::lower(trim($data['customer_email'])) : null;
+        $input = ['customer_name' => $data['customer_name'] ?? null, 'customer_phone' => $data['customer_phone'] ?? null, 'customer_email' => $email ?: null];
+        $rules = MemberService::identityRules();
+        $messages = [
+            'customer_name.required' => 'اسم العميل مطلوب: يُنشأ به ملف العضو.',
+            'customer_phone.required' => 'هاتف العميل مطلوب: يُنشأ به ملف العضو.',
+            'customer_phone.regex' => 'رقم الهاتف غير صحيح.',
+            'customer_email.unique' => 'البريد مسجّل لعضو آخر.',
+        ];
+        Validator::make($input, ['customer_name' => $rules['full_name'], 'customer_phone' => $rules['phone']], $messages)->validate();
+
+        // The number first: a customer already registered is that member, whatever else was typed.
+        $phone = Phone::normalize($input['customer_phone']);
+        if ($existing = Member::where('phone', $phone)->first()) {
+            throw $this->alreadyRegistered($existing);
+        }
+        Validator::make($input, ['customer_email' => $rules['email']], $messages)->validate();
+        try {
+            return $this->members->create(['full_name' => trim((string) $input['customer_name']), 'phone' => $phone, 'email' => $input['customer_email'], 'branch_id' => $branchId]);
+        } catch (BusinessRuleException $e) {
+            // A removed member's number (member.phone_taken): on the phone field.
+            throw new BusinessRuleException($e->rule, $e->getMessage(), 'customer_phone');
+        } catch (UniqueConstraintViolationException) {
+            $existing = Member::where('phone', $phone)->first();
+            throw $existing ? $this->alreadyRegistered($existing) : ValidationException::withMessages(['customer_phone' => 'رقم الهاتف مسجّل لعضو آخر.']);
+        }
+    }
+
+    /** No second member for a number: who has it, and how to choose them, to whoever may see that member. */
+    private function alreadyRegistered(Member $existing): ValidationException
+    {
+        $user = Auth::guard('web')->user();
+        $visible = $user?->can('members.view') && $this->branches->allows($user, $existing->branch_id);
+
+        return ValidationException::withMessages(array_filter([
+            'customer_phone' => $visible
+                ? 'رقم الهاتف مسجّل للعضو «'.$existing->full_name.'» ('.$existing->member_no.'). لا يُنشأ عضو مكرر: اختره لتُصدر الفاتورة باسمه.'
+                : 'رقم الهاتف مسجّل لعضو في النادي، فلا يُنشأ عضو مكرر. اختر العضو من «اختيار عضو»، أو اطلب ذلك ممن يملك صلاحية عرض الأعضاء.',
+            'existing_member_id' => $visible ? (string) $existing->id : null,
+            'existing_member_label' => $visible ? $existing->full_name.' · '.$existing->member_no : null,
+        ]));
     }
 
     /**

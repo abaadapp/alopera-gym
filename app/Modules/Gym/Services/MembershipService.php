@@ -105,6 +105,23 @@ final class MembershipService
     }
 
     /**
+     * quote() for a customer not registered yet, whose member file the invoice will make: a first, new membership —
+     * from today, with the plan's signup fee — as its sale will bill it once the member exists.
+     *
+     * @return array{description: string, signup_fee: string}
+     */
+    public function quoteForNewMember(MembershipPlan $plan): array
+    {
+        $start = CarbonImmutable::today();
+        $end = $plan->endDateFrom($start);
+
+        return [
+            'description' => self::KIND_LABELS[Membership::KIND_NEW].' — '.$plan->name.' (من '.$start->format('Y-m-d').' إلى '.$end->format('Y-m-d').')',
+            'signup_fee' => Money::normalize($plan->signup_fee),
+        ];
+    }
+
+    /**
      * The invoice the lines of pendingForInvoice() were issued on: the membership is tied to it, as a sale is, and
      * announced (MembershipCreated: the invoice message to the member) — or later by announce(), once the money taken
      * with the invoice is recorded, so the message asks only what is still owed (none: no message).

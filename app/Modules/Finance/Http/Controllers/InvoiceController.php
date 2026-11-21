@@ -195,7 +195,8 @@ class InvoiceController extends Controller
 
         $form = [
             'id' => $invoice->id,
-            'customer_mode' => $member ? 'member' : ($invoice->customer_phone || $invoice->customer_email ? 'new' : 'walk_in'),
+            // A new customer's draft selling a plan or a package stays a new customer's (the invoice registers them).
+            'customer_mode' => $member ? 'member' : ($invoice->customer_phone || $invoice->customer_email || ($invoice->customer_name !== 'عميل نقدي' && $invoice->items->contains(fn ($i) => $i->itemable instanceof MembershipPlan || $i->itemable instanceof PtPackage)) ? 'new' : 'walk_in'),
             'member' => $member ? ['id' => $member->id, 'label' => $member->full_name.' · '.$member->member_no] : null,
             'customer_name' => $member ? '' : ($invoice->customer_name === 'عميل نقدي' ? '' : $invoice->customer_name),
             'customer_phone' => $member ? '' : (string) $invoice->customer_phone,
@@ -285,6 +286,9 @@ class InvoiceController extends Controller
             ->filter(fn ($l) => filled($l['description'] ?? null) && (float) ($l['quantity'] ?? 0) > 0)
             ->map(fn ($l) => [
                 'product_id' => $l['product_id'] ?? null,
+                // A catalogue service is drawn as issuing bills it (its price, a plan's period and signup fee).
+                'item_type' => $l['item_type'] ?? null,
+                'item_id' => $l['item_id'] ?? null,
                 'description' => $l['description'],
                 'quantity' => $l['quantity'],
                 'unit_price' => $l['unit_price'] ?? 0,
@@ -478,6 +482,8 @@ class InvoiceController extends Controller
             'terms' => self::TERMS,
             'methods' => $user->can('payments.record') ? ManualInvoices::METHODS : ['credit'],
             'may' => ['issue' => $user->can('invoices.manage'), 'pay' => $user->can('payments.record'), 'design' => $user->can('papers.manage'),
+                // A new customer sold a plan or a package is registered as a member on issue: by whoever may register them.
+                'register' => $user->can('members.manage'),
                 // «إصدار الفاتورة وإنشاء رابط دفع»: with the links permission, while online payments are on.
                 'link' => $user->can('payments.links') && app(OnlinePaymentService::class)->available()],
             // Why that button is not offered, shown in its place rather than leaving it out without a word.

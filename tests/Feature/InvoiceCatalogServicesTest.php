@@ -163,7 +163,8 @@ class InvoiceCatalogServicesTest extends TestCase
 
         // No member: refused on the line, nothing made.
         $this->issue($owner, [$this->planLine($c['plan'])], ['customer_mode' => 'walk_in'])->assertSessionHasErrors('lines.0.item_id');
-        $this->issue($owner, [$this->ptLine($c['pt'])], ['customer_mode' => 'new', 'customer_name' => 'سارة'])->assertSessionHasErrors('lines.0.item_id');
+        // A new customer is registered as a member by the invoice (InvoiceNewMemberTest): not without a phone to file them by.
+        $this->issue($owner, [$this->ptLine($c['pt'])], ['customer_mode' => 'new', 'customer_name' => 'سارة'])->assertSessionHasErrors('customer_phone');
         // Twice, or more than one.
         $this->issue($owner, [$this->planLine($c['plan']), $this->planLine($c['plan'])], ['member_id' => $member->id])->assertSessionHasErrors('lines.0.item_id');
         $this->issue($owner, [$this->ptLine($c['pt']), $this->ptLine($c['pt'])], ['member_id' => $member->id])->assertSessionHasErrors('lines.0.item_id');

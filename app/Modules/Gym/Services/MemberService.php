@@ -5,6 +5,7 @@ namespace App\Modules\Gym\Services;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\NumberSequence;
 use App\Core\Support\Phone;
+use App\Core\Tenancy\TenantRule;
 use App\Modules\Gym\Events\MemberRegistered;
 use App\Modules\Gym\Models\Member;
 use Illuminate\Support\Facades\Auth;
@@ -12,6 +13,22 @@ use Illuminate\Support\Facades\DB;
 
 final class MemberService
 {
+    /**
+     * Who a member is, as every door that registers one checks it (the members' form, a new customer's invoice that
+     * sells a membership or personal training): the name, the phone as typed (normalized by create()), the e-mail once
+     * per club. The phone's uniqueness is create()'s, on the normalized number.
+     *
+     * @return array{full_name: list<mixed>, phone: list<mixed>, email: list<mixed>}
+     */
+    public static function identityRules(?Member $member = null): array
+    {
+        return [
+            'full_name' => ['required', 'string', 'max:160'],
+            'phone' => ['required', 'string', 'max:32', 'regex:/^[+0-9٠-٩\s-]{8,20}$/u'],
+            'email' => ['nullable', 'email', 'max:255', TenantRule::unique('gym_members', 'email')->ignore($member?->id)],
+        ];
+    }
+
     /** @param array<string, mixed> $data validated attributes */
     public function create(array $data, ?string $password = null): Member
     {
