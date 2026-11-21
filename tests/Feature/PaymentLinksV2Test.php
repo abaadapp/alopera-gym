@@ -580,21 +580,28 @@ class PaymentLinksV2Test extends TestCase
         $second->assertRedirect(route('club.invoices.show', $invoice->id));
         $this->assertEqualsWithDelta(now()->addDays(3)->getTimestamp(), $this->current($club, $invoice->id)->expires_at->getTimestamp(), 5);
 
-        // A link refused (paid in full now: nothing left to pay) issues nothing either.
+        // A link is for an invoice on credit only (owner, 2026-11-21, as the reference): money taken now — the whole
+        // amount or a part of it — with a link is refused, nothing issued and nothing recorded.
         $this->actingAs($owner)->post(route('club.invoices.store'), ['payment_method' => 'cash', 'payment_date' => today()->toDateString(), 'client_key' => (string) Str::uuid()] + $form)
-            ->assertSessionHasErrors('error');
-        $this->assertSame(1, $this->asTenant($club, fn () => Invoice::count()), 'not issued without its link');
+            ->assertSessionHasErrors(['payment_method' => 'رابط الدفع لفاتورةٍ آجلة — اختر «آجل».']);
+        $this->actingAs($owner)->post(route('club.invoices.store'), ['payment_method' => 'cash', 'paid_amount' => '5.000', 'payment_date' => today()->toDateString(), 'client_key' => (string) Str::uuid()] + $form)
+            ->assertSessionHasErrors('payment_method');
+        $this->assertSame([1, 0], $this->asTenant($club, fn () => [Invoice::count(), Payment::count()]), 'not issued, nothing taken');
+        // The same cash invoice without a link: issued, its payment recorded.
+        $this->actingAs($owner)->post(route('club.invoices.store'), ['payment_method' => 'cash', 'paid_amount' => '5.000', 'payment_date' => today()->toDateString(), 'with_link' => 0, 'client_key' => (string) Str::uuid()] + $form)
+            ->assertSessionHasNoErrors();
+        $this->assertSame([2, 1], $this->asTenant($club, fn () => [Invoice::count(), PaymentLink::count()]));
 
         // No validity chosen: the form says so, nothing issued.
         $this->actingAs($owner)->post(route('club.invoices.store'), ['link_days' => null, 'client_key' => (string) Str::uuid()] + $form)->assertSessionHasErrors('link_days');
-        $this->assertSame(1, $this->asTenant($club, fn () => Invoice::count()));
+        $this->assertSame(2, $this->asTenant($club, fn () => Invoice::count()));
 
         // Without the links permission: refused, nothing issued; the plain issue still works.
         $clerk = $this->holding($club, ['invoices.manage', 'invoices.view']);
         $this->actingAs($clerk)->post(route('club.invoices.store'), ['client_key' => (string) Str::uuid()] + $form)->assertForbidden();
-        $this->assertSame(1, $this->asTenant($club, fn () => Invoice::count()));
+        $this->assertSame(2, $this->asTenant($club, fn () => Invoice::count()));
         $this->actingAs($clerk)->post(route('club.invoices.store'), ['with_link' => 0, 'client_key' => (string) Str::uuid()] + $form)->assertSessionHasNoErrors();
-        $this->assertSame([2, 1], $this->asTenant($club, fn () => [Invoice::count(), PaymentLink::count()]));
+        $this->assertSame([3, 1], $this->asTenant($club, fn () => [Invoice::count(), PaymentLink::count()]));
     }
 
     public function test_the_invoice_message_carries_the_current_link_and_none_is_sent_once_it_ended(): void

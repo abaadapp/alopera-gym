@@ -343,6 +343,11 @@ class InvoiceController extends Controller
         abort_if($issue && $method !== 'credit' && ! $request->user()->can('payments.record'), 403);
         $withLink = $issue && (bool) ($data['with_link'] ?? false);
         abort_if($withLink && ! $request->user()->can('payments.links'), 403);
+        // Owner's decision (2026-11-21), as the reference: issuing with a payment link is for an invoice on credit
+        // («آجل — لا يُقبض الآن»), the link asking what it owes; money taken now is recorded on its own, with no link.
+        if ($withLink && $method !== 'credit') {
+            throw ValidationException::withMessages(['payment_method' => 'رابط الدفع لفاتورةٍ آجلة — اختر «آجل».']);
+        }
 
         // The form sent twice (a double click, a retry) saves or issues once: the second gets the first's result.
         // With its payment link: one transaction, so a link refused (nothing left to pay, online payments off…) issues nothing.

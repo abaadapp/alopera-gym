@@ -367,7 +367,7 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, ser
                     {/* A draft carries no money: with a payment chosen, only issuing records it. */}
                     {(credit || !may.issue) && <Button variant="outline" disabled={form.processing} icon={<Save />} onClick={() => submit(false)}>حفظ كمسودة</Button>}
                     {may.issue && may.link && link_days.length > 0 && (
-                        <Button variant="outline" disabled={form.processing || paidNow >= total} title={paidNow >= total ? 'المبلغ كله مدفوع عند الإصدار، فلا يبقى ما يطلبه رابط الدفع.' : undefined} icon={<Link2 />} onClick={() => setLinking(true)}>إصدار الفاتورة وإنشاء رابط دفع</Button>
+                        <Button variant="outline" disabled={form.processing || !credit || paidNow >= total} title={!credit ? 'رابط الدفع لفاتورةٍ آجلة — اختر «آجل»' : paidNow >= total ? 'لا مبلغ في الفاتورة يطلبه رابط الدفع.' : undefined} icon={<Link2 />} onClick={() => setLinking(true)}>إصدار الفاتورة وإنشاء رابط دفع</Button>
                     )}
                     {/* Not offered: still shown, greyed, with why just below — never left out without a word. */}
                     {may.issue && !may.link && link_reason && <Button variant="outline" disabled title={link_reason} icon={<Link2 />}>إصدار الفاتورة وإنشاء رابط دفع</Button>}
