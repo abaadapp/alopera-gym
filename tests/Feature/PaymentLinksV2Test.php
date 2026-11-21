@@ -704,6 +704,32 @@ class PaymentLinksV2Test extends TestCase
         $this->assertEquals($before, $rows());
     }
 
+    public function test_cancelling_a_link_on_any_invoice_ends_the_link_only_even_when_asked_directly_of_an_ended_one(): void
+    {
+        // From R1 (PR #219, v0.140), kept for v2: whatever the invoice is for, from every path — the log's button or a
+        // request sent by hand for a link past its time — cancelling ends the link only.
+        [$club, $owner] = $this->ready();
+        $membership = $this->asTenant($club, fn () => app(MembershipService::class)->sell($this->member($club), $this->plan($club, ['price' => 25])));
+        $this->openLink($owner, $membership->invoice_id)->assertSessionHasNoErrors();
+        $live = $this->current($club, $membership->invoice_id);
+        $ended = $this->asTenant($club, fn () => PaymentLink::create(['invoice_id' => app(MembershipService::class)->sell($this->member($club), $this->plan($club, ['price' => 30]))->invoice_id,
+            'description' => 'اشتراك آخر', 'created_by' => $owner->id, 'expires_at' => now()->subDay()]));
+        $books = fn () => [DB::table('gym_journal_entries')->count(), DB::table('gym_journal_lines')->count(), DB::table('invoices')->orderBy('id')->get(['id', 'status', 'total', 'tax_total', 'paid_total', 'credited_total'])->toJson()];
+        $before = $books();
+
+        foreach ([$live, $ended] as $link) {
+            $this->actingAs($owner)->post(route('club.payment-links.cancel', $link->id))->assertSessionHasNoErrors();
+            $this->assertNotNull($link->fresh()->cancelled_at);
+        }
+        $this->assertSame($before, $books(), 'no invoice voided, no entry written, no amount changed');
+        $this->asTenant($club, fn () => $this->assertSame([Membership::PENDING, Membership::PENDING], Membership::orderBy('id')->pluck('status')->all()));
+        $this->assertSame(0, DB::table('audit_logs')->where('tenant_id', $club->id)->where('event', 'invoice.voided')->count());
+        $this->assertCount(2, $this->audit($club, 'payment_link.cancelled'));
+        // Voiding stays the invoice screen's own act.
+        $this->actingAs($owner)->post(route('club.invoices.void', $membership->invoice_id), ['reason' => 'خطأ'])->assertSessionHasNoErrors();
+        $this->asTenant($club, fn () => $this->assertSame(Invoice::VOID, Invoice::find($membership->invoice_id)->status));
+    }
+
     public function test_the_migration_adds_only_and_going_back_is_refused_once_a_v2_link_exists(): void
     {
         $migration = require base_path('app/Modules/Payments/Database/migrations/2026_11_21_000100_add_payment_link_history.php');
