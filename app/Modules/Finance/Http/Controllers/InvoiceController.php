@@ -29,7 +29,7 @@ use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Inventory\Services\ProductAddons;
 use App\Modules\Inventory\Services\StockService;
-use App\Modules\Messaging\Models\Message;
+use App\Modules\Messaging\Services\InvoiceMessage;
 use App\Modules\Messaging\Services\MemberNotifier;
 use App\Modules\Messaging\Services\WhatsAppService;
 use App\Modules\Payments\Http\Controllers\PaymentLinkController;
@@ -575,24 +575,13 @@ class InvoiceController extends Controller
         if (! $member) {
             return back()->with('error', 'الفاتورة غير مرتبطة بعضو.');
         }
-        // Owner's decision (2026-11-20): the message carries the invoice's live payment link; with its links all ended,
-        // nothing is sent and no link is made here — the staff make a new one first.
-        if (app(OnlinePaymentService::class)->available() && $notifier->payPageOrNull($invoice) === null) {
-            return back()->with('error', 'لا يوجد رابط دفع نشط لهذه الفاتورة: انتهى رابطها أو أُلغي أو استُبدل. أنشئ رابط دفع جديدًا من قسم «رابط الدفع» في هذه الصفحة، ثم أرسل الفاتورة.');
-        }
 
-        $message = $whatsapp->queueTemplate($member, 'invoice_issued', [
-            'member_name' => explode(' ', $member->full_name)[0],
-            'invoice_number' => $invoice->number,
-            'amount' => number_format((float) $invoice->balance(), 3).' '.$invoice->currency,
-            'payment_link' => $notifier->paymentLink($invoice),
-        ], $invoice, 'invoice:'.$invoice->id.':resend:'.now()->timestamp);
+        // The invoice's own values, in the member's language (the approved Arabic template when hers is not approved);
+        // refused for an invoice with no live payment link, as before (InvoiceMessage::refusal).
+        $sent = app(InvoiceMessage::class)->sendByHand($member, $invoice, (string) ($member->message_language ?: 'ar'));
 
-        // Said as it went: a skipped message (no consent, no phone, a template not approved) was not sent.
-        return match (true) {
-            $message === null => back()->with('error', 'لم تُرسل الفاتورة: أُرسلت قبل لحظات، أو واتساب غير مفعّل.'),
-            $message->status === Message::SKIPPED => back()->with('error', 'لم تُرسل الفاتورة: '.(Message::SKIP_REASONS[$message->error_code] ?? $message->error_code).'.'),
-            default => back()->with('success', 'أُضيفت الفاتورة إلى قائمة الإرسال عبر واتساب.'),
-        };
+        return $sent['error'] !== null
+            ? back()->with('error', 'لم تُرسل الفاتورة: '.$sent['error'])
+            : back()->with('success', 'أُضيفت الفاتورة إلى قائمة الإرسال عبر واتساب.'.($sent['fallback'] ? ' '.$sent['fallback'] : ''));
     }
 }

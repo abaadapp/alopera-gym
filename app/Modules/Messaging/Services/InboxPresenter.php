@@ -204,7 +204,9 @@ final class InboxPresenter
     /** @return list<array{key: string, label: string, body: string}> */
     public function templates(): array
     {
+        // An invoice's templates are sent from «إرسال الفاتورة» (the invoice's own values), not from here.
         return MessageTemplate::where('is_active', true)->where('status', MessageTemplate::APPROVED)->orderBy('id')->get()
+            ->reject(fn (MessageTemplate $t) => array_intersect((array) $t->variables, InvoiceMessage::INVOICE_VALUES) !== [])
             ->map(fn (MessageTemplate $t) => ['key' => $t->key, 'label' => TemplateCatalog::EVENTS[$t->key]['label'] ?? $t->name, 'body' => $t->body])
             ->values()->all();
     }

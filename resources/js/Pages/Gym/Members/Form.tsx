@@ -25,6 +25,8 @@ interface MemberData {
     notes: string | null;
     whatsapp_opt_in: boolean;
     marketing_opt_in: boolean;
+    /** The language of her WhatsApp messages. */
+    message_language?: 'ar' | 'en';
     branch_id: number | null;
     date_of_birth: string | null;
     health_notes: string | null;
@@ -67,6 +69,7 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
         notes: member?.notes ?? '',
         whatsapp_opt_in: member?.whatsapp_opt_in ?? true,
         marketing_opt_in: member?.marketing_opt_in ?? false,
+        message_language: member?.message_language ?? 'ar',
         branch_id: member ? (member.branch_id ? String(member.branch_id) : '') : branchDefault,
         photo: null as File | null,
         photo_preview: null as File | null,
@@ -206,6 +209,12 @@ export default function MemberForm({ member, branches }: { member: MemberData | 
                         <Toggle checked={form.data.whatsapp_opt_in} onChange={(v) => form.setData('whatsapp_opt_in', v)} label="رسائل الخدمة عبر واتساب" hint="الفواتير، التذكير بالانتهاء، تأكيد الحجوزات" />
                         <Toggle checked={form.data.marketing_opt_in} onChange={(v) => form.setData('marketing_opt_in', v)} label="الرسائل التسويقية والعروض" hint="لا تُرسل الحملات إلا لمن وافق صراحةً" />
                     </div>
+                    <Field label="لغة رسائل واتساب" error={err.message_language} hint="تُرسل الفاتورة بقالب هذه اللغة متى اعتمدته Meta؛ وإلا بالقالب العربي المعتمد." className="mt-3">
+                        <Select value={form.data.message_language} onChange={(e) => form.setData('message_language', e.target.value as 'ar' | 'en')}>
+                            <option value="ar">العربية</option>
+                            <option value="en">English</option>
+                        </Select>
+                    </Field>
                 </FormSection>
 
                 <FormSection icon={StickyNote} title="ملاحظات داخلية" hint="للموظفين فقط، لا تظهر للعضو">

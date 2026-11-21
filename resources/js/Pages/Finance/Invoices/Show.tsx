@@ -14,6 +14,7 @@ import { INVOICE_STATES } from './Index';
 import PrintButton, { PrintLink } from '@/Components/Printing/PrintButton';
 import PaymentReviews, { type PaymentReviewRow } from '@/Components/PaymentReviews';
 import { InvoicePaymentLink, type InvoicePaymentLinkData } from '@/Components/PaymentLinks';
+import SendInvoiceWhatsApp from '@/Components/Messaging/SendInvoiceWhatsApp';
 
 interface Item {
     id: number;
@@ -140,6 +141,8 @@ export default function InvoiceShow({ invoice, intents, paymentReviews = [], onl
     const currency = useCurrency() || invoice.currency;
     const [payOpen, setPayOpen] = useState(false);
     const [creditOpen, setCreditOpen] = useState(false);
+    // «إرسال عبر واتساب»: the member, the invoice and the language, the message read before it leaves.
+    const [sending, setSending] = useState(false);
     const [refundNote, setRefundNote] = useState<CreditNoteRow | null>(null);
     const [creditAction, setCreditAction] = useState<{ payment: PaymentRow; mode: 'apply' | 'refund' } | null>(null);
     const hasGatewayPayment = invoice.payments.some((p) => p.gateway && p.status === 'completed' && p.kind === 'payment');
@@ -171,9 +174,7 @@ export default function InvoiceShow({ invoice, intents, paymentReviews = [], onl
                         {isOpen && can('payments.record') && <Button icon={<Wallet />} onClick={() => setPayOpen(true)}>تسجيل دفعة</Button>}
                         {canCredit && <Button variant="outline" icon={<Undo2 />} onClick={() => setCreditOpen(true)}>إشعار دائن</Button>}
                         {can('whatsapp.send') && invoice.billable_type === 'member' && isOpen && whatsappEnabled && (
-                            <ConfirmAction url={route('club.invoices.send', invoice.id)} title="إرسال عبر واتساب" message={paymentLink.history.length > 0 ? 'ستُرسل الفاتورة برابط الدفع النشط للعضو بقالب «إرسال الفاتورة» المعتمد. إن لم يكن لها رابط نشط فلا تُرسل حتى تنشئ رابطًا جديدًا.' : 'ستُرسل الفاتورة ورابط الدفع للعضو بقالب «إرسال الفاتورة» المعتمد.'} confirmLabel="إرسال" tone="primary" variant="outline" size="md" icon={<MessageCircle />}>
-                                إرسال عبر واتساب
-                            </ConfirmAction>
+                            <Button variant="outline" icon={<MessageCircle />} onClick={() => setSending(true)}>إرسال عبر واتساب</Button>
                         )}
                         {/* On a narrow screen the paper sits under the details: a way to it from the top. */}
                         {mayPrint && <PrintButton variant="outline" className="xl:hidden" url={route('club.invoices.print', invoice.id)} title={invoice.number}>طباعة</PrintButton>}
@@ -426,6 +427,9 @@ export default function InvoiceShow({ invoice, intents, paymentReviews = [], onl
             <CreditRefundModal note={refundNote} invoice={invoice} onClose={() => setRefundNote(null)} currency={currency} gateway={hasGatewayPayment} />
             {creditAction?.mode === 'apply' && <CreditApplyModal payment={creditAction.payment} targets={creditTargets} onClose={() => setCreditAction(null)} currency={currency} />}
             {creditAction?.mode === 'refund' && <CreditPayBackModal payment={creditAction.payment} onClose={() => setCreditAction(null)} currency={currency} />}
+                    {can('whatsapp.send') && invoice.billable_type === 'member' && invoice.billable_id && (
+                <SendInvoiceWhatsApp open={sending} onClose={() => setSending(false)} member={{ id: invoice.billable_id, label: invoice.customer_name }} invoiceId={invoice.id} />
+            )}
         </ClubLayout>
     );
 }

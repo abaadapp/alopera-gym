@@ -120,6 +120,9 @@ final class WhatsAppService
         $skip = match (true) {
             ! $template => 'template_missing',
             ! $template->isUsable() => 'template_not_approved',
+            // An invoice's values (its number, amount, links) come from an invoice: never sent empty, from any path —
+            // a campaign, the chat or the member's page fill a member's values only (owner's decision, 2026-11-21).
+            collect(array_intersect((array) $template->variables, InvoiceMessage::INVOICE_VALUES))->contains(fn ($name) => trim((string) ($values[$name] ?? '')) === '') => 'missing_values',
             ! $member->whatsapp_opt_in => 'opted_out',
             $marketing && ! $member->canReceiveMarketing() => 'no_marketing_consent',
             Phone::normalize($member->phone) === '' => 'no_phone',

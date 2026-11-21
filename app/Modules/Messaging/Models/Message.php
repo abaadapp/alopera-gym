@@ -64,6 +64,7 @@ class Message extends Model
     public const SKIP_REASONS = [
         'template_missing' => 'القالب غير موجود', 'template_not_approved' => 'القالب لم يُعتمد من Meta بعد', 'opted_out' => 'العضو لم يوافق على رسائل الخدمة',
         'no_phone' => 'لا رقم هاتف', 'no_marketing_consent' => 'بلا موافقة تسويقية',
+        'missing_values' => 'قيم الفاتورة في القالب فارغة: يُرسل من «إرسال الفاتورة» باختيار الفاتورة',
     ];
 
     protected $guarded = ['id', 'tenant_id'];

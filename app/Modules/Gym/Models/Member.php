@@ -39,11 +39,14 @@ class Member extends Authenticatable implements Billable
     /** Arabic labels for exports (the UI has its own copy in resources/js/lib/labels.ts). */
     public const STATUS_LABELS = [self::ACTIVE => 'نشط', self::INACTIVE => 'غير نشط', self::BLOCKED => 'موقوف'];
 
+    /** The languages a member may prefer WhatsApp messages in (a template approved in it is sent; else the Arabic one). */
+    public const MESSAGE_LANGUAGES = ['ar' => 'العربية', 'en' => 'English'];
+
     protected $table = 'gym_members';
 
     protected $guarded = ['id', 'tenant_id', 'qr_token', 'password'];
 
-    protected $attributes = ['status' => 'active', 'gender' => 'female', 'whatsapp_opt_in' => true, 'marketing_opt_in' => false];
+    protected $attributes = ['status' => 'active', 'gender' => 'female', 'whatsapp_opt_in' => true, 'marketing_opt_in' => false, 'message_language' => 'ar'];
 
     protected $hidden = ['password', 'remember_token', 'qr_token'];
 
