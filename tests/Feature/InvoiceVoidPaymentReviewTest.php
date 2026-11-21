@@ -24,6 +24,7 @@ use App\Modules\Payments\Models\PaymentLink;
 use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Paymob\PaymobSignature;
 use App\Modules\Payments\Services\OnlinePaymentService;
+use App\Modules\Payments\Services\PaymentLinks;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -158,7 +159,9 @@ class InvoiceVoidPaymentReviewTest extends TestCase
         $this->review($club, $link->invoice_id);
         $before = $this->books($club, $link->invoice_id);
 
-        $this->actingAs($owner)->from('/app')->post(route('club.payment-links.cancel', $link->id))->assertSessionHasErrors(['error' => PaymentReview::VOID_REFUSED]);
+        // Cancelling the link ends the link only (R1): refused all the same, in the link's own words; voiding the invoice
+        // is refused in the invoice's.
+        $this->actingAs($owner)->from('/app')->post(route('club.payment-links.cancel', $link->id))->assertSessionHasErrors(['error' => PaymentLinks::REVIEW_REFUSED]);
         $this->actingAs($owner)->from('/app')->post(route('club.invoices.void', $link->invoice_id), ['reason' => 'خطأ'])->assertSessionHasErrors(['error' => PaymentReview::VOID_REFUSED]);
 
         $this->assertSame($before, $this->books($club, $link->invoice_id));

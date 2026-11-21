@@ -45,7 +45,7 @@ class PaymentLinkController extends Controller
                 'on' => $online->available(),
                 'valid_days' => PaymentLink::VALID_DAYS,
                 'currency' => app(TenantContext::class)->require()->currency,
-                'can_cancel' => (bool) request()->user()?->can('invoices.void'),
+                'can_cancel' => (bool) request()->user()?->can('payments.links'),
                 // A user tied to a branch sees the links of that branch's invoices only, as on the invoice list.
                 'rows' => PaymentLink::whereIn('invoice_id', BranchContext::scope(Invoice::query())->select('id'))->with(['invoice:id,number,status,customer_name,customer_phone,billable_id,total,paid_total,credited_total,currency,public_token', 'creator:id,name'])
                     ->latest('id')->limit(50)->get()
@@ -95,6 +95,6 @@ class PaymentLinkController extends Controller
     {
         $links->cancel($paymentLink);
 
-        return back()->with('success', 'أُلغي رابط الدفع وفاتورته.');
+        return back()->with('success', 'أُلغي رابط الدفع. الفاتورة ومستحقاتها كما هي.');
     }
 }

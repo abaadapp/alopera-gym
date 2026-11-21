@@ -101,7 +101,7 @@ class PaymentLinksConcurrencyTest extends TestCase
 
         $results = $this->concurrently([
             function (string $dir) use ($club, $link) {
-                self::pauseAfter('update "invoices"', $dir, 0.8); // the invoice voided, not yet committed
+                self::pauseAfter('update "payment_links"', $dir, 0.8); // the link cancelled (the link only), not yet committed
 
                 return self::cancel($club, $link);
             },
