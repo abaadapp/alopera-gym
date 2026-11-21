@@ -252,6 +252,52 @@ final class PaymobClient
         return 'HTTP '.$response->status().($detail ? ' — '.Str::limit((string) $detail, 160) : '');
     }
 
+    /**
+     * The settings read here, without a word to Paymob (owner, 2026-11-21: a check that opens no payment intention):
+     * the three keys saved, a method's integration id, both keys from one environment and that environment the mode,
+     * Apple Pay left out of a test checkout, the online payment switched on, and — on the production server — real keys.
+     * Names which key or id is missing, never its value.
+     *
+     * @return list<array{label: string, ok: bool, detail: string|null}>
+     */
+    public static function settingsReview(?TenantIntegration $integration): array
+    {
+        $names = ['secret_key' => 'Secret key', 'public_key' => 'Public key', 'hmac_secret' => 'HMAC secret'];
+        $missing = array_values(array_filter(self::REQUIRED, fn (string $key) => $integration?->credential($key) === null));
+        $env = function (string $key) use ($integration): ?string {
+            $value = (string) $integration?->credential($key);
+
+            return str_contains($value, '_live_') ? 'live' : (str_contains($value, '_test_') ? 'test' : null);
+        };
+        [$secret, $public] = [$env('secret_key'), $env('public_key')];
+        $mode = $integration?->mode ?? 'test';
+        $ids = $integration ? self::methodIds($integration) : array_fill_keys(array_keys(self::METHOD_KEYS), null);
+        $words = ['live' => 'حقيقي', 'test' => 'اختبار'];
+
+        $review = [
+            ['label' => 'المفاتيح الثلاثة محفوظة', 'ok' => $missing === [],
+                'detail' => $missing === [] ? null : 'ينقص: '.implode('، ', array_map(fn (string $k) => $names[$k], $missing)).'.'],
+            ['label' => 'رقم تكامل لوسيلة دفع واحدة على الأقل', 'ok' => $integration !== null && self::checkoutIds($integration) !== [],
+                'detail' => $integration !== null && self::checkoutIds($integration) !== [] ? null : 'أدخل رقم تكامل البطاقات كما يظهر في لوحة Paymob.'],
+            ['label' => 'المفتاحان السري والعام من بيئة واحدة', 'ok' => $secret === null || $public === null || $secret === $public,
+                'detail' => $secret !== null && $public !== null && $secret !== $public ? 'المفتاح السري '.$words[$secret].' والعام '.$words[$public].'.' : null],
+            ['label' => 'الوضع يطابق المفاتيح', 'ok' => $secret === null || $secret === $mode,
+                'detail' => $secret !== null && $secret !== $mode ? 'الوضع «'.$words[$mode].'» والمفتاح السري '.$words[$secret].'.' : null],
+        ];
+        if ($ids['apple_pay'] !== null) {
+            $review[] = ['label' => 'Apple Pay', 'ok' => true,
+                'detail' => $mode === 'live' ? 'يُعرض في صفحة الدفع.' : 'لا يُعرض في وضع الاختبار: لـ Apple Pay أرقام حقيقية فقط.'];
+        }
+        $review[] = ['label' => 'الدفع الإلكتروني مفعّل', 'ok' => (bool) $integration?->is_enabled,
+            'detail' => $integration?->is_enabled ? null : 'فعّله بعد اكتمال المفاتيح.'];
+        if (app()->isProduction()) {
+            $review[] = ['label' => 'يقبل مدفوعات حقيقية على الإنتاج', 'ok' => self::takesPayments($integration),
+                'detail' => self::unavailableReason($integration)];
+        }
+
+        return $review;
+    }
+
     /** A test key under live mode (or the reverse) is a common mistake; the key's own prefix tells. */
     public static function modeMismatch(TenantIntegration $integration): ?string
     {

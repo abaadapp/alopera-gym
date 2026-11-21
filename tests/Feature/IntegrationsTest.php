@@ -131,12 +131,12 @@ class IntegrationsTest extends TestCase
         $owner = $this->owner($club);
         $this->paymobKeys($club);
 
-        $this->actingAs($owner)->post(route('club.integrations.verify', 'paymob'))->assertSessionHas('success');
+        $this->actingAs($owner)->post(route('club.integrations.verify', 'paymob'), ['confirm_intention' => 1])->assertSessionHas('success');
         Http::assertSent(fn ($r) => $r->hasHeader('Authorization', 'Token omn_sk_test_secret123') && $r['amount'] === 1000 && ! isset($r['redirection_url']));
         $this->assertSame('connected', $this->cards($club, $owner)['paymob']['status']['state']);
 
         // Paymob refuses: the card says so, with Paymob's words and never the key.
-        $this->actingAs($owner)->post(route('club.integrations.verify', 'paymob'))->assertSessionHas('error');
+        $this->actingAs($owner)->post(route('club.integrations.verify', 'paymob'), ['confirm_intention' => 1])->assertSessionHas('error');
         $status = $this->cards($club, $owner)['paymob']['status'];
         $this->assertSame('error', $status['state']);
         $this->assertStringContainsString('Invalid token', $status['detail']);
@@ -286,7 +286,7 @@ class IntegrationsTest extends TestCase
         $a = $this->club('A');
         $b = $this->club('B');
         $this->paymobKeys($a);
-        $this->actingAs($this->owner($a))->post(route('club.integrations.verify', 'paymob'));
+        $this->actingAs($this->owner($a))->post(route('club.integrations.verify', 'paymob'), ['confirm_intention' => 1]);
         $device = $this->asTenant($a, function () {
             $device = new AccessDevice(['name' => 'A gate', 'type' => 'qr_reader']);
             $device->issueToken();

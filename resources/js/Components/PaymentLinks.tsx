@@ -125,10 +125,10 @@ export function CreatePaymentLink({ data }: { data: PaymentLinksData }) {
 }
 
 /** The links made and where each stands (waiting, at the bank, under review, paid, expired, cancelled), with the invoice's paid and left; copy, WhatsApp or cancel a waiting one, open its invoice. */
-export function PaymentLinksLog({ data }: { data: PaymentLinksData }) {
+export function PaymentLinksLog({ data, subtitle = 'آخر 50 رابطًا. الحالة من الفاتورة كما سُجّلت: «مدفوع» بعد إشعار Paymob الموقّع فقط.' }: { data: PaymentLinksData; subtitle?: string }) {
     return (
         <Card padded={false}>
-            <div className="p-5 pb-0"><CardHeader title="سجل روابط الدفع" subtitle="آخر 50 رابطًا. الحالة من الفاتورة كما سُجّلت: «مدفوع» بعد إشعار Paymob الموقّع فقط." /></div>
+            <div className="p-5 pb-0"><CardHeader title="سجل روابط الدفع" subtitle={subtitle} /></div>
             {data.rows.length === 0 ? (
                 <EmptyState title="لا توجد روابط بعد" description="أنشئ رابطًا بالمبلغ والوصف، ثم أرسله للعميل." />
             ) : (

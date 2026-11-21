@@ -201,8 +201,8 @@ class PaymobMethodsTest extends TestCase
             ->pushFailedConnection()
             ->pushFailedConnection()
             ->push(['client_secret' => 'cs', 'intention_order_id' => 4601], 201)]);
-        $this->actingAs($owner)->post(route('club.integrations.verify', 'paymob'))->assertSessionHas('error');
-        $this->actingAs($owner)->post(route('club.integrations.verify', 'paymob'))->assertSessionHas('error');
+        $this->actingAs($owner)->post(route('club.integrations.verify', 'paymob'), ['confirm_intention' => 1])->assertSessionHas('error');
+        $this->actingAs($owner)->post(route('club.integrations.verify', 'paymob'), ['confirm_intention' => 1])->assertSessionHas('error');
         $invoice = $this->invoice($club);
         try {
             $this->asTenant($club, fn () => app(OnlinePaymentService::class)->start($invoice, 'whatsapp'));
@@ -236,11 +236,11 @@ class PaymobMethodsTest extends TestCase
         $this->assertSame(PaymobMethods::SAVED, $this->states($club)['card']['state']);
 
         Http::fake(['*/v1/intention/' => Http::sequence()->push(['detail' => 'Integration ID/Name does not exist in our system'], 404)->push(['client_secret' => 'cs', 'intention_order_id' => 1], 201)]);
-        $this->actingAs($this->owner($club))->post(route('club.integrations.verify', 'paymob'))->assertSessionHas('error');
+        $this->actingAs($this->owner($club))->post(route('club.integrations.verify', 'paymob'), ['confirm_intention' => 1])->assertSessionHas('error');
         $this->assertSame(PaymobMethods::SAVED, $this->states($club)['card']['state'], 'a refused check proves nothing');
         $this->assertNotNull($this->row($club)->last_error);
 
-        $this->actingAs($this->owner($club))->post(route('club.integrations.verify', 'paymob'))->assertSessionHas('success');
+        $this->actingAs($this->owner($club))->post(route('club.integrations.verify', 'paymob'), ['confirm_intention' => 1])->assertSessionHas('success');
         Http::assertSent(fn ($r) => $r['payment_methods'] === [111]);
         $this->assertSame(PaymobMethods::CHECKED, $this->states($club)['card']['state']);
 

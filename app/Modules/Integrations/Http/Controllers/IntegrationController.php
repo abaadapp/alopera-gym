@@ -17,11 +17,13 @@ use App\Modules\Messaging\Models\MessageTemplate;
 use App\Modules\Messaging\Models\WebhookEvent;
 use App\Modules\Messaging\Models\WhatsAppContact;
 use App\Modules\Messaging\Services\TemplateCatalog;
+use App\Modules\Payments\Http\Controllers\PaymentLinkController;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobClient;
 use App\Modules\Payments\Paymob\PaymobMethods;
 use App\Modules\Payments\Services\OnlinePaymentService;
+use App\Modules\Payments\Services\PaymentLinks;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -86,12 +88,17 @@ class IntegrationController extends Controller
             'integration' => $this->form('paymob', $row),
             'status' => $this->hub->paymob($row),
             'warning' => $row ? PaymobClient::modeMismatch($row) : null,
+            // The settings read without a call to Paymob; the connection test (an intention) only after confirming.
+            'review' => PaymobClient::settingsReview($row),
             // Each method's state and whether a number is saved for it — never the number: it is kept with the keys.
             'methods' => PaymobMethods::states($row),
             // Pay links: the club's own invoice links (/pay/{token}) through the checkout; Paymob QuickLink is not used.
-            // Making them and their log are the finance screen's («المالية ← روابط الدفع»), not repeated here.
-            'links' => ['on' => $ready, 'reason' => PaymobClient::unavailableReason($row), 'invoices_route' => 'club.invoices.index', 'create_route' => 'club.invoices.create',
-                'manage_route' => request()->user()?->can('payments.links') ? 'club.payment-links.index' : null],
+            // Made and followed on the finance screen («المالية ← روابط الدفع») and each invoice's page, never here (owner,
+            // 2026-11-21: this page is Paymob's settings, its check and the latest links). The way there and the latest
+            // links only for who holds payments.links — no option a member of staff cannot use.
+            'links' => ['on' => $ready, 'reason' => PaymobClient::unavailableReason($row),
+                'manage_route' => request()->user()?->can('payments.links') ? 'club.payment-links.index' : null,
+                'recent' => request()->user()?->can('payments.links') ? $this->recentLinks() : null],
             'checks' => [
                 ['label' => 'المفاتيح الثلاثة مُدخلة ورقم ربط واحد على الأقل', 'ok' => $row !== null && array_filter(PaymobClient::REQUIRED, fn ($k) => $row->credential($k) === null) === [] && PaymobClient::checkoutIds($row) !== [], 'at' => null],
                 ['label' => 'قبلت Paymob المفتاح السري وأرقام الربط', 'ok' => $row?->verified_at !== null && ! $row->failing(), 'at' => $row?->verified_at?->format('Y-m-d H:i')],
@@ -101,7 +108,7 @@ class IntegrationController extends Controller
                 ['label' => 'تجديد العضويات والباقات من بوابة الأعضاء', 'on' => $ready],
                 ['label' => 'الاشتراك الجديد من موقع النادي', 'on' => $ready && (bool) $tenant->setting('member_signup_enabled', true)],
                 ['label' => 'دفع فواتير النادي برابط الفاتورة', 'on' => $ready],
-                ['label' => 'طلبات متجر الموقع الإلكتروني', 'on' => $ready && $shop !== null && $shop['shop_enabled'] && $shop['online_payment_enabled'], 'route' => $shop !== null ? 'club.settings.sales' : null],
+                ['label' => 'طلبات متجر الموقع الإلكتروني', 'on' => $ready && $shop !== null && $shop['shop_enabled'] && $shop['online_payment_enabled'], 'route' => $shop !== null && request()->user()?->can('settings.manage') ? 'club.settings.sales' : null],
             ],
             'intents' => PaymentIntent::with('invoice:id,number')->latest('id')->limit(15)->get()->map(fn (PaymentIntent $i) => [
                 'id' => $i->id,
@@ -325,6 +332,11 @@ class IntegrationController extends Controller
         }
 
         if ($provider === 'paymob') {
+            // The check opens a payment intention at Paymob (1.000, sent to no one, gone in ten minutes): only when the
+            // staff confirmed it in its dialog, never by a stray request.
+            if (! request()->boolean('confirm_intention')) {
+                return back()->with('error', 'اختبار الاتصال يفتح لدى Paymob صفحة دفع تجريبية: أكّده من نافذة التأكيد. فحص الإعدادات لا يحتاج اتصالًا.');
+            }
             $result = app(PaymobClient::class)->probe($row, $this->tenants->require()->currency);
         } else {
             $result = app(MetaCloudGateway::class)->describeNumber($row);
@@ -346,6 +358,15 @@ class IntegrationController extends Controller
     }
 
     /** @return array<string, mixed> */
+    /** The five latest payment links, as the finance screen lists them (PaymentLinkController::props). */
+    private function recentLinks(): array
+    {
+        $links = PaymentLinkController::props(app(PaymentLinks::class), app(OnlinePaymentService::class))['paymentLinks'];
+        $links['rows'] = collect($links['rows'])->take(5)->values();
+
+        return $links;
+    }
+
     private function form(string $provider, ?TenantIntegration $row): array
     {
         $keys = self::SECRETS[$provider];
