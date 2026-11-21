@@ -27,6 +27,7 @@ const FIELDS = [
     { key: 'public_key', label: 'Public key' },
     { key: 'hmac_secret', label: 'HMAC secret', hint: 'للتحقق من توقيع إشعارات الدفع', secret: true },
     { key: 'integration_ids', label: 'أرقام ربط إضافية (اختياري)', hint: 'الطريقة السابقة: أرقام مفصولة بفاصلة. يكفي رقم البطاقات في قسمه أدناه.' },
+    { key: 'api_key', label: 'API key (لروابط Paymob)', hint: 'اختياري: به تُنشأ روابط الدفع داخل Paymob وتُلغى منها. من لوحة Paymob ← Settings ← API Keys، وهو واحد لوضعي الاختبار والحقيقي.', secret: true },
 ];
 
 const METHOD_STATE: Record<string, { label: string; tone: 'green' | 'amber' | 'red' | 'gray' }> = {
