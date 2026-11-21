@@ -23,6 +23,7 @@ use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Models\PaymentAllocation;
 use App\Modules\Inventory\Models\Sale;
+use App\Modules\Payments\Services\QuickLinks;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -67,6 +68,8 @@ final class PaymentService
 
         return DB::transaction(function () use ($invoice, $amount, $method, $options, $account) {
             $invoice = $this->lockOpen($invoice);
+            // Owner's decision (2026-11-21): not while its Paymob link may still be paid (QuickLinks) — no paying twice.
+            QuickLinks::refuseDeskWhileOpen($invoice);
             $this->assertAmountFits($invoice, $amount);
 
             $pending = $method === 'bank_transfer';

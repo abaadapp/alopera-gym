@@ -195,6 +195,17 @@ final class OnlinePaymentService
             $pages = $attempts->filter(fn (PaymentIntent $i) => $i->checkout_url !== null && str_starts_with($i->reference, $prefix));
 
             // Given again: the page for what is owed now, with time left to pay it.
+            // The invoice's link made inside Paymob (QuickLinks) while it may be paid: the customer is led to it, never to
+            // a second page; for another amount (the invoice changed since), refused as any page still open.
+            $paymobLink = $pages->first(fn (PaymentIntent $i) => $i->channel === QuickLinks::CHANNEL && $i->status === PaymentIntent::PENDING
+                && $i->expires_at !== null && $i->expires_at->isFuture());
+            if ($paymobLink) {
+                if (Money::cmp($paymobLink->amount, $invoice->balance()) === 0) {
+                    return [$invoice, $paymobLink];
+                }
+                throw new BusinessRuleException('paymob.page_open', self::pageOpenMessage($paymobLink, $invoice->balance()));
+            }
+
             $open = $pages->first(fn (PaymentIntent $i) => $i->status !== PaymentIntent::EXPIRED && $i->expires_at !== null
                 && $i->expires_at->gt(now()->addMinutes(10)) && $i->expires_at->lte($expires) && Money::cmp($i->amount, $invoice->balance()) === 0);
             if ($open) {
@@ -355,7 +366,12 @@ final class OnlinePaymentService
             ->when($reference !== '', fn ($q) => $q->where('reference', $reference))
             ->when($reference === '' && $orderId !== '', fn ($q) => $q->where('provider_order_id', $orderId))
             ->when($reference === '' && $orderId === '', fn ($q) => $q->whereRaw('1 = 0'))
-            ->first());
+            ->first()
+            // A link made inside Paymob (QuickLinks) may come back under Paymob's own merchant order id: its order —
+            // signed, and checked against the attempt below (orderProblem) — finds it.
+            ?? ($reference !== '' && $orderId !== ''
+                ? PaymentIntent::where('provider_order_id', $orderId)->where('channel', QuickLinks::CHANNEL)->first()
+                : null));
 
         if (! $intent) {
             return $this->log(null, $transactionId, $reference, false, 'unknown_intent', $payload, $ip);

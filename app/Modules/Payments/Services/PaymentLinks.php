@@ -101,7 +101,7 @@ final class PaymentLinks
             throw new BusinessRuleException('payment_link.days', 'اختر مدة صلاحية الرابط.', 'valid_days');
         }
 
-        return DB::transaction(function () use ($invoice, $days, $description, $paymobChecked, $expires, $whileOff) {
+        $link = DB::transaction(function () use ($invoice, $days, $description, $paymobChecked, $expires, $whileOff) {
             $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
             if (! $invoice->isOpen() || Money::isZero($invoice->balance())) {
                 throw new BusinessRuleException('payment_link.nothing_owed', 'لا يوجد مبلغ مستحق على هذه الفاتورة، فلا يُنشأ لها رابط دفع.');
@@ -147,6 +147,17 @@ final class PaymentLinks
 
             return $row;
         });
+
+        // With the club's API key, the link is made inside Paymob too (QuickLinks) — once everything around it is
+        // committed, Paymob called with no lock held; when Paymob does not make it, the staff are told and the link
+        // opens the club's own page as before.
+        DB::afterCommit(function () use ($link) {
+            if (($why = app(QuickLinks::class)->issue($link)) !== null && app()->bound('session') && request()->hasSession()) {
+                request()->session()->flash('error', $why);
+            }
+        });
+
+        return $link;
     }
 
     /**
@@ -166,6 +177,10 @@ final class PaymentLinks
             if ($invoice->status === Invoice::PAID || ! Money::isZero($invoice->paid_total)) {
                 throw new BusinessRuleException('payment_link.paid', 'دُفع على هذا الرابط، فلا يُلغى. للرد استخدم الإشعار الدائن أو رد المبلغ من الفاتورة.');
             }
+            // Its Paymob link, when it has one, is closed there first (money not settled stops it before Paymob is asked);
+            // Paymob not confirming refuses the cancel. Then any other page of the invoice still open stops it, as before.
+            self::refuseWhileMoneyIsUnsettled($invoice, pages: false);
+            app(QuickLinks::class)->closeAtPaymob($link);
             self::refuseWhileMoneyIsUnsettled($invoice);
 
             // Owner's decision (2026-11-20): cancelling ends the link only. The invoice, what it owes and its entries stay
@@ -280,6 +295,10 @@ final class PaymentLinks
     public function url(PaymentLink $link): string
     {
         $club = $this->tenants->require()->slug;
+        // Made inside Paymob (QuickLinks): Paymob's own address, while it may be paid.
+        if ($link->token !== null && ($paymob = QuickLinks::openFor($link->invoice_id, $link->issuedAt())) !== null) {
+            return (string) $paymob->checkout_url;
+        }
 
         return $link->token !== null
             ? route('site.pay.link', ['club' => $club, 'token' => $link->token])

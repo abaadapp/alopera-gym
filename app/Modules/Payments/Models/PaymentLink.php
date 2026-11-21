@@ -8,6 +8,7 @@ use App\Core\Tenancy\BranchOwned;
 use App\Models\User;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Payments\Services\QuickLinks;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -169,6 +170,8 @@ class PaymentLink extends Model implements BranchOwned
     {
         return PaymentIntent::where('invoice_id', $this->invoice_id)->whereNotNull('checkout_url')
             ->where('status', '!=', PaymentIntent::PAID)->where('created_at', '>=', $this->issuedAt())
+            // A Paymob link Paymob confirmed it closed (QuickLinks) took nothing after: nothing to look up by hand.
+            ->where(fn ($q) => $q->whereNull('failure_reason')->orWhere('failure_reason', '!=', QuickLinks::CANCELLED))
             ->orderBy('id')->pluck('reference')->all();
     }
 }

@@ -134,7 +134,7 @@ class PaymobMethodsTest extends TestCase
         $keys(['is_enabled' => true, 'mode' => 'test', 'credentials' => ['secret_key' => 'omn_sk_test_reload', 'public_key' => 'omn_pk_test_reload', 'hmac_secret' => 'hmac-reload']]);
         $this->actingAs($owner)->put(route('club.integrations.paymob.methods'), ['card' => '6101', 'apple_pay' => '6103'])->assertSessionHasNoErrors();
         $saved = fn ($page) => $page->where('integration.mode', 'test')
-            ->where('integration.present', ['secret_key' => true, 'public_key' => true, 'hmac_secret' => true, 'integration_ids' => false])
+            ->where('integration.present', ['secret_key' => true, 'public_key' => true, 'hmac_secret' => true, 'integration_ids' => false, 'api_key' => false])
             ->where('methods.0.saved', true)->where('methods.0.state', PaymobMethods::SAVED)
             ->where('methods.1.saved', false)->where('methods.1.within_cards', true)
             ->where('methods.2.saved', true)->where('methods.2.state', PaymobMethods::WRONG_MODE);
