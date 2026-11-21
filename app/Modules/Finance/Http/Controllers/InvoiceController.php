@@ -433,6 +433,10 @@ class InvoiceController extends Controller
             'may' => ['issue' => $user->can('invoices.manage'), 'pay' => $user->can('payments.record'), 'design' => $user->can('papers.manage'),
                 // «إصدار الفاتورة وإنشاء رابط دفع»: with the links permission, while online payments are on.
                 'link' => $user->can('payments.links') && app(OnlinePaymentService::class)->available()],
+            // Why that button is not offered, shown in its place rather than leaving it out without a word.
+            'link_reason' => ! $user->can('payments.links')
+                ? 'إنشاء رابط دفع مع الفاتورة يتطلب صلاحية «روابط الدفع». اطلبها من مدير النادي.'
+                : (($why = app(OnlinePaymentService::class)->unavailableReason()) !== null ? 'لا يُنشأ رابط دفع مع الفاتورة الآن: '.$why : null),
             'link_days' => PaymentLink::VALID_DAYS,
         ];
     }

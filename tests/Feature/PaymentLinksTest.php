@@ -26,7 +26,7 @@ use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
 
 /**
- * «إنشاء رابط دفع» on the Paymob page (and «روابط الدفع» in finance): an amount and a description issue an ordinary club
+ * «إنشاء رابط دفع» in «المالية ← روابط الدفع» (no longer on the Paymob page): an amount and a description issue an ordinary club
  * invoice on credit whose secure link opens one Paymob checkout; only a signed, matching callback records the money,
  * once. The link opens a page only until its time and never once cancelled. Paymob is faked; nothing leaves the test,
  * and no real key or payment is used.
@@ -174,15 +174,18 @@ class PaymentLinksTest extends TestCase
             $this->actingAs($user)->post(route('club.payment-links.store'), $this->form())->assertForbidden();
             $this->actingAs($user)->post(route('club.payment-links.cancel', $link))->assertForbidden();
         }
-        // Keys without the permission: the Paymob page, without the links.
+        // Keys without the permission: the Paymob page, without the links and without the way to them.
         $this->actingAs($this->holding($club, ['integrations.manage']))->get(route('club.integrations.paymob'))->assertOk()
-            ->assertInertia(fn ($p) => $p->where('paymentLinks', null));
+            ->assertInertia(fn ($p) => $p->missing('paymentLinks')->where('links.manage_route', null));
 
         $allowed = $this->holding($club, ['payments.links']);
         $this->actingAs($allowed)->get(route('club.payment-links.index'))->assertOk()->assertInertia(fn ($p) => $p->has('paymentLinks.rows', 1));
         $this->actingAs($allowed)->post(route('club.payment-links.store'), $this->form())->assertSessionHasNoErrors();
         $this->assertSame([2, $allowed->id], $this->asTenant($club, fn () => [PaymentLink::count(), PaymentLink::latest('id')->value('created_by')]));
-        $this->actingAs($this->owner($club))->get(route('club.integrations.paymob'))->assertOk()->assertInertia(fn ($p) => $p->has('paymentLinks.rows', 2));
+        // The links are made and followed in finance only: the Paymob page points there, it does not repeat them.
+        $this->actingAs($this->owner($club))->get(route('club.integrations.paymob'))->assertOk()
+            ->assertInertia(fn ($p) => $p->missing('paymentLinks')->where('links.manage_route', 'club.payment-links.index'));
+        $this->actingAs($this->owner($club))->get(route('club.payment-links.index'))->assertOk()->assertInertia(fn ($p) => $p->has('paymentLinks.rows', 2));
     }
 
     public function test_one_club_never_sees_or_cancels_another_clubs_links(): void
