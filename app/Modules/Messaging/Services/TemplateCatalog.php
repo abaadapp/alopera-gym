@@ -30,6 +30,27 @@ final class TemplateCatalog
             'variables' => ['member_name', 'invoice_number', 'amount', 'payment_link'],
             'body' => 'مرحبًا {{1}}، تم إصدار الفاتورة رقم {{2}} بمبلغ {{3}}. تفاصيل الفاتورة والدفع: {{4}}',
         ],
+        // The same message when the invoice carries a membership (alone, or with other lines: the invoice catalogue,
+        // owner's decision 2026-11-21), saying it starts only once the invoice is paid in full. Sent in place of
+        // invoice_issued only once Meta approved it; until then invoice_issued is, once per invoice either way.
+        // One Meta template, alopera_invoice_issued_membership, in the two languages a member may prefer (Member::
+        // message_language): Arabic here, English below, the same four values in the same order.
+        'invoice_issued_membership' => [
+            'label' => 'إرسال الفاتورة ورابطها (فيها اشتراك) — العربية',
+            'category' => 'utility',
+            'name' => 'alopera_invoice_issued_membership',
+            'language' => 'ar',
+            'variables' => ['member_name', 'invoice_number', 'amount', 'payment_link'],
+            'body' => 'مرحبًا {{1}}، تم إصدار الفاتورة رقم {{2}} بمبلغ {{3}}. الاشتراك فيها يتفعّل بعد سداد الفاتورة كاملة. تفاصيل الفاتورة والدفع: {{4}}',
+        ],
+        'invoice_issued_membership_en' => [
+            'label' => 'إرسال الفاتورة ورابطها (فيها اشتراك) — الإنجليزية',
+            'category' => 'utility',
+            'name' => 'alopera_invoice_issued_membership',
+            'language' => 'en',
+            'variables' => ['member_name', 'invoice_number', 'amount', 'payment_link'],
+            'body' => 'Hello {{1}}, invoice {{2}} for {{3}} has been issued. The membership on it starts once the invoice is paid in full. Invoice details and payment: {{4}}',
+        ],
         'payment_received' => [
             'label' => 'تأكيد استلام الدفعة والإيصال',
             'category' => 'utility',

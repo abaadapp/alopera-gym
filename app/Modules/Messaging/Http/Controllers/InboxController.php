@@ -14,6 +14,7 @@ use App\Modules\Messaging\Models\MessageTemplate;
 use App\Modules\Messaging\Services\ConversationAccess;
 use App\Modules\Messaging\Services\Conversations;
 use App\Modules\Messaging\Services\InboxPresenter;
+use App\Modules\Messaging\Services\InvoiceMessage;
 use App\Modules\Messaging\Services\TemplateValues;
 use App\Modules\Messaging\Services\WhatsAppService;
 use Illuminate\Http\JsonResponse;
@@ -152,6 +153,9 @@ class InboxController extends Controller
             throw ValidationException::withMessages(['template_key' => 'اربط المحادثة بمشترك أولًا: القوالب تُرسل لمشترك وافق على رسائل الخدمة.']);
         }
         $template = MessageTemplate::where('key', $data['template_key'])->firstOrFail();
+        if (array_intersect((array) $template->variables, InvoiceMessage::INVOICE_VALUES) !== []) {
+            throw ValidationException::withMessages(['template_key' => 'هذا قالب فاتورة: أرسله من «إرسال الفاتورة عبر واتساب» لتُعبّأ قيمه من الفاتورة المختارة.']);
+        }
 
         $message = $whatsapp->queueTemplate($member, $template->key, TemplateValues::forMember($member), null,
             'manual:'.$template->key.':'.$member->id.':'.now()->timestamp);
@@ -221,6 +225,9 @@ class InboxController extends Controller
     {
         $data = $request->validate(['template_key' => ['required', 'string', 'max:50']]);
         $template = MessageTemplate::where('key', $data['template_key'])->firstOrFail();
+        if (array_intersect((array) $template->variables, InvoiceMessage::INVOICE_VALUES) !== []) {
+            throw ValidationException::withMessages(['template_key' => 'هذا قالب فاتورة: أرسله من «إرسال الفاتورة عبر واتساب» لتُعبّأ قيمه من الفاتورة المختارة.']);
+        }
         $message = $whatsapp->queueTemplate($member, $template->key, TemplateValues::forMember($member), null, 'manual:'.$template->key.':'.$member->id.':'.now()->timestamp);
 
         if (! $message) {

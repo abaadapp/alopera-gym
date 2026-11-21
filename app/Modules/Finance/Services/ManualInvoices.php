@@ -10,6 +10,13 @@ use App\Core\Tenancy\BranchContext;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\InvoiceAttachment;
 use App\Modules\Gym\Models\Member;
+use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\MembershipPlan;
+use App\Modules\Gym\Models\Program;
+use App\Modules\Gym\Models\PtPackage;
+use App\Modules\Gym\Models\PtSubscription;
+use App\Modules\Gym\Services\MembershipService;
+use App\Modules\Gym\Services\PtService;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Services\StockService;
@@ -35,6 +42,12 @@ use Illuminate\Support\Str;
  * Issuing a saved draft issues a new invoice from it and removes the draft, its files moving to the invoice. Either
  * all of it happens or none (short stock, an amount larger than the invoice): one transaction.
  *
+ * The catalogue's services go on the same one invoice (owner's decision, 2026-11-21), priced from the database, never
+ * from the form: a membership plan and a personal-training package, for a member chosen, are made pending as their own
+ * screens make them (MembershipService / PtService::pendingForInvoice) — no invoice of their own — and are activated by
+ * ActivatePaidItems only once this invoice is paid in full; voiding it withdraws them. A program is billed at its price
+ * (none set: only by whoever manages programs, at a price typed) and books nothing. None of them touches the stock.
+ *
  * @phpstan-type Data array{customer_mode: string, member_id?: int|null, customer_name?: string|null, customer_phone?: string|null, customer_email?: string|null, issue_date: string, due_date?: string|null, payment_terms_days?: int|string|null, notes?: string|null, internal_notes?: string|null, paper_lang?: string|null, lines: list<array{product_id?: int|string|null, description: string, quantity: string|float, unit_price: string|float, discount?: string|float|null, addons?: list<array{addon_id: int|string, quantity: int|string}>}>}
  */
 final class ManualInvoices
@@ -45,12 +58,20 @@ final class ManualInvoices
     /** Staff sell at the counter and on invoices alike: an invoice offers the add-ons offered at the point of sale. */
     public const ADDON_CHANNEL = 'pos';
 
+    /** The catalogue's kinds of line, as the form names them (product: the catalogue product, with its add-ons). */
+    public const ITEM_TYPES = ['product', 'plan', 'pt', 'program'];
+
+    /** How a program is named on the invoice, by its kind. */
+    private const PROGRAM_KINDS = ['class' => 'حصة جماعية', 'program' => 'برنامج تدريبي', 'pt' => 'تدريب شخصي'];
+
     public function __construct(
         private readonly InvoiceService $invoices,
         private readonly PaymentService $payments,
         private readonly StockService $stock,
         private readonly BranchContext $branches,
         private readonly AuditLogger $audit,
+        private readonly MembershipService $memberships,
+        private readonly PtService $pt,
     ) {}
 
     /**
@@ -104,7 +125,14 @@ final class ManualInvoices
                 ($line['itemable'] ?? null) instanceof ProductAddon => $line['itemable']->stock_product_id,
                 default => null,
             }));
+            // The services: memberships and packages made pending for this invoice, their lines in place of the
+            // catalogue's — after the shelf's locks, before the number (the member's lock, as their own sale takes it).
+            [$lines, $made] = $this->services($member, $lines, $options['branch_id']);
+            $options['type'] = self::typeOf($lines);
             $invoice = $this->invoices->issue($member, $lines, $options, $name);
+            foreach ($made as $record) {
+                $record instanceof Membership ? $this->memberships->issuedOn($record, $invoice, announce: false) : $this->pt->issuedOn($record, $invoice);
+            }
 
             // Products from the catalogue leave the shelf of the invoice's branch (none: the main branch), and so does
             // the stock their add-ons use up.
@@ -143,6 +171,14 @@ final class ManualInvoices
                         'proof_path' => $proof instanceof UploadedFile ? $this->store($proof, 'tenants/'.$invoice->tenant_id.'/payment-proofs', 'payment_proof') : null,
                         'notes' => 'عند إصدار الفاتورة',
                     ]);
+                }
+            }
+
+            // A membership on it is announced as its own sale announces it (the invoice message, owner's decision
+            // 2026-11-21: one, with the member's consent) — after the money taken now, so it asks only what is owed.
+            foreach ($made as $record) {
+                if ($record instanceof Membership) {
+                    $this->memberships->announce($record);
                 }
             }
 
@@ -203,8 +239,23 @@ final class ManualInvoices
         $addons = $wanted->isEmpty() ? collect() : ProductAddon::offered(self::ADDON_CHANNEL)->whereIn('id', $wanted)
             ->with(['products:products.id', 'categories:product_categories.id', 'stockProduct'])->get()->keyBy('id');
 
+        $of = fn (string $type) => $rows->filter(fn ($l) => ($l['item_type'] ?? null) === $type)->pluck('item_id')->filter()->map(fn ($id) => (int) $id)->all();
+        $catalogue = [
+            'plan' => MembershipPlan::whereIn('id', $of('plan'))->get()->keyBy('id'),
+            'pt' => PtPackage::whereIn('id', $of('pt'))->get()->keyBy('id'),
+            'program' => Program::whereIn('id', $of('program'))->get()->keyBy('id'),
+        ];
+
         $lines = [];
         foreach ($rows as $i => $l) {
+            $type = $l['item_type'] ?? null;
+            if (in_array($type, ['plan', 'pt', 'program'], true)) {
+                if ($line = $this->serviceLine($type, $catalogue[$type]->get((int) ($l['item_id'] ?? 0)), $l, $member, $rows, $strict, "lines.$i")) {
+                    array_push($lines, ...$line);
+                }
+
+                continue;
+            }
             $product = filled($l['product_id'] ?? null) ? $products->get((int) $l['product_id']) : null;
             $lines[] = [
                 'description' => trim((string) $l['description']),
@@ -234,6 +285,135 @@ final class ManualInvoices
         $name = $member ? null : ($mode === 'new' ? ($data['customer_name'] ?? null) : (($data['customer_name'] ?? null) ?: 'عميل نقدي'));
 
         return [$member, $lines, $options, $name];
+    }
+
+    /**
+     * A service from the catalogue as the invoice bills it: what it is and its price from the database (the form gives
+     * only which one, how many of a program, and a discount); a plan's period and a first membership's signup fee as
+     * its sale would bill them. Checked here, refused when saving (named on the line), left out of the paper while the
+     * form is unfinished: a plan or a package is sold to a member chosen, once, by whoever may sell it; a plan or a
+     * package or a program not on sale is not billed; a program without a price only by whoever manages programs.
+     *
+     * @param  array<string, mixed>  $line  the form's line
+     * @param  Collection<int, array<string, mixed>>  $rows  the form's lines
+     * @return list<array<string, mixed>>|null
+     */
+    private function serviceLine(string $type, MembershipPlan|PtPackage|Program|null $item, array $line, ?Member $member, Collection $rows, bool $strict, string $field): ?array
+    {
+        $user = Auth::guard('web')->user();
+        $same = $rows->filter(fn ($l) => ($l['item_type'] ?? null) === $type && (int) ($l['item_id'] ?? 0) === (int) ($line['item_id'] ?? 0))->count();
+        $quantity = (float) ($line['quantity'] ?? 0);
+        $typed = Money::normalize(is_numeric($line['unit_price'] ?? null) ? $line['unit_price'] : 0);
+        $refusal = match (true) {
+            $item === null => ['item_id', 'هذا الصنف لم يعد في الكتالوج — احذف البند.'],
+            ! $item->is_active => ['item_id', '«'.$item->name.'» غير متاح للبيع.'],
+            $type === 'plan' && ! $user?->can('memberships.sell') => ['item_id', 'بيع العضويات يتطلب صلاحية «بيع وتجديد العضويات».'],
+            $type === 'pt' && ! $user?->can('pt.sell') => ['item_id', 'بيع باقات التدريب الشخصي يتطلب صلاحية «بيع باقات التدريب الشخصي».'],
+            $type !== 'program' && $member === null => ['item_id', '«'.$item->name.'» يُباع لعضو: اختر «عضو» ثم العضو، فتُنشأ له وتُفعَّل بعد السداد الكامل.'],
+            $type === 'plan' && $rows->filter(fn ($l) => ($l['item_type'] ?? null) === 'plan')->count() > 1 => ['item_id', 'عضوية واحدة في الفاتورة: للعضو اشتراك واحد بانتظار الدفع.'],
+            $type === 'pt' && $same > 1 => ['item_id', '«'.$item->name.'» مكررة في الفاتورة: باقة واحدة منها بانتظار الدفع.'],
+            $type !== 'program' && abs($quantity - 1) > 0.0001 => ['quantity', 'الكمية واحدة: يُباع «'.$item->name.'» مرة في الفاتورة.'],
+            $type === 'program' && $item->price === null && ! ($user?->can('classes.manage') && Money::toMinor($typed) > 0) => ['unit_price', 'لا سعر لـ«'.$item->name.'» في الكتالوج: حدّده من صفحة البرامج أولًا (أو يسعّره هنا من يدير البرامج).'],
+            default => null,
+        };
+        $discount = $line['discount'] ?? 0;
+        $price = $item === null ? '0.000' : ($item instanceof Program && $item->price === null ? $typed : Money::normalize($item->price));
+        if ($refusal === null && Money::toMinor(is_numeric($discount) ? $discount : 0) > Money::toMinor(Money::mul($price, $type === 'program' ? $quantity : 1))) {
+            $refusal = ['discount', 'الخصم أكبر من قيمة البند.'];
+        }
+        if ($refusal !== null) {
+            if ($strict) {
+                throw new BusinessRuleException('invoice.catalogue', $refusal[1], "$field.{$refusal[0]}");
+            }
+
+            return null;
+        }
+
+        if ($item instanceof MembershipPlan) {
+            $quote = $member ? $this->memberships->quote($member, $item) : ['description' => MembershipService::KIND_LABELS['new'].' — '.$item->name, 'signup_fee' => '0.000'];
+            $lines = [['description' => $quote['description'], 'quantity' => 1, 'unit_price' => Money::normalize($item->price), 'discount' => $discount, 'itemable' => $item, 'field' => $field]];
+            if (! Money::isZero($quote['signup_fee'])) {
+                $lines[] = ['description' => 'رسوم التسجيل', 'quantity' => 1, 'unit_price' => $quote['signup_fee'], 'discount' => 0, 'itemable' => $item, 'signup' => true];
+            }
+
+            return $lines;
+        }
+        if ($item instanceof PtPackage) {
+            return [['description' => 'تدريب شخصي — '.$item->name.' ('.$item->sessions_count.' جلسات)', 'quantity' => 1, 'unit_price' => Money::normalize($item->price), 'discount' => $discount, 'itemable' => $item, 'field' => $field]];
+        }
+
+        // A program: its price, or the one typed by whoever manages programs when it has none. Selling it books nothing.
+        return [[
+            'description' => (self::PROGRAM_KINDS[$item->category] ?? 'برنامج').' — '.$item->name,
+            'quantity' => $line['quantity'],
+            'unit_price' => $price,
+            'discount' => $discount,
+            'itemable' => $item,
+        ]];
+    }
+
+    /**
+     * Issuing: each plan and package line made into a membership or a package pending for this invoice, the lines its
+     * sale bills in place of the catalogue's (a plan's signup fee as its sale reckons it, under the member's lock), the
+     * add-ons' parents moved with them. The records are tied to the invoice once it is issued.
+     *
+     * @param  list<array<string, mixed>>  $lines
+     * @return array{0: list<array<string, mixed>>, 1: list<Membership|PtSubscription>}
+     */
+    private function services(?Member $member, array $lines, ?int $branchId): array
+    {
+        $out = [];
+        $made = [];
+        $moved = [];
+        foreach ($lines as $i => $line) {
+            $item = $line['itemable'] ?? null;
+            if (! empty($line['signup'])) {
+                continue; // the plan's own sale bills it, as it reckons it now
+            }
+            $moved[$i] = count($out);
+            try {
+                if ($item instanceof MembershipPlan && $member) {
+                    [$membership, $billed] = $this->memberships->pendingForInvoice($member, $item, ['discount' => $line['discount'] ?? 0, 'branch_id' => $branchId]);
+                    $made[] = $membership;
+                    foreach ($billed as $b) {
+                        $out[] = $b + ['quantity' => 1];
+                    }
+                } elseif ($item instanceof PtPackage && $member) {
+                    [$subscription, $billed] = $this->pt->pendingForInvoice($member, $item);
+                    $made[] = $subscription;
+                    $out[] = $billed + ['quantity' => 1, 'discount' => $line['discount'] ?? 0];
+                } else {
+                    $out[] = $line;
+                }
+            } catch (BusinessRuleException $e) {
+                // Its sale's refusal (a membership already awaiting payment, days already covered…), on the line.
+                throw new BusinessRuleException($e->rule, $e->getMessage(), isset($line['field']) ? $line['field'].'.item_id' : $e->field);
+            }
+        }
+        foreach ($out as $k => $line) {
+            if (isset($line['parent'])) {
+                $out[$k]['parent'] = $moved[$line['parent']];
+            }
+        }
+
+        return [$out, $made];
+    }
+
+    /**
+     * The invoice's kind, which the books post its revenue by: a membership or a personal-training sale alone, as its
+     * own screen issues it; anything else (products, programs, mixed lines) as every invoice of this editor is.
+     *
+     * @param  list<array<string, mixed>>  $lines
+     */
+    private static function typeOf(array $lines): string
+    {
+        $kinds = collect($lines)->map(fn (array $l) => match (true) {
+            ($l['itemable'] ?? null) instanceof Membership => 'membership',
+            ($l['itemable'] ?? null) instanceof PtSubscription => 'pt',
+            default => 'other',
+        })->unique();
+
+        return $kinds->count() === 1 ? $kinds->first() : 'other';
     }
 
     /**

@@ -40,11 +40,9 @@ final class MemberNotifier
             return;
         }
 
-        $this->whatsapp->queueTemplate($member, 'invoice_issued', $this->base($member) + [
-            'invoice_number' => $invoice->number,
-            'amount' => $this->money($invoice->balance()),
-            'payment_link' => $this->paymentLink($invoice),
-        ], $invoice, 'invoice:'.$invoice->id);
+        // Its own values, in the member's language; with a membership waiting on it, the message saying it starts once
+        // the invoice is paid in full — each as Meta approved it, else the approved Arabic one. Once per invoice.
+        app(InvoiceMessage::class)->automatic($member, $invoice);
     }
 
     /**

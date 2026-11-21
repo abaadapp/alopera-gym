@@ -29,6 +29,7 @@ use App\Modules\Gym\Models\Trainer;
 use App\Modules\Gym\Services\MemberService;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Models\MessageTemplate;
+use App\Modules\Messaging\Services\InvoiceMessage;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -148,7 +149,7 @@ class MemberController extends Controller
         return Inertia::render('Gym/Members/Show', [
             'member' => GymPresenter::memberRow($member) + $member->only(
                 'gender', 'national_id', 'nationality', 'address', 'emergency_contact_name', 'emergency_contact_phone',
-                'goals', 'source', 'notes', 'whatsapp_opt_in', 'marketing_opt_in', 'phone_alt', 'branch_id'
+                'goals', 'source', 'notes', 'whatsapp_opt_in', 'marketing_opt_in', 'message_language', 'phone_alt', 'branch_id'
             ) + [
                 'date_of_birth' => $member->date_of_birth?->toDateString(),
                 'health_notes' => $member->health_notes,
@@ -183,7 +184,10 @@ class MemberController extends Controller
             'plans' => MembershipPlan::active()->with('programs:id')->orderBy('sort')->get()->map(fn ($p) => GymPresenter::plan($p)),
             'ptPackages' => $user->can('pt.manage') ? PtPackage::where('is_active', true)->get(['id', 'name', 'sessions_count', 'price']) : [],
             'trainers' => Trainer::where('is_active', true)->get(['id', 'name']),
-            'templates' => $user->can('whatsapp.send') ? MessageTemplate::where('status', 'approved')->where('is_active', true)->get(['key', 'name', 'body']) : [],
+            // An invoice's templates are sent from «إرسال الفاتورة» (the invoice's own values), not from this list.
+            'templates' => $user->can('whatsapp.send') ? MessageTemplate::where('status', 'approved')->where('is_active', true)->get(['key', 'name', 'body', 'variables'])
+                ->reject(fn (MessageTemplate $t) => array_intersect((array) $t->variables, InvoiceMessage::INVOICE_VALUES) !== [])
+                ->map(fn (MessageTemplate $t) => $t->only('key', 'name', 'body'))->values() : [],
             'onlinePayments' => $online->available(),
         ]);
     }
@@ -192,7 +196,7 @@ class MemberController extends Controller
     {
         return Inertia::render('Gym/Members/Form', [
             'member' => $member->only('id', 'full_name', 'phone', 'phone_alt', 'email', 'gender', 'national_id', 'nationality', 'address',
-                'emergency_contact_name', 'emergency_contact_phone', 'goals', 'source', 'status', 'notes', 'whatsapp_opt_in', 'marketing_opt_in', 'branch_id') + [
+                'emergency_contact_name', 'emergency_contact_phone', 'goals', 'source', 'status', 'notes', 'whatsapp_opt_in', 'marketing_opt_in', 'message_language', 'branch_id') + [
                     'date_of_birth' => $member->date_of_birth?->toDateString(),
                     'health_notes' => $member->health_notes,
                     'photo_url' => $member->photoThumbUrl(), // a 96px box: the thumbnail is plenty
@@ -323,6 +327,8 @@ class MemberController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
             'whatsapp_opt_in' => ['boolean'],
             'marketing_opt_in' => ['boolean'],
+            // The language of her WhatsApp messages (owner's decision, 2026-11-21).
+            'message_language' => ['sometimes', 'in:'.implode(',', array_keys(Member::MESSAGE_LANGUAGES))],
             'branch_id' => ['nullable', ...app(BranchContext::class)->rule($member?->branch_id)],
             'photo' => ImageRule::rules(),
             'photo_preview' => ImageRule::previewRules(),

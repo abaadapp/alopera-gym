@@ -8,6 +8,7 @@ import {
 import ClubLayout from '@/Layouts/ClubLayout';
 import { clientKey } from '@/Components/Inventory/parts';
 import { BackLink, Badge, Button, Card, CardHeader, ChoiceCard, ConfirmAction, EmptyState, Field, FlatCards, Input, Modal, PageHeader, Select, StatCard, StatGrid, Tabs, Textarea, FileInput } from '@/Components/ui';
+import SendInvoiceWhatsApp from '@/Components/Messaging/SendInvoiceWhatsApp';
 import { Dropdown, DropdownItem, DropdownSeparator } from '@/Components/ui/Dropdown';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { date, money, whatsappUrl, dayCount } from '@/lib/format';
@@ -1100,6 +1101,8 @@ function CrmTab({ notes, member }: Props) {
 function WhatsAppTab({ messages, templates, member }: Props) {
     const can = useCan();
     const form = useForm({ template_key: '' });
+    // «إرسال فاتورة»: one of her open invoices, in the language chosen, read before it leaves (its own values).
+    const [sendingInvoice, setSendingInvoice] = useState(false);
     const selected = templates.find((t) => t.key === form.data.template_key);
 
     const submit = (e: FormEvent) => {
@@ -1149,6 +1152,13 @@ function WhatsAppTab({ messages, templates, member }: Props) {
                         </form>
                     )}
                     {!member.whatsapp_opt_in && <p className="mt-3 text-xs text-amber-700">العضو غير موافق على رسائل واتساب؛ لن تُرسل الرسائل.</p>}
+                    {can('invoices.view') && (
+                        <div className="mt-4 border-t border-line pt-4">
+                            <p className="mb-2 text-xs text-muted">الفاتورة تُرسل بقيمها هي (الرقم والمتبقي ورابط الدفع): اختر الفاتورة واللغة وراجع الرسالة.</p>
+                            <Button variant="outline" className="w-full" icon={<Send className="size-4" />} onClick={() => setSendingInvoice(true)}>إرسال فاتورة</Button>
+                            <SendInvoiceWhatsApp open={sendingInvoice} onClose={() => setSendingInvoice(false)} member={{ id: member.id, label: `${member.full_name} · ${member.member_no}` }} />
+                        </div>
+                    )}
                 </Card>
             )}
         </div>

@@ -169,9 +169,12 @@ class WhatsAppTest extends TestCase
 
         $this->asTenant($club, function () use ($member, $optedOut) {
             $keys = Message::where('member_id', $member->id)->pluck('template_key')->all();
-            foreach (['member_welcome', 'invoice_issued', 'payment_received', 'membership_activated'] as $key) {
+            // Its invoice carries the membership: the message saying it starts once paid in full, its wording approved
+            // here with every template (owner's decision, 2026-11-21) — in place of the plain one, not beside it.
+            foreach (['member_welcome', 'invoice_issued_membership', 'payment_received', 'membership_activated'] as $key) {
                 $this->assertContains($key, $keys);
             }
+            $this->assertNotContains('invoice_issued', $keys);
             $this->assertSame(0, Message::where('member_id', $optedOut->id)->whereIn('status', ['sent', 'queued'])->count());
             $this->assertSame('opted_out', Message::where('member_id', $optedOut->id)->value('error_code'));
         });

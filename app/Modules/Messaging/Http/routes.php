@@ -4,6 +4,7 @@ use App\Modules\Messaging\Http\Controllers\AttachmentController;
 use App\Modules\Messaging\Http\Controllers\AutoReplyController;
 use App\Modules\Messaging\Http\Controllers\CampaignController;
 use App\Modules\Messaging\Http\Controllers\InboxController;
+use App\Modules\Messaging\Http\Controllers\InvoiceMessageController;
 use App\Modules\Messaging\Http\Controllers\MessageLogController;
 use App\Modules\Messaging\Http\Controllers\ReportController;
 use App\Modules\Messaging\Http\Controllers\TemplateController;
@@ -31,6 +32,13 @@ Route::get('/inbox', [InboxController::class, 'legacy'])->middleware('can:whatsa
 Route::get('/inbox/{conversation}', [InboxController::class, 'legacy'])->middleware('can:whatsapp.access')->name('inbox.show');
 
 Route::post('/members/{member}/whatsapp', [InboxController::class, 'sendTemplate'])->middleware(['can:whatsapp.send', 'throttle:30,1'])->name('members.whatsapp');
+
+// «إرسال الفاتورة عبر واتساب» by hand: a member's open invoice, in a language chosen, read before it is sent.
+Route::middleware(['can:whatsapp.send', 'can:invoices.view'])->prefix('whatsapp/invoice-messages')->name('whatsapp.invoice-messages.')->group(function () {
+    Route::get('/invoices', [InvoiceMessageController::class, 'invoices'])->middleware('throttle:60,1')->name('invoices');
+    Route::post('/preview', [InvoiceMessageController::class, 'preview'])->middleware('throttle:60,1')->name('preview');
+    Route::post('/', [InvoiceMessageController::class, 'send'])->middleware('throttle:30,1')->name('send');
+});
 
 Route::middleware('can:whatsapp.view_reports')->group(function () {
     Route::get('/whatsapp/reports', ReportController::class)->name('whatsapp.reports');

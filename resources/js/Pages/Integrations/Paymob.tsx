@@ -3,15 +3,14 @@ import { AlertTriangle, Apple, CircleCheck, CircleDashed, CreditCard, Landmark, 
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Card, CardHeader, EmptyState, Notice, PageHeader } from '@/Components/ui';
 import { CheckList, CopyRow, IntegrationBack, IntegrationSummary, KeysForm, VerifyButton, type IntegrationStatusData, type ProviderForm } from '@/Components/Integrations';
-import { CreatePaymentLink, PaymentLinksLog, type PaymentLinksData } from '@/Components/PaymentLinks';
 
 interface Props {
     integration: ProviderForm;
     status: IntegrationStatusData;
     warning: string | null;
     methods: { key: 'card' | 'omannet' | 'apple_pay'; label: string; saved: boolean; state: 'not_set' | 'saved' | 'checked' | 'enabled' | 'available' | 'wrong_mode'; reason: string; within_cards?: boolean }[];
-    links: { on: boolean; invoices_route: string; create_route: string };
-    paymentLinks: PaymentLinksData | null;
+    /** manage_route: «المالية ← روابط الدفع», where links are made and followed (null without the permission). */
+    links: { on: boolean; reason: string | null; invoices_route: string; create_route: string; manage_route: string | null };
     checks: { label: string; ok: boolean; at: string | null }[];
     usage: { label: string; on: boolean; route?: string | null }[];
     intents: { id: number; reference: string; invoice: string | null; channel: string; amount: string; currency: string; status: string; failure: string | null; at: string }[];
@@ -102,14 +101,16 @@ function MethodSection({ method, form, icon, title, subtitle, hint, note }: {
 function PayLinks({ links }: { links: Props['links'] }) {
     return (
         <Card>
-            <CardHeader title={<span className="flex items-center gap-2"><Link2 className="size-4" />روابط الدفع</span>} subtitle="رابط دفع آمن لكل فاتورة مفتوحة، يُنسخ أو يُرسل بواتساب من صفحة الفاتورة." />
+            <CardHeader title={<span className="flex items-center gap-2"><Link2 className="size-4" />روابط الدفع</span>} subtitle="تُنشأ روابط الدفع وتُتابع من «المالية ← روابط الدفع» ومن صفحة كل فاتورة، لا من هنا. هذه الصفحة لمفاتيح Paymob وحالته." />
             <ul className="space-y-2 text-sm">
                 <li className="flex items-center gap-2.5">
                     {links.on ? <CircleCheck className="size-[18px] shrink-0 text-emerald-600" /> : <CircleDashed className="size-[18px] shrink-0 text-[#9ca3af]" />}
                     <span className={links.on ? 'text-ink' : 'text-muted'}>{links.on ? 'روابط الفواتير تفتح صفحة الدفع' : 'روابط الفواتير تعرض الفاتورة فقط حتى يُفعَّل الدفع الإلكتروني'}</span>
                 </li>
+                {!links.on && links.reason && <li className="ps-7 text-xs leading-6 text-muted">{links.reason}</li>}
             </ul>
             <div className="mt-3 flex flex-wrap gap-3 text-xs">
+                {links.manage_route && <Link href={route(links.manage_route)} className="font-medium text-[#1d4ed8] underline">المالية ← روابط الدفع</Link>}
                 <Link href={route(links.create_route)} className="text-[#1d4ed8] underline">فاتورة جديدة (مطالبة بمبلغ ووصف)</Link>
                 <Link href={route(links.invoices_route)} className="text-[#1d4ed8] underline">فواتير العملاء</Link>
             </div>
@@ -127,7 +128,7 @@ const INTENT_STATUS: Record<string, { label: string; tone: 'green' | 'amber' | '
     expired: { label: 'انتهت المهلة', tone: 'gray' },
 };
 
-export default function PaymobIntegration({ integration, status, warning, methods, links, paymentLinks, checks, usage, intents, events, endpoints }: Props) {
+export default function PaymobIntegration({ integration, status, warning, methods, links, checks, usage, intents, events, endpoints }: Props) {
     const complete = checks[0]?.ok;
     const methodForm = useMethodForm();
     const byKey = Object.fromEntries(methods.map((m) => [m.key, m])) as Record<MethodKey, Props['methods'][number]>;
@@ -171,7 +172,7 @@ export default function PaymobIntegration({ integration, status, warning, method
                 <MethodSection method={byKey.apple_pay} form={methodForm} icon={<Apple className="size-4" />} title="Apple Pay"
                     subtitle="يظهر داخل صفحة دفع Paymob على الأجهزة التي تدعمه، بعد أن تفعّله Paymob لحسابك. لا يعرض النظام زرًا خاصًا به."
                     hint="اختياري: رقم تكامل Apple Pay الحقيقي (Live) — لا أرقام تجريبية له لدى Paymob، فلا يُرسل مع مفاتيح الاختبار." />
-                {paymentLinks ? <CreatePaymentLink data={paymentLinks} /> : <PayLinks links={links} />}
+                <PayLinks links={links} />
                 </div>
 
                 <div className="space-y-6 lg:col-span-2">
@@ -228,8 +229,6 @@ export default function PaymobIntegration({ integration, status, warning, method
                     </Card>
                 </div>
             </div>
-
-            {paymentLinks && <div className="mt-6"><PaymentLinksLog data={paymentLinks} /></div>}
 
             <div className="mt-6 grid gap-6 xl:grid-cols-2 [&>*]:min-w-0">
                 <Card padded={false}>

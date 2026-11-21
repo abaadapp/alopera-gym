@@ -69,6 +69,34 @@ final class PaymobClient
         return self::ready($integration) && (self::live($integration) || ! app()->isProduction());
     }
 
+    /**
+     * Why this integration takes no money here, in the staff's words, or null when it does (takesPayments): what is
+     * missing first, as ready() and live() check it. Names nothing secret — never a key, only which one is missing.
+     */
+    public static function unavailableReason(?TenantIntegration $integration): ?string
+    {
+        if (self::takesPayments($integration)) {
+            return null;
+        }
+        if (! $integration) {
+            return 'لم يُربط Paymob بعد: أدخل مفاتيحه من التطبيقات التكاملية ← Paymob.';
+        }
+        if (! $integration->is_enabled) {
+            return 'Paymob موقوف: فعّله من التطبيقات التكاملية ← Paymob.';
+        }
+        $missing = array_values(array_filter(self::REQUIRED, fn (string $key) => $integration->credential($key) === null));
+        if ($missing !== []) {
+            $names = ['secret_key' => 'Secret key', 'public_key' => 'Public key', 'hmac_secret' => 'HMAC secret'];
+
+            return 'مفاتيح Paymob غير مكتملة (ينقص: '.implode('، ', array_map(fn (string $k) => $names[$k], $missing)).'): أكملها من التطبيقات التكاملية ← Paymob.';
+        }
+        if (self::checkoutIds($integration) === []) {
+            return 'لا رقم ربط لوسيلة دفع في Paymob (رقم البطاقات غالبًا): أضفه من التطبيقات التكاملية ← Paymob.';
+        }
+
+        return 'Paymob في وضع الاختبار، أو مفاتيحه لا تثبت أنها حقيقية، فلا يفتح صفحات دفع ولا يسجّل دفعات على نظام الإنتاج.';
+    }
+
     /** @return array<string, int|null> each method's own integration id, as saved */
     public static function methodIds(?TenantIntegration $integration): array
     {

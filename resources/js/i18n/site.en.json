@@ -351,5 +351,6 @@
     "جارٍ التحويل إلى الدفع…": "Taking you to payment…",
     "ادفع :amount وأهدِ الآن": "Pay :amount and send the gift",
     "يظهر الدفع بعد تأكيد رقم المستلمة.": "Payment appears once the recipient's number is confirmed.",
-    "رسالة الهدية على واتساب المستلمة:": "The gift's message on the recipient's WhatsApp:"
+    "رسالة الهدية على واتساب المستلمة:": "The gift's message on the recipient's WhatsApp:",
+    "الاشتراك أو باقة التدريب في هذه الفاتورة يتفعّل بعد سدادها كاملة.": "The membership or training package on this invoice starts once it is paid in full."
 }

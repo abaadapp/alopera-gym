@@ -31,6 +31,9 @@ use Throwable;
  */
 final class MembershipService
 {
+    /** How each kind of sale is named on its invoice line. */
+    public const KIND_LABELS = ['new' => 'اشتراك', 'renewal' => 'تجديد', 'upgrade' => 'ترقية'];
+
     public function __construct(
         private readonly InvoiceService $invoices,
         private readonly CouponService $coupons,
@@ -56,6 +59,79 @@ final class MembershipService
      */
     public function renew(Member $member, ?MembershipPlan $plan = null, array $options = []): Membership
     {
+        [$plan, $kind, $terms] = $this->renewalTerms($member, $plan);
+
+        return $this->create($member, $plan, $kind, $terms + $options);
+    }
+
+    /**
+     * A membership on a customer invoice of several lines (the invoice editor's catalogue, owner's decision 2026-11-21):
+     * made as renew() makes it — after the period running, or from today — and pending, with the same checks (one sale
+     * awaiting payment per member, no overlap, the plan on sale, the member not blocked) and the same lines (the plan,
+     * the signup fee of a first one), but no invoice of its own: the caller puts the lines on its one invoice and then
+     * calls issuedOn(). It is activated as any sale is, by ActivatePaidItems once that invoice is paid in full.
+     *
+     * @param  array{discount?: string|float|null, branch_id?: int|null, notes?: string|null}  $options
+     * @return array{0: Membership, 1: list<array<string, mixed>>}
+     */
+    public function pendingForInvoice(Member $member, MembershipPlan $plan, array $options = []): array
+    {
+        [$plan, $kind, $terms] = $this->renewalTerms($member, $plan);
+
+        return DB::transaction(function () use ($member, $plan, $kind, $terms, $options) {
+            [$membership, $lines] = $this->pending($member, $plan, $kind, $terms + $options);
+
+            return [$membership, $lines];
+        });
+    }
+
+    /**
+     * What pendingForInvoice() would bill now, read only (the editor's paper, a draft): the plan line's description —
+     * its kind and period — and the signup fee of a first membership. Nothing is made or locked.
+     *
+     * @return array{description: string, signup_fee: string}
+     */
+    public function quote(Member $member, MembershipPlan $plan): array
+    {
+        [$plan, $kind, $terms] = $this->renewalTerms($member, $plan);
+        $start = CarbonImmutable::parse($terms['starts_on'])->startOfDay();
+        $end = $plan->endDateFrom($start);
+        $isFirst = ! $member->memberships()->whereNot('status', Membership::CANCELLED)->exists();
+
+        return [
+            'description' => self::KIND_LABELS[$kind].' — '.$plan->name.' (من '.$start->format('Y-m-d').' إلى '.$end->format('Y-m-d').')',
+            'signup_fee' => $kind === Membership::KIND_NEW && $isFirst ? Money::normalize($plan->signup_fee) : '0.000',
+        ];
+    }
+
+    /**
+     * The invoice the lines of pendingForInvoice() were issued on: the membership is tied to it, as a sale is, and
+     * announced (MembershipCreated: the invoice message to the member) — or later by announce(), once the money taken
+     * with the invoice is recorded, so the message asks only what is still owed (none: no message).
+     */
+    public function issuedOn(Membership $membership, Invoice $invoice, bool $announce = true): Membership
+    {
+        $membership->forceFill(['invoice_id' => $invoice->id])->save();
+        $membership->refresh();
+        if ($announce) {
+            $this->announce($membership);
+        }
+
+        return $membership;
+    }
+
+    public function announce(Membership $membership): void
+    {
+        MembershipCreated::dispatch($membership->refresh());
+    }
+
+    /**
+     * What a renewal is: the plan (the last one when none is given), its kind, and where it starts.
+     *
+     * @return array{0: MembershipPlan, 1: string, 2: array{starts_on: string, previous_membership_id: int|null}}
+     */
+    private function renewalTerms(Member $member, ?MembershipPlan $plan): array
+    {
         $latest = $member->memberships()
             ->whereIn('status', [Membership::ACTIVE, Membership::FROZEN, Membership::SCHEDULED])
             ->orderByDesc('ends_on')
@@ -73,10 +149,10 @@ final class MembershipService
         $start = $latest && ($latest->ends_on->gte($today) || $latest->status === Membership::FROZEN) ? $latest->ends_on->addDay() : $today;
 
         // A renewal starts where the current period ends, whatever start date the request still carries.
-        return $this->create($member, $plan, $latestAny ? Membership::KIND_RENEWAL : Membership::KIND_NEW, [
+        return [$plan, $latestAny ? Membership::KIND_RENEWAL : Membership::KIND_NEW, [
             'starts_on' => $start->toDateString(),
             'previous_membership_id' => $latestAny?->id,
-        ] + $options);
+        ]];
     }
 
     /**
@@ -127,6 +203,34 @@ final class MembershipService
 
     /** @param array<string, mixed> $options */
     private function create(Member $member, MembershipPlan $plan, string $kind, array $options): Membership
+    {
+        return DB::transaction(function () use ($member, $plan, $kind, $options) {
+            [$membership, $lines] = $this->pending($member, $plan, $kind, $options);
+            $gift = $options['gift'] ?? null;
+            $credit = Money::normalize($membership->credit_applied);
+
+            $invoice = $this->invoices->issue($member, $lines, [
+                'type' => 'membership',
+                'branch_id' => $membership->branch_id,
+                'notes' => match (true) {
+                    $gift !== null => 'مدفوعة بهدية: الفاتورة '.($gift->invoice?->number ?? '').'. لا مبلغ على المستلم.',
+                    Money::isZero($credit) => null,
+                    default => 'رصيد مستخدم من العضوية السابقة: '.$credit,
+                },
+            ]);
+
+            return $this->issuedOn($membership, $invoice);
+        });
+    }
+
+    /**
+     * The membership, pending, and its invoice lines (the plan, the signup fee of a first one), with every check a sale
+     * makes; its invoice is the caller's. Inside the caller's transaction: the member's lock is held until it ends.
+     *
+     * @param  array<string, mixed>  $options
+     * @return array{0: Membership, 1: list<array<string, mixed>>}
+     */
+    private function pending(Member $member, MembershipPlan $plan, string $kind, array $options): array
     {
         // A paid gift (#192) is redeemed into the plan it was bought for, even if that plan is no longer sold.
         if (! isset($options['gift']) && ! $plan->is_active) {
@@ -207,7 +311,7 @@ final class MembershipService
                 $this->coupons->redeem($coupon, $member, $membership, $discount);
             }
 
-            $kindLabel = ['new' => 'اشتراك', 'renewal' => 'تجديد', 'upgrade' => 'ترقية'][$kind];
+            $kindLabel = self::KIND_LABELS[$kind];
             $lines = [[
                 'description' => ($gift ? 'هدية '.$gift->number.' — '.($gift->plan_snapshot['name'] ?? $plan->name) : $kindLabel.' — '.$plan->name)
                     .' (من '.$start->format('Y-m-d').' إلى '.$end->format('Y-m-d').')',
@@ -219,22 +323,7 @@ final class MembershipService
                 $lines[] = ['description' => 'رسوم التسجيل', 'unit_price' => $signupFee, 'itemable' => $membership];
             }
 
-            $invoice = $this->invoices->issue($member, $lines, [
-                'type' => 'membership',
-                'branch_id' => $membership->branch_id,
-                'notes' => match (true) {
-                    $gift !== null => 'مدفوعة بهدية: الفاتورة '.($gift->invoice?->number ?? '').'. لا مبلغ على المستلم.',
-                    Money::isZero($credit) => null,
-                    default => 'رصيد مستخدم من العضوية السابقة: '.$credit,
-                },
-            ]);
-
-            $membership->forceFill(['invoice_id' => $invoice->id])->save();
-            $membership->refresh();
-
-            MembershipCreated::dispatch($membership);
-
-            return $membership;
+            return [$membership, $lines];
         });
     }
 
@@ -427,6 +516,12 @@ final class MembershipService
             $invoice = $membership->invoice;
             if ($wasPending && $invoice && (! Money::isZero($invoice->paid_total) || $invoice->payments()->where('status', Payment::PENDING)->exists())) {
                 throw new BusinessRuleException('membership.partly_paid', 'على فاتورة هذا الاشتراك '.$invoice->number.' دفعة مسجّلة. ألغِ الدفعة أو ردّها من المالية أولًا، ثم ألغِ الاشتراك.');
+            }
+            // Sold on a customer invoice with other lines (the invoice catalogue): withdrawing it here would void the
+            // whole invoice — the products, the other services — behind finance. The invoice is voided there instead,
+            // which withdraws the memberships still pending on it and nothing else (cancelForVoidedInvoice).
+            if ($wasPending && $invoice && $invoice->items()->where(fn ($q) => $q->whereNull('itemable_type')->orWhere('itemable_type', '!=', 'membership')->orWhere('itemable_id', '!=', $membership->id))->exists()) {
+                throw new BusinessRuleException('membership.shared_invoice', 'هذا الاشتراك على الفاتورة '.$invoice->number.' مع أصناف أخرى. ألغِ الفاتورة من «فواتير العملاء»، فيُلغى الاشتراك المعلّق معها دون غيره.');
             }
 
             $membership->forceFill([

@@ -5,7 +5,7 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import PaperFrame from '@/Components/Papers/PaperFrame';
 import { clientKey } from '@/Components/Inventory/parts';
 import { Stepper } from '@/Components/Products/parts';
-import { BackLink, Button, Card, Field, FileInput, Input, MemberPicker, Modal, PageHeader, Select, Textarea, type MemberHit } from '@/Components/ui';
+import { BackLink, Button, Card, Field, FileInput, Input, MemberPicker, Modal, Notice, PageHeader, Select, Textarea, type MemberHit } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { lineTotal, type AddonOption, type ChosenAddon } from '@/lib/addons';
 import { currencyLabel, money } from '@/lib/format';
@@ -38,8 +38,33 @@ interface LineAddon extends ChosenAddon {
     price?: string;
 }
 
+/** A service of the club's catalogue: its price is the server's (null: a program not priced yet). */
+interface Service {
+    id: number;
+    name: string;
+    price: string | null;
+    /** Its period or sessions, as the picker shows them. */
+    detail: string;
+    note: string | null;
+}
+
+type ServiceKind = 'plan' | 'pt' | 'program';
+
+interface Services {
+    plans: Service[];
+    pt: Service[];
+    programs: Service[];
+    /** May price a program that has none (whoever manages programs). */
+    price_programs: boolean;
+}
+
+const SERVICE_LABEL: Record<ServiceKind, string> = { plan: 'باقة عضوية', pt: 'تدريب شخصي', program: 'حصة أو برنامج' };
+
 interface Line {
     product_id: string;
+    /** A service from the catalogue (plan, personal training, program): which one; its name and price are the server's. */
+    item_type?: '' | ServiceKind;
+    item_id?: string;
     description: string;
     quantity: string;
     unit_price: string;
@@ -77,6 +102,7 @@ interface Props {
     products: Product[];
     catalog_truncated: boolean;
     addons: Addon[];
+    services?: Services;
     tax_rate: number;
     due_days: number;
     today: string;
@@ -85,6 +111,8 @@ interface Props {
     methods: Method[];
     /** link: «إصدار الفاتورة وإنشاء رابط دفع» (the links permission, online payments on). */
     may: { issue: boolean; pay: boolean; design: boolean; link?: boolean };
+    /** Why «إصدار الفاتورة وإنشاء رابط دفع» is not offered (the permission, Paymob not ready); shown in its place. */
+    link_reason?: string | null;
     /** How long a payment link opens a payment page, in days. */
     link_days?: number[];
     draft?: Draft;
@@ -99,7 +127,8 @@ const CUSTOM = 'custom';
 const METHOD_LABEL: Record<Method, string> = { credit: 'آجل — لا يُقبض الآن', cash: 'مدفوع نقدًا', card: 'مدفوع بالبطاقة (جهاز الشبكة)', bank_transfer: 'تحويل بنكي' };
 const ACCEPT = '.jpg,.jpeg,.png,.pdf,.webp,.heic';
 const N = (v: string) => (Number.isFinite(Number(v)) ? Number(v) : 0);
-const blank = (): Line => ({ product_id: '', description: '', quantity: '1', unit_price: '0', discount: '0', addons: [] });
+const blank = (): Line => ({ product_id: '', item_type: '', item_id: '', description: '', quantity: '1', unit_price: '0', discount: '0', addons: [] });
+const NO_SERVICES: Services = { plans: [], pt: [], programs: [], price_programs: false };
 /** An add-on's count on a line: per piece × the pieces, to the thousandth as the server keeps it. */
 const units = (quantity: string | number, perPiece: number) => Math.round(N(String(quantity)) * perPiece * 1000) / 1000;
 /** As the server prices an add-on line: its price in baisa times the count, rounded. */
@@ -129,7 +158,7 @@ function addDays(from: string, days: number): string {
  * shelf allows): chosen when the product is taken, from its line, or from «إضافة من الإضافات». Each is billed on a line
  * of its own under the product's; the server prices them and checks they go with it.
  */
-export default function InvoiceCreate({ products, catalog_truncated, addons, tax_rate, due_days, today, terms, paper_lang, methods, may, link_days = [], draft, paper: firstPaper }: Props) {
+export default function InvoiceCreate({ products, catalog_truncated, addons, services = NO_SERVICES, tax_rate, due_days, today, terms, paper_lang, methods, may, link_reason = null, link_days = [], draft, paper: firstPaper }: Props) {
     const currency = useCurrency();
     const symbol = currencyLabel(currency);
     const m = (v: string | number) => money(v, currency);
@@ -195,6 +224,18 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
             return empty ? [line] : [...prev, line];
         });
     const productOf = (l: Line) => (l.product_id ? products.find((p) => String(p.id) === l.product_id) : undefined);
+    const serviceOf = (l: Line): Service | undefined => {
+        const list = l.item_type === 'plan' ? services.plans : l.item_type === 'pt' ? services.pt : l.item_type === 'program' ? services.programs : [];
+        return list.find((s) => String(s.id) === l.item_id);
+    };
+    // A service as the server bills it: its name and price (a program without one is priced here only by whoever may).
+    const pickService = (kind: ServiceKind, s: Service) =>
+        setLines((prev) => {
+            const line: Line = { product_id: '', item_type: kind, item_id: String(s.id), description: s.name, quantity: '1', unit_price: s.price !== null ? Number(s.price).toFixed(3) : '', discount: '0', addons: [] };
+            const empty = prev.length === 1 && prev[0].description === '' && prev[0].product_id === '' && !prev[0].item_type;
+            return empty ? [line] : [...prev, line];
+        });
+    const needsMember = lines.some((l) => l.item_type === 'plan' || l.item_type === 'pt');
 
     // ── Add-ons: those that go with a product, how many of one the other lines already use, and how many per piece the
     // shelf still allows on a line (within the add-on's own limit). ──
@@ -219,7 +260,7 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
         notes: d.notes || null,
         internal_notes: internal ? d.internal_notes || null : null,
         paper_lang: lang,
-        lines: lines.map((l) => ({ product_id: l.product_id || null, description: l.description, quantity: l.quantity || 0, unit_price: l.unit_price || 0, discount: l.discount || 0, addons: l.product_id ? l.addons.map((a) => ({ addon_id: a.id, quantity: a.qty })) : [] })),
+        lines: lines.map((l) => ({ product_id: l.product_id || null, item_type: l.item_type || null, item_id: l.item_type ? l.item_id || null : null, description: l.description, quantity: l.quantity || 0, unit_price: l.unit_price || 0, discount: l.discount || 0, addons: l.product_id ? l.addons.map((a) => ({ addon_id: a.id, quantity: a.qty })) : [] })),
     }), [d.customer_mode, member, d.customer_name, d.customer_phone, d.customer_email, d.issue_date, d.due_date, d.payment_terms_days, d.notes, d.internal_notes, internal, lang, lines]);
 
     // ── The live paper and its totals: the server's first one, then redrawn a moment after typing stops (the same form
@@ -311,7 +352,7 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
         if (!list) return;
         form.setData('attachments', [...d.attachments, ...Array.from(list)].slice(0, Math.max(0, 6 - kept.length)));
     };
-    const lineError = (i: number) => ['description', 'quantity', 'unit_price', 'discount', 'product_id', 'addons'].map((f) => errors[`lines.${i}.${f}`]).find(Boolean) ?? Object.entries(errors).find(([k]) => k.startsWith(`lines.${i}.addons.`))?.[1];
+    const lineError = (i: number) => ['item_id', 'item_type', 'description', 'quantity', 'unit_price', 'discount', 'product_id', 'addons'].map((f) => errors[`lines.${i}.${f}`]).find(Boolean) ?? Object.entries(errors).find(([k]) => k.startsWith(`lines.${i}.addons.`))?.[1];
 
     return (
         <ClubLayout title={draft ? 'مسودة فاتورة' : 'إنشاء فاتورة'}>
@@ -326,11 +367,15 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
                     {/* A draft carries no money: with a payment chosen, only issuing records it. */}
                     {(credit || !may.issue) && <Button variant="outline" disabled={form.processing} icon={<Save />} onClick={() => submit(false)}>حفظ كمسودة</Button>}
                     {may.issue && may.link && link_days.length > 0 && (
-                        <Button variant="outline" disabled={form.processing || paidNow >= total} icon={<Link2 />} onClick={() => setLinking(true)}>إصدار الفاتورة وإنشاء رابط دفع</Button>
+                        <Button variant="outline" disabled={form.processing || paidNow >= total} title={paidNow >= total ? 'المبلغ كله مدفوع عند الإصدار، فلا يبقى ما يطلبه رابط الدفع.' : undefined} icon={<Link2 />} onClick={() => setLinking(true)}>إصدار الفاتورة وإنشاء رابط دفع</Button>
                     )}
+                    {/* Not offered: still shown, greyed, with why just below — never left out without a word. */}
+                    {may.issue && !may.link && link_reason && <Button variant="outline" disabled title={link_reason} icon={<Link2 />}>إصدار الفاتورة وإنشاء رابط دفع</Button>}
                     {may.issue && <Button loading={form.processing} icon={<Send />} onClick={() => submit(true)}>إصدار الفاتورة</Button>}
                 </>}
             />
+
+            {may.issue && !may.link && link_reason && <Notice tone="amber" icon={<Link2 />} className="mb-4">{link_reason}</Notice>}
 
             {Object.keys(errors).length > 0 && (
                 <p className="mb-4 rounded-[10px] border border-[#fecaca] bg-[#fef2f2] p-3 text-[13px] text-[#b91c1c]" role="alert">
@@ -417,11 +462,15 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
                     <Card className="p-5">
                         <div className="mb-4 flex flex-wrap items-center gap-2">
                             <h2 className="me-auto text-[15px] font-bold text-ink">الأصناف</h2>
-                            {products.length > 0 && <Button variant="outline" size="sm" icon={<Search />} onClick={() => setPicking(true)}>منتج من الكتالوج</Button>}
-                            {products.length > 0 && <Button variant="outline" size="sm" icon={<PlusCircle />} onClick={() => setPickingAddon(true)}>إضافة من الإضافات</Button>}
+                            {(products.length > 0 || services.plans.length > 0 || services.pt.length > 0 || services.programs.length > 0) && <Button variant="outline" size="sm" icon={<Search />} onClick={() => setPicking(true)}>من الكتالوج</Button>}
+                            {/* Its own list: shown whenever add-ons are offered, not only while the catalogue has products (each one still goes with a product, as at the point of sale). */}
+                            {addons.length > 0 && <Button variant="outline" size="sm" icon={<PlusCircle />} onClick={() => setPickingAddon(true)}>إضافة من الإضافات</Button>}
                             <Button size="sm" icon={<Plus />} onClick={() => setLines((p) => [...p, blank()])} disabled={lines.length >= 50}>إضافة بند</Button>
                             <Button variant="outline" size="sm" className="text-[#b91c1c]" title="تفريغ كل البنود" aria-label="تفريغ كل البنود" icon={<Trash2 />} onClick={() => setLines([blank()])} />
                         </div>
+                        {needsMember && d.customer_mode !== 'member' && (
+                            <Notice tone="amber" icon={<Info />} className="mb-3">العضوية والتدريب الشخصي يُباعان لعضو: اختر «عضو» في العميل ثم العضو، فتُنشأ له معلّقة وتُفعَّل بعد سداد الفاتورة كاملة.</Notice>
+                        )}
                         {/* The lines fit the card at any width: one row each where there is room (a header over them), else
                             the description on one row and the quantity, price, discount and total under it. */}
                         <div className="@container text-[13px]">
@@ -438,11 +487,21 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
                                 const product = productOf(line);
                                 const short = product?.track_stock && product.stock !== null && N(line.quantity) > product.stock;
                                 const offered = fitting(product);
+                                const kind = line.item_type || null;
+                                const service = kind ? serviceOf(line) : undefined;
+                                // A service's name and price are the catalogue's; a plan or a package is sold once.
+                                const priceOpen = !kind || (kind === 'program' && service?.price === null && services.price_programs);
                                 return (
                                     <div key={i} className={cn(LINE_GRID, 'grid-cols-[1.25rem_minmax(0,1fr)_2.25rem] items-start border-b border-line py-3 last:border-b-0')}>
                                         <span className="pt-2.5 text-[#9ca3af] num">{i + 1}</span>
                                         <div className="min-w-0">
-                                            <Input value={line.description} onChange={(e) => setLine(i, { description: e.target.value })} placeholder="الوصف" maxLength={250} aria-label={`وصف البند ${i + 1}`} />
+                                            <Input value={line.description} readOnly={kind !== null} onChange={(e) => setLine(i, { description: e.target.value })} placeholder="الوصف" maxLength={250} aria-label={`وصف البند ${i + 1}`} />
+                                            {kind && (
+                                                <p className={cn('mt-1 text-[11px]', service ? 'text-[#9ca3af]' : 'text-[#b91c1c]')} data-testid="line-service">
+                                                    {service ? <>{SERVICE_LABEL[kind]} · {service.detail}{service.note ? ` · ${service.note}` : ''} · {kind === 'program' ? 'بيعها لا يحجز موعدًا' : 'تُنشأ للعضو معلّقة وتُفعَّل بعد السداد الكامل'}</> : 'لم يعد في الكتالوج — احذف البند'}
+                                                    {kind === 'program' && service?.price === null && <span className="text-[#b45309]"> · {services.price_programs ? 'بلا سعر في الكتالوج: اكتب السعر' : 'بلا سعر في الكتالوج: يحدده من يدير البرامج'}</span>}
+                                                </p>
+                                            )}
                                             {product && (
                                                 <p className={cn('mt-1 text-[11px]', short ? 'text-[#b91c1c]' : 'text-[#9ca3af]')}>
                                                     من الكتالوج{product.track_stock ? <> · المتوفر <span className="num">{product.stock}</span>{short && ' — أقل من الكمية'}</> : ' · خدمة بلا مخزون'}
@@ -454,8 +513,8 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
                                             <Button variant="outline" size="sm" className="h-10 w-9 px-0 text-[#b91c1c]" title="حذف البند" aria-label={`حذف البند ${i + 1}`} icon={<Trash2 />} disabled={lines.length === 1} onClick={() => setLines((p) => p.filter((_, k) => k !== i))} />
                                         </div>
                                         <div className="col-[2/-1] grid grid-cols-2 gap-2 @[26rem]:grid-cols-4 @[42rem]:contents">
-                                            <LineField label="الكمية"><Input dir="ltr" inputMode="decimal" value={line.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} aria-label={`كمية البند ${i + 1}`} /></LineField>
-                                            <LineField label={`سعر الوحدة (${symbol})`}><Input dir="ltr" inputMode="decimal" value={line.unit_price} onChange={(e) => setLine(i, { unit_price: e.target.value })} aria-label={`سعر البند ${i + 1}`} /></LineField>
+                                            <LineField label="الكمية"><Input dir="ltr" inputMode="decimal" value={line.quantity} readOnly={kind === 'plan' || kind === 'pt'} onChange={(e) => setLine(i, { quantity: e.target.value })} aria-label={`كمية البند ${i + 1}`} /></LineField>
+                                            <LineField label={`سعر الوحدة (${symbol})`}><Input dir="ltr" inputMode="decimal" value={line.unit_price} readOnly={!priceOpen} onChange={(e) => setLine(i, { unit_price: e.target.value })} aria-label={`سعر البند ${i + 1}`} /></LineField>
                                             <LineField label={`الخصم (${symbol})`}><Input dir="ltr" inputMode="decimal" value={line.discount} onChange={(e) => setLine(i, { discount: e.target.value })} aria-label={`خصم البند ${i + 1}`} /></LineField>
                                             <LineField label={`الإجمالي (${symbol})`}><span className="flex h-10 items-center font-semibold tabular-nums text-ink" aria-label={`إجمالي البند ${i + 1}`}>{lineNet(line).toFixed(3)}</span></LineField>
                                         </div>
@@ -653,7 +712,8 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
                 </div>
             </div>
 
-            <ProductDialog open={picking} onClose={() => setPicking(false)} products={products} truncated={catalog_truncated} picked={lines.map((l) => Number(l.product_id)).filter((n) => n > 0)} addonsOf={fitting} room={(a, quantity) => perPiece(a, quantity)} onPick={pickProduct} />
+            <ProductDialog open={picking} onClose={() => setPicking(false)} products={products} truncated={catalog_truncated} picked={lines.map((l) => Number(l.product_id)).filter((n) => n > 0)} addonsOf={fitting} room={(a, quantity) => perPiece(a, quantity)} onPick={pickProduct}
+                services={services} pickedServices={lines.flatMap((l) => (l.item_type ? [`${l.item_type}:${l.item_id}`] : []))} onPickService={pickService} addonsCount={addons.length} onAddons={() => { setPicking(false); setPickingAddon(true); }} />
             <AddonsDialog open={pickingAddon} onClose={() => setPickingAddon(false)} addons={addons} products={products} lines={lines} productOf={productOf} room={perPiece} onAttach={attach} />
             {editing !== null && lines[editing] && (
                 <LineAddonsDialog
@@ -763,12 +823,26 @@ function AddonChoices({ options, chosen, onChange, room }: { options: Addon[]; c
 /** The chosen add-ons, in the order they are offered. */
 const chosenList = (options: Addon[], chosen: Record<number, number>): ChosenAddon[] => options.flatMap((a) => ((chosen[a.id] ?? 0) > 0 ? [{ id: a.id, qty: chosen[a.id] }] : []));
 
+type CatalogTab = 'products' | 'addons' | ServiceKind;
+
+const CATALOG_TABS: { key: CatalogTab; label: string }[] = [
+    { key: 'products', label: 'منتجات المتجر' },
+    { key: 'addons', label: 'الإضافات' },
+    { key: 'plan', label: 'باقات العضوية' },
+    { key: 'pt', label: 'التدريب الشخصي' },
+    { key: 'program', label: 'الحصص والبرامج' },
+];
+
 /**
- * منتج من الكتالوج: search by name, code or barcode; arrows and Enter pick; it stays open to add several lines. A product
- * with add-ons opens them first — the pieces and how many of each add-on per piece — or is added without them.
+ * من الكتالوج: the club's catalogue in one picker, by kind — the shop's products (with their add-ons), the add-ons, the
+ * membership plans, personal training and the programs — searched by name; it stays open to add several lines. A
+ * product with add-ons opens them first — the pieces and how many of each add-on per piece — or is added without them.
  */
-function ProductDialog({ open, onClose, products, truncated, picked, addonsOf, room, onPick }: { open: boolean; onClose: () => void; products: Product[]; truncated: boolean; picked: number[]; addonsOf: (p: Product) => Addon[]; room: (a: Addon, quantity: number) => number; onPick: (p: Product, quantity?: number, chosen?: ChosenAddon[]) => void }) {
+function ProductDialog({ open, onClose, products, truncated, picked, addonsOf, room, onPick, services, pickedServices, onPickService, addonsCount, onAddons }: { open: boolean; onClose: () => void; products: Product[]; truncated: boolean; picked: number[]; addonsOf: (p: Product) => Addon[]; room: (a: Addon, quantity: number) => number; onPick: (p: Product, quantity?: number, chosen?: ChosenAddon[]) => void; services: Services; pickedServices: string[]; onPickService: (kind: ServiceKind, s: Service) => void; addonsCount: number; onAddons: () => void }) {
     const currency = useCurrency();
+    const counts: Record<CatalogTab, number> = { products: products.length, addons: addonsCount, plan: services.plans.length, pt: services.pt.length, program: services.programs.length };
+    const tabs = CATALOG_TABS.filter((tb) => counts[tb.key] > 0);
+    const [tab, setTab] = useState<CatalogTab>(tabs[0]?.key ?? 'products');
     const [q, setQ] = useState('');
     const [active, setActive] = useState(0);
     const [added, setAdded] = useState(0);
@@ -783,10 +857,17 @@ function ProductDialog({ open, onClose, products, truncated, picked, addonsOf, r
             setActive(0);
             setAdded(0);
             setChoosing(null);
+            setTab((current) => (counts[current] > 0 ? current : (tabs[0]?.key ?? 'products')));
         }
-    }, [open]);
+    }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const needle = q.trim().toLowerCase();
+    const serviceList = tab === 'plan' ? services.plans : tab === 'pt' ? services.pt : tab === 'program' ? services.programs : [];
+    const servicesShown = (needle === '' ? serviceList : serviceList.filter((s) => [s.name, s.detail].some((v) => v.toLowerCase().includes(needle)))).slice(0, 60);
+    const addService = (s: Service) => {
+        onPickService(tab as ServiceKind, s);
+        setAdded((n) => n + 1);
+    };
     const matched = needle === '' ? products : products.filter((p) => [p.name, p.sku ?? '', p.barcode ?? ''].some((v) => v.toLowerCase().includes(needle)));
     const shown = matched.slice(0, 40);
     useEffect(() => setActive(0), [q]);
@@ -809,16 +890,18 @@ function ProductDialog({ open, onClose, products, truncated, picked, addonsOf, r
         setChosen({});
     };
     const onKey = (e: KeyboardEvent) => {
-        if (shown.length === 0) return;
+        const size = tab === 'products' ? shown.length : servicesShown.length;
+        if (size === 0) return;
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            setActive((i) => (i + 1) % shown.length);
+            setActive((i) => (i + 1) % size);
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
-            setActive((i) => (i - 1 + shown.length) % shown.length);
+            setActive((i) => (i - 1 + size) % size);
         } else if (e.key === 'Enter') {
             e.preventDefault();
-            take(shown[active] ?? shown[0]);
+            if (tab === 'products') take(shown[active] ?? shown[0]);
+            else if (tab !== 'addons') addService(servicesShown[active] ?? servicesShown[0]);
         }
     };
 
@@ -829,8 +912,8 @@ function ProductDialog({ open, onClose, products, truncated, picked, addonsOf, r
         <Modal
             open={open}
             onClose={onClose} size="large"
-            title={choosing ? choosing.name : 'منتج من الكتالوج'}
-            description={choosing ? 'اختر الإضافات لكل قطعة — أو أضف المنتج بدونها.' : 'ابحث بالاسم أو رمز الصنف أو الباركود — والنافذة تبقى مفتوحة لتضيف أكثر من بند.'}
+            title={choosing ? choosing.name : 'من الكتالوج'}
+            description={choosing ? 'اختر الإضافات لكل قطعة — أو أضف المنتج بدونها.' : 'منتجات المتجر وخدمات النادي في فاتورة واحدة — ابحث بالاسم، والنافذة تبقى مفتوحة لتضيف أكثر من بند.'}
             footer={choosing ? (
                 <>
                     <span className="me-auto text-[13px] text-[#6b7280]">الإجمالي <span className="font-bold text-ink num">{money(lineTotal(choosing.price, quantity, picks, options), currency)}</span></span>
@@ -853,6 +936,51 @@ function ProductDialog({ open, onClose, products, truncated, picked, addonsOf, r
                     <AddonChoices options={options} chosen={chosen} onChange={setChosen} room={(a) => room(a, quantity)} />
                 </div>
             ) : (
+                <>
+                    {tabs.length > 1 && (
+                        <div className="mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="أقسام الكتالوج">
+                            {tabs.map((tb) => (
+                                <button key={tb.key} type="button" role="tab" aria-selected={tab === tb.key} onClick={() => { setTab(tb.key); setActive(0); }}
+                                    className={cn('rounded-full border px-3 py-1 text-[12px]', tab === tb.key ? 'border-ink bg-ink text-white' : 'border-line text-[#4b4b4b] hover:bg-[#f7f7f5]')}>
+                                    {tb.label} <span className="num opacity-70">{counts[tb.key]}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    {tab === 'addons' ? (
+                        <div className="rounded-[12px] border border-line p-4 text-[13px] text-[#4b4b4b]">
+                            <p>كل إضافة تُباع مع منتج من المتجر، كما في نقطة البيع: تُختار مع المنتج، أو من «إضافة من الإضافات» فتُضاف إلى بند منتج أو مع منتج جديد.</p>
+                            <Button className="mt-3" variant="outline" size="sm" icon={<PlusCircle />} onClick={onAddons}>إضافة من الإضافات</Button>
+                        </div>
+                    ) : tab !== 'products' ? (
+                        <>
+                            <div className="relative">
+                                <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[#9ca3af]" />
+                                <Input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} placeholder="ابحث بالاسم" className="ps-9" aria-label="بحث في الكتالوج" />
+                            </div>
+                            {tab !== 'program' && <p className="mt-2 text-[11px] text-[#9ca3af]">تُباع لعضو محدد، وتُنشأ له معلّقة وتُفعَّل تلقائيًا بعد سداد الفاتورة كاملة — لا عند السداد الجزئي.</p>}
+                            {tab === 'program' && <p className="mt-2 text-[11px] text-[#9ca3af]">بيع الحصة أو البرنامج لا يحجز موعدًا: الحجز من جدول الحصص.</p>}
+                            <div ref={list} className="mt-2 max-h-80 overflow-y-auto" role="listbox" aria-label={CATALOG_TABS.find((tb) => tb.key === tab)?.label}>
+                                {servicesShown.map((s, i) => {
+                                    const taken = pickedServices.includes(`${tab}:${s.id}`);
+                                    const blocked = (tab === 'plan' && pickedServices.some((k) => k.startsWith('plan:'))) || (tab === 'pt' && taken) || (tab === 'program' && s.price === null && !services.price_programs);
+                                    return (
+                                        <button key={s.id} type="button" role="option" aria-selected={i === active} data-active={i === active} disabled={blocked}
+                                            onMouseEnter={() => setActive(i)} onClick={() => addService(s)}
+                                            className={cn('flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-start text-[13px] disabled:cursor-not-allowed disabled:opacity-50', i === active ? 'bg-[#f1f1ef]' : 'hover:bg-[#f7f7f5]')}>
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block truncate text-ink">{s.name}</span>
+                                                <span className="block truncate text-[11px] text-[#9ca3af]">{s.detail}{s.note ? ` · ${s.note}` : ''}{tab === 'plan' && blocked ? ' · عضوية واحدة في الفاتورة' : ''}</span>
+                                            </span>
+                                            {taken && <span className="shrink-0 rounded-full bg-[#eff6ff] px-2 py-0.5 text-[11px] text-[#1d4ed8]">في الفاتورة</span>}
+                                            <span className="shrink-0 tabular-nums text-[#6b7280]">{s.price !== null ? money(s.price, currency) : services.price_programs ? 'يُسعَّر هنا' : 'بلا سعر'}</span>
+                                        </button>
+                                    );
+                                })}
+                                {servicesShown.length === 0 && <p className="p-4 text-center text-[12px] text-[#9ca3af]">لا شيء بهذا الاسم</p>}
+                            </div>
+                        </>
+                    ) : (
                 <>
                     <div className="relative">
                         <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[#9ca3af]" />
@@ -886,6 +1014,8 @@ function ProductDialog({ open, onClose, products, truncated, picked, addonsOf, r
                         {matched.length > shown.length && <p className="p-3 text-center text-[11px] text-[#9ca3af]">عُرض <span className="num">{shown.length}</span> من <span className="num">{matched.length}</span> — ضيّق البحث</p>}
                     </div>
                     {truncated && needle === '' && <p className="mt-1 text-[11px] text-[#b45309]">الكتالوج أكبر ممّا يُحمَّل هنا — ابحث بالاسم أو الرمز للوصول إلى الباقي.</p>}
+                </>
+                    )}
                 </>
             )}
         </Modal>
