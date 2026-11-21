@@ -22,6 +22,7 @@ use App\Modules\Gym\Services\PtService;
 use App\Modules\Inventory\Models\Product;
 use App\Modules\Inventory\Models\ProductAddon;
 use App\Modules\Inventory\Services\StockService;
+use App\Modules\Messaging\Services\MemberNotifier;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
@@ -197,10 +198,16 @@ final class ManualInvoices
 
             // A membership on it is announced as its own sale announces it (the invoice message, owner's decision
             // 2026-11-21: one, with the member's consent) — after the money taken now, so it asks only what is owed.
+            // A member the invoice registered: only the messages staff chose with the customer (owner's decision,
+            // 2026-11-21) — the invoice once, in their language, with their consent; none otherwise. Queued with this
+            // transaction (WhatsAppService), so nothing leaves before the invoice is issued and saved.
             foreach ($made as $record) {
                 if ($record instanceof Membership) {
-                    $this->memberships->announce($record);
+                    $this->memberships->announce($record, notify: $registered === null);
                 }
+            }
+            if ($registered && self::notices($data)['send_invoice']) {
+                app(MemberNotifier::class)->invoiceIssued($registered, $invoice->refresh());
             }
 
             return $invoice->refresh();
@@ -439,6 +446,7 @@ final class ManualInvoices
      */
     private function registerCustomer(array $data, ?int $branchId): Member
     {
+        $notices = self::notices($data);
         $email = is_string($data['customer_email'] ?? null) ? Str::lower(trim($data['customer_email'])) : null;
         $input = ['customer_name' => $data['customer_name'] ?? null, 'customer_phone' => $data['customer_phone'] ?? null, 'customer_email' => $email ?: null];
         $rules = MemberService::identityRules();
@@ -457,7 +465,12 @@ final class ManualInvoices
         }
         Validator::make($input, ['customer_email' => $rules['email']], $messages)->validate();
         try {
-            return $this->members->create(['full_name' => trim((string) $input['customer_name']), 'phone' => $phone, 'email' => $input['customer_email'], 'branch_id' => $branchId]);
+            // The customer's consent and language kept on their file, as the members' form keeps them; the welcome
+            // only when asked for (MemberRegistered).
+            return $this->members->create([
+                'full_name' => trim((string) $input['customer_name']), 'phone' => $phone, 'email' => $input['customer_email'], 'branch_id' => $branchId,
+                'whatsapp_opt_in' => $notices['whatsapp_opt_in'], 'message_language' => $notices['message_language'],
+            ], welcome: $notices['welcome']);
         } catch (BusinessRuleException $e) {
             // A removed member's number (member.phone_taken): on the phone field.
             throw new BusinessRuleException($e->rule, $e->getMessage(), 'customer_phone');
@@ -465,6 +478,33 @@ final class ManualInvoices
             $existing = Member::where('phone', $phone)->first();
             throw $existing ? $this->alreadyRegistered($existing) : ValidationException::withMessages(['customer_phone' => 'رقم الهاتف مسجّل لعضو آخر.']);
         }
+    }
+
+    /**
+     * «إشعارات العضو الجديد» as the form sent them (owner's decision, 2026-11-21): consent to service messages on
+     * WhatsApp (off unless ticked), the language of the messages, and — only with that consent — the invoice and the
+     * welcome, each off unless ticked. Asked without the consent: refused, on the option.
+     *
+     * @param  Data  $data
+     * @return array{whatsapp_opt_in: bool, message_language: string, send_invoice: bool, welcome: bool}
+     */
+    private static function notices(array $data): array
+    {
+        $asked = (array) ($data['new_member'] ?? []);
+        $notices = [
+            'whatsapp_opt_in' => (bool) ($asked['whatsapp_opt_in'] ?? false),
+            'message_language' => array_key_exists((string) ($asked['message_language'] ?? ''), Member::MESSAGE_LANGUAGES) ? (string) $asked['message_language'] : 'ar',
+            'send_invoice' => (bool) ($asked['send_invoice'] ?? false),
+            'welcome' => (bool) ($asked['welcome'] ?? false),
+        ];
+        if (! $notices['whatsapp_opt_in'] && ($notices['send_invoice'] || $notices['welcome'])) {
+            throw ValidationException::withMessages(array_filter([
+                'new_member.send_invoice' => $notices['send_invoice'] ? 'إرسال الفاتورة عبر واتساب يتطلب موافقة العميل على رسائل الخدمة.' : null,
+                'new_member.welcome' => $notices['welcome'] ? 'رسالة الترحيب عبر واتساب تتطلب موافقة العميل على رسائل الخدمة.' : null,
+            ]));
+        }
+
+        return $notices;
     }
 
     /** No second member for a number: who has it, and how to choose them, to whoever may see that member. */

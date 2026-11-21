@@ -137,9 +137,9 @@ final class MembershipService
         return $membership;
     }
 
-    public function announce(Membership $membership): void
+    public function announce(Membership $membership, bool $notify = true): void
     {
-        MembershipCreated::dispatch($membership->refresh());
+        MembershipCreated::dispatch($membership->refresh(), $notify);
     }
 
     /**

@@ -5,7 +5,7 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import PaperFrame from '@/Components/Papers/PaperFrame';
 import { clientKey } from '@/Components/Inventory/parts';
 import { Stepper } from '@/Components/Products/parts';
-import { BackLink, Button, Card, Field, FileInput, Input, MemberPicker, Modal, Notice, PageHeader, Select, Textarea, type MemberHit } from '@/Components/ui';
+import { BackLink, Button, Card, Checkbox, Field, FileInput, Input, MemberPicker, Modal, Notice, PageHeader, Select, Textarea, type MemberHit } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { lineTotal, type AddonOption, type ChosenAddon } from '@/lib/addons';
 import { currencyLabel, money } from '@/lib/format';
@@ -106,6 +106,8 @@ interface Props {
     tax_rate: number;
     due_days: number;
     today: string;
+    /** What can go out for a member the invoice registers: WhatsApp on for the club, its welcome not turned off. */
+    whatsapp?: { on: boolean; welcome: boolean };
     terms: number[];
     paper_lang: PaperLang;
     methods: Method[];
@@ -129,6 +131,14 @@ const ACCEPT = '.jpg,.jpeg,.png,.pdf,.webp,.heic';
 const N = (v: string) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 /** Shown with the form and its preview when issuing will register a new customer as a member (owner's wording). */
 const NEW_MEMBER_NOTICE = 'سيتم إنشاء ملف عضو تلقائيًا عند إصدار الفاتورة، وستُفعّل العضوية بعد السداد الكامل';
+
+interface NewMemberNotices {
+    whatsapp_opt_in: boolean;
+    message_language: 'ar' | 'en';
+    send_invoice: boolean;
+    welcome: boolean;
+}
+const NO_NOTICES: NewMemberNotices = { whatsapp_opt_in: false, message_language: 'ar', send_invoice: false, welcome: false };
 
 const blank = (): Line => ({ product_id: '', item_type: '', item_id: '', description: '', quantity: '1', unit_price: '0', discount: '0', addons: [] });
 const NO_SERVICES: Services = { plans: [], pt: [], programs: [], price_programs: false };
@@ -161,7 +171,7 @@ function addDays(from: string, days: number): string {
  * shelf allows): chosen when the product is taken, from its line, or from «إضافة من الإضافات». Each is billed on a line
  * of its own under the product's; the server prices them and checks they go with it.
  */
-export default function InvoiceCreate({ products, catalog_truncated, addons, services = NO_SERVICES, tax_rate, due_days, today, terms, paper_lang, methods, may, link_reason = null, link_days = [], draft, paper: firstPaper }: Props) {
+export default function InvoiceCreate({ products, catalog_truncated, addons, services = NO_SERVICES, tax_rate, due_days, today, terms, paper_lang, methods, may, link_reason = null, link_days = [], draft, paper: firstPaper, whatsapp = { on: false, welcome: false } }: Props) {
     const currency = useCurrency();
     const symbol = currencyLabel(currency);
     const m = (v: string | number) => money(v, currency);
@@ -243,6 +253,9 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, ser
     const registers = needsMember && d.customer_mode === 'new' && may.register === true;
     // The number is already a member's: choose them instead (named only to whoever may see that member).
     const takenBy = errors.existing_member_id ? { id: Number(errors.existing_member_id), label: errors.existing_member_label ?? '' } : null;
+    // «إشعارات العضو الجديد»: nothing unless ticked; the invoice and the welcome only with the customer's consent.
+    const [notices, setNotices] = useState<NewMemberNotices>(NO_NOTICES);
+    const consent = (on: boolean) => setNotices((n) => (on ? { ...n, whatsapp_opt_in: true } : { ...n, whatsapp_opt_in: false, send_invoice: false, welcome: false }));
     const chooseRegistered = () => {
         if (!takenBy) return;
         setMember({ id: takenBy.id, label: takenBy.label });
@@ -344,6 +357,7 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, ser
             ...payload,
             client_key: key.current,
             issue: issue ? 1 : 0,
+            ...(registers ? { new_member: { whatsapp_opt_in: notices.whatsapp_opt_in ? 1 : 0, message_language: notices.message_language, send_invoice: notices.send_invoice ? 1 : 0, welcome: notices.welcome ? 1 : 0 } } : {}),
             // Issued and its payment link made together, or neither (one transaction on the server).
             ...(issue && withLink ? { with_link: 1, link_days: linkDays } : {}),
             attachments: x.attachments,
@@ -466,6 +480,33 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, ser
                                 </Field>
                                 <Field label="البريد" error={errors.customer_email}><Input dir="ltr" type="email" value={d.customer_email} onChange={(e) => form.setData('customer_email', e.target.value)} maxLength={160} /></Field>
                             </div>
+                        )}
+                        {registers && (
+                            <section aria-labelledby="new-member-notices" className="mt-3 rounded-[12px] border border-line bg-[#fafafa] p-4">
+                                <h3 id="new-member-notices" className="mb-1 text-[13px] font-bold text-ink">إشعارات العضو الجديد</h3>
+                                <p className="mb-3 text-[12px] text-[#6b7280]">تُحفظ في ملف العضو عند إنشائه. ولا يُرسل شيء قبل إصدار الفاتورة.</p>
+                                <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-start">
+                                    <div className="space-y-2.5">
+                                        <Checkbox label="موافقة العميل على استقبال رسائل الخدمة عبر واتساب" checked={notices.whatsapp_opt_in} onChange={(e) => consent(e.target.checked)} />
+                                        <Checkbox label="إرسال الفاتورة عبر واتساب" disabled={!notices.whatsapp_opt_in || !whatsapp.on} checked={notices.send_invoice} onChange={(e) => setNotices((n) => ({ ...n, send_invoice: e.target.checked }))} className="has-[:disabled]:opacity-50" />
+                                        {errors['new_member.send_invoice'] && <p className="text-[12px] text-[#b91c1c]">{errors['new_member.send_invoice']}</p>}
+                                        <Checkbox label="إرسال رسالة الترحيب بالعضوية" disabled={!notices.whatsapp_opt_in || !whatsapp.on || !whatsapp.welcome} checked={notices.welcome} onChange={(e) => setNotices((n) => ({ ...n, welcome: e.target.checked }))} className="has-[:disabled]:opacity-50" />
+                                        {errors['new_member.welcome'] && <p className="text-[12px] text-[#b91c1c]">{errors['new_member.welcome']}</p>}
+                                    </div>
+                                    <Field label="لغة الرسائل" error={errors['new_member.message_language']}>
+                                        <Select value={notices.message_language} onChange={(e) => setNotices((n) => ({ ...n, message_language: e.target.value as 'ar' | 'en' }))}>
+                                            <option value="ar">العربية</option>
+                                            <option value="en">English</option>
+                                        </Select>
+                                    </Field>
+                                </div>
+                                <ul className="mt-2 space-y-1 text-[12px] text-[#9ca3af]">
+                                    {!notices.whatsapp_opt_in && <li>الإرسال عبر واتساب يتطلب موافقة العميل أولًا.</li>}
+                                    {!whatsapp.on && <li>واتساب غير مفعّل للنادي: تُحفظ الموافقة ولا تُرسل رسائل.</li>}
+                                    {whatsapp.on && !whatsapp.welcome && <li>رسالة الترحيب معطّلة من إعدادات أتمتة واتساب.</li>}
+                                    {notices.welcome && notices.message_language === 'en' && <li>رسالة الترحيب لها قالب عربي فقط حاليًا، فتُرسل بالعربية. رسالة الفاتورة تُرسل بالإنجليزية متى كان قالبها معتمدًا.</li>}
+                                </ul>
+                            </section>
                         )}
                         {d.customer_mode === 'walk_in' && (
                             <div className="mt-3 rounded-[12px] border border-line bg-[#fafafa] p-4">

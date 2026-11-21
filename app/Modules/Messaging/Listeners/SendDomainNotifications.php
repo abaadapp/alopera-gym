@@ -50,11 +50,17 @@ final class SendDomainNotifications
 
     public function onMemberRegistered(MemberRegistered $e): void
     {
+        if (! $e->welcome) {
+            return;
+        }
         $this->safely(fn () => $this->notifier->welcome($e->member));
     }
 
     public function onMembershipCreated(MembershipCreated $e): void
     {
+        if (! $e->notify) {
+            return;
+        }
         $this->safely(function () use ($e) {
             $e->membership->loadMissing(['member', 'invoice']);
             if ($e->membership->invoice) {

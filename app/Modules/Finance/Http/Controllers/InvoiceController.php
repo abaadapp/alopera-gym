@@ -31,6 +31,7 @@ use App\Modules\Inventory\Services\ProductAddons;
 use App\Modules\Inventory\Services\StockService;
 use App\Modules\Messaging\Services\InvoiceMessage;
 use App\Modules\Messaging\Services\MemberNotifier;
+use App\Modules\Messaging\Services\WhatsAppAutomation;
 use App\Modules\Messaging\Services\WhatsAppService;
 use App\Modules\Payments\Http\Controllers\PaymentLinkController;
 use App\Modules\Payments\Models\PaymentIntent;
@@ -394,6 +395,12 @@ class InvoiceController extends Controller
             'customer_name' => [$preview ? 'nullable' : 'required_if:customer_mode,new', 'nullable', 'string', 'max:160'],
             'customer_phone' => ['nullable', 'string', 'max:32'],
             'customer_email' => ['nullable', 'email', 'max:160'],
+            // «إشعارات العضو الجديد»: read only when issuing registers the customer as a member (ManualInvoices).
+            'new_member' => ['nullable', 'array'],
+            'new_member.whatsapp_opt_in' => ['boolean'],
+            'new_member.message_language' => ['nullable', 'in:'.implode(',', array_keys(Member::MESSAGE_LANGUAGES))],
+            'new_member.send_invoice' => ['boolean'],
+            'new_member.welcome' => ['boolean'],
             'issue_date' => [$preview ? 'nullable' : 'required', 'date', ...($issue ? ['before_or_equal:today', new OpenPeriod] : [])],
             'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
             'payment_terms_days' => ['nullable', 'integer', 'min:0', 'max:365'],
@@ -479,6 +486,9 @@ class InvoiceController extends Controller
             // The paper's face a new invoice starts with: the invoice template's.
             'paper_lang' => str_starts_with($lang, 'en') ? 'en' : 'ar',
             'today' => today()->toDateString(),
+            // «إشعارات العضو الجديد»: what can go out for a member the invoice registers (WhatsApp on for the club, the
+            // welcome not turned off in its automation).
+            'whatsapp' => ['on' => app(WhatsAppService::class)->enabled(), 'welcome' => WhatsAppAutomation::on($tenant, 'member_welcome')],
             'terms' => self::TERMS,
             'methods' => $user->can('payments.record') ? ManualInvoices::METHODS : ['credit'],
             'may' => ['issue' => $user->can('invoices.manage'), 'pay' => $user->can('payments.record'), 'design' => $user->can('papers.manage'),

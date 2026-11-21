@@ -29,10 +29,13 @@ final class MemberService
         ];
     }
 
-    /** @param array<string, mixed> $data validated attributes */
-    public function create(array $data, ?string $password = null): Member
+    /**
+     * @param  array<string, mixed>  $data  validated attributes
+     * @param  bool  $welcome  false: no welcome message for this registration (MemberRegistered)
+     */
+    public function create(array $data, ?string $password = null, bool $welcome = true): Member
     {
-        return DB::transaction(function () use ($data, $password) {
+        return DB::transaction(function () use ($data, $password, $welcome) {
             $data['phone'] = Phone::normalize($data['phone']);
             if (! empty($data['emergency_contact_phone'])) {
                 $data['emergency_contact_phone'] = Phone::normalize($data['emergency_contact_phone']);
@@ -54,7 +57,7 @@ final class MemberService
             }
             $member->save();
 
-            MemberRegistered::dispatch($member);
+            MemberRegistered::dispatch($member, $welcome);
 
             return $member;
         });
