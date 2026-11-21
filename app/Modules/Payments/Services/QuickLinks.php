@@ -32,6 +32,17 @@ final class QuickLinks
     /** An attempt whose link Paymob confirmed it closed: no money can come of it, nothing to check by hand. */
     public const CANCELLED = 'quicklink.cancelled';
 
+    /**
+     * Paymob did not answer making the link (a timeout, or an answer without its order or address): it may or may not
+     * exist there — and Paymob may text it to the customer. Kept pending under this reason until its time is over or
+     * the staff checked Paymob: no page of the invoice is opened and the desk takes nothing meanwhile (owner,
+     * 2026-11-21: no second page while its state is not known).
+     */
+    public const UNCONFIRMED = 'paymob.quicklink_unknown';
+
+    /** An unconfirmed attempt the staff checked at Paymob (and closed there whatever they found) when cancelling. */
+    public const UNCONFIRMED_CHECKED = 'quicklink.unknown_checked';
+
     public function __construct(
         private readonly PaymobQuickLink $paymob,
         private readonly OnlinePaymentService $online,
@@ -47,7 +58,24 @@ final class QuickLinks
             ->latest('id')->first();
     }
 
-    /** The desk takes nothing on an invoice whose Paymob link may still be paid. */
+    /** The invoice's attempt whose Paymob link may exist, not known (UNCONFIRMED), while its time runs, or null. */
+    public static function unconfirmedFor(int $invoiceId, ?Carbon $since = null): ?PaymentIntent
+    {
+        return PaymentIntent::where('invoice_id', $invoiceId)->where('channel', self::CHANNEL)
+            ->where('status', PaymentIntent::PENDING)->whereNull('checkout_url')->where('failure_reason', self::UNCONFIRMED)
+            ->where('expires_at', '>', now())
+            ->when($since !== null, fn ($q) => $q->where('created_at', '>=', $since))
+            ->latest('id')->first();
+    }
+
+    /** What the customer and the desk are told while an attempt's link at Paymob is not known. */
+    public static function unconfirmedMessage(PaymentIntent $intent): string
+    {
+        return 'لم تؤكد Paymob إنشاء رابط الدفع لهذه الفاتورة (المرجع '.$intent->reference.')، وقد يكون أُنشئ لديها. لا تُفتح صفحة دفع ولا تُسجَّل دفعة في الاستقبال حتى تتأكد حالته: '
+            .'افحص لوحة Paymob ← روابط الدفع وألغِ أي رابط بهذا المرجع، ثم ألغِ رابط الفاتورة هنا مؤكدًا أنك فحصت.';
+    }
+
+    /** The desk takes nothing on an invoice whose Paymob link may still be paid, or may exist without being known. */
     public static function refuseDeskWhileOpen(Invoice $invoice): void
     {
         $open = self::openFor($invoice->id);
@@ -55,6 +83,9 @@ final class QuickLinks
             throw new BusinessRuleException('payment.quicklink_open', 'لهذه الفاتورة رابط دفع Paymob مفتوح حتى '
                 .$open->expires_at->timezone((string) config('app.timezone'))->format('Y-m-d H:i')
                 .' وقد يدفع العميل منه. ألغِ الرابط أولًا (روابط الدفع أو صفحة الفاتورة) ثم سجّل الدفعة، حتى لا يُدفع مرتين.');
+        }
+        if (($unknown = self::unconfirmedFor($invoice->id)) !== null) {
+            throw new BusinessRuleException('payment.quicklink_unconfirmed', self::unconfirmedMessage($unknown));
         }
     }
 
@@ -77,11 +108,11 @@ final class QuickLinks
             if ($link === null || ! $link->opensCheckout() || ! $invoice->isOpen() || Money::isZero($invoice->balance())) {
                 return null;
             }
-            // A page of the invoice that may still take money: no second one is made at Paymob.
+            // A page of the invoice that may still take money, or a Paymob link not known: no second one at Paymob.
             $open = PaymentIntent::where('invoice_id', $invoice->id)->where('status', PaymentIntent::PENDING)->whereNotNull('checkout_url')
                 ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()->subMinutes(OnlinePaymentService::LATE_CALLBACK_MINUTES)))
                 ->exists();
-            if ($open) {
+            if ($open || self::unconfirmedFor($invoice->id) !== null) {
                 return null;
             }
 
@@ -103,9 +134,16 @@ final class QuickLinks
         try {
             $made = $this->paymob->create($integration, $intent, $intent->invoice, (string) $link->description, route('webhooks.paymob'));
         } catch (BusinessRuleException $e) {
-            // Refused, or unanswered: nothing of it is sent (its address was never known), and the link opens the
-            // club's own page. Were it paid all the same, its callback finds this attempt with no order to match:
-            // held for review, never recorded unasked.
+            if ($e->rule === self::UNCONFIRMED) {
+                // Not known whether Paymob made it: kept pending for review — no page of the invoice opens and the desk
+                // takes nothing until its time is over or the staff checked Paymob (cancel). Were it paid, its callback
+                // finds this attempt by our reference with no order to match: held for review, never recorded unasked.
+                $intent->forceFill(['failure_reason' => self::UNCONFIRMED])->save();
+                $this->audit->log('payment_link.quicklink_unconfirmed', $intent->invoice, ['link' => $link->id, 'reference' => $intent->reference]);
+
+                return self::unconfirmedMessage($intent);
+            }
+            // Refused: nothing was made there, and the link opens the club's own page.
             $intent->forceFill(['status' => PaymentIntent::FAILED, 'failure_reason' => $e->rule])->save();
             $this->audit->log('payment_link.quicklink_failed', $intent->invoice, ['link' => $link->id, 'reason' => $e->rule]);
 
@@ -119,21 +157,31 @@ final class QuickLinks
     }
 
     /**
-     * Close the link's Paymob link before the link is cancelled (under the invoice's lock, its checks passed). Throws,
-     * nothing changed, when Paymob does not confirm.
+     * Before a link is cancelled, outside any lock (PaymentLinks::cancel): its Paymob link closed at Paymob, and that
+     * kept on its attempt at once — whatever the cancel then does, the attempt says what Paymob said, and a cancel
+     * tried again finds nothing left to close. Throws, nothing changed, when Paymob does not confirm. An attempt whose
+     * link is not known (UNCONFIRMED) ends only once the staff say they checked Paymob ($paymobChecked).
      */
-    public function closeAtPaymob(PaymentLink $link): void
+    public function closeAtPaymob(PaymentLink $link, bool $paymobChecked = false): void
     {
         $intent = self::openFor($link->invoice_id, $link->issuedAt());
-        if ($intent === null || $intent->provider_link_id === null) {
-            return;
+        if ($intent !== null && $intent->provider_link_id !== null) {
+            $integration = $this->online->integration();
+            if ($integration === null) {
+                throw new BusinessRuleException('paymob.quicklink_cancel', 'إعدادات Paymob غير موجودة، فلا يُلغى الرابط لديها. لم يُلغَ شيء.');
+            }
+            $this->paymob->cancel($integration, $intent->provider_link_id);
+            $intent->forceFill(['status' => PaymentIntent::EXPIRED, 'failure_reason' => self::CANCELLED])->save();
+            $this->audit->log('payment_link.quicklink_cancelled', $intent->invoice, ['link' => $link->id, 'order' => $intent->provider_order_id]);
         }
-        $integration = $this->online->integration();
-        if ($integration === null) {
-            throw new BusinessRuleException('paymob.quicklink_cancel', 'إعدادات Paymob غير موجودة، فلا يُلغى الرابط لديها. لم يُلغَ شيء.');
+
+        $unknown = self::unconfirmedFor($link->invoice_id, $link->issuedAt());
+        if ($unknown !== null) {
+            if (! $paymobChecked) {
+                throw new BusinessRuleException('payment_link.quicklink_unconfirmed', self::unconfirmedMessage($unknown));
+            }
+            $unknown->forceFill(['status' => PaymentIntent::FAILED, 'failure_reason' => self::UNCONFIRMED_CHECKED])->save();
+            $this->audit->log('payment_link.quicklink_checked', $unknown->invoice, ['link' => $link->id, 'reference' => $unknown->reference]);
         }
-        $this->paymob->cancel($integration, $intent->provider_link_id);
-        $intent->forceFill(['status' => PaymentIntent::EXPIRED, 'failure_reason' => self::CANCELLED])->save();
-        $this->audit->log('payment_link.quicklink_cancelled', $intent->invoice, ['link' => $link->id, 'order' => $intent->provider_order_id]);
     }
 }

@@ -12,10 +12,12 @@ use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentLink;
+use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Paymob\PaymobSignature;
 use App\Modules\Payments\Services\PaymentLinks;
 use App\Modules\Payments\Services\QuickLinks;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -44,7 +46,7 @@ class PaymobQuickLinkTest extends TestCase
      * @param  array<string, mixed>  $links  Paymob's answer to making a link
      * @param  list<array<string, mixed>>  $cancels  its answers to cancelling, in turn
      */
-    private function paymob(array $links = [], array $cancels = [['success' => true]], int $status = 200): void
+    private function paymob(array $links = [], array $cancels = [['success' => true]], int $status = 200, bool $timeout = false): void
     {
         $cancel = Http::sequence();
         foreach ($cancels as $answer) {
@@ -53,7 +55,9 @@ class PaymobQuickLinkTest extends TestCase
         Http::fake([
             '*/api/auth/tokens' => Http::response(['token' => 'bearer-token-1'], 201),
             '*/api/ecommerce/payment-links/cancel' => $cancel,
-            '*/api/ecommerce/payment-links' => Http::response($links + ['id' => 9001, 'order' => self::ORDER, 'shorten_url' => 'https://paymob.link/abc12', 'client_url' => 'https://oman.paymob.com/api/ecommerce/payment-links/unrestricted?token=x', 'state' => 'created'], $status),
+            '*/api/ecommerce/payment-links' => $timeout
+                ? fn () => throw new ConnectionException('cURL error 28: Operation timed out')
+                : Http::response($links + ['id' => 9001, 'order' => self::ORDER, 'shorten_url' => 'https://paymob.link/abc12', 'client_url' => 'https://oman.paymob.com/api/ecommerce/payment-links/unrestricted?token=x', 'state' => 'created'], $status),
             '*/v1/intention/' => Http::response(['client_secret' => 'cs_page', 'intention_order_id' => 555], 201),
         ]);
     }
@@ -264,5 +268,103 @@ class PaymobQuickLinkTest extends TestCase
         $this->assertStringNotContainsString(self::API_KEY, $page->getContent());
         $page->assertInertia(fn ($p) => $p->where('integration.present.api_key', true));
         Http::assertNothingSent();
+    }
+
+    public function test_paymob_not_answering_the_making_keeps_the_attempt_for_review_and_opens_no_second_page_nor_takes_money_at_the_desk(): void
+    {
+        $this->paymob(timeout: true);
+        [$club, $owner] = $this->ready();
+        $invoice = $this->invoice($club, $owner);
+
+        // The staff are told it is not known, with the reference to look up at Paymob.
+        $this->openLink($owner, $invoice)->assertSessionHas('error', fn ($m) => str_contains($m, 'لم تؤكد Paymob') && str_contains($m, 'افحص لوحة Paymob'));
+        $attempt = $this->attempt($club, $invoice);
+        $this->assertSame([PaymentIntent::PENDING, QuickLinks::UNCONFIRMED, null, null], [$attempt->status, $attempt->failure_reason, $attempt->checkout_url, $attempt->provider_order_id]);
+        $link = $this->link($club, $invoice);
+
+        // No page opens — the link's or the invoice's own — and nothing is asked of Paymob for one, long after the
+        // minute a page being opened holds others back.
+        $this->travel(10)->minutes();
+        auth()->logout();
+        $this->post(route('site.pay.link.start', ['club' => $club->slug, 'token' => $link->token]));
+        $this->post(route('site.pay.start', ['club' => $club->slug, 'token' => $invoice->public_token]));
+        Http::assertNotSent(fn (HttpRequest $r) => str_contains($r->url(), '/v1/intention/'));
+        $this->assertSame(1, $this->asTenant($club, fn () => PaymentIntent::where('invoice_id', $invoice->id)->count()));
+
+        // The desk takes nothing meanwhile.
+        try {
+            $this->asTenant($club, fn () => app(PaymentService::class)->record(Invoice::find($invoice->id), '5.000', 'cash'));
+            $this->fail('the desk took money while the Paymob link was not known');
+        } catch (BusinessRuleException $e) {
+            $this->assertSame('payment.quicklink_unconfirmed', $e->rule);
+        }
+
+        // The cancel dialog lists it to check at Paymob; without that word the cancel is refused.
+        $this->actingAs($owner)->get(route('club.payment-links.index'))->assertInertia(fn ($p) => $p->where('paymentLinks.rows.0.unanswered', [$attempt->reference]));
+        $this->actingAs($owner)->post(route('club.payment-links.cancel', $link->id))->assertSessionHasErrors('error');
+        $this->assertNull($this->link($club, $invoice)->cancelled_at);
+        $this->assertSame(PaymentIntent::PENDING, $this->attempt($club, $invoice)->status);
+
+        // Checked at Paymob: cancelled, the attempt closed as checked, never cancelled at Paymob by id (none known).
+        $this->actingAs($owner)->post(route('club.payment-links.cancel', $link->id), ['paymob_checked' => 1])->assertSessionHasNoErrors();
+        $this->assertNotNull($this->link($club, $invoice)->cancelled_at);
+        $this->assertSame([PaymentIntent::FAILED, QuickLinks::UNCONFIRMED_CHECKED], [$this->attempt($club, $invoice)->status, $this->attempt($club, $invoice)->failure_reason]);
+        Http::assertNotSent(fn (HttpRequest $r) => str_ends_with($r->url(), '/payment-links/cancel'));
+        $this->asTenant($club, fn () => app(PaymentService::class)->record(Invoice::find($invoice->id), '5.000', 'cash'));
+    }
+
+    public function test_money_paid_on_a_paymob_link_not_known_is_held_for_review_never_recorded_unasked(): void
+    {
+        $this->paymob(timeout: true);
+        [$club, $owner] = $this->ready();
+        $invoice = $this->invoice($club, $owner);
+        $this->openLink($owner, $invoice);
+        $attempt = $this->attempt($club, $invoice);
+
+        // Paymob had made it after all, and the customer paid: our reference, an order we never knew.
+        $this->paymobSays($attempt, 888001, ['order' => ['merchant_order_id' => $attempt->reference]]);
+        $this->assertNotSame(Invoice::PAID, $this->asTenant($club, fn () => Invoice::find($invoice->id)->status));
+        $this->assertSame('0.000', (string) $this->asTenant($club, fn () => Invoice::find($invoice->id)->paid_total));
+        $this->assertSame(1, $this->asTenant($club, fn () => PaymentReview::where('invoice_id', $invoice->id)->open()->count()));
+    }
+
+    public function test_paymob_closing_the_link_is_kept_even_when_the_cancel_then_fails_and_cancelling_again_does_not_ask_paymob_twice(): void
+    {
+        $this->paymob();
+        [$club, $owner] = $this->ready();
+        $invoice = $this->invoice($club, $owner);
+        $this->openLink($owner, $invoice)->assertSessionHasNoErrors();
+        $link = $this->link($club, $invoice);
+
+        // Paymob closes it; then the gym's own write fails (the database went away mid-cancel).
+        $fail = true;
+        PaymentLink::updating(function () use (&$fail) {
+            if ($fail) {
+                $fail = false;
+                throw new \RuntimeException('database went away');
+            }
+        });
+        $this->actingAs($owner);
+        try {
+            $this->asTenant($club, fn () => app(PaymentLinks::class)->cancel(PaymentLink::find($link->id)));
+            $this->fail('the cancel was expected to fail after Paymob closed the link');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('database went away', $e->getMessage());
+        }
+
+        // Nothing misleading: the attempt says Paymob closed it, so the link no longer hands out Paymob's dead address
+        // (it opens the club's own page, the link still running here) and the desk is open; the link is not cancelled.
+        $attempt = $this->attempt($club, $invoice);
+        $this->assertSame([PaymentIntent::EXPIRED, QuickLinks::CANCELLED], [$attempt->status, $attempt->failure_reason]);
+        $this->assertNull($this->link($club, $invoice)->cancelled_at);
+        $fresh = $this->link($club, $invoice);
+        $this->assertSame(route('site.pay.link', ['club' => $club->slug, 'token' => $fresh->token]), $this->asTenant($club, fn () => app(PaymentLinks::class)->url($fresh)));
+        $this->asTenant($club, fn () => QuickLinks::refuseDeskWhileOpen(Invoice::find($invoice->id)));
+
+        // Cancelling again goes on from there: cancelled here, Paymob asked once in all, nothing to check by hand.
+        $this->post(route('club.payment-links.cancel', $link->id))->assertSessionHasNoErrors();
+        $this->assertNotNull($this->link($club, $invoice)->cancelled_at);
+        Http::assertSentCount(4); // the token and the link when made; the token and the cancel once
+        $this->assertSame(1, collect(Http::recorded())->filter(fn ($pair) => str_ends_with($pair[0]->url(), '/payment-links/cancel'))->count());
     }
 }

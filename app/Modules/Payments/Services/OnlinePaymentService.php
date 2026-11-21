@@ -199,6 +199,10 @@ final class OnlinePaymentService
             // a second page; for another amount (the invoice changed since), refused as any page still open.
             $paymobLink = $pages->first(fn (PaymentIntent $i) => $i->channel === QuickLinks::CHANNEL && $i->status === PaymentIntent::PENDING
                 && $i->expires_at !== null && $i->expires_at->isFuture());
+            // A Paymob link of the invoice that may exist, not known (QuickLinks::UNCONFIRMED): no second page meanwhile.
+            if (($unknown = QuickLinks::unconfirmedFor($invoice->id)) !== null) {
+                throw new BusinessRuleException('paymob.quicklink_unconfirmed', 'رابط الدفع لهذه الفاتورة قيد التأكد لدى Paymob، فلا تُفتح صفحة دفع الآن ولا تدفع مرة أخرى. تواصل مع النادي.');
+            }
             if ($paymobLink) {
                 if (Money::cmp($paymobLink->amount, $invoice->balance()) === 0) {
                     return [$invoice, $paymobLink];

@@ -168,7 +168,10 @@ class PaymentLink extends Model implements BranchOwned
      */
     public function unansweredPages(): array
     {
-        return PaymentIntent::where('invoice_id', $this->invoice_id)->whereNotNull('checkout_url')
+        // A Paymob link whose making Paymob never confirmed (QuickLinks::UNCONFIRMED) is listed too: checked by hand.
+        return PaymentIntent::where('invoice_id', $this->invoice_id)
+            ->where(fn ($q) => $q->whereNotNull('checkout_url')->orWhere(fn ($q) => $q->where('channel', QuickLinks::CHANNEL)
+                ->where('status', PaymentIntent::PENDING)->where('failure_reason', QuickLinks::UNCONFIRMED)))
             ->where('status', '!=', PaymentIntent::PAID)->where('created_at', '>=', $this->issuedAt())
             // A Paymob link Paymob confirmed it closed (QuickLinks) took nothing after: nothing to look up by hand.
             ->where(fn ($q) => $q->whereNull('failure_reason')->orWhere('failure_reason', '!=', QuickLinks::CANCELLED))
