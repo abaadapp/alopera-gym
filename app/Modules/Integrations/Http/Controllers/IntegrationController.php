@@ -39,7 +39,8 @@ class IntegrationController extends Controller
     private const SECRETS = [
         // Meta: the system user's token and the ids; 360dialog: its API key (and the number's id, to route webhooks).
         'whatsapp' => ['access_token', 'phone_number_id', 'business_account_id', 'api_key'],
-        'paymob' => ['secret_key', 'public_key', 'hmac_secret', 'integration_ids'],
+        // api_key: only for links made inside Paymob (QuickLinks); the checkout needs none of it.
+        'paymob' => ['secret_key', 'public_key', 'hmac_secret', 'integration_ids', 'api_key'],
     ];
 
     /** What each payment channel is called on the Paymob screen. */
@@ -293,7 +294,8 @@ class IntegrationController extends Controller
             $value = trim((string) ($data['credentials'][$key] ?? ''));
             if ($value !== '' && ($credentials[$key] ?? null) !== $value) {
                 $credentials[$key] = $value;
-                $changed = true;
+                // A new API key leaves the checkout's keys as proven as they were (it makes links, opens no page).
+                $changed = $changed || $key !== 'api_key';
             }
         }
 

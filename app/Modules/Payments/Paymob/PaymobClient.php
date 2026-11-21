@@ -288,6 +288,10 @@ final class PaymobClient
             $review[] = ['label' => 'Apple Pay', 'ok' => true,
                 'detail' => $mode === 'live' ? 'يُعرض في صفحة الدفع.' : 'لا يُعرض في وضع الاختبار: لـ Apple Pay أرقام حقيقية فقط.'];
         }
+        $review[] = ['label' => 'روابط الدفع', 'ok' => true,
+            'detail' => PaymobQuickLink::configured($integration)
+                ? 'تُنشأ داخل Paymob بمفتاح API (QuickLink)، ويُرسل رابط Paymob نفسه.'
+                : 'تفتح صفحة الدفع من موقع النادي. أدخل API key لإنشائها داخل Paymob.'];
         $review[] = ['label' => 'الدفع الإلكتروني مفعّل', 'ok' => (bool) $integration?->is_enabled,
             'detail' => $integration?->is_enabled ? null : 'فعّله بعد اكتمال المفاتيح.'];
         if (app()->isProduction()) {
