@@ -32,9 +32,11 @@ return new class extends Migration
         Schema::create('payment_link_history', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
-            // As payment_links: an issued invoice is voided, never deleted; a club removed takes its rows with it.
-            $table->foreignId('invoice_id')->constrained('invoices')->cascadeOnDelete();
-            $table->foreignId('payment_link_id')->constrained('payment_links')->cascadeOnDelete();
+            // Not cascaded: an issued invoice is voided, never deleted, and a link row is never deleted. A delete that does
+            // not know this table — the code before v2 restoring a backup — is refused, the whole of it, rather than
+            // taking the earlier links with it. A club removed still takes them (tenant_id).
+            $table->foreignId('invoice_id')->constrained('invoices');
+            $table->foreignId('payment_link_id')->constrained('payment_links');
             $table->string('token', 64)->nullable()->unique();
             $table->string('description', 250);
             $table->decimal('amount', 12, 3)->nullable();

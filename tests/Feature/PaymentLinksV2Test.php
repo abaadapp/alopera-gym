@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Core\Backup\TenantBackupService;
 use App\Core\Support\Money;
 use App\Models\Branch;
 use App\Models\Role;
@@ -31,6 +32,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\Concerns\BuildsClubs;
 use Tests\TestCase;
@@ -666,6 +668,40 @@ class PaymentLinksV2Test extends TestCase
             $this->post(route('site.pay.link.start', ['club' => $other->slug, 'token' => $t]))->assertNotFound();
         }
         Http::assertNothingSent();
+    }
+
+    public function test_a_delete_that_does_not_know_the_history_is_refused_rather_than_taking_the_earlier_links_with_it(): void
+    {
+        [$club, $owner] = $this->ready();
+        $invoice = $this->invoice($club, $owner);
+        $this->openLink($owner, $invoice->id, ['valid_days' => 1])->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.payment-links.cancel', $this->current($club, $invoice->id)->id))->assertSessionHasNoErrors();
+        $this->openLink($owner, $invoice->id, ['valid_days' => 3])->assertSessionHasNoErrors();
+        $this->assertCount(1, $this->earlier($club, $invoice->id));
+
+        // What the code before v2 does first when it restores a backup (its TenantTables have no payment_link_history):
+        // the club's link rows deleted, then its invoices. Refused — the whole restore with it — not the history lost.
+        foreach (['payment_links' => 'tenant_id', 'invoices' => 'tenant_id'] as $table => $column) {
+            try {
+                DB::transaction(fn () => DB::table($table)->where($column, $club->id)->delete());
+                $this->fail("deleting $table took the earlier links with it");
+            } catch (QueryException $e) {
+                $this->assertStringContainsString('payment_link_history', $e->getMessage());
+            }
+            $this->assertCount(1, $this->earlier($club, $invoice->id), "after deleting $table was refused");
+        }
+        $this->assertSame(1, DB::table('payment_links')->where('invoice_id', $invoice->id)->count());
+
+        // This code's own backup and restore know the table (TenantTables, in key order): the earlier link comes back whole.
+        Storage::fake('local');
+        Storage::fake('public');
+        $rows = fn () => DB::table('payment_link_history')->where('tenant_id', $club->id)->orderBy('id')->get()->map(fn ($r) => (array) $r)->all();
+        $before = $rows();
+        $service = app(TenantBackupService::class);
+        $file = $service->create($club);
+        $counts = $service->restore($club, Storage::disk('local')->path($service->path($club, $file)));
+        $this->assertSame([1, 1], [$counts['payment_links'], $counts['payment_link_history']]);
+        $this->assertEquals($before, $rows());
     }
 
     public function test_the_migration_adds_only_and_going_back_is_refused_once_a_v2_link_exists(): void
