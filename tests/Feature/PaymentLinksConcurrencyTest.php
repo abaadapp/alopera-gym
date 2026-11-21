@@ -9,8 +9,10 @@ use App\Models\Tenant;
 use App\Models\TenantIntegration;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Finance\Services\ManualInvoices;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentLink;
+use App\Modules\Payments\Models\PaymentLinkHistory;
 use App\Modules\Payments\Paymob\PaymobSignature;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Payments\Services\PaymentLinks;
@@ -70,6 +72,134 @@ class PaymentLinksConcurrencyTest extends TestCase
         }
     }
 
+    private static function newLink(Tenant $club, int $invoiceId, bool $checked = false): string
+    {
+        try {
+            return 'made:'.app(TenantContext::class)->run($club, fn () => app(PaymentLinks::class)->open(Invoice::findOrFail($invoiceId), 7, null, $checked)->token);
+        } catch (BusinessRuleException $e) {
+            return 'refused:'.$e->rule;
+        }
+    }
+
+    /** Paymob's signed word that it took the page's money (a card payment), as the callback brings it. */
+    private static function paid(PaymentIntent $intent, int $order, int $transaction): string
+    {
+        $obj = [
+            'id' => $transaction, 'pending' => false, 'amount_cents' => Money::toMinor($intent->amount), 'success' => true, 'is_auth' => false,
+            'is_capture' => false, 'is_standalone_payment' => true, 'is_voided' => false, 'is_refunded' => false, 'is_3d_secure' => true,
+            'integration_id' => 111, 'has_parent_transaction' => false, 'order' => ['id' => $order, 'merchant_order_id' => $intent->reference],
+            'created_at' => '2026-11-19T10:00:00', 'currency' => 'OMR', 'error_occured' => false, 'owner' => 1,
+        ];
+
+        return app(OnlinePaymentService::class)->handleWebhook(['type' => 'TRANSACTION', 'obj' => $obj], PaymobSignature::compute($obj, self::HMAC));
+    }
+
+    /** Two staff asking for the first link of an invoice at once: one link row (the invoice's lock, then its unique key). */
+    public function test_two_first_links_asked_for_one_invoice_at_once_make_one(): void
+    {
+        [$club] = $this->link();
+        $invoiceId = $this->asTenant($club, fn () => app(ManualInvoices::class)->issue([
+            'customer_mode' => 'walk_in', 'customer_name' => null, 'customer_phone' => null, 'issue_date' => today()->toDateString(),
+            'due_date' => today()->addDays(7)->toDateString(), 'payment_terms_days' => 7, 'lines' => [['description' => 'سباق', 'quantity' => 1, 'unit_price' => '10.000']],
+        ], ['method' => 'credit', 'amount' => null, 'paid_at' => null, 'reference' => null, 'proof' => null])->id);
+
+        $results = $this->concurrently([
+            function (string $dir) use ($club, $invoiceId) {
+                self::pauseAfter('insert into "payment_links"', $dir, 0.8); // the row written, the invoice still locked
+
+                return self::newLink($club, $invoiceId);
+            },
+            function (string $dir) use ($club, $invoiceId) {
+                self::waitFor("$dir/inside");
+
+                return is_file("$dir/inside") ? self::newLink($club, $invoiceId) : 'not at the same time';
+            },
+        ]);
+
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results, JSON_UNESCAPED_UNICODE));
+        $this->assertStringStartsWith('made:', $results[0]['value']);
+        $this->assertSame('refused:payment_link.live', $results[1]['value'], 'the second sees the first and makes none');
+        $this->asTenant($club, fn () => $this->assertSame([1, 0], [PaymentLink::where('invoice_id', $invoiceId)->count(), PaymentLinkHistory::where('invoice_id', $invoiceId)->count()]));
+    }
+
+    /** Two new links after a cancel, at once: one takes the row (the old one kept once in the history), the other none. */
+    public function test_two_new_links_asked_after_a_cancel_at_once_make_one(): void
+    {
+        [$club, $link] = $this->link();
+        $this->asTenant($club, fn () => app(PaymentLinks::class)->cancel($link));
+
+        $results = $this->concurrently([
+            function (string $dir) use ($club, $link) {
+                self::pauseAfter('insert into "payment_link_history"', $dir, 0.8); // the old one kept, the row not yet the new one
+
+                return self::newLink($club, $link->invoice_id);
+            },
+            function (string $dir) use ($club, $link) {
+                self::waitFor("$dir/inside");
+
+                return is_file("$dir/inside") ? self::newLink($club, $link->invoice_id) : 'not at the same time';
+            },
+        ]);
+
+        $this->assertTrue($results[0]['ok'] && $results[1]['ok'], json_encode($results, JSON_UNESCAPED_UNICODE));
+        $this->assertStringStartsWith('made:', $results[0]['value']);
+        $this->assertSame('refused:payment_link.live', $results[1]['value'], 'the second sees the first and makes none');
+        $this->asTenant($club, function () use ($link, $results) {
+            $this->assertSame(substr($results[0]['value'], 5), PaymentLink::where('invoice_id', $link->invoice_id)->sole()->token);
+            $this->assertSame([$link->token], PaymentLinkHistory::where('invoice_id', $link->invoice_id)->pluck('token')->all());
+        });
+    }
+
+    /**
+     * Paymob's late word on an old page arriving while a new link is asked for (its time over, checked at Paymob): the
+     * callback holds the invoice first — the money is recorded (held for review) and the new link is refused, the old
+     * link as it was; or the new link goes first and the money is still recorded, once, after it. Never lost, never twice.
+     */
+    public function test_money_arriving_while_a_new_link_is_asked_for_either_way(): void
+    {
+        foreach (['callback first', 'new link first'] as $n => $order) {
+            [$club, $link] = $this->link();
+            Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_r4'.$n, 'intention_order_id' => 9200 + $n], 201)]);
+            $intent = $this->asTenant($club, fn () => PaymentIntent::where('reference', self::open($club, $link))->sole());
+            $this->travelTo($link->expires_at->copy()->addHour()); // the link and its page over, and the late window
+
+            $hold = $order === 'callback first' ? 'insert into "payments"' : 'insert into "payment_link_history"';
+            $first = $order === 'callback first'
+                ? fn () => self::paid($intent, (int) $intent->provider_order_id, 992000 + $n)
+                : fn () => self::newLink($club, $link->invoice_id, checked: true);
+            $second = $order === 'callback first'
+                ? fn () => self::newLink($club, $link->invoice_id, checked: true)
+                : fn () => self::paid($intent, (int) $intent->provider_order_id, 992000 + $n);
+            $results = $this->concurrently([
+                function (string $dir) use ($hold, $first) {
+                    self::pauseAfter($hold, $dir, 0.8);
+
+                    return $first();
+                },
+                function (string $dir) use ($second) {
+                    self::waitFor("$dir/inside");
+
+                    return is_file("$dir/inside") ? $second() : 'not at the same time';
+                },
+            ]);
+            $this->assertTrue($results[0]['ok'] && $results[1]['ok'], $order.': '.json_encode($results, JSON_UNESCAPED_UNICODE));
+            [$callback, $made] = $order === 'callback first' ? [$results[0]['value'], $results[1]['value']] : [$results[1]['value'], $results[0]['value']];
+            $this->assertSame('held_for_review', $callback, "$order: the money is recorded, held for review");
+            $this->asTenant($club, function () use ($link, $made, $order) {
+                $this->assertSame(1, Payment::where('invoice_id', $link->invoice_id)->where('gateway', 'paymob')->count(), "$order: once");
+                $this->assertSame(Invoice::ISSUED, Invoice::find($link->invoice_id)->status, "$order: held, not applied");
+                if ($order === 'callback first') {
+                    $this->assertSame('refused:payment_link.money', $made, 'no new link asks for money already received');
+                    $this->assertSame([$link->token, 0], [PaymentLink::where('invoice_id', $link->invoice_id)->sole()->token, PaymentLinkHistory::where('invoice_id', $link->invoice_id)->count()]);
+                } else {
+                    $this->assertStringStartsWith('made:', $made);
+                    $this->assertSame([$link->token], PaymentLinkHistory::where('invoice_id', $link->invoice_id)->pluck('token')->all());
+                }
+            });
+            $this->travelBack();
+        }
+    }
+
     public function test_a_page_opening_while_the_link_is_cancelled(): void
     {
         [$club, $link] = $this->link();
@@ -101,7 +231,9 @@ class PaymentLinksConcurrencyTest extends TestCase
 
         $results = $this->concurrently([
             function (string $dir) use ($club, $link) {
-                self::pauseAfter('update "payment_links"', $dir, 0.8); // the link cancelled (the link only), not yet committed
+                // The link cancelled under the invoice's lock, not yet committed (cancelling ends the link only and
+                // writes nothing on the invoice: owner's decision, 2026-11-20).
+                self::pauseAfter('update "payment_links"', $dir, 0.8);
 
                 return self::cancel($club, $link);
             },

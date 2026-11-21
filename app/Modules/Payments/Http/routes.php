@@ -7,7 +7,8 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('can:payments.links')->group(function () {
     Route::get('/payment-links', [PaymentLinkController::class, 'index'])->name('payment-links.index');
     Route::post('/payment-links', [PaymentLinkController::class, 'store'])->middleware('throttle:60,1')->name('payment-links.store');
-    // Cancelling ends the link only (R1): its invoice stays as it is, so it takes the links' permission alone. Voiding an
-    // invoice stays the invoice screen's, with its own permission (invoices.void).
-    Route::post('/payment-links/{paymentLink}/cancel', [PaymentLinkController::class, 'cancel'])->whereNumber('paymentLink')->name('payment-links.cancel');
+    // Cancelling ends the link only (never its invoice): the links permission, not the one that voids invoices.
+    // A link for an invoice already issued (its page), or in place of its link whose time is over.
+    Route::post('/invoices/{invoice}/payment-links', [PaymentLinkController::class, 'open'])->whereNumber('invoice')->middleware('throttle:60,1')->name('payment-links.open');
+    Route::post('/payment-links/{paymentLink}/cancel', [PaymentLinkController::class, 'cancel'])->whereNumber('paymentLink')->middleware('can:payments.links')->name('payment-links.cancel');
 });

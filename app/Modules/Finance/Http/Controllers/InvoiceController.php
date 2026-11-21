@@ -29,9 +29,12 @@ use App\Modules\Inventory\Services\StockService;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Services\MemberNotifier;
 use App\Modules\Messaging\Services\WhatsAppService;
+use App\Modules\Payments\Http\Controllers\PaymentLinkController;
 use App\Modules\Payments\Models\PaymentIntent;
+use App\Modules\Payments\Models\PaymentLink;
 use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Services\OnlinePaymentService;
+use App\Modules\Payments\Services\PaymentLinks;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -298,9 +301,12 @@ class InvoiceController extends Controller
         $remove = array_map('intval', $data['remove_attachments'] ?? []);
         $method = $data['payment_method'] ?? 'credit';
         abort_if($issue && $method !== 'credit' && ! $request->user()->can('payments.record'), 403);
+        $withLink = $issue && (bool) ($data['with_link'] ?? false);
+        abort_if($withLink && ! $request->user()->can('payments.links'), 403);
 
         // The form sent twice (a double click, a retry) saves or issues once: the second gets the first's result.
-        [$kind, $id, $number] = SubmittedOnce::run($data['client_key'] ?? null, 'invoice-editor:'.($issue ? 'issue' : 'draft').':'.($draft->id ?? 'new'), function () use ($invoices, $data, $files, $draft, $remove, $issue, $method, $request) {
+        // With its payment link: one transaction, so a link refused (nothing left to pay, online payments off…) issues nothing.
+        [$kind, $id, $number] = SubmittedOnce::run($data['client_key'] ?? null, 'invoice-editor:'.($issue ? ($withLink ? 'issue-link' : 'issue') : 'draft').':'.($draft->id ?? 'new'), function () use ($invoices, $data, $files, $draft, $remove, $issue, $method, $request, $withLink) {
             if (! $issue) {
                 return ['draft', $invoices->saveDraft($data, $files, $draft, $remove)->id, null];
             }
@@ -311,13 +317,16 @@ class InvoiceController extends Controller
                 'reference' => $data['payment_reference'] ?? null,
                 'proof' => $request->file('payment_proof'),
             ], $files, $draft, $remove);
+            if ($withLink) {
+                app(PaymentLinks::class)->open($invoice, (int) $data['link_days']);
+            }
 
             return ['invoice', $invoice->id, $invoice->number];
         });
 
         return $kind === 'draft'
             ? redirect()->route('club.invoices.drafts.edit', $id)->with('success', 'حُفظت المسودة. لا رقم لها ولا قيد حتى تُصدر.')
-            : redirect()->route('club.invoices.show', $id)->with('success', 'تم إصدار الفاتورة '.$number);
+            : redirect()->route('club.invoices.show', $id)->with('success', 'تم إصدار الفاتورة '.$number.($withLink ? ' وأُنشئ رابط الدفع: انسخه أو أرسله بواتساب.' : ''));
     }
 
     /** The editor's figures, named as its fields are. */
@@ -361,6 +370,9 @@ class InvoiceController extends Controller
             'lines.*.addons.*.quantity' => ['required', 'integer', 'min:1', 'max:99'],
             ...($preview ? [] : [
                 'client_key' => SubmittedOnce::RULE,
+                // «إصدار الفاتورة وإنشاء رابط دفع»: issued and its payment link made together, or neither.
+                'with_link' => ['nullable', 'boolean'],
+                'link_days' => ['nullable', 'required_if_accepted:with_link', 'in:'.implode(',', PaymentLink::VALID_DAYS)],
                 'attachments' => ['nullable', 'array', 'max:6'],
                 'attachments.*' => $file,
                 'remove_attachments' => ['nullable', 'array'],
@@ -418,7 +430,10 @@ class InvoiceController extends Controller
             'today' => today()->toDateString(),
             'terms' => self::TERMS,
             'methods' => $user->can('payments.record') ? ManualInvoices::METHODS : ['credit'],
-            'may' => ['issue' => $user->can('invoices.manage'), 'pay' => $user->can('payments.record'), 'design' => $user->can('papers.manage')],
+            'may' => ['issue' => $user->can('invoices.manage'), 'pay' => $user->can('payments.record'), 'design' => $user->can('papers.manage'),
+                // «إصدار الفاتورة وإنشاء رابط دفع»: with the links permission, while online payments are on.
+                'link' => $user->can('payments.links') && app(OnlinePaymentService::class)->available()],
+            'link_days' => PaymentLink::VALID_DAYS,
         ];
     }
 
@@ -473,6 +488,8 @@ class InvoiceController extends Controller
                     ? Invoice::where(['billable_type' => $invoice->billable_type, 'billable_id' => $invoice->billable_id])->whereIn('status', Invoice::OPEN_STATUSES)->whereKeyNot($invoice->id)
                         ->orderBy('id')->get()->map(fn (Invoice $i) => ['id' => $i->id, 'number' => $i->number, 'balance' => $i->balance()])->values()
                     : []),
+            // Its payment link (v2): the live one with copy, WhatsApp and cancel, a new one when allowed, and every link it had.
+            'paymentLink' => PaymentLinkController::forInvoice($invoice, app(PaymentLinks::class), $online),
             'isSale' => Sale::where('invoice_id', $invoice->id)->exists(),
             'whatsappEnabled' => app(WhatsAppService::class)->enabled(),
             // The invoice as it prints: the same paper as the print page, the PDF and the customer's link.
@@ -506,6 +523,11 @@ class InvoiceController extends Controller
         $member = $invoice->billable_type === 'member' ? Member::find($invoice->billable_id) : null;
         if (! $member) {
             return back()->with('error', 'الفاتورة غير مرتبطة بعضو.');
+        }
+        // Owner's decision (2026-11-20): the message carries the invoice's live payment link; with its links all ended,
+        // nothing is sent and no link is made here — the staff make a new one first.
+        if (app(OnlinePaymentService::class)->available() && $notifier->payPageOrNull($invoice) === null) {
+            return back()->with('error', 'لا يوجد رابط دفع نشط لهذه الفاتورة: انتهى رابطها أو أُلغي أو استُبدل. أنشئ رابط دفع جديدًا من قسم «رابط الدفع» في هذه الصفحة، ثم أرسل الفاتورة.');
         }
 
         $message = $whatsapp->queueTemplate($member, 'invoice_issued', [

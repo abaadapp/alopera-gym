@@ -52,6 +52,22 @@ $(sed '/^$/d; s/^/    /' <<<"$UNLISTED")
 Stop here, and do not restore a dump over the live database: it would wipe out everything since.
 If you checked them and they only add what the older code never reads, name them in ALLOW_MIGRATIONS and run again."
 
+# Payment links v2 (PR #218): its migration only adds. R1 (v0.140, PR #219) and later read what v2 writes: «إلغاء»
+# ends the link only, /pay/link addresses open, and a restore is refused rather than losing payment_link_history
+# (tried on v0.140) — going back to them asks nothing more than the migration's own line above. Code from before R1
+# voids the link's invoice on «إلغاء» (its PaymentLinks calls ->void(), and since v2 a link can be on any invoice — a
+# subscription's voided cancels the membership waiting on it): going back that far is said and agreed to first.
+if grep -q '2026_11_21_000100_add_payment_link_history\.php' <<<"$MIGRATIONS" \
+    && git show "$TO:app/Modules/Payments/Services/PaymentLinks.php" 2>/dev/null | grep -q -- '->void(' \
+    && [[ "${ACCEPT_PAYMENT_LINKS_V1:-}" != "1" ]]; then
+    die "الرجوع إلى كود أقدم من R1 (v0.140) بعد روابط الدفع v2 (2026_11_21_000100_add_payment_link_history). الأسلم الرجوع إلى v0.140 أو أحدث بدل هذا. وإن لزم، فحتى تعود إلى v2:
+    - لا تضغط «إلغاء» في «روابط الدفع»: هذا الكود يلغي معه الفاتورة نفسها، ولو كانت اشتراكًا أو هدية أو بيعًا، فيُلغى الاشتراك المنتظر لها.
+    - روابط /pay/link/… المرسلة لا تفتح (404): أرسل للعميل الفاتورة نفسها من صفحتها، فرابطها يفتح الدفع ما دام رابطها الحالي قائمًا.
+    - الروابط السابقة لا تظهر في السجل، وتبقى محفوظة في payment_link_history؛ واسترجاع نسخة احتياطية بهذا الكود يُرفض كاملًا ولا يحذفها.
+    - الدفع والإشعارات والقيود كما هي، والإشعار المتأخر يُحجز للمراجعة مرة واحدة.
+Read and agreed: run again with ACCEPT_PAYMENT_LINKS_V1=1 (and ALLOW_MIGRATIONS)."
+fi
+
 step "الكود: $FROM → $TO"
 git reset --hard --quiet "$TO"
 ok "$TO"

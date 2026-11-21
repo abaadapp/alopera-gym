@@ -4,21 +4,20 @@ namespace App\Modules\Website\Http\Controllers;
 
 use App\Core\Papers\Papers;
 use App\Core\Support\BusinessRuleException;
-use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Inventory\Models\Sale;
+use App\Modules\Messaging\Services\MemberNotifier;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentLink;
+use App\Modules\Payments\Models\PaymentLinkHistory;
 use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Http\RendersSite;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
@@ -40,22 +39,7 @@ class PayController extends Controller
 
     public function show(string $token, OnlinePaymentService $online): Response
     {
-        $invoice = $this->invoiceByToken($token)->load('items');
-
-        // A payment link (PaymentLink) past its time or cancelled: the invoice is shown, with why it is not payable here.
-        $link = PaymentLink::where('invoice_id', $invoice->id)->first();
-
-        return $this->page('Site/Pay', [
-            'invoice' => $this->present($invoice),
-            'token' => $token,
-            'onlinePayments' => $online->available(),
-            'closed' => match (true) {
-                ! $link || ! $invoice->isOpen() => null,
-                ! $link->opensCheckout() => OnlinePaymentService::closedLinkMessage($link),
-                OnlinePaymentService::singleBaisa($invoice->balance()) => OnlinePaymentService::singleBaisaMessage($invoice->balance()),
-                default => null,
-            },
-        ], __('دفع الفاتورة :number', ['number' => $invoice->number]));
+        return $this->payPage($this->invoiceByToken($token), null, $online);
     }
 
     public function start(string $token, OnlinePaymentService $online): HttpResponse
@@ -66,51 +50,55 @@ class PayController extends Controller
     }
 
     /**
-     * A link's own address, /pay/link/{token} (payment links v2, PR #218), served here so that the links v2 sent keep
-     * working if the code goes back to this release (R1). It exists only once v2's migration added the columns: before,
-     * every such address is 404. The invoice's current link (payment_links.token) opens its invoice's pay page — the same
-     * page, gate and checkout as the invoice's own address (start() asks the current link). An earlier link of the
-     * invoice (payment_link_history) shows the invoice with why it no longer opens a page, and starts nothing.
+     * A payment link's own address: its invoice's pay page, payable only while it is the invoice's current link. An
+     * earlier link's address (PaymentLinkHistory) shows the invoice and why it is not payable here.
      */
     public function link(string $token, OnlinePaymentService $online): Response
     {
-        [$invoice, $closed] = $this->linkOf($token);
-        $page = $this->show($invoice->public_token, $online);
-
-        return $closed === null ? $page : $page->with('closed', $invoice->isOpen() ? $closed : null);
+        return $this->payPage($this->invoiceOfLink($token), $token, $online);
     }
 
-    /** Paying from a link's own address: the current link only, as the invoice's address does; an earlier one never. */
     public function startLink(string $token, OnlinePaymentService $online): HttpResponse
     {
-        [$invoice, $closed] = $this->linkOf($token);
-        if ($closed !== null) {
-            throw new BusinessRuleException('payment_link.closed', $closed);
-        }
+        $intent = $online->start($this->invoiceOfLink($token), 'whatsapp', $token);
 
-        return $this->start($invoice->public_token, $online);
+        return Inertia::location($intent->checkout_url);
+    }
+
+    private function invoiceOfLink(string $token): Invoice
+    {
+        $invoiceId = PaymentLink::where('token', $token)->value('invoice_id') ?? PaymentLinkHistory::where('token', $token)->value('invoice_id');
+        abort_if($invoiceId === null, 404);
+
+        return Invoice::findOrFail($invoiceId);
     }
 
     /**
-     * The invoice of a link's address, and why it opens no page when it is an earlier link (null when it is the current
-     * one). This club's only (the link's tenant scope, and the club's id for the earlier links).
-     *
-     * @return array{0: Invoice, 1: string|null}
+     * The invoice and its pay button. With payment links, through the live one only: an ended link (over, cancelled,
+     * replaced) shows the invoice with why it is not payable here, and opens nothing (OnlinePaymentService::linkFor).
      */
-    private function linkOf(string $token): array
+    private function payPage(Invoice $invoice, ?string $viaToken, OnlinePaymentService $online): Response
     {
-        abort_unless(Schema::hasColumn('payment_links', 'token'), 404);
-        $current = PaymentLink::where('token', $token)->value('invoice_id');
-        if ($current !== null) {
-            return [Invoice::findOrFail($current), null];
+        $invoice->load('items');
+        $closed = null;
+        if ($invoice->isOpen()) {
+            try {
+                $link = OnlinePaymentService::linkFor($invoice, $viaToken);
+                if ($link && OnlinePaymentService::singleBaisa($invoice->balance())) {
+                    $closed = OnlinePaymentService::singleBaisaMessage($invoice->balance());
+                }
+            } catch (BusinessRuleException $e) {
+                $closed = $e->getMessage();
+            }
         }
-        abort_unless(Schema::hasTable('payment_link_history'), 404);
-        $earlier = DB::table('payment_link_history')->where('tenant_id', app(TenantContext::class)->require()->id)->where('token', $token)->first(['invoice_id', 'replaced_at', 'cancelled_at']);
-        abort_if($earlier === null, 404);
 
-        return [Invoice::findOrFail($earlier->invoice_id), $earlier->replaced_at !== null
-            ? 'هذا رابط دفع قديم حلّ محله رابط أحدث. اطلب من النادي الرابط الجديد، أو ادفع في الاستقبال.'
-            : 'أُلغي رابط الدفع هذا. تواصل مع النادي إن كان عليك مبلغ.'];
+        return $this->page('Site/Pay', [
+            'invoice' => $this->present($invoice),
+            'token' => $invoice->public_token,
+            'start_url' => $viaToken !== null ? route('site.pay.link.start', ['token' => $viaToken]) : route('site.pay.start', ['token' => $invoice->public_token]),
+            'onlinePayments' => $online->available(),
+            'closed' => $closed,
+        ], __('دفع الفاتورة :number', ['number' => $invoice->number]));
     }
 
     public function return(string $reference): Response
@@ -166,7 +154,8 @@ class PayController extends Controller
         return $this->page('Site/Invoice', [
             'invoice' => ['number' => $invoice->number, 'balance' => $invoice->status === Invoice::VOID ? '0.000' : $invoice->balance(), 'status' => $invoice->status],
             'paper' => Papers::for('invoice', $invoice)->toArray(),
-            'pay_url' => $invoice->isOpen() && $online->available() ? route('site.pay.show', ['token' => $token]) : null,
+            // With payment links: the live one's address while it runs; none once they all ended (no new one is made here).
+            'pay_url' => $invoice->isOpen() && $online->available() ? app(MemberNotifier::class)->payPageOrNull($invoice) : null,
             'print_url' => route('site.invoice.print', ['token' => $token]),
             'pdf_url' => route('site.invoice.pdf', ['token' => $token]),
         ], __('فاتورة :number', ['number' => $invoice->number]));

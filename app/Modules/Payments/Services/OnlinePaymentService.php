@@ -19,6 +19,7 @@ use App\Modules\Inventory\Models\Sale;
 use App\Modules\Payments\Events\OnlinePaymentFailed;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentLink;
+use App\Modules\Payments\Models\PaymentLinkHistory;
 use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobClient;
@@ -105,7 +106,7 @@ final class OnlinePaymentService
      * The checkout for what the invoice still owes. A checkout already opened for that same amount and still valid is
      * given again rather than a second one, so a customer who opens the link twice cannot pay the invoice twice.
      */
-    public function start(Invoice $invoice, string $channel = 'portal'): PaymentIntent
+    public function start(Invoice $invoice, string $channel = 'portal', ?string $viaToken = null): PaymentIntent
     {
         $tenant = $this->tenants->require();
         $integration = $this->integration();
@@ -127,7 +128,7 @@ final class OnlinePaymentService
         // request (two tabs, a double press), or claimed here. Paymob itself is asked after the lock is let go, so a
         // slow gateway keeps no one waiting on the invoice. The lock is the one the callback takes after its intent's
         // (intent → invoice); nothing here waits on an intent's row, so the two never wait on each other.
-        [$invoice, $intent] = DB::transaction(function () use ($invoice, $prefix, $channel) {
+        [$invoice, $intent] = DB::transaction(function () use ($invoice, $prefix, $channel, $viaToken) {
             $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
             if (! $invoice->isOpen() || Money::isZero($invoice->balance())) {
                 throw new BusinessRuleException('invoice.not_open', 'لا يوجد مبلغ مستحق على هذه الفاتورة.');
@@ -151,11 +152,9 @@ final class OnlinePaymentService
             if ($gift && $gift->source === 'site' && ! $gift->phoneVerified()) {
                 throw new BusinessRuleException('gift.phone_unverified', 'أكّد رقم واتساب المستلمة أولًا، ثم ادفع قيمة الهدية.');
             }
-            // A payment link from the Paymob page (PaymentLink) opens a page only until its time, never once cancelled.
-            $paymentLink = PaymentLink::where('invoice_id', $invoice->id)->first();
-            if ($paymentLink && ! $paymentLink->opensCheckout()) {
-                throw new BusinessRuleException('payment_link.closed', self::closedLinkMessage($paymentLink));
-            }
+            // An invoice with a payment link opens a page only through its current link, until its time (read under the
+            // invoice's lock, which making, cancelling and replacing a link take first); an earlier link opens nothing, ever.
+            $paymentLink = self::linkFor($invoice, $viaToken);
             // What a link still owes may end in a single baisa (a part paid at the desk): not opened online, never rounded.
             if ($paymentLink && self::singleBaisa($invoice->balance())) {
                 throw new BusinessRuleException('payment_link.single_baisa', self::singleBaisaMessage($invoice->balance()));
@@ -278,11 +277,36 @@ final class OnlinePaymentService
     }
 
     /** What the customer is told by a payment link that no longer opens a page. */
-    public static function closedLinkMessage(PaymentLink $link): string
+    public static function closedLinkMessage(PaymentLink|PaymentLinkHistory $link): string
     {
-        return $link->cancelled_at !== null
-            ? 'أُلغي رابط الدفع هذا. تواصل مع النادي إن كان عليك مبلغ.'
-            : 'انتهت صلاحية رابط الدفع هذا. اطلب من النادي رابطًا جديدًا، أو ادفع في الاستقبال.';
+        return match (true) {
+            $link instanceof PaymentLinkHistory && $link->replaced_at !== null => 'هذا رابط دفع قديم حلّ محله رابط أحدث. اطلب من النادي الرابط الجديد، أو ادفع في الاستقبال.',
+            $link->cancelled_at !== null => 'أُلغي رابط الدفع هذا. تواصل مع النادي إن كان عليك مبلغ.',
+            default => 'انتهت صلاحية رابط الدفع هذا. اطلب من النادي رابطًا جديدًا، أو ادفع في الاستقبال.',
+        };
+    }
+
+    /**
+     * The payment link a page of this invoice opens under: its current link (the invoice's one link row) while it runs —
+     * asked from that link's own address ($viaToken, which must be the row's) or from the invoice's (the member's invoice
+     * message, the portal). Null when the invoice never had a link (its pay page works as before). An earlier link's
+     * address (PaymentLinkHistory) opens nothing, ever; nor does the row once cancelled or past its time, until a new link
+     * takes its place.
+     *
+     * @throws BusinessRuleException payment_link.closed, with what the customer is told
+     */
+    public static function linkFor(Invoice $invoice, ?string $viaToken = null): ?PaymentLink
+    {
+        $row = PaymentLink::currentFor($invoice->id);
+        if ($viaToken !== null && ($row === null || $row->token === null || ! hash_equals($row->token, $viaToken))) {
+            $earlier = PaymentLinkHistory::where('invoice_id', $invoice->id)->where('token', $viaToken)->first();
+            throw new BusinessRuleException('payment_link.closed', $earlier ? self::closedLinkMessage($earlier) : 'رابط الدفع هذا لم يعد صالحًا. اطلب من النادي رابطًا جديدًا، أو ادفع في الاستقبال.');
+        }
+        if ($row !== null && ! $row->opensCheckout()) {
+            throw new BusinessRuleException('payment_link.closed', self::closedLinkMessage($row));
+        }
+
+        return $row;
     }
 
     /**
