@@ -26,6 +26,7 @@ use App\Modules\Payments\Models\PaymentLink;
 use App\Modules\Payments\Models\PaymentLinkHistory;
 use App\Modules\Payments\Paymob\PaymobSignature;
 use App\Modules\Payments\Services\OnlinePaymentService;
+use App\Modules\Payments\Services\PaymentLinks;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -468,6 +469,55 @@ class PaymentLinksV2Test extends TestCase
         $this->payThrough($club, $link->token)->assertRedirect();
         $this->assertSame(2, $this->intents($club, $invoice->id));
         $this->assertNotNull($this->lastIntent($club, $invoice->id)->checkout_url);
+    }
+
+    public function test_a_new_link_failing_half_way_leaves_the_link_before_it_whole_and_writes_nothing(): void
+    {
+        [$club, $owner] = $this->ready();
+        $invoice = $this->invoice($club, $owner);
+        $this->openLink($owner, $invoice->id, ['valid_days' => 1])->assertSessionHasNoErrors();
+        $first = $this->current($club, $invoice->id);
+        $this->actingAs($owner)->post(route('club.payment-links.cancel', $first->id))->assertSessionHasNoErrors();
+        $before = $this->current($club, $invoice->id)->getAttributes();
+        $created = count($this->audit($club, 'payment_link.created'));
+
+        // The database failing at either write of a new link — keeping the old one in the history, or the row taking
+        // the new one: nothing of it stays (one transaction), the cancelled link as it was, the invoice untouched.
+        $fail = null;
+        PaymentLinkHistory::creating(function () use (&$fail) {
+            if ($fail === 'history') {
+                throw new \RuntimeException('simulated: the history write failed');
+            }
+        });
+        PaymentLink::updating(function () use (&$fail) {
+            if ($fail === 'row') {
+                throw new \RuntimeException('simulated: the row write failed');
+            }
+        });
+        foreach (['history', 'row'] as $fail) {
+            $this->openLink($owner, $invoice->id, ['valid_days' => 3])->assertStatus(500);
+            // And the service by itself (as the Paymob page and the invoice editor call it), not only the request's.
+            $this->actingAs($owner);
+            $this->asTenant($club, function () use ($invoice, $fail) {
+                try {
+                    app(PaymentLinks::class)->open($invoice->fresh(), 3);
+                    $this->fail("a failed $fail write went through");
+                } catch (\RuntimeException $e) {
+                    $this->assertStringContainsString('simulated', $e->getMessage());
+                }
+            });
+            $this->assertSame($before, $this->current($club, $invoice->id)->getAttributes(), "after a failed $fail write: the row as it was");
+            $this->assertSame([], $this->earlier($club, $invoice->id), "after a failed $fail write: no history");
+            $this->assertCount($created, $this->audit($club, 'payment_link.created'));
+            $this->assertSame(['20.000', Invoice::ISSUED], [$invoice->fresh()->balance(), $invoice->fresh()->status]);
+        }
+
+        // Once the database answers: the new link is made, the cancelled one kept whole.
+        $fail = null;
+        $this->openLink($owner, $invoice->id, ['valid_days' => 3])->assertSessionHasNoErrors();
+        $this->assertNotSame($first->token, $this->current($club, $invoice->id)->token);
+        [$kept] = $this->earlier($club, $invoice->id);
+        $this->assertSame([$first->token, PaymentLink::CANCELLED], [$kept->token, $kept->status()]);
     }
 
     public function test_a_subscription_paid_in_part_is_not_activated_until_its_link_takes_what_is_left(): void
