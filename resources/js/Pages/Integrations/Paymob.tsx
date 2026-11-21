@@ -1,5 +1,5 @@
 import { Link, useForm } from '@inertiajs/react';
-import { AlertTriangle, Apple, CircleCheck, CircleDashed, CreditCard, Landmark, Link2, Plug, Plus, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Apple, CircleCheck, CircleDashed, CreditCard, Landmark, Link2, Plug, ShieldCheck } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Notice, PageHeader } from '@/Components/ui';
 import { CheckList, CopyRow, IntegrationBack, IntegrationSummary, KeysForm, type IntegrationStatusData, type ProviderForm } from '@/Components/Integrations';
@@ -12,11 +12,8 @@ interface Props {
     methods: { key: 'card' | 'omannet' | 'apple_pay'; label: string; saved: boolean; state: 'not_set' | 'saved' | 'checked' | 'enabled' | 'available' | 'wrong_mode'; reason: string; within_cards?: boolean }[];
     /** The settings read without a call to Paymob. */
     review: { label: string; ok: boolean; detail: string | null }[];
-    /**
-     * manage_route: «المالية ← روابط الدفع», where links are followed (null without the permission); can_create: the
-     * invoice form, which issues the invoice and its link in one step; recent: the latest links (null without permission).
-     */
-    links: { on: boolean; reason: string | null; invoices_route: string; create_route: string; manage_route: string | null; can_create: boolean; recent: PaymentLinksData | null };
+    /** manage_route: «المالية ← روابط الدفع», where links are made and followed; recent: the latest links — both null without payments.links. */
+    links: { on: boolean; reason: string | null; manage_route: string | null; recent: PaymentLinksData | null };
     checks: { label: string; ok: boolean; at: string | null }[];
     usage: { label: string; on: boolean; route?: string | null }[];
     intents: { id: number; reference: string; invoice: string | null; channel: string; amount: string; currency: string; status: string; failure: string | null; at: string }[];
@@ -107,7 +104,7 @@ function MethodSection({ method, form, icon, title, subtitle, hint, note }: {
 function PayLinks({ links }: { links: Props['links'] }) {
     return (
         <Card>
-            <CardHeader title={<span className="flex items-center gap-2"><Link2 className="size-4" />روابط الدفع</span>} subtitle="كل رابط على فاتورة: «إنشاء رابط دفع» يصدر الفاتورة ورابطها معًا من نموذج الفاتورة، ورابط فاتورة صادرة يُضاف من صفحتها دون فاتورة ثانية." />
+            <CardHeader title={<span className="flex items-center gap-2"><Link2 className="size-4" />روابط الدفع</span>} subtitle="كل رابط على فاتورة. تُنشأ الروابط وتُتابع من «المالية ← روابط الدفع» ومن صفحة كل فاتورة، وهنا آخرها فقط." />
             <ul className="space-y-2 text-sm">
                 <li className="flex items-center gap-2.5">
                     {links.on ? <CircleCheck className="size-[18px] shrink-0 text-emerald-600" /> : <CircleDashed className="size-[18px] shrink-0 text-[#9ca3af]" />}
@@ -115,15 +112,11 @@ function PayLinks({ links }: { links: Props['links'] }) {
                 </li>
                 {!links.on && links.reason && <li className="ps-7 text-xs leading-6 text-muted">{links.reason}</li>}
             </ul>
-            {links.can_create && (
-                <div className="mt-3">
-                    <Button href={route(links.create_route)} size="sm" icon={<Plus />}>إنشاء رابط دفع (فاتورة ورابطها)</Button>
+            {links.manage_route && (
+                <div className="mt-3 text-xs">
+                    <Link href={route(links.manage_route)} className="font-medium text-[#1d4ed8] underline">المالية ← روابط الدفع</Link>
                 </div>
             )}
-            <div className="mt-3 flex flex-wrap gap-3 text-xs">
-                {links.manage_route && <Link href={route(links.manage_route)} className="font-medium text-[#1d4ed8] underline">المالية ← روابط الدفع</Link>}
-                <Link href={route(links.invoices_route)} className="text-[#1d4ed8] underline">رابط لفاتورة صادرة (من صفحتها)</Link>
-            </div>
             <p className="mt-3 text-xs leading-6 text-muted">
                 لا تُسجَّل دفعة عند إصدار الرابط ولا عند رجوع العميل من Paymob؛ تُسجَّل فقط بإشعار موقّع ومطابق، مرة واحدة. روابط Paymob السريعة (QuickLink) غير مستخدمة: لم تثبت وثائق Paymob ربط إشعارها الموقّع بالفاتورة.
             </p>

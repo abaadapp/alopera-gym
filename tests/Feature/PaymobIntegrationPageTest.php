@@ -16,8 +16,9 @@ use Tests\TestCase;
 
 /**
  * «التطبيقات التكاملية ← Paymob» (owner, 2026-11-21): the settings read without a word to Paymob; the connection test —
- * a payment intention at Paymob — only once confirmed; the latest links and the one way to make one (the invoice form,
- * invoice and link together) for who may; never a saved secret in the page. Test keys only; nothing is paid.
+ * a payment intention at Paymob — only once confirmed; the latest links and the way to «المالية ← روابط الدفع» for who
+ * holds payments.links, no link made here, no option a member of staff cannot use; never a saved secret in the page.
+ * Test keys only; nothing is paid.
  */
 class PaymobIntegrationPageTest extends TestCase
 {
@@ -118,7 +119,7 @@ class PaymobIntegrationPageTest extends TestCase
         Http::assertSentCount(1);
     }
 
-    public function test_the_page_shows_the_review_and_the_links_to_who_may_and_never_a_saved_secret(): void
+    public function test_the_page_is_settings_check_and_latest_links_each_option_for_who_may_use_it_never_a_secret(): void
     {
         Http::fake();
         $club = $this->club();
@@ -128,8 +129,9 @@ class PaymobIntegrationPageTest extends TestCase
         $page = $this->actingAs($owner)->get(route('club.integrations.paymob'));
         $page->assertOk()->assertInertia(fn (Assert $p) => $p->component('Integrations/Paymob')
             ->where('review.0.label', 'المفاتيح الثلاثة محفوظة')->where('review.0.ok', true)
-            ->where('links.can_create', true)->where('links.create_route', 'club.invoices.create')
-            ->has('links.recent.rows')
+            ->where('links.manage_route', 'club.payment-links.index')->has('links.recent.rows')
+            ->where('links.recent.can_cancel', true)->where('links.recent.can_open_invoice', true)
+            ->missing('links.create_route')->missing('links.can_create')->where('usage.3.route', 'club.settings.sales')
             ->where('integration.present.secret_key', true)->where('integration.present.hmac_secret', true));
         foreach ([self::SECRET, self::HMAC, self::PUBLIC, '4101', '4103'] as $secret) {
             $this->assertStringNotContainsString($secret, $page->getContent());
@@ -138,7 +140,13 @@ class PaymobIntegrationPageTest extends TestCase
         // Keys without finance: the page, but neither the links nor the button that makes one.
         $keysOnly = $this->holding($club, ['integrations.manage']);
         $this->actingAs($keysOnly)->get(route('club.integrations.paymob'))->assertOk()
-            ->assertInertia(fn (Assert $p) => $p->where('links.recent', null)->where('links.can_create', false)->where('links.manage_route', null));
+            ->assertInertia(fn (Assert $p) => $p->where('links.recent', null)->where('links.manage_route', null)->where('usage.3.route', null));
+
+        // Links without the invoices: the links and their actions, but no way to an invoice page they cannot open.
+        $linksOnly = $this->holding($club, ['integrations.manage', 'payments.links']);
+        $this->actingAs($linksOnly)->get(route('club.integrations.paymob'))->assertOk()
+            ->assertInertia(fn (Assert $p) => $p->where('links.manage_route', 'club.payment-links.index')
+                ->where('links.recent.can_cancel', true)->where('links.recent.can_open_invoice', false));
 
         Http::assertNothingSent();
     }

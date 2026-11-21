@@ -93,12 +93,11 @@ class IntegrationController extends Controller
             // Each method's state and whether a number is saved for it — never the number: it is kept with the keys.
             'methods' => PaymobMethods::states($row),
             // Pay links: the club's own invoice links (/pay/{token}) through the checkout; Paymob QuickLink is not used.
-            // Making them and their log are the finance screen's («المالية ← روابط الدفع»), not repeated here.
-            'links' => ['on' => $ready, 'reason' => PaymobClient::unavailableReason($row), 'invoices_route' => 'club.invoices.index', 'create_route' => 'club.invoices.create',
+            // Made and followed on the finance screen («المالية ← روابط الدفع») and each invoice's page, never here (owner,
+            // 2026-11-21: this page is Paymob's settings, its check and the latest links). The way there and the latest
+            // links only for who holds payments.links — no option a member of staff cannot use.
+            'links' => ['on' => $ready, 'reason' => PaymobClient::unavailableReason($row),
                 'manage_route' => request()->user()?->can('payments.links') ? 'club.payment-links.index' : null,
-                // A link with its invoice: «إصدار الفاتورة وإنشاء رابط دفع» on the one invoice form — no second form here.
-                'can_create' => (bool) request()->user()?->can('invoices.manage'),
-                // The latest links as on «المالية ← روابط الدفع» (branch-scoped there), for who may see them.
                 'recent' => request()->user()?->can('payments.links') ? $this->recentLinks() : null],
             'checks' => [
                 ['label' => 'المفاتيح الثلاثة مُدخلة ورقم ربط واحد على الأقل', 'ok' => $row !== null && array_filter(PaymobClient::REQUIRED, fn ($k) => $row->credential($k) === null) === [] && PaymobClient::checkoutIds($row) !== [], 'at' => null],
@@ -109,7 +108,7 @@ class IntegrationController extends Controller
                 ['label' => 'تجديد العضويات والباقات من بوابة الأعضاء', 'on' => $ready],
                 ['label' => 'الاشتراك الجديد من موقع النادي', 'on' => $ready && (bool) $tenant->setting('member_signup_enabled', true)],
                 ['label' => 'دفع فواتير النادي برابط الفاتورة', 'on' => $ready],
-                ['label' => 'طلبات متجر الموقع الإلكتروني', 'on' => $ready && $shop !== null && $shop['shop_enabled'] && $shop['online_payment_enabled'], 'route' => $shop !== null ? 'club.settings.sales' : null],
+                ['label' => 'طلبات متجر الموقع الإلكتروني', 'on' => $ready && $shop !== null && $shop['shop_enabled'] && $shop['online_payment_enabled'], 'route' => $shop !== null && request()->user()?->can('settings.manage') ? 'club.settings.sales' : null],
             ],
             'intents' => PaymentIntent::with('invoice:id,number')->latest('id')->limit(15)->get()->map(fn (PaymentIntent $i) => [
                 'id' => $i->id,
