@@ -10,7 +10,6 @@ use App\Core\Support\Images\ImageUpload;
 use App\Core\Support\ImageStore;
 use App\Core\Support\Money;
 use App\Core\Tenancy\BranchContext;
-use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Modules\Finance\Models\Invoice;
@@ -308,11 +307,13 @@ class MemberController extends Controller
             $request->merge(['email' => Str::lower(trim($request->input('email')))]);
         }
 
+        $identity = MemberService::identityRules($member);
+
         return $request->validate([
-            'full_name' => ['required', 'string', 'max:160'],
-            'phone' => ['required', 'string', 'max:32', 'regex:/^[+0-9٠-٩\s-]{8,20}$/u'],
+            'full_name' => $identity['full_name'],
+            'phone' => $identity['phone'],
             'phone_alt' => ['nullable', 'string', 'max:32'],
-            'email' => ['nullable', 'email', 'max:255', TenantRule::unique('gym_members', 'email')->ignore($member?->id)],
+            'email' => $identity['email'],
             'gender' => ['nullable', 'in:female,male'],
             'date_of_birth' => ['nullable', 'date', 'before:today'],
             'national_id' => ['nullable', 'string', 'max:40'],
