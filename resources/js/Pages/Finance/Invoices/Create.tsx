@@ -5,7 +5,7 @@ import ClubLayout from '@/Layouts/ClubLayout';
 import PaperFrame from '@/Components/Papers/PaperFrame';
 import { clientKey } from '@/Components/Inventory/parts';
 import { Stepper } from '@/Components/Products/parts';
-import { BackLink, Button, Card, Field, FileInput, Input, MemberPicker, Modal, PageHeader, Select, Textarea, type MemberHit } from '@/Components/ui';
+import { BackLink, Button, Card, Field, FileInput, Input, MemberPicker, Modal, Notice, PageHeader, Select, Textarea, type MemberHit } from '@/Components/ui';
 import { useCurrency } from '@/hooks/useShared';
 import { lineTotal, type AddonOption, type ChosenAddon } from '@/lib/addons';
 import { currencyLabel, money } from '@/lib/format';
@@ -85,6 +85,8 @@ interface Props {
     methods: Method[];
     /** link: «إصدار الفاتورة وإنشاء رابط دفع» (the links permission, online payments on). */
     may: { issue: boolean; pay: boolean; design: boolean; link?: boolean };
+    /** Why «إصدار الفاتورة وإنشاء رابط دفع» is not offered (the permission, Paymob not ready); shown in its place. */
+    link_reason?: string | null;
     /** How long a payment link opens a payment page, in days. */
     link_days?: number[];
     draft?: Draft;
@@ -129,7 +131,7 @@ function addDays(from: string, days: number): string {
  * shelf allows): chosen when the product is taken, from its line, or from «إضافة من الإضافات». Each is billed on a line
  * of its own under the product's; the server prices them and checks they go with it.
  */
-export default function InvoiceCreate({ products, catalog_truncated, addons, tax_rate, due_days, today, terms, paper_lang, methods, may, link_days = [], draft, paper: firstPaper }: Props) {
+export default function InvoiceCreate({ products, catalog_truncated, addons, tax_rate, due_days, today, terms, paper_lang, methods, may, link_reason = null, link_days = [], draft, paper: firstPaper }: Props) {
     const currency = useCurrency();
     const symbol = currencyLabel(currency);
     const m = (v: string | number) => money(v, currency);
@@ -326,11 +328,15 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
                     {/* A draft carries no money: with a payment chosen, only issuing records it. */}
                     {(credit || !may.issue) && <Button variant="outline" disabled={form.processing} icon={<Save />} onClick={() => submit(false)}>حفظ كمسودة</Button>}
                     {may.issue && may.link && link_days.length > 0 && (
-                        <Button variant="outline" disabled={form.processing || paidNow >= total} icon={<Link2 />} onClick={() => setLinking(true)}>إصدار الفاتورة وإنشاء رابط دفع</Button>
+                        <Button variant="outline" disabled={form.processing || paidNow >= total} title={paidNow >= total ? 'المبلغ كله مدفوع عند الإصدار، فلا يبقى ما يطلبه رابط الدفع.' : undefined} icon={<Link2 />} onClick={() => setLinking(true)}>إصدار الفاتورة وإنشاء رابط دفع</Button>
                     )}
+                    {/* Not offered: still shown, greyed, with why just below — never left out without a word. */}
+                    {may.issue && !may.link && link_reason && <Button variant="outline" disabled title={link_reason} icon={<Link2 />}>إصدار الفاتورة وإنشاء رابط دفع</Button>}
                     {may.issue && <Button loading={form.processing} icon={<Send />} onClick={() => submit(true)}>إصدار الفاتورة</Button>}
                 </>}
             />
+
+            {may.issue && !may.link && link_reason && <Notice tone="amber" icon={<Link2 />} className="mb-4">{link_reason}</Notice>}
 
             {Object.keys(errors).length > 0 && (
                 <p className="mb-4 rounded-[10px] border border-[#fecaca] bg-[#fef2f2] p-3 text-[13px] text-[#b91c1c]" role="alert">
@@ -418,7 +424,8 @@ export default function InvoiceCreate({ products, catalog_truncated, addons, tax
                         <div className="mb-4 flex flex-wrap items-center gap-2">
                             <h2 className="me-auto text-[15px] font-bold text-ink">الأصناف</h2>
                             {products.length > 0 && <Button variant="outline" size="sm" icon={<Search />} onClick={() => setPicking(true)}>منتج من الكتالوج</Button>}
-                            {products.length > 0 && <Button variant="outline" size="sm" icon={<PlusCircle />} onClick={() => setPickingAddon(true)}>إضافة من الإضافات</Button>}
+                            {/* Its own list: shown whenever add-ons are offered, not only while the catalogue has products (each one still goes with a product, as at the point of sale). */}
+                            {addons.length > 0 && <Button variant="outline" size="sm" icon={<PlusCircle />} onClick={() => setPickingAddon(true)}>إضافة من الإضافات</Button>}
                             <Button size="sm" icon={<Plus />} onClick={() => setLines((p) => [...p, blank()])} disabled={lines.length >= 50}>إضافة بند</Button>
                             <Button variant="outline" size="sm" className="text-[#b91c1c]" title="تفريغ كل البنود" aria-label="تفريغ كل البنود" icon={<Trash2 />} onClick={() => setLines([blank()])} />
                         </div>

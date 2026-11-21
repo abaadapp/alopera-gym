@@ -17,13 +17,11 @@ use App\Modules\Messaging\Models\MessageTemplate;
 use App\Modules\Messaging\Models\WebhookEvent;
 use App\Modules\Messaging\Models\WhatsAppContact;
 use App\Modules\Messaging\Services\TemplateCatalog;
-use App\Modules\Payments\Http\Controllers\PaymentLinkController;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentWebhookEvent;
 use App\Modules\Payments\Paymob\PaymobClient;
 use App\Modules\Payments\Paymob\PaymobMethods;
 use App\Modules\Payments\Services\OnlinePaymentService;
-use App\Modules\Payments\Services\PaymentLinks;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -91,9 +89,9 @@ class IntegrationController extends Controller
             // Each method's state and whether a number is saved for it — never the number: it is kept with the keys.
             'methods' => PaymobMethods::states($row),
             // Pay links: the club's own invoice links (/pay/{token}) through the checkout; Paymob QuickLink is not used.
-            'links' => ['on' => $ready, 'invoices_route' => 'club.invoices.index', 'create_route' => 'club.invoices.create'],
-            // «إنشاء رابط دفع» and its log, for whoever may make links (payments.links).
-            'paymentLinks' => request()->user()?->can('payments.links') ? PaymentLinkController::props(app(PaymentLinks::class), app(OnlinePaymentService::class))['paymentLinks'] : null,
+            // Making them and their log are the finance screen's («المالية ← روابط الدفع»), not repeated here.
+            'links' => ['on' => $ready, 'reason' => PaymobClient::unavailableReason($row), 'invoices_route' => 'club.invoices.index', 'create_route' => 'club.invoices.create',
+                'manage_route' => request()->user()?->can('payments.links') ? 'club.payment-links.index' : null],
             'checks' => [
                 ['label' => 'المفاتيح الثلاثة مُدخلة ورقم ربط واحد على الأقل', 'ok' => $row !== null && array_filter(PaymobClient::REQUIRED, fn ($k) => $row->credential($k) === null) === [] && PaymobClient::checkoutIds($row) !== [], 'at' => null],
                 ['label' => 'قبلت Paymob المفتاح السري وأرقام الربط', 'ok' => $row?->verified_at !== null && ! $row->failing(), 'at' => $row?->verified_at?->format('Y-m-d H:i')],

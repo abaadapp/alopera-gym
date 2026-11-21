@@ -88,6 +88,12 @@ final class OnlinePaymentService
         return PaymobClient::takesPayments($this->integration());
     }
 
+    /** Why online payments are off here, for the staff (null while available()). */
+    public function unavailableReason(): ?string
+    {
+        return PaymobClient::unavailableReason($this->integration());
+    }
+
     /**
      * Checkouts whose money may still arrive: opened (or being opened) and not past their end by LATE_CALLBACK_MINUTES.
      * While there are any, the account's mode, keys and integrations are not changed under them.

@@ -40,6 +40,8 @@ export interface PaymentLinkRow {
 
 export interface PaymentLinksData {
     on: boolean;
+    /** Why online payments are off (Paymob not linked, stopped, keys missing, test mode on production). */
+    reason?: string | null;
     can_cancel: boolean;
     can_open_invoice?: boolean;
     valid_days: number[];
@@ -94,7 +96,7 @@ export function CreatePaymentLink({ data }: { data: PaymentLinksData }) {
         <Card>
             <CardHeader title={<span className="flex items-center gap-2"><Link2 className="size-4" />إنشاء رابط دفع</span>} subtitle="مبلغ ووصف، فيُصدر النظام فاتورة برابط دفع آمن تنسخه أو ترسله بواتساب. تُسجَّل الدفعة فقط بإشعار موقّع من Paymob." />
             {!data.on && (
-                <Notice tone="amber" className="mb-4">الدفع الإلكتروني غير مفعّل الآن: يُنشأ الرابط، لكن صفحته تعرض الفاتورة دون زر الدفع حتى يُفعَّل Paymob.</Notice>
+                <Notice tone="amber" className="mb-4">الدفع الإلكتروني غير مفعّل الآن.{data.reason ? ` ${data.reason}` : ''} يُنشأ الرابط، لكن صفحته تعرض الفاتورة دون زر الدفع حتى يُفعَّل Paymob.</Notice>
             )}
             <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
                 <Field label={`المبلغ (${data.currency})`} error={form.errors.amount} required hint="بالريال العُماني بثلاث منازل، وآخر خانة صفر (مثل 12.340). هو ما يدفعه العميل شاملًا الضريبة إن وُجدت.">
@@ -248,6 +250,8 @@ export interface InvoicePaymentLinkData {
     can_manage: boolean;
     /** A new link may be made now: something is owed and no live link still runs. */
     can_open: boolean;
+    /** Why no link can be made now (the invoice, the permission, Paymob), shown instead of the button; null when it can. */
+    reason?: string | null;
     live: PaymentLinkRow | null;
     history: PaymentLinkRow[];
 }
@@ -284,7 +288,8 @@ export function InvoicePaymentLink({ invoiceId, data }: { invoiceId: number; dat
     const key = useRef(clientKey());
     const mayCreate = data.can_manage && data.can_open && data.on;
 
-    if (!live && data.history.length === 0 && !mayCreate) return null;
+    // Never hidden without a word: with no link and none to make, the panel says why (draft, paid, permission, Paymob).
+    const why = !mayCreate && (!live || live.status === 'expired') ? (data.reason ?? null) : null;
 
     const create = () => {
         setBusy(true);
@@ -304,7 +309,8 @@ export function InvoicePaymentLink({ invoiceId, data }: { invoiceId: number; dat
         <Card className="p-4">
             <h2 className="mb-1 flex items-center gap-2 font-bold text-ink"><Link2 className="size-4" />رابط الدفع</h2>
             <p className="mb-3 text-[12px] text-[#9ca3af]">رابط آمن لهذه الفاتورة يطلب ما تبقى منها عند فتحه. تُسجَّل الدفعة فقط بإشعار موقّع ومطابق من Paymob.</p>
-            {!data.on && <Notice tone="amber" className="mb-3">الدفع الإلكتروني غير مفعّل، فلا يفتح الرابط صفحة دفع. فعّل Paymob من الإعدادات ← الربط.</Notice>}
+            {why && <Notice tone="amber" className="mb-3">{why}</Notice>}
+            {!why && !data.on && live && <Notice tone="amber" className="mb-3">الدفع الإلكتروني غير مفعّل، فلا يفتح الرابط صفحة دفع. فعّل Paymob من التطبيقات التكاملية ← Paymob.</Notice>}
 
             {live && (
                 <div className="space-y-3 text-[13px]">

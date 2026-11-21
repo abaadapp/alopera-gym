@@ -59,6 +59,7 @@ class PaymentLinkController extends Controller
         return [
             'paymentLinks' => [
                 'on' => $online->available(),
+                'reason' => $online->unavailableReason(),
                 'valid_days' => PaymentLink::VALID_DAYS,
                 'currency' => app(TenantContext::class)->require()->currency,
                 'can_cancel' => (bool) request()->user()?->can('payments.links'),
@@ -80,16 +81,41 @@ class PaymentLinkController extends Controller
         $earlier = PaymentLinkHistory::where('invoice_id', $invoice->id)->with(['invoice', 'creator:id,name'])->get();
         $shown = self::rows($current, $earlier, $links);
         $live = $shown->first(fn (array $r) => $r['live']);
+        $canManage = (bool) request()->user()?->can('payments.links');
+        // A new link: while something is owed and no link still runs (one past its time is replaced by it).
+        $canOpen = $invoice->isOpen() && ! Money::isZero($invoice->balance()) && ($live === null || $live['status'] === PaymentLink::EXPIRED);
 
         return [
             'on' => $online->available(),
             'valid_days' => PaymentLink::VALID_DAYS,
-            'can_manage' => (bool) request()->user()?->can('payments.links'),
-            // A new link: while something is owed and no link still runs (one past its time is replaced by it).
-            'can_open' => $invoice->isOpen() && ! Money::isZero($invoice->balance()) && ($live === null || $live['status'] === PaymentLink::EXPIRED),
+            'can_manage' => $canManage,
+            'can_open' => $canOpen,
+            // Why no link can be made now, shown in place of the button (a running link is shown as itself instead).
+            'reason' => $live !== null && $live['status'] !== PaymentLink::EXPIRED ? null : self::whyNoLink($invoice, $canManage, $canOpen, $online),
             'live' => $live,
             'history' => $shown->values(),
         ];
+    }
+
+    /**
+     * Why «إنشاء رابط دفع» is not offered for this invoice, or null when it is: the invoice first (nothing to ask for
+     * whoever asks), then the staff member's permission, then Paymob. The same conditions PaymentLinks::open refuses on.
+     */
+    public static function whyNoLink(Invoice $invoice, bool $canManage, bool $canOpen, OnlinePaymentService $online): ?string
+    {
+        $paymob = $online->unavailableReason();
+
+        return match (true) {
+            $invoice->status === Invoice::DRAFT => 'الفاتورة مسودة: أصدرها أولًا، ثم أنشئ لها رابط دفع.',
+            $invoice->status === Invoice::VOID => 'الفاتورة ملغاة، فلا يُنشأ لها رابط دفع.',
+            $invoice->status === Invoice::PAID || ($invoice->isOpen() && Money::isZero($invoice->balance())) => 'الفاتورة مدفوعة بالكامل، فلا يُنشأ لها رابط دفع.',
+            ! $invoice->isOpen() => 'لا مبلغ مستحق على هذه الفاتورة، فلا يُنشأ لها رابط دفع.',
+            OnlinePaymentService::singleBaisa($invoice->balance()) => OnlinePaymentService::singleBaisaMessage($invoice->balance()),
+            ! $canManage => 'إنشاء روابط الدفع يتطلب صلاحية «روابط الدفع». اطلبها من مدير النادي.',
+            $paymob !== null => 'الدفع الإلكتروني غير متاح: '.$paymob,
+            ! $canOpen => 'لا يُنشأ رابط جديد الآن.',
+            default => null,
+        };
     }
 
     /**
