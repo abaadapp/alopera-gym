@@ -9,7 +9,6 @@ use App\Core\Support\Phone;
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
-use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Finance\Services\ManualInvoices;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentLink;
@@ -25,9 +24,11 @@ use Illuminate\Support\Facades\DB;
  */
 final class PaymentLinks
 {
+    /** An open Paymob review stops a link's cancel (PR #216), in the link's own words: the invoice itself is untouched. */
+    public const REVIEW_REFUSED = 'هناك دفعة إلكترونية من Paymob قيد المراجعة على هذه الفاتورة، فلا يُلغى رابط الدفع ولا يُنشأ رابط بدله حتى تُغلق المراجعة بدليل. الفاتورة نفسها لا تتغير.';
+
     public function __construct(
         private readonly ManualInvoices $invoices,
-        private readonly InvoiceService $engine,
         private readonly TenantContext $tenants,
         private readonly AuditLogger $audit,
     ) {}
@@ -78,8 +79,10 @@ final class PaymentLinks
     }
 
     /**
-     * Cancel a link nothing was paid on, with its invoice (voided, as the invoice screen voids). Refused while a payment
-     * page opened from it may still take money: cancelling then could leave the customer's payment with nothing to pay.
+     * Cancel a link nothing was paid on: the link only (owner's decision 2026-11-20; R1, before payment links v2). Its
+     * invoice — whatever it is for: a link's own, a subscription, a gift, a store sale — stays as it is, owed, with its
+     * tax and journal; voiding it is the invoice screen's, with its own permission. Refused while money on the invoice is
+     * not settled, under an open Paymob review, or while a payment page opened from it may still take money.
      */
     public function cancel(PaymentLink $link): PaymentLink
     {
@@ -92,13 +95,10 @@ final class PaymentLinks
             if ($invoice->status === Invoice::PAID || ! Money::isZero($invoice->paid_total)) {
                 throw new BusinessRuleException('payment_link.paid', 'دُفع على هذا الرابط، فلا يُلغى. للرد استخدم الإشعار الدائن أو رد المبلغ من الفاتورة.');
             }
-            self::refuseWhileMoneyIsUnsettled($invoice);
+            self::refuseWhileMoneyIsUnsettled($invoice, link: true);
 
-            if ($invoice->status !== Invoice::VOID) {
-                $this->engine->void($invoice, 'إلغاء رابط الدفع');
-            }
             $link->forceFill(['cancelled_at' => now(), 'cancelled_by' => Auth::id()])->save();
-            $this->audit->log('payment_link.cancelled', $invoice, ['link' => $link->id]);
+            $this->audit->log('payment_link.cancelled', $invoice, ['link' => $link->id, 'invoice_kept' => $invoice->status]);
 
             return $link;
         });
@@ -110,9 +110,10 @@ final class PaymentLinks
      *  - money recorded and not settled: a payment or refund awaiting confirmation, or money received whose credit is not
      *    yet allocated or refunded (a late online payment held for review);
      *  - a payment page opened from it that may still take money (its time, then the late-callback window).
-     * Settled money (refunded, allocated elsewhere, rejected, cancelled) no longer stops it. Called under the invoice's lock.
+     * Settled money (refunded, allocated elsewhere, rejected, cancelled) no longer stops it. Called under the invoice's lock;
+     * $link: asked by a link's cancel (an open review is then refused in the link's words, not the invoice void's).
      */
-    public static function refuseWhileMoneyIsUnsettled(Invoice $invoice): void
+    public static function refuseWhileMoneyIsUnsettled(Invoice $invoice, bool $link = false): void
     {
         $unsettled = Payment::where('invoice_id', $invoice->id)
             ->where(fn ($q) => $q->where('status', Payment::PENDING)
@@ -123,6 +124,9 @@ final class PaymentLinks
         }
         // PR #216: an open signed-Paymob review may represent money even when its checkout expired (the same rule and
         // words as any invoice's void).
+        if ($link && PaymentReview::where('invoice_id', $invoice->id)->open()->exists()) {
+            throw new BusinessRuleException('payment_link.review', self::REVIEW_REFUSED);
+        }
         PaymentReview::refuseVoidWhileOpen($invoice);
         $open = PaymentIntent::where('invoice_id', $invoice->id)
             ->where(fn ($q) => $q->where('status', PaymentIntent::PENDING)
@@ -132,7 +136,7 @@ final class PaymentLinks
         if ($open) {
             $after = $open->expires_at?->copy()->addMinutes(OnlinePaymentService::LATE_CALLBACK_MINUTES)->timezone((string) config('app.timezone'));
             throw new BusinessRuleException('payment_link.page_open', 'فتح العميل صفحة الدفع من رابط هذه الفاتورة وقد يدفع منها'
-                .($after ? ' حتى الساعة '.$after->format('H:i') : '').'. ألغِ بعد ذلك حتى لا تصل دفعة لفاتورة ملغاة.');
+                .($after ? ' حتى الساعة '.$after->format('H:i') : '').'. لا يُلغى الرابط ولا الفاتورة قبل ذلك حتى لا تصل دفعة العميل إلى رابط أو فاتورة ملغاة.');
         }
     }
 

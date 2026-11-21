@@ -261,7 +261,7 @@ class PaymentLinksTest extends TestCase
         $this->actingAs($owner)->get(route('club.payment-links.index'))->assertInertia(fn ($p) => $p->where('paymentLinks.rows.0.status', 'expired'));
     }
 
-    public function test_a_link_is_cancelled_with_its_invoice_but_not_while_its_page_may_still_take_money(): void
+    public function test_cancelling_ends_the_link_only_and_not_while_its_page_may_still_take_money(): void
     {
         Http::fake(['*/v1/intention/' => Http::response(['client_secret' => 'cs_l3', 'intention_order_id' => 5503], 201)]);
         $club = $this->club();
@@ -278,9 +278,12 @@ class PaymentLinksTest extends TestCase
         $this->assertStringContainsString('فتح العميل صفحة الدفع', session('errors')->first('error'));
         $this->assertSame([Invoice::ISSUED, null], [$opened->invoice->fresh()->status, $opened->fresh()->cancelled_at]);
 
-        // The other: cancelled, its invoice voided, and its link opens nothing.
+        // The other: the link cancelled, its invoice as it was (owed, its journal untouched), and the link opens nothing.
+        $lines = \DB::table('gym_journal_lines')->count();
         $this->actingAs($owner)->post(route('club.payment-links.cancel', $quiet->id))->assertSessionHasNoErrors();
-        $this->assertSame(Invoice::VOID, $quiet->invoice->fresh()->status);
+        $this->assertSame('أُلغي رابط الدفع. الفاتورة ومستحقاتها كما هي.', session('success'));
+        $this->assertSame([Invoice::ISSUED, '12.340'], [$quiet->invoice->fresh()->status, $quiet->invoice->fresh()->balance()]);
+        $this->assertSame($lines, \DB::table('gym_journal_lines')->count(), 'no entry written');
         $this->assertNotNull($quiet->fresh()->cancelled_at);
         auth()->logout();
         $this->start($club, $quiet);
@@ -333,7 +336,7 @@ class PaymentLinksTest extends TestCase
         $this->assertSame([Invoice::ISSUED, null], [$link->invoice->fresh()->status, $link->fresh()->cancelled_at]);
     }
 
-    public function test_cancelling_a_link_voids_an_invoice_so_it_takes_the_invoice_void_permission_too(): void
+    public function test_cancelling_a_link_takes_the_links_permission_and_never_voids_the_invoice(): void
     {
         $club = $this->club();
         $this->paymob($club);
@@ -341,15 +344,16 @@ class PaymentLinksTest extends TestCase
         $this->actingAs($linksOnly)->post(route('club.payment-links.store'), $this->form())->assertSessionHasNoErrors();
         $link = $this->link($club);
 
-        // Making links does not make its holder able to void invoices.
-        $this->actingAs($linksOnly)->get(route('club.payment-links.index'))->assertInertia(fn ($p) => $p->where('paymentLinks.can_cancel', false));
-        $this->actingAs($linksOnly)->post(route('club.payment-links.cancel', $link->id))->assertForbidden();
-        $this->assertSame([Invoice::ISSUED, null], [$link->invoice->fresh()->status, $link->fresh()->cancelled_at]);
-
-        $both = $this->holding($club, ['payments.links', 'invoices.void']);
-        $this->actingAs($both)->get(route('club.payment-links.index'))->assertInertia(fn ($p) => $p->where('paymentLinks.can_cancel', true));
-        $this->actingAs($both)->post(route('club.payment-links.cancel', $link->id))->assertSessionHasNoErrors();
-        $this->assertSame(Invoice::VOID, $link->invoice->fresh()->status);
+        // Cancelling ends the link only, so the links' permission is enough — and it still voids nothing: its holder
+        // cannot void the invoice from here, nor from the invoice screen.
+        $this->actingAs($this->holding($club, ['invoices.view']))->post(route('club.payment-links.cancel', $link->id))->assertForbidden();
+        $this->actingAs($linksOnly)->get(route('club.payment-links.index'))->assertInertia(fn ($p) => $p->where('paymentLinks.can_cancel', true));
+        $this->actingAs($linksOnly)->post(route('club.payment-links.cancel', $link->id))->assertSessionHasNoErrors();
+        $this->assertSame(Invoice::ISSUED, $link->invoice->fresh()->status);
+        $this->assertNotNull($link->fresh()->cancelled_at);
+        $this->actingAs($linksOnly)->post(route('club.invoices.void', $link->invoice_id), ['reason' => 'خطأ'])->assertForbidden();
+        $this->assertSame(Invoice::ISSUED, $link->invoice->fresh()->status);
+        $this->assertSame(0, \DB::table('audit_logs')->where('tenant_id', $club->id)->where('event', 'invoice.voided')->count());
     }
 
     public function test_a_link_with_money_held_for_review_is_not_cancelled(): void
@@ -407,12 +411,15 @@ class PaymentLinksTest extends TestCase
         $cancelLink()->assertSessionHasErrors('error');
         $this->assertSame([Invoice::ISSUED, null], [$link->invoice->fresh()->status, $link->fresh()->cancelled_at]);
 
-        // 4. The refund confirmed: settled, the link is cancelled with its invoice, both in the audit log.
+        // 4. The refund confirmed: settled. The link is cancelled — the link only, in the audit log — and the invoice is
+        // voided from its own screen, a separate act, also in the audit log.
         $this->asTenant($club, fn () => app(PaymentService::class)->confirm($refund->fresh(), 'TRX-7801'));
         $cancelLink()->assertSessionHasNoErrors();
-        $this->assertSame(Invoice::VOID, $link->invoice->fresh()->status);
+        $this->assertSame(Invoice::ISSUED, $link->invoice->fresh()->status);
         $this->assertNotNull($link->fresh()->cancelled_at);
-        $this->assertEqualsCanonicalizing(['invoice.voided', 'payment_link.cancelled'], \DB::table('audit_logs')->where('tenant_id', $club->id)->whereIn('event', ['invoice.voided', 'payment_link.cancelled'])->pluck('event')->all());
+        $voidOnInvoiceScreen()->assertSessionHasNoErrors();
+        $this->assertSame(Invoice::VOID, $link->invoice->fresh()->status);
+        $this->assertSame(['payment_link.cancelled', 'invoice.voided'], \DB::table('audit_logs')->where('tenant_id', $club->id)->whereIn('event', ['invoice.voided', 'payment_link.cancelled'])->orderBy('id')->pluck('event')->all());
     }
 
     public function test_a_staff_member_tied_to_a_branch_sees_and_cancels_only_that_branchs_links(): void

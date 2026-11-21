@@ -3,6 +3,8 @@
 namespace App\Modules\Website\Http\Controllers;
 
 use App\Core\Papers\Papers;
+use App\Core\Support\BusinessRuleException;
+use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
@@ -15,6 +17,8 @@ use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Http\RendersSite;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
@@ -59,6 +63,54 @@ class PayController extends Controller
         $intent = $online->start($this->invoiceByToken($token), 'whatsapp');
 
         return Inertia::location($intent->checkout_url);
+    }
+
+    /**
+     * A link's own address, /pay/link/{token} (payment links v2, PR #218), served here so that the links v2 sent keep
+     * working if the code goes back to this release (R1). It exists only once v2's migration added the columns: before,
+     * every such address is 404. The invoice's current link (payment_links.token) opens its invoice's pay page — the same
+     * page, gate and checkout as the invoice's own address (start() asks the current link). An earlier link of the
+     * invoice (payment_link_history) shows the invoice with why it no longer opens a page, and starts nothing.
+     */
+    public function link(string $token, OnlinePaymentService $online): Response
+    {
+        [$invoice, $closed] = $this->linkOf($token);
+        $page = $this->show($invoice->public_token, $online);
+
+        return $closed === null ? $page : $page->with('closed', $invoice->isOpen() ? $closed : null);
+    }
+
+    /** Paying from a link's own address: the current link only, as the invoice's address does; an earlier one never. */
+    public function startLink(string $token, OnlinePaymentService $online): HttpResponse
+    {
+        [$invoice, $closed] = $this->linkOf($token);
+        if ($closed !== null) {
+            throw new BusinessRuleException('payment_link.closed', $closed);
+        }
+
+        return $this->start($invoice->public_token, $online);
+    }
+
+    /**
+     * The invoice of a link's address, and why it opens no page when it is an earlier link (null when it is the current
+     * one). This club's only (the link's tenant scope, and the club's id for the earlier links).
+     *
+     * @return array{0: Invoice, 1: string|null}
+     */
+    private function linkOf(string $token): array
+    {
+        abort_unless(Schema::hasColumn('payment_links', 'token'), 404);
+        $current = PaymentLink::where('token', $token)->value('invoice_id');
+        if ($current !== null) {
+            return [Invoice::findOrFail($current), null];
+        }
+        abort_unless(Schema::hasTable('payment_link_history'), 404);
+        $earlier = DB::table('payment_link_history')->where('tenant_id', app(TenantContext::class)->require()->id)->where('token', $token)->first(['invoice_id', 'replaced_at', 'cancelled_at']);
+        abort_if($earlier === null, 404);
+
+        return [Invoice::findOrFail($earlier->invoice_id), $earlier->replaced_at !== null
+            ? 'هذا رابط دفع قديم حلّ محله رابط أحدث. اطلب من النادي الرابط الجديد، أو ادفع في الاستقبال.'
+            : 'أُلغي رابط الدفع هذا. تواصل مع النادي إن كان عليك مبلغ.'];
     }
 
     public function return(string $reference): Response
