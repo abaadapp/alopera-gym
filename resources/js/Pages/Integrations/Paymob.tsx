@@ -1,16 +1,22 @@
 import { Link, useForm } from '@inertiajs/react';
-import { AlertTriangle, Apple, CircleCheck, CircleDashed, CreditCard, Landmark, Link2, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Apple, CircleCheck, CircleDashed, CreditCard, Landmark, Link2, Plug, Plus, ShieldCheck } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
-import { Badge, Card, CardHeader, EmptyState, Notice, PageHeader } from '@/Components/ui';
-import { CheckList, CopyRow, IntegrationBack, IntegrationSummary, KeysForm, VerifyButton, type IntegrationStatusData, type ProviderForm } from '@/Components/Integrations';
+import { Badge, Button, Card, CardHeader, ConfirmAction, EmptyState, Notice, PageHeader } from '@/Components/ui';
+import { CheckList, CopyRow, IntegrationBack, IntegrationSummary, KeysForm, type IntegrationStatusData, type ProviderForm } from '@/Components/Integrations';
+import { PaymentLinksLog, type PaymentLinksData } from '@/Components/PaymentLinks';
 
 interface Props {
     integration: ProviderForm;
     status: IntegrationStatusData;
     warning: string | null;
     methods: { key: 'card' | 'omannet' | 'apple_pay'; label: string; saved: boolean; state: 'not_set' | 'saved' | 'checked' | 'enabled' | 'available' | 'wrong_mode'; reason: string; within_cards?: boolean }[];
-    /** manage_route: «المالية ← روابط الدفع», where links are made and followed (null without the permission). */
-    links: { on: boolean; reason: string | null; invoices_route: string; create_route: string; manage_route: string | null };
+    /** The settings read without a call to Paymob. */
+    review: { label: string; ok: boolean; detail: string | null }[];
+    /**
+     * manage_route: «المالية ← روابط الدفع», where links are followed (null without the permission); can_create: the
+     * invoice form, which issues the invoice and its link in one step; recent: the latest links (null without permission).
+     */
+    links: { on: boolean; reason: string | null; invoices_route: string; create_route: string; manage_route: string | null; can_create: boolean; recent: PaymentLinksData | null };
     checks: { label: string; ok: boolean; at: string | null }[];
     usage: { label: string; on: boolean; route?: string | null }[];
     intents: { id: number; reference: string; invoice: string | null; channel: string; amount: string; currency: string; status: string; failure: string | null; at: string }[];
@@ -20,7 +26,7 @@ interface Props {
 }
 
 const FIELDS = [
-    { key: 'secret_key', label: 'Secret key', hint: 'من لوحة Paymob ← Settings ← Account info', secret: true },
+    { key: 'secret_key', label: 'Secret key', hint: 'من لوحة Paymob ← Settings ← API Keys، ويختلف بين وضعي الاختبار والحقيقي', secret: true },
     { key: 'public_key', label: 'Public key' },
     { key: 'hmac_secret', label: 'HMAC secret', hint: 'للتحقق من توقيع إشعارات الدفع', secret: true },
     { key: 'integration_ids', label: 'أرقام ربط إضافية (اختياري)', hint: 'الطريقة السابقة: أرقام مفصولة بفاصلة. يكفي رقم البطاقات في قسمه أدناه.' },
@@ -101,7 +107,7 @@ function MethodSection({ method, form, icon, title, subtitle, hint, note }: {
 function PayLinks({ links }: { links: Props['links'] }) {
     return (
         <Card>
-            <CardHeader title={<span className="flex items-center gap-2"><Link2 className="size-4" />روابط الدفع</span>} subtitle="تُنشأ روابط الدفع وتُتابع من «المالية ← روابط الدفع» ومن صفحة كل فاتورة، لا من هنا. هذه الصفحة لمفاتيح Paymob وحالته." />
+            <CardHeader title={<span className="flex items-center gap-2"><Link2 className="size-4" />روابط الدفع</span>} subtitle="كل رابط على فاتورة: «إنشاء رابط دفع» يصدر الفاتورة ورابطها معًا من نموذج الفاتورة، ورابط فاتورة صادرة يُضاف من صفحتها دون فاتورة ثانية." />
             <ul className="space-y-2 text-sm">
                 <li className="flex items-center gap-2.5">
                     {links.on ? <CircleCheck className="size-[18px] shrink-0 text-emerald-600" /> : <CircleDashed className="size-[18px] shrink-0 text-[#9ca3af]" />}
@@ -109,10 +115,14 @@ function PayLinks({ links }: { links: Props['links'] }) {
                 </li>
                 {!links.on && links.reason && <li className="ps-7 text-xs leading-6 text-muted">{links.reason}</li>}
             </ul>
+            {links.can_create && (
+                <div className="mt-3">
+                    <Button href={route(links.create_route)} size="sm" icon={<Plus />}>إنشاء رابط دفع (فاتورة ورابطها)</Button>
+                </div>
+            )}
             <div className="mt-3 flex flex-wrap gap-3 text-xs">
                 {links.manage_route && <Link href={route(links.manage_route)} className="font-medium text-[#1d4ed8] underline">المالية ← روابط الدفع</Link>}
-                <Link href={route(links.create_route)} className="text-[#1d4ed8] underline">فاتورة جديدة (مطالبة بمبلغ ووصف)</Link>
-                <Link href={route(links.invoices_route)} className="text-[#1d4ed8] underline">فواتير العملاء</Link>
+                <Link href={route(links.invoices_route)} className="text-[#1d4ed8] underline">رابط لفاتورة صادرة (من صفحتها)</Link>
             </div>
             <p className="mt-3 text-xs leading-6 text-muted">
                 لا تُسجَّل دفعة عند إصدار الرابط ولا عند رجوع العميل من Paymob؛ تُسجَّل فقط بإشعار موقّع ومطابق، مرة واحدة. روابط Paymob السريعة (QuickLink) غير مستخدمة: لم تثبت وثائق Paymob ربط إشعارها الموقّع بالفاتورة.
@@ -128,7 +138,30 @@ const INTENT_STATUS: Record<string, { label: string; tone: 'green' | 'amber' | '
     expired: { label: 'انتهت المهلة', tone: 'gray' },
 };
 
-export default function PaymobIntegration({ integration, status, warning, methods, links, checks, usage, intents, events, endpoints }: Props) {
+/**
+ * The connection test opens a payment intention at Paymob (1.000, sent to no one, gone in ten minutes): only after this
+ * dialog says so — in live mode, in the club's real account. The settings check above it calls nothing.
+ */
+function ProbeButton({ disabled, live }: { disabled: boolean; live: boolean }) {
+    if (disabled) {
+        return <Button variant="outline" size="sm" icon={<Plug />} disabled>اختبار الاتصال</Button>;
+    }
+    return (
+        <ConfirmAction
+            url={route('club.integrations.verify', 'paymob')}
+            data={{ confirm_intention: 1 }}
+            title="اختبار الاتصال بـ Paymob"
+            message={`يفتح لدى Paymob صفحة دفع تجريبية (Payment Intention) بمبلغ 1.000 لا تُرسل لأحد ولا يُخصم منها شيء، وتنتهي وحدها خلال 10 دقائق${live ? '، في حسابك الحقيقي لأن الوضع «حقيقي»' : ''}. لا تُسجَّل دفعة ولا تُصدر فاتورة. «فحص الإعدادات» لا يحتاج هذا الاختبار.`}
+            confirmLabel="افتح صفحة الاختبار"
+            tone="primary"
+            icon={<Plug />}
+        >
+            اختبار الاتصال
+        </ConfirmAction>
+    );
+}
+
+export default function PaymobIntegration({ integration, status, warning, review, methods, links, checks, usage, intents, events, endpoints }: Props) {
     const complete = checks[0]?.ok;
     const methodForm = useMethodForm();
     const byKey = Object.fromEntries(methods.map((m) => [m.key, m])) as Record<MethodKey, Props['methods'][number]>;
@@ -138,7 +171,7 @@ export default function PaymobIntegration({ integration, status, warning, method
             <PageHeader back={<IntegrationBack />} title="Paymob — الدفع الإلكتروني" subtitle="مفاتيح حساب النادي لدى Paymob، ووضع الاختبار أو الإنتاج، وسجل عمليات الدفع والإشعارات." />
 
             <IntegrationSummary service="paymob" title="Paymob" status={status}>
-                <VerifyButton provider="paymob" disabled={!complete} />
+                <ProbeButton disabled={!complete} live={integration.mode === 'live'} />
             </IntegrationSummary>
 
             {warning && (
@@ -189,12 +222,27 @@ export default function PaymobIntegration({ integration, status, warning, method
                     </Card>
 
                     <Card>
+                        <CardHeader title="فحص الإعدادات" subtitle="يُقرأ من الإعدادات المحفوظة دون أي اتصال بـ Paymob ودون فتح صفحة دفع." />
+                        <ul className="divide-y divide-line" data-testid="paymob-review">
+                            {review.map((item) => (
+                                <li key={item.label} className="flex items-start gap-3 py-2.5 text-sm">
+                                    {item.ok ? <CircleCheck className="mt-0.5 size-[18px] shrink-0 text-emerald-600" /> : <AlertTriangle className="mt-0.5 size-[18px] shrink-0 text-amber-600" />}
+                                    <span className="min-w-0 flex-1">
+                                        <span className={item.ok ? 'text-ink' : 'text-amber-800'}>{item.label}</span>
+                                        {item.detail && <span className="block text-xs leading-6 text-muted">{item.detail}</span>}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    </Card>
+
+                    <Card>
                         <CardHeader title="اختبار الاتصال" subtitle="«متصل» لا تظهر إلا بعد قبول Paymob للمفاتيح وأرقام الربط فعلًا" />
                         <CheckList items={checks} />
                         <p className="mt-3 text-xs leading-6 text-muted">
                             «اختبار الاتصال» يفتح لدى Paymob صفحة دفع تجريبية بمبلغ 1.000 لا تُرسل لأحد ولا يُخصم منها شيء، ثم تنتهي وحدها.
                         </p>
-                        <div className="mt-3"><VerifyButton provider="paymob" disabled={!complete} /></div>
+                        <div className="mt-3"><ProbeButton disabled={!complete} live={integration.mode === 'live'} /></div>
                     </Card>
 
                     <Card>
@@ -229,6 +277,12 @@ export default function PaymobIntegration({ integration, status, warning, method
                     </Card>
                 </div>
             </div>
+
+            {links.recent && (
+                <div className="mt-6">
+                    <PaymentLinksLog data={links.recent} subtitle="آخر 5 روابط، كما في «المالية ← روابط الدفع». «مدفوع» بعد إشعار Paymob الموقّع فقط." />
+                </div>
+            )}
 
             <div className="mt-6 grid gap-6 xl:grid-cols-2 [&>*]:min-w-0">
                 <Card padded={false}>
