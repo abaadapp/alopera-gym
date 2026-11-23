@@ -236,6 +236,15 @@ final class MembershipService
                 },
             ]);
 
+            // A sign-up on the website pays on the next screen: no invoice message before she has had the chance to
+            // (owner's decision 2026-11-23). The payment and the activation are still announced as they happen.
+            if (($options['invoice_message'] ?? true) === false) {
+                $this->issuedOn($membership, $invoice, false);
+                $this->announce($membership, notify: false);
+
+                return $membership->refresh();
+            }
+
             return $this->issuedOn($membership, $invoice);
         });
     }

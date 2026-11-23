@@ -82,7 +82,7 @@ class PortalAuthController extends Controller
 
             return $memberships->sell($member, MembershipPlan::findOrFail($data['membership_plan_id']), array_filter([
                 'coupon_code' => $data['coupon_code'] ?? null,
-            ]));
+            ]) + ['invoice_message' => false]);
         });
 
         Auth::guard('member')->login($membership->member);
