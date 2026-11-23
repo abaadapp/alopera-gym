@@ -315,16 +315,6 @@ h1, h2, h3, .font-display {
         line-height: 1.5;
         color: #4b4b4b;
     }
-    /* A list on the grey canvas sits on white, framed like a card; inside a card the card is its frame. */
-    .admin-ui .data-table {
-        @apply rounded-2xl border border-line bg-white;
-        overflow: clip;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    }
-    .admin-ui .card .data-table {
-        @apply rounded-none border-0 bg-transparent;
-        box-shadow: none;
-    }
     .admin-ui .table-base th {
         @apply h-11 py-0 align-middle;
     }
