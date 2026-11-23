@@ -17,7 +17,8 @@ import { cn } from '@/lib/cn';
  *   rows (14px, 12px padding, a hairline between them)
  *   1–20 من 96                                                   [السابق] [التالي]
  *
- * It draws no card of its own: a page sets it on the canvas or inside a <Card padded={false}>. With `card`, a phone, a
+ * On the canvas it is framed white (`.data-table` in app.css) so the list reads clearly; inside a <Card padded={false}> the
+ * card is the frame. With `card`, a phone, a
  * tablet or a small laptop (below 1280px) gets the rows as that page's own cards instead of the table; otherwise a table too wide for
  * the screen is laid out as cards by the panel (useStackedTables).
  */
@@ -111,7 +112,7 @@ export default function DataTable<T>({ rows, columns, card, rowKey, params, pagi
     const sortKeys = new Set(sorts.map((s) => s.key));
 
     return (
-        <div className={className}>
+        <div className={cn('data-table', className)}>
             {hasToolbar && (
                 <div className={cn('flex flex-wrap items-center gap-1 px-4 py-2', applied.length === 0 && 'border-b border-line')}>
                     {search && (
