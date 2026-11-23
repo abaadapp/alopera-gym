@@ -55,14 +55,11 @@
     "فاتورة :number": "Invoice :number",
     "يجب الموافقة على الشروط والأحكام.": "Please accept the terms and conditions.",
     "رقم الهاتف مسجّل مسبقًا. سجّل الدخول إلى بوابة الأعضاء أو تواصل مع الاستقبال.": "This phone number is already registered. Sign in to the member portal or contact the reception.",
-    "تم التسجيل! أكمل الدفع لتفعيل اشتراكك (أونلاين من صفحة الفواتير أو في الاستقبال).": "You're registered! Complete the payment to activate your membership (online from the invoices page, or at the reception).",
-    "تم التسجيل! أكمل الدفع في الاستقبال لتفعيل اشتراكك.": "You're registered! Complete the payment at the reception to activate your membership.",
     "تم التسجيل وتفعيل اشتراكك. أهلًا بك!": "You're registered and your membership is active. Welcome!",
     "دخول الأعضاء": "Member sign-in",
     "بيانات الدخول غير صحيحة. إن لم تُفعّل حسابك بعد، تواصل مع الاستقبال.": "The sign-in details are not correct. If your account is not activated yet, contact the reception.",
     "حسابي": "My account",
     "تجديد الاشتراك": "Renew membership",
-    "تم إنشاء فاتورة التجديد. ادفعها في الاستقبال لتفعيل الاشتراك.": "The renewal invoice is ready. Pay it at the reception to activate the membership.",
     "تم التجديد.": "Renewed.",
     "الفواتير والسجل": "Invoices and history",
     "حجز الحصص": "Book classes",
@@ -179,5 +176,9 @@
     "لم تُرسل بعد؛ يمكنك مشاركة رابط الهدية بنفسك.": "Not sent yet; you can share the gift's link yourself.",
     "تعذّر إرسال الهدية إلى واتساب المستلمة. شارك رابط الهدية بنفسك أو تواصل مع النادي.": "The gift could not be sent to the recipient's WhatsApp. Share the gift's link yourself or contact the club.",
     "نتيجة الإرسال غير مؤكدة": "Delivery not confirmed",
-    "لم يصل ما يؤكد وصول رسالة الهدية أو عدمه. اسأل المستلمة، أو شارك رابط الهدية بنفسك.": "Nothing confirmed whether the gift message arrived. Ask the recipient, or share the gift's link yourself."
+    "لم يصل ما يؤكد وصول رسالة الهدية أو عدمه. اسأل المستلمة، أو شارك رابط الهدية بنفسك.": "Nothing confirmed whether the gift message arrived. Ask the recipient, or share the gift's link yourself.",
+    "لديكِ صفحة دفع مفتوحة لاشتراك آخر. أكملي الدفع منها، أو انتظري ساعة ثم حاولي مرة أخرى.": "You have a payment page open for another membership. Complete the payment there, or wait an hour and try again.",
+    "الدفع الإلكتروني غير متاح حاليًا. جدّدي اشتراكك في الاستقبال.": "Online payment is not available right now. Renew your membership at the reception.",
+    "تم إنشاء حسابك. تعذّر فتح صفحة الدفع الآن: أكملي الدفع من حسابك لتفعيل اشتراكك.": "Your account is created. The payment page could not be opened right now: complete the payment from your account to activate your membership.",
+    "تم إنشاء حسابك. ادفعي في الاستقبال ليُفعَّل اشتراكك.": "Your account is created. Pay at the reception to activate your membership."
 }

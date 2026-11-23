@@ -51,7 +51,7 @@
     "كود الخصم": "Discount code",
     "لديك كود خصم؟": "Have a discount code?",
     "تأكيد التجديد والدفع": "Confirm renewal and pay",
-    "نصدر فاتورة التجديد وننقلك للدفع الإلكتروني إن كان متاحًا، وإلا يمكنك الدفع في الاستقبال.": "We'll issue the renewal invoice and take you to online payment if it's available; otherwise, you can pay at reception.",
+    "ننقلك للدفع الإلكتروني، ويُصدر التجديد وفاتورته فور تأكيد الدفع. إن لم يكن الدفع الإلكتروني متاحًا فجدّدي في الاستقبال.": "We take you to online payment; the renewal and its invoice are issued as soon as the payment is confirmed. If online payment is unavailable, renew at the reception.",
     "لا توجد فواتير بعد.": "No invoices yet.",
     "استرداد": "Refund",
     "إيصال": "Receipt",
@@ -124,5 +124,8 @@
     "دون أي مبلغ إضافي": "No extra charge",
     "جارٍ التأكيد…": "Confirming…",
     "تأكيد استلام الهدية": "Confirm the gift",
-    "هذه الهدية مخصصة لرقم جوال آخر. استلميها بالحساب المسجّل برقم المستلمة، أو اطلبي تفعيلها من استقبال النادي.": "This gift is meant for another mobile number. Redeem it with the account registered with the recipient's number, or ask the club's reception to activate it."
+    "هذه الهدية مخصصة لرقم جوال آخر. استلميها بالحساب المسجّل برقم المستلمة، أو اطلبي تفعيلها من استقبال النادي.": "This gift is meant for another mobile number. Redeem it with the account registered with the recipient's number, or ask the club's reception to activate it.",
+    "اشتراك لم يكتمل دفعه": "A membership not paid yet",
+    "لم يُصدر اشتراككِ بعد: يُصدر ويُفعَّل فور تأكيد الدفع.": "Your membership is not issued yet: it is issued and activated as soon as the payment is confirmed.",
+    "أكملي الدفع": "Complete the payment"
 }

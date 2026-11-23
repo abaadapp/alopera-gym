@@ -14,7 +14,9 @@ use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\MembershipCheckout;
 use App\Modules\Gym\Models\PtSubscription;
+use App\Modules\Gym\Services\MembershipCheckouts;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Payments\Events\OnlinePaymentFailed;
 use App\Modules\Payments\Models\PaymentIntent;
@@ -76,6 +78,7 @@ final class OnlinePaymentService
         private readonly PaymobClient $paymob,
         private readonly PaymentService $payments,
         private readonly AuditLogger $audit,
+        private readonly MembershipCheckouts $checkouts,
     ) {}
 
     public function integration(): ?TenantIntegration
@@ -135,8 +138,12 @@ final class OnlinePaymentService
         // slow gateway keeps no one waiting on the invoice. The lock is the one the callback takes after its intent's
         // (intent → invoice); nothing here waits on an intent's row, so the two never wait on each other.
         [$invoice, $intent] = DB::transaction(function () use ($invoice, $prefix, $channel, $viaToken) {
-            $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
-            if (! $invoice->isOpen() || Money::isZero($invoice->balance())) {
+            // A membership bought online is paid before it is sold: its open checkout's draft is what is paid
+            // (MembershipCheckouts). Any other draft is not an invoice yet and pays nothing.
+            $invoice = Invoice::withoutGlobalScope('issued')->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            $checkout = $invoice->status === Invoice::DRAFT
+                && MembershipCheckout::where('invoice_id', $invoice->id)->where('status', MembershipCheckout::OPEN)->exists();
+            if (! ($invoice->isOpen() || $checkout) || Money::isZero($invoice->balance())) {
                 throw new BusinessRuleException('invoice.not_open', 'لا يوجد مبلغ مستحق على هذه الفاتورة.');
             }
             // Paymob confirmed money for this invoice that did not match it, and the club is checking it (PaymentReview);
@@ -521,8 +528,11 @@ final class OnlinePaymentService
                     // The invoice, then what it pays for (the order every payment takes), and only then the decision: the
                     // money is applied — the membership activated, the order paid — only while all of it still stands as
                     // it was sold; otherwise it is recorded and held for staff, nothing activated.
+                    // A membership bought online is sold now that its money is confirmed: the intent moves from the
+                    // checkout's draft to the sale's invoice (MembershipCheckouts::complete), recorded there as below.
+                    $checkoutProblem = $this->audit->as('gateway', null, 'paymob', fn () => $this->checkouts->complete($intent));
                     $invoice = Invoice::whereKey($intent->invoice_id)->lockForUpdate()->firstOrFail();
-                    $hold = $this->holdReason($intent, $invoice);
+                    $hold = $checkoutProblem ?? $this->holdReason($intent, $invoice);
                     $result = $this->audit->as('gateway', null, 'paymob', fn () => $this->payments->recordGatewayPayment(
                         $invoice, $intent->amount, 'paymob', $transactionId, $intent->reference, $hold, $signedAt
                     ));
@@ -846,7 +856,13 @@ final class OnlinePaymentService
             // invoice): the row written names the intent, and a callback recording money holds that intent first.
             [$review, $changed] = DB::transaction(function () use ($intent, $transactionId, $values, $reason, $whilePending) {
                 $locked = PaymentIntent::whereKey($intent->id)->lockForUpdate()->firstOrFail();
-                $invoice = Invoice::whereKey($intent->invoice_id)->lockForUpdate()->firstOrFail();
+                // Confirmed money for a membership bought online: the sale is made, so the review names its invoice.
+                // An attempt the bank has not decided ($whilePending) is not money yet: its checkout stays a draft.
+                if (! $whilePending) {
+                    $this->audit->as('gateway', null, 'paymob', fn () => $this->checkouts->complete($locked));
+                }
+                $values['invoice_id'] = $locked->invoice_id;
+                $invoice = Invoice::withoutGlobalScope('issued')->whereKey($locked->invoice_id)->lockForUpdate()->firstOrFail();
                 if ($whilePending && ($locked->status !== PaymentIntent::PENDING || self::unresolvedAtBank($invoice) === null)) {
                     return [null, false];
                 }

@@ -6,7 +6,6 @@ use App\Models\Tenant;
 use App\Models\TenantIntegration;
 use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Gym\Access\AccessControlService;
-use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Services\MembershipService;
 use App\Modules\Messaging\Models\AutoReply;
@@ -155,30 +154,6 @@ class WhatsAppTest extends TestCase
             $message = Message::where('member_id', $member->id)->firstOrFail();
             $this->assertSame(Message::SENT, $message->status);
             $this->assertSame('wamid.SENT', $message->provider_message_id);
-        });
-    }
-
-    public function test_a_website_sign_up_gets_no_invoice_message_before_paying_but_payment_and_activation_are_announced(): void
-    {
-        $club = $this->club();
-        $this->enableWhatsApp($club);
-        $plan = $this->plan($club);
-
-        $this->post(route('site.join.store', ['club' => $club->slug]), [
-            'membership_plan_id' => $plan->id, 'full_name' => 'نورة الكندية', 'phone' => '9123 4567',
-            'password' => 'secret-pass', 'password_confirmation' => 'secret-pass', 'accept_terms' => true, 'pay_now' => false,
-        ])->assertRedirect();
-
-        $this->asTenant($club, function () {
-            $member = Member::where('phone', '96891234567')->firstOrFail();
-            // She pays on the next screen: no invoice message before she has had the chance to (owner, 2026-11-23).
-            $this->assertSame([], Message::where('member_id', $member->id)->whereIn('template_key', ['invoice_issued', 'invoice_issued_membership', 'invoice_issued_membership_en'])->pluck('template_key')->all());
-
-            $membership = $member->memberships()->firstOrFail();
-            app(PaymentService::class)->record($membership->invoice()->first(), $membership->invoice()->first()->total, 'cash');
-            $keys = Message::where('member_id', $member->id)->pluck('template_key')->all();
-            $this->assertContains('payment_received', $keys);
-            $this->assertContains('membership_activated', $keys);
         });
     }
 

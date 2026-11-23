@@ -22,6 +22,8 @@ final class TenantTables
         'gym_cash_shifts', 'gym_cash_shift_movements',
         'invoices', 'invoice_items', 'invoice_attachments', 'credit_notes', 'payments', 'payment_allocations',
         'gym_memberships', 'gym_coupon_redemptions', 'gym_membership_freezes', 'gym_membership_events',
+        // A membership bought online waiting for its payment: after the member, the plan, its invoice and its membership.
+        'gym_membership_checkouts',
         'gym_member_documents', 'gym_member_notes',
         'gym_class_schedules', 'gym_class_sessions', 'gym_bookings',
         'gym_pt_packages', 'gym_pt_subscriptions', 'gym_pt_sessions',

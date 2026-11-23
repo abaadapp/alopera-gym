@@ -15,9 +15,10 @@ use App\Modules\Gym\Models\CheckIn;
 use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\MembershipCheckout;
 use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Services\BookingService;
-use App\Modules\Gym\Services\MembershipService;
+use App\Modules\Gym\Services\MembershipCheckouts;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Http\RendersSite;
 use Carbon\CarbonImmutable;
@@ -67,6 +68,12 @@ class PortalController extends Controller
                 ->where('status', Booking::BOOKED)->whereHas('session', fn ($q) => $q->where('starts_at', '>', now()))
                 ->get()->sortBy(fn ($b) => $b->session->starts_at)->values()->take(5)
                 ->map(fn ($b) => ['id' => $b->id, 'session' => GymPresenter::siteSession($b->session)]),
+            // A membership bought online whose payment did not go through: nothing is sold yet; she may pay it here.
+            'checkout' => ($checkout = MembershipCheckouts::openFor($member)) && $checkout->invoice ? [
+                'plan' => SiteLanguage::pick($checkout->plan?->name, $checkout->plan?->name_en) ?? $checkout->plan?->name,
+                'amount' => $checkout->invoice->total,
+                'currency' => $checkout->invoice->currency,
+            ] : null,
             'openInvoices' => Invoice::where('billable_type', 'member')->where('billable_id', $member->id)->open()->latest('id')->get()
                 ->map(fn ($i) => $i->only('id', 'number', 'total') + ['balance' => $i->balance(), 'issue_date' => $i->issue_date->toDateString()]),
             'visits' => CheckIn::where('member_id', $member->id)->where('result', 'allowed')->where('checked_in_at', '>=', now()->subDays(30))->count(),
@@ -86,7 +93,7 @@ class PortalController extends Controller
         ], __('تجديد الاشتراك'));
     }
 
-    public function storeRenewal(Request $request, MembershipService $memberships, OnlinePaymentService $online): HttpResponse
+    public function storeRenewal(Request $request, MembershipCheckouts $checkouts, OnlinePaymentService $online): HttpResponse
     {
         $member = $this->member($request);
         $data = $request->validate([
@@ -98,14 +105,26 @@ class PortalController extends Controller
             throw new BusinessRuleException('renew.pending', 'لديك طلب اشتراك بانتظار الدفع. أكمل دفعه من صفحة الفواتير.', 'membership_plan_id');
         }
 
-        $membership = $memberships->renew($member, MembershipPlan::findOrFail($data['membership_plan_id']), array_filter(['coupon_code' => $data['coupon_code'] ?? null]));
-        $invoice = $membership->invoice;
-
-        if ($invoice->isOpen() && $online->available()) {
-            return Inertia::location($online->start($invoice, 'portal')->checkout_url);
+        // The sale happens after the payment (owner's decision, 2026-11-24): online, the renewal is sold when Paymob
+        // confirms the money (MembershipCheckouts); without online payment nothing is sold here — the desk renews it.
+        if (! $online->available()) {
+            throw new BusinessRuleException('renew.offline', __('الدفع الإلكتروني غير متاح حاليًا. جدّدي اشتراكك في الاستقبال.'), 'membership_plan_id');
+        }
+        $checkout = $checkouts->open($member, MembershipPlan::findOrFail($data['membership_plan_id']), Membership::KIND_RENEWAL, 'portal', $data['coupon_code'] ?? null);
+        if ($checkout->status === MembershipCheckout::COMPLETED) {
+            return redirect()->route('portal.dashboard')->with('success', __('تم التجديد.'));
         }
 
-        return redirect()->route('portal.invoices')->with('success', $invoice->isOpen() ? __('تم إنشاء فاتورة التجديد. ادفعها في الاستقبال لتفعيل الاشتراك.') : __('تم التجديد.'));
+        return Inertia::location($online->start($checkout->invoice, 'portal')->checkout_url);
+    }
+
+    /** Pays the member's membership bought online and not paid yet (a payment that failed, or a page she left). */
+    public function payCheckout(Request $request, OnlinePaymentService $online): HttpResponse
+    {
+        $checkout = MembershipCheckouts::openFor($this->member($request));
+        abort_unless($checkout?->invoice !== null, 404);
+
+        return Inertia::location($online->start($checkout->invoice, 'portal')->checkout_url);
     }
 
     public function invoices(Request $request, OnlinePaymentService $online): Response
