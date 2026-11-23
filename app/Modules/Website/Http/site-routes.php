@@ -75,6 +75,7 @@ Route::prefix('portal')->name('portal.')->group(function () {
         Route::post('/renew', [PortalController::class, 'storeRenewal'])->name('renew.store');
         Route::get('/invoices', [PortalController::class, 'invoices'])->name('invoices');
         Route::post('/invoices/{invoice}/pay', [PortalController::class, 'pay'])->name('invoices.pay');
+        Route::post('/checkout/pay', [PortalController::class, 'payCheckout'])->name('checkout.pay');
         Route::get('/classes', [PortalController::class, 'classes'])->name('classes');
         Route::post('/classes/{session}/book', [PortalController::class, 'book'])->name('classes.book');
         Route::post('/bookings/{booking}/cancel', [PortalController::class, 'cancelBooking'])->name('bookings.cancel');

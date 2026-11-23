@@ -73,7 +73,7 @@ export default function Renew({ site, seo, plans, current, hasPending }: Props) 
                         <Button type="submit" size="lg" className="mt-5 w-full rounded-full sm:w-auto" loading={form.processing} disabled={!form.data.membership_plan_id} icon={<CreditCard className="size-4" />}>
                             {t('تأكيد التجديد والدفع')}
                         </Button>
-                        <p className="mt-2 text-xs text-muted">{t('نصدر فاتورة التجديد وننقلك للدفع الإلكتروني إن كان متاحًا، وإلا يمكنك الدفع في الاستقبال.')}</p>
+                        <p className="mt-2 text-xs text-muted">{t('ننقلك للدفع الإلكتروني، ويُصدر التجديد وفاتورته فور تأكيد الدفع. إن لم يكن الدفع الإلكتروني متاحًا فجدّدي في الاستقبال.')}</p>
                     </div>
                 </form>
             )}

@@ -9,6 +9,7 @@ use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\MembershipCheckout;
 use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Messaging\Services\MemberNotifier;
@@ -113,7 +114,10 @@ class PayController extends Controller
             'held' => self::held($intent),
             'amount' => $intent->amount,
             'currency' => $intent->currency,
-            'invoice' => $intent->invoice?->only('number') + ['token' => $intent->invoice?->public_token],
+            // A membership bought online has no invoice until its money is confirmed (MembershipCheckouts): none to show yet.
+            'invoice' => ($intent->invoice?->only('number') ?? []) + ['token' => $intent->invoice?->public_token],
+            // Its attempt failed: tried again from the member's account, where her open checkout is.
+            'checkout' => $intent->invoice_id !== null && MembershipCheckout::where('invoice_id', $intent->invoice_id)->where('status', MembershipCheckout::OPEN)->exists(),
             // A website order's payment returns to the order's own page link.
             'order' => $intent->invoice_id ? Sale::where('invoice_id', $intent->invoice_id)->where('source', Sale::WEBSITE)->value('public_token') : null,
             // A gift's payment (#192) returns to the gift's card, which shows it usable only once the webhook paid it.

@@ -51,10 +51,14 @@ class Invoice extends Model implements BranchOwned
         static::addGlobalScope('issued', fn (Builder $query) => $query->where($query->qualifyColumn('status'), '!=', self::DRAFT));
     }
 
-    /** The drafts (and nothing else), for the editor and the drafts tab. */
+    /**
+     * The drafts (and nothing else), for the editor and the drafts tab. Not the amount of a membership being paid online
+     * (MembershipCheckouts): no one's work in progress — it becomes the sale's invoice when it is paid, or nothing.
+     */
     public static function drafts(): Builder
     {
-        return static::withoutGlobalScope('issued')->where('status', self::DRAFT);
+        return static::withoutGlobalScope('issued')->where('status', self::DRAFT)
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('gym_membership_checkouts')->whereColumn('gym_membership_checkouts.invoice_id', 'invoices.id'));
     }
 
     protected $attributes = ['paid_total' => 0, 'credited_total' => 0, 'discount_total' => 0, 'tax_total' => 0, 'tax_rate' => 0];

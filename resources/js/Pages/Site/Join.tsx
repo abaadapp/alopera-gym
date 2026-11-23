@@ -325,7 +325,7 @@ export default function Join({ site, seo, plans, selected, onlinePayments, payAt
                                     <PayOption on={form.data.pay_now} onClick={() => form.setData('pay_now', true)} icon={<CreditCard className="size-5" />} title={t('دفع إلكتروني الآن')} text={t('بطاقة بنكية عبر بوابة دفع آمنة، ويُفعَّل اشتراكك فور تأكيد الدفع.')} />
                                 )}
                                 {(payAtReception || !onlinePayments) && (
-                                    <PayOption on={!form.data.pay_now} onClick={() => form.setData('pay_now', false)} icon={<Store className="size-5" />} title={t('الدفع في الاستقبال')} text={t('نصدر فاتورتك الآن، ويُفعَّل الاشتراك بعد تأكيد الدفع في النادي.')} />
+                                    <PayOption on={!form.data.pay_now} onClick={() => form.setData('pay_now', false)} icon={<Store className="size-5" />} title={t('الدفع في الاستقبال')} text={t('ننشئ حسابكِ الآن، ويُصدر اشتراككِ وفاتورته حين تدفعين في النادي.')} />
                                 )}
                             </div>
                             <div className="flex items-baseline justify-between gap-3 rounded-2xl bg-white px-5 py-4 ring-1 ring-[rgba(26,22,18,0.08)]">
