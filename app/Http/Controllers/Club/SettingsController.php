@@ -11,9 +11,11 @@ use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
+use App\Modules\Website\Content\ClubContact;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -141,6 +143,8 @@ class SettingsController extends Controller
         $tenant->settings = $settings;
         ImageStore::commit(is_string($oldLogo) && ($logo || $removeLogo) ? $oldLogo : null, $logo ? $settings['logo_file'] : '', fn () => $tenant->save());
         app(AuditLogger::class)->logChanges('settings.club_updated', $tenant, $before, $snapshot(), $logo ? ['logo' => 'uploaded'] : ($removeLogo ? ['logo' => 'official'] : []));
+        // The website shows the same phone, email and address at once (ClubContact).
+        DB::transaction(fn () => ClubContact::toSite($tenant));
 
         return back()->with('success', 'تم حفظ إعدادات النادي.');
     }

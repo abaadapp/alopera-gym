@@ -105,6 +105,8 @@ final class SiteRenderer
                 'preview' => $preview,
                 // Every page's heading words; the legal pages' long text goes only to its own page (legalBody).
                 'pages' => collect(SitePages::of($doc))->map(fn (array $page) => array_diff_key($page, ['body' => true]))->all(),
+                // The featured plan's tag as the owner wrote it in the plans section, the same on every page that lists plans.
+                'featured_label' => (string) (collect($doc['sections'] ?? [])->firstWhere('type', 'plans')['data']['featured_label'] ?? '') ?: null,
             ],
             'page' => ['sections' => $sections],
             'site' => $this->siteInfo($doc),
@@ -200,7 +202,9 @@ final class SiteRenderer
             'whatsapp_number' => ($c['whatsapp'] ?? '') ?: null,
             'contact_email' => ($c['email'] ?? '') ?: $this->tenant->email,
             'address' => ($c['address'] ?? '') ?: $this->tenant->address,
-            'map_url' => ($c['map_url'] ?? '') ?: null,
+            // No map link in «التواصل»: the club's location from its settings, when it has one.
+            'map_url' => ($c['map_url'] ?? '') ?: ($this->tenant->latitude !== null && $this->tenant->longitude !== null
+                ? 'https://www.google.com/maps?q='.(float) $this->tenant->latitude.','.(float) $this->tenant->longitude : null),
             'working_hours' => collect($c['hours'] ?? [])->map(fn ($h) => ['days' => $h['days'], 'hours' => $h['hours']])->values()->all(),
             'social_links' => array_filter($c['social'] ?? []),
         ];

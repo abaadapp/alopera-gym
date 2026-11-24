@@ -142,6 +142,8 @@ final class SiteContent
             'content_published_at' => now(),
             'content_published_by' => $user->id,
         ] + self::legacyColumns($doc))->save();
+        // The club settings say what the site now says: one phone, email and address (ClubContact).
+        ClubContact::toClub($doc, $this->tenants->require());
 
         return $revision;
     }

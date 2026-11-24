@@ -65,7 +65,7 @@ export function ContactPanel({ doc, patch }: { doc: SiteDoc; patch: Patch }) {
     return (
         <div className="grid gap-4 xl:grid-cols-2">
             <Card className="space-y-4">
-                <CardHeader title="بيانات التواصل" subtitle="تظهر في قسم «معلومات التواصل» وفي التذييل، وتُحدَّث في الموقع عند النشر." className="mb-0" />
+                <CardHeader title="بيانات التواصل" subtitle="تظهر في قسم «معلومات التواصل» وفي التذييل، وتُحدَّث في الموقع عند النشر. الهاتف والبريد والعنوان هي نفسها في الإعدادات العامة للنادي: ما تنشره هنا يُحدّثها هناك، والعكس." className="mb-0" />
                 <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="الهاتف" hint={phoneHint} error={errors['contact.phone'] ?? phoneError(c.phone)}>
                         <Input dir="ltr" type="tel" inputMode="tel" maxLength={20} value={c.phone} onChange={(e) => set('phone', e.target.value)} />

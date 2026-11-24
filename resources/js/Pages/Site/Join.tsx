@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useForm } from '@inertiajs/react';
+import { Link, useForm, usePage } from '@inertiajs/react';
 import { ArrowLeft, ArrowRight, Check, CreditCard, Lock, Store } from 'lucide-react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
 import { Diamond, phrase, priceText } from '@/Components/Site/ui';
@@ -10,6 +10,7 @@ import { useCarryOver } from '@/lib/carry-over';
 import { useLocale, useT } from '@/lib/i18n';
 import { planAccess, say } from '@/lib/plan-access';
 import type { PlanData } from './Plans';
+import type { SiteChrome } from '@/types/site';
 
 interface Props {
     site: SiteInfo;
@@ -61,6 +62,7 @@ function FieldRow({ label, error, hint, required, children, className }: { label
  * screen. Nothing is sent before the last step, and the server's checks stay the only ones that count.
  */
 export default function Join({ site, seo, plans, selected, onlinePayments, payAtReception }: Props) {
+    const featuredTag = usePage<{ chrome?: SiteChrome }>().props.chrome?.featured_label;
     const currency = useCurrency();
     const t = useT();
     const english = useLocale() === 'en';
@@ -219,7 +221,7 @@ export default function Join({ site, seo, plans, selected, onlinePayments, payAt
                                                 <span className="flex min-w-0 flex-1 flex-col">
                                                     <span className="flex flex-wrap items-center gap-2">
                                                         <span className="text-lg font-bold">{p.name}</span>
-                                                        {p.is_featured && <span className="rounded-full bg-[var(--site-gold)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--site-ink)]">{t('الأكثر طلبًا')}</span>}
+                                                        {p.is_featured && <span className="rounded-full bg-[var(--site-gold)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--site-ink)]">{featuredTag || t('باقة مميزة')}</span>}
                                                     </span>
                                                     <PlanAccessLine plan={p} t={t} english={english} />
                                                     {p.description && <span className="text-sm text-[#5E5648]">{p.description}</span>}
