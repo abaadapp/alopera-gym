@@ -5,6 +5,9 @@ return [
     // The gym's own rules live in tenants.settings (see Tenant::DEFAULT_SETTINGS).
     'home_club' => env('GYM_HOME_CLUB'),
 
+    // The demo club (php artisan gym:demo): its slug. Empty: none. Its staff use the panel only (see HomeGym).
+    'demo_club' => env('GYM_DEMO_CLUB'),
+
     'devices_rate_limit' => (int) env('DEVICES_RATE_LIMIT_PER_MINUTE', 120),
 
     'backup_disk' => env('BACKUP_DISK', 'local'),

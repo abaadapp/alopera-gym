@@ -33,6 +33,7 @@ Read `docs/ARCHITECTURE.md` first.
 - Printing apps: `mobile/` (Android, iOS); the iOS printing package tests on macOS with `swift test` (see `mobile/README.md`)
 - Style: `vendor/bin/pint`
 - Demo data: `php artisan migrate:fresh --seed` (refuses to run in production)
+- Demo club beside the gym, also on the live server: `GYM_DEMO_CLUB=demo`, then `php artisan gym:demo --email= --password= [--fresh]` (`App\Core\Demo`; panel only, see `HomeGym::allowsPanel`; docs/DEPLOYMENT.md)
 - Release gate: `php artisan platform:preflight` (run by `scripts/deploy.sh`; fails locally by design)
 - Push + version tag: `scripts/release.sh` (`--dry-run` to preview); bumps from conventional-commit subjects, refuses env files and keys
 - Deploy (docs/DEPLOY.md): CI runs on pull requests and ends with a proof of the tested tree; on main, Main Gate checks main's tree is that tree; Deploy Main then runs `scripts/deploy.sh` on the droplet over SSH and tags what it deployed (v0.N). Merging to main IS deploying to production — only with the owner's explicit approval. Going back is by hand: `scripts/rollback-code.sh <commit>`

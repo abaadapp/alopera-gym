@@ -20,7 +20,40 @@ final class HomeGym
             return Tenant::where('slug', $slug)->first();
         }
 
-        return Tenant::query()->count() === 1 ? Tenant::query()->first() : null;
+        $clubs = Tenant::query()->when(self::demoSlug(), fn ($q, $demo) => $q->where('slug', '!=', $demo));
+
+        return $clubs->count() === 1 ? $clubs->first() : null;
+    }
+
+    /** The demo club's web-address part, when one is set and it is not the gym itself. */
+    public static function demoSlug(): ?string
+    {
+        $demo = config('gym.demo_club');
+
+        return $demo && $demo !== config('gym.home_club') ? (string) $demo : null;
+    }
+
+    public static function demo(): ?Tenant
+    {
+        $slug = self::demoSlug();
+
+        return $slug ? Tenant::where('slug', $slug)->first() : null;
+    }
+
+    public static function isDemo(?int $tenantId): bool
+    {
+        if ($tenantId === null || ! ($slug = self::demoSlug())) {
+            return false;
+        }
+        $tenant = Tenant::find($tenantId);
+
+        return $tenant !== null && $tenant->slug === $slug && (bool) $tenant->setting('is_demo', false) && $tenantId !== self::id();
+    }
+
+    /** Whether this club's staff may use the panel: the club served, or the demo club. */
+    public static function allowsPanel(?int $tenantId): bool
+    {
+        return self::allows($tenantId) || self::isDemo($tenantId);
     }
 
     public static function id(): ?int

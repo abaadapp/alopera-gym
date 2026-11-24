@@ -63,6 +63,21 @@ sudo -u deploy php /var/www/alopera-gym/current/artisan platform:preflight
 `GYM_HOME_CLUB=alopera` في `.env` إن أردتِ أن يفتح العنوان المجرد (`/`) موقع النادي دائمًا (يفتحه تلقائيًا ما دام في
 القاعدة نادٍ واحد).
 
+## نادي الديمو (`gym:demo`)
+نادٍ تجريبي منفصل بجانب النادي، مليء ببيانات مصطنعة في كل الشاشات (أعضاء، فواتير، حصص، مبيعات، مخزون، رواتب، وثائق، واتساب…)
+لتجربة النظام كاملًا. يدخل صاحبه من نفس صفحة الدخول ويرى ناديه وحده؛ لا موقع ولا بوابة أعضاء ولا أجهزة ولا مهام مجدولة له،
+فلا تخرج منه أي رسالة واتساب أو تذكير ولا يدخل في النسخ الاحتياطية، ولا يلمس صفوف النادي الحقيقي.
+
+```bash
+# مرة واحدة في /var/www/alopera-gym/shared/.env (و GYM_HOME_CLUB=alopera مضبوط):
+GYM_DEMO_CLUB=demo
+cd /var/www/alopera-gym/current && sudo -u deploy php artisan config:cache
+sudo -u deploy php artisan gym:demo --email=<بريد الديمو> --password='<كلمة المرور>'
+# إعادة بنائه من الصفر (يحذف صفوف نادي الديمو وحده):
+sudo -u deploy php artisan gym:demo --email=<بريد الديمو> --password='<كلمة المرور>' --fresh
+```
+لإيقافه: احذفي `GYM_DEMO_CLUB` ثم `config:cache` — لا يعود حسابه يدخل، وتبقى بياناته دون أن تُخدم.
+
 ## الدومين المخصص للنادي
 1. سجل DNS من نوع A لدومين النادي يشير إلى IP الخادم.
 2. أضيفي الدومين في `server_name` واستخرجي الشهادة بـ certbot.
