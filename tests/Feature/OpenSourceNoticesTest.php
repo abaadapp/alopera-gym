@@ -47,12 +47,10 @@ class OpenSourceNoticesTest extends TestCase
         $this->assertStringContainsString('href="/licenses/index.html"', (string) file_get_contents(resource_path('js/Layouts/AuthLayout.tsx')));
     }
 
-    public function test_every_page_of_the_club_panel_links_the_notices_without_touching_the_sign_in_page(): void
+    public function test_the_librarys_own_code_names_its_licence_and_source(): void
     {
-        // The panel is where libheif-js is loaded (image fields): its sidebar links the notices on every page.
-        $this->assertStringContainsString('href="/licenses/index.html"', (string) file_get_contents(resource_path('js/Components/PanelShell.tsx')));
-        $this->assertStringContainsString('تراخيص البرامج مفتوحة المصدر', (string) file_get_contents(resource_path('js/Components/PanelShell.tsx')));
-        // The library's own chunk names its licence and where its source is (vite.config.js, libheif-notice).
+        // Not in the panel's sidebar (owner's decision, 2026-11-24): the sign-in page links the notices, and the
+        // library's own chunk names its licence and where its source is (vite.config.js, libheif-notice).
         $this->assertStringContainsString('/licenses/index.html', (string) file_get_contents(base_path('vite.config.js')));
     }
 }
