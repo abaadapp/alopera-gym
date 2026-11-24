@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, router } from '@inertiajs/react';
-import { CircleAlert, CircleCheck, Clock, ExternalLink, Eye, History, Mail, MoreHorizontal, RotateCcw, Save, Send } from 'lucide-react';
+import { CircleAlert, CircleCheck, Clock, ExternalLink, Eye, History, Loader2, Mail, MoreHorizontal, MousePointerClick, RotateCcw, Save, Send, SlidersHorizontal } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
+import SectionTabs from '@/Components/SectionTabs';
 import { Badge, Button, Card, Modal, PageHeader, Tabs } from '@/Components/ui';
 import { Dropdown, DropdownItem } from '@/Components/ui/Dropdown';
 import AddSectionModal from '@/Components/SiteBuilder/AddSectionModal';
@@ -13,6 +14,7 @@ import MediaLibrary from '@/Components/SiteBuilder/MediaLibrary';
 import PreviewPanel from '@/Components/SiteBuilder/PreviewPanel';
 import SectionEditor from '@/Components/SiteBuilder/SectionEditor';
 import SectionList from '@/Components/SiteBuilder/SectionList';
+import VisualEditor from '@/Components/SiteBuilder/VisualEditor';
 import { cn } from '@/lib/cn';
 import { date, time } from '@/lib/format';
 import { docKey, duplicateSection, errorIndex, hasErrorUnder, imageUses, mapErrors, move, newSection, normalizeDoc, type BuilderError } from '@/lib/site-builder';
@@ -20,6 +22,16 @@ import type { BuilderProps, SectionDoc, SectionTypeSchema, SiteDoc } from '@/typ
 
 type Tab = 'sections' | 'english' | 'pages' | 'menu' | 'contact' | 'colors' | 'media' | 'seo';
 type Busy = 'save' | 'publish' | 'discard' | null;
+/** «التعديل المرئي» (the site itself, click to edit) or «كل الإعدادات» (the tabs of forms). */
+type Mode = 'visual' | 'settings';
+
+function storedMode(): Mode {
+    try {
+        return window.localStorage.getItem('website-editor-mode') === 'settings' ? 'settings' : 'visual';
+    } catch {
+        return 'visual';
+    }
+}
 
 const TAB_OF_PATH: [string, Tab][] = [
     ['en.', 'english'],
@@ -56,13 +68,25 @@ export default function WebsiteBuilder(props: BuilderProps) {
     const [errors, setErrors] = useState<BuilderError[]>([]);
     const [busy, setBusy] = useState<Busy>(null);
     const [tab, setTab] = useState<Tab>('sections');
-    const [selected, setSelected] = useState<string | null>(props.doc.sections[0]?.id ?? null);
+    // The visual editor opens on its guide (nothing chosen yet); the forms, on the first section.
+    const [selected, setSelected] = useState<string | null>(() => (storedMode() === 'visual' ? null : (props.doc.sections[0]?.id ?? null)));
     const [adding, setAdding] = useState(false);
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewStamp, setPreviewStamp] = useState(() => Date.now());
     const [historyOpen, setHistoryOpen] = useState(false);
     const [confirmPublish, setConfirmPublish] = useState(false);
     const [confirmDiscard, setConfirmDiscard] = useState(false);
+    const [mode, setModeState] = useState<Mode>(storedMode);
+    const setMode = (next: Mode) => {
+        setModeState(next);
+        try {
+            window.localStorage.setItem('website-editor-mode', next);
+        } catch {
+            // A private window: the choice lasts for this visit.
+        }
+    };
+    // Where «أضف قسمًا هنا» puts the new section: after this one (null: at the top); undefined: after the selected one.
+    const [addAfter, setAddAfter] = useState<string | null | undefined>(undefined);
 
     const dirty = docKey(doc) !== baseline;
     const dirtyRef = useRef(dirty);
@@ -72,6 +96,8 @@ export default function WebsiteBuilder(props: BuilderProps) {
     // starting point (taken as it is if nothing was typed meanwhile); after publish/discard/restore it replaces it.
     const adopt = useRef<'save' | 'replace' | null>(null);
     const sent = useRef<string | null>(null);
+    // The document a save was refused for: not sent again by itself until it changes.
+    const refused = useRef<string | null>(null);
 
     useEffect(() => {
         setMedia(props.media);
@@ -89,11 +115,12 @@ export default function WebsiteBuilder(props: BuilderProps) {
         adopt.current = null;
     }, [props.doc, props.version]);
 
-    // The selected section exists (after a delete, a restore, a discard).
+    // The selected section exists (after a delete, a restore, a discard). The visual editor may have none: its guide shows.
     useEffect(() => {
         if (selected && doc.sections.some((s) => s.id === selected)) return;
-        setSelected(doc.sections[0]?.id ?? null);
-    }, [doc.sections, selected]);
+        if (mode === 'visual' && selected === null) return;
+        setSelected(mode === 'visual' ? null : (doc.sections[0]?.id ?? null));
+    }, [doc.sections, selected, mode]);
 
     const errorMap = useMemo(() => errorIndex(errors), [errors]);
     const localUses = useMemo(() => imageUses(doc.sections, schemas), [doc.sections, schemas]);
@@ -105,13 +132,13 @@ export default function WebsiteBuilder(props: BuilderProps) {
 
     /* ---------- server ---------- */
 
-    const save = (then?: (version: number) => void) => {
+    const save = (then?: (version: number) => void, quiet = false) => {
         if (busy) return;
         const snapshot = doc;
         sent.current = docKey(snapshot);
         adopt.current = 'save';
         setBusy('save');
-        router.put(route('club.website.draft.save'), { doc: snapshot as unknown as Record<string, never>, version: props.version }, {
+        router.put(route('club.website.draft.save'), { doc: snapshot as unknown as Record<string, never>, version: props.version, quiet }, {
             preserveScroll: true,
             preserveState: true,
             onSuccess: (page) => {
@@ -120,6 +147,7 @@ export default function WebsiteBuilder(props: BuilderProps) {
             },
             onError: (e) => {
                 adopt.current = null;
+                refused.current = sent.current;
                 setErrors(mapErrors(e as Record<string, string>, snapshot));
             },
             onFinish: () => setBusy((b) => (b === 'save' ? null : b)),
@@ -227,7 +255,9 @@ export default function WebsiteBuilder(props: BuilderProps) {
 
     const add = (type: SectionTypeSchema) => {
         const section = newSection(type, doc.sections.map((s) => s.id));
-        const at = selectedIndex >= 0 ? selectedIndex + 1 : doc.sections.length;
+        const after = addAfter === undefined ? selectedIndex : addAfter === null ? -1 : doc.sections.findIndex((s) => s.id === addAfter);
+        const at = addAfter === undefined && selectedIndex < 0 ? doc.sections.length : after + 1;
+        setAddAfter(undefined);
         setSections((list) => [...list.slice(0, at), section, ...list.slice(at)]);
         setAdding(false);
         select(section.id);
@@ -246,6 +276,28 @@ export default function WebsiteBuilder(props: BuilderProps) {
         setSections((list) => list.filter((s) => s.id !== id));
         if (selected === id) setSelected(doc.sections[i + 1]?.id ?? doc.sections[i - 1]?.id ?? null);
     };
+
+    /* ---------- the visual editor ---------- */
+
+    const op = useCallback((what: 'up' | 'down' | 'toggle' | 'duplicate' | 'delete', id: string) => {
+        if (what === 'duplicate') return duplicate(id);
+        if (what === 'delete') return remove(id);
+        setSections((list) => {
+            const i = list.findIndex((s) => s.id === id);
+            if (i < 0) return list;
+            if (what === 'toggle') return list.map((s) => (s.id === id ? { ...s, visible: !s.visible } : s));
+            const to = what === 'up' ? i - 1 : i + 1;
+            return to < 0 || to >= list.length ? list : move(list, i, to);
+        });
+    }, [doc.sections]);
+
+    // The visual editor keeps the work by itself: saved as a draft a moment after the last change (visitors still see
+    // the published site until «نشر على الموقع»).
+    useEffect(() => {
+        if (mode !== 'visual' || !dirty || busy || refused.current === docKey(doc)) return;
+        const id = window.setTimeout(() => saveRef.current(undefined, true), 2500);
+        return () => window.clearTimeout(id);
+    }, [doc, dirty, busy, mode]);
 
     /* ---------- reading ---------- */
 
@@ -288,6 +340,126 @@ export default function WebsiteBuilder(props: BuilderProps) {
         { key: 'seo', label: 'الإعلان ومحركات البحث', dot: tabErr('seo') ? '#dc2626' : undefined },
     ];
 
+    const errorBox = (
+        <>
+                {errors.length > 0 && (
+                <div role="alert" className="mb-4 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-800">
+                    <p className="flex items-center gap-2 font-semibold"><CircleAlert className="size-4" />لم يُحفظ شيء: صحّح ما يلي ثم حاول مرة أخرى.</p>
+                    <ul className="mt-2 space-y-1">
+                        {errors.map((e) => {
+                            const label = errorLabel(e);
+                            return (
+                                <li key={e.path}>
+                                    <button type="button" className="text-start hover:underline" onClick={() => goTo(e)}>
+                                        {label && <span className="font-medium">{label}: </span>}
+                                        {e.message}
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
+            )}
+
+        </>
+    );
+
+    const modals = (
+        <>
+                <AddSectionModal open={adding} onClose={() => setAdding(false)} schema={schema} onPick={add} />
+            <PreviewPanel open={previewOpen} onClose={() => setPreviewOpen(false)} url={previewUrl} stamp={previewStamp} dirty={dirty} english={tab === 'english'} />
+            <HistoryModal open={historyOpen} onClose={() => setHistoryOpen(false)} revisions={revisions} dirty={dirty} />
+
+            <Modal
+                open={confirmPublish}
+                onClose={() => setConfirmPublish(false)}
+                title="نشر التغييرات على الموقع؟"
+                size="confirm"
+                footer={
+                    <>
+                        <Button variant="outline" onClick={() => setConfirmPublish(false)}>إلغاء</Button>
+                        <Button icon={<Send />} loading={busy !== null} onClick={publish}>نشر الآن</Button>
+                    </>
+                }
+            >
+                <div className="space-y-2 text-sm leading-7 text-[#4b4b4b]">
+                    <p>تظهر النسخة الحالية للزوار على الموقع فورًا.{dirty && ' تُحفظ تعديلاتك أولًا ثم تُنشر.'}</p>
+                    <p>تبقى النسخة المنشورة الآن في «سجل النسخ المنشورة»، ويمكنك الرجوع إليها في أي وقت.</p>
+                </div>
+            </Modal>
+
+            <Modal
+                open={confirmDiscard}
+                onClose={() => setConfirmDiscard(false)}
+                title="تجاهل التعديلات غير المنشورة؟"
+                size="confirm"
+                footer={
+                    <>
+                        <Button variant="outline" onClick={() => setConfirmDiscard(false)}>إلغاء</Button>
+                        <Button variant="danger" loading={busy === 'discard'} onClick={discard}>تجاهل التعديلات</Button>
+                    </>
+                }
+            >
+                <p className="text-sm leading-7 text-[#4b4b4b]">ترجع المسودة إلى النسخة المنشورة الآن على الموقع، وتُحذف كل التعديلات التي لم تُنشر (المحفوظة وغير المحفوظة). لا يتغير ما يراه الزوار.</p>
+            </Modal>
+        </>
+    );
+
+    if (mode === 'visual') {
+        return (
+            <ClubLayout title="إدارة الموقع" fullBleed>
+                <BuilderContext.Provider value={context}>
+                    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 sm:p-4 lg:overflow-hidden">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                            <div className="me-auto min-w-0">
+                                <h1 className="text-[20px] font-bold text-ink">موقعي الإلكتروني</h1>
+                                <p className="flex items-center gap-1.5 text-[13px] text-muted">
+                                    {busy === 'save' ? (
+                                        <><Loader2 className="size-3.5 animate-spin" />جارٍ حفظ تعديلاتك…</>
+                                    ) : dirty ? (
+                                        <><Clock className="size-3.5" />تُحفظ تعديلاتك تلقائيًا…</>
+                                    ) : canPublish ? (
+                                        <><Clock className="size-3.5 text-amber-600" /><span className="text-amber-800">تعديلاتك محفوظة، ولم تظهر للزوار بعد: اضغطي «نشر على الموقع».</span></>
+                                    ) : (
+                                        <><CircleCheck className="size-3.5 text-emerald-600" /><span className="text-emerald-700">الموقع منشور بآخر تعديلاتك.</span></>
+                                    )}
+                                </p>
+                            </div>
+                            {unread > 0 && (
+                                <Link href={route('club.website.messages')} className="flex items-center gap-1.5 text-[13px] font-medium text-ink hover:underline">
+                                    <Mail className="size-4" />رسائل جديدة <span className="num">({unread})</span>
+                                </Link>
+                            )}
+                            <Button variant="outline" icon={<SlidersHorizontal />} onClick={() => setMode('settings')}>كل الإعدادات</Button>
+                            <Button variant="outline" href={siteUrl} external icon={<ExternalLink />}>فتح الموقع</Button>
+                            <Button icon={<Send />} loading={busy === 'publish'} disabled={!canPublish || busy === 'publish' || busy === 'discard'} onClick={() => setConfirmPublish(true)}>نشر على الموقع</Button>
+                            <Dropdown label="خيارات أخرى" trigger={() => <span className="grid size-10 place-items-center rounded-[10px] border border-[#dcdcdc] bg-white text-ink hover:bg-[#fafafa]"><MoreHorizontal className="size-[18px]" /></span>}>
+                                <DropdownItem onClick={() => setHistoryOpen(true)}><History />النسخ المنشورة سابقًا</DropdownItem>
+                                <DropdownItem destructive onClick={() => setConfirmDiscard(true)}><RotateCcw />التراجع عن كل التعديلات غير المنشورة</DropdownItem>
+                            </Dropdown>
+                        </div>
+                        <SectionTabs className="-mt-1" />
+                        {errorBox}
+                        <VisualEditor
+                            doc={doc}
+                            patch={patch}
+                            selected={selected}
+                            onSelect={setSelected}
+                            onSection={(next) => setSections((list) => list.map((s) => (s.id === next.id ? next : s)))}
+                            onOp={op}
+                            onAdd={(after) => {
+                                setAddAfter(after);
+                                setAdding(true);
+                            }}
+                            canvasUrl={`${previewUrl}${previewUrl.includes('?') ? '&' : '?'}canvas=1`}
+                        />
+                    </div>
+                    {modals}
+                </BuilderContext.Provider>
+            </ClubLayout>
+        );
+    }
+
     return (
         <ClubLayout title="إدارة الموقع">
             <BuilderContext.Provider value={context}>
@@ -296,6 +468,7 @@ export default function WebsiteBuilder(props: BuilderProps) {
                     subtitle="عدّل محتوى الموقع الرسمي، واحفظه مسودةً، وعاينه، ثم انشره بضغطة واحدة."
                     actions={
                         <>
+                            <Button variant="outline" icon={<MousePointerClick />} onClick={() => setMode('visual')}>التعديل المرئي</Button>
                             <Button variant="outline" href={siteUrl} external icon={<ExternalLink />}>عرض الموقع</Button>
                             <Button variant="outline" icon={<Save />} loading={busy === 'save'} disabled={!dirty || busy !== null} onClick={() => save()} title="Ctrl+S">حفظ المسودة</Button>
                             <Button variant="outline" icon={<Eye />} disabled={busy !== null} onClick={preview}>معاينة</Button>
@@ -323,24 +496,7 @@ export default function WebsiteBuilder(props: BuilderProps) {
                     )}
                 </div>
 
-                {errors.length > 0 && (
-                    <div role="alert" className="mb-4 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-800">
-                        <p className="flex items-center gap-2 font-semibold"><CircleAlert className="size-4" />لم يُحفظ شيء: صحّح ما يلي ثم حاول مرة أخرى.</p>
-                        <ul className="mt-2 space-y-1">
-                            {errors.map((e) => {
-                                const label = errorLabel(e);
-                                return (
-                                    <li key={e.path}>
-                                        <button type="button" className="text-start hover:underline" onClick={() => goTo(e)}>
-                                            {label && <span className="font-medium">{label}: </span>}
-                                            {e.message}
-                                        </button>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    </div>
-                )}
+                {errorBox}
 
                 <Tabs tabs={tabs} value={tab} onChange={setTab} className="mb-4" />
 
@@ -401,42 +557,7 @@ export default function WebsiteBuilder(props: BuilderProps) {
                     </div>
                 )}
 
-                <AddSectionModal open={adding} onClose={() => setAdding(false)} schema={schema} onPick={add} />
-                <PreviewPanel open={previewOpen} onClose={() => setPreviewOpen(false)} url={previewUrl} stamp={previewStamp} dirty={dirty} english={tab === 'english'} />
-                <HistoryModal open={historyOpen} onClose={() => setHistoryOpen(false)} revisions={revisions} dirty={dirty} />
-
-                <Modal
-                    open={confirmPublish}
-                    onClose={() => setConfirmPublish(false)}
-                    title="نشر التغييرات على الموقع؟"
-                    size="confirm"
-                    footer={
-                        <>
-                            <Button variant="outline" onClick={() => setConfirmPublish(false)}>إلغاء</Button>
-                            <Button icon={<Send />} loading={busy !== null} onClick={publish}>نشر الآن</Button>
-                        </>
-                    }
-                >
-                    <div className="space-y-2 text-sm leading-7 text-[#4b4b4b]">
-                        <p>تظهر النسخة الحالية للزوار على الموقع فورًا.{dirty && ' تُحفظ تعديلاتك أولًا ثم تُنشر.'}</p>
-                        <p>تبقى النسخة المنشورة الآن في «سجل النسخ المنشورة»، ويمكنك الرجوع إليها في أي وقت.</p>
-                    </div>
-                </Modal>
-
-                <Modal
-                    open={confirmDiscard}
-                    onClose={() => setConfirmDiscard(false)}
-                    title="تجاهل التعديلات غير المنشورة؟"
-                    size="confirm"
-                    footer={
-                        <>
-                            <Button variant="outline" onClick={() => setConfirmDiscard(false)}>إلغاء</Button>
-                            <Button variant="danger" loading={busy === 'discard'} onClick={discard}>تجاهل التعديلات</Button>
-                        </>
-                    }
-                >
-                    <p className="text-sm leading-7 text-[#4b4b4b]">ترجع المسودة إلى النسخة المنشورة الآن على الموقع، وتُحذف كل التعديلات التي لم تُنشر (المحفوظة وغير المحفوظة). لا يتغير ما يراه الزوار.</p>
-                </Modal>
+                {modals}
             </BuilderContext.Provider>
         </ClubLayout>
     );

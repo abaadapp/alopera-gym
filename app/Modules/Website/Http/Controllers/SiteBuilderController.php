@@ -15,6 +15,7 @@ use App\Modules\Website\Content\MediaLibrary;
 use App\Modules\Website\Content\SectionTypes;
 use App\Modules\Website\Content\SiteContent;
 use App\Modules\Website\Content\SiteDataHints;
+use App\Modules\Website\Content\SiteDocument;
 use App\Modules\Website\Content\SiteLinks;
 use App\Modules\Website\Content\SitePages;
 use App\Modules\Website\Content\SiteRenderer;
@@ -79,7 +80,8 @@ class SiteBuilderController extends Controller
         $data = $request->validate(['doc' => ['required', 'array'], 'version' => ['required', 'integer', 'min:0']]);
         $this->content->saveDraft($data['doc'], (int) $data['version'], $request->user());
 
-        return back()->with('success', 'حُفظت المسودة. لا يراها الزوار حتى تضغط «نشر التغييرات».');
+        // The visual editor saves by itself as the owner works (quiet): its own line says so, not a message each time.
+        return $request->boolean('quiet') ? back() : back()->with('success', 'حُفظت المسودة. لا يراها الزوار حتى تضغط «نشر التغييرات».');
     }
 
     public function publish(Request $request): RedirectResponse
@@ -119,10 +121,40 @@ class SiteBuilderController extends Controller
         $site = $this->content->site();
         $rendered = $renderer->render($this->content->editable($site), preview: true);
 
-        return $this->page('Site/Home', ['page' => $rendered['page']], null, null, null, null, $rendered)
+        // ?canvas=1: the visual editor's frame — the same page, drawn again from the editor's edits as they are made.
+        $canvas = $request->boolean('canvas') ? ['canvas' => true] : [];
+
+        return $this->page('Site/Home', ['page' => $rendered['page']] + $canvas, null, null, null, null, $rendered)
             ->toResponse($request)
             ->header('X-Robots-Tag', 'noindex, nofollow')
             ->header('Cache-Control', 'no-store, private');
+    }
+
+    /**
+     * The visual editor's canvas (the preview page with ?canvas=1) asks this for the page as the edits open in the
+     * editor would draw it — saved or not, nothing is stored. Checked as a save checks it: a document that would not
+     * be saved is answered with its errors (422) and the canvas keeps the last page it drew.
+     */
+    public function render(Request $request, SiteRenderer $renderer, SiteDataHints $hints): JsonResponse
+    {
+        URL::defaults(['club' => $this->tenants->require()->slug]);
+        if ($request->input('lang') === 'en') {
+            app()->setLocale('en');
+        }
+        $request->validate(['doc' => ['required', 'array']]);
+        try {
+            $doc = SiteDocument::clean($request->input('doc'));
+        } catch (ValidationException $e) {
+            return response()->json(['errors' => $e->errors()], 422);
+        }
+        $rendered = $renderer->render($doc, preview: true);
+
+        return response()->json([
+            'page' => $rendered['page'],
+            'chrome' => $rendered['chrome'],
+            'site' => $rendered['site'],
+            'waiting' => $hints->explain($renderer->waiting($doc), $doc),
+        ])->header('Cache-Control', 'no-store, private');
     }
 
     /** A library image as it was uploaded, for download. */

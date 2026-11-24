@@ -62,13 +62,15 @@ export default function SectionEditor({ section, onChange }: { section: SectionD
             </div>
             <div className="space-y-4 border-t border-line pt-4">
                 {schema.fields.map((f) => (
-                    <FieldInput
-                        key={f.key}
-                        field={f}
-                        value={section.data[f.key]}
-                        path={`${path}.data`}
-                        onChange={(v) => onChange({ ...section, data: { ...section.data, [f.key]: v } })}
-                    />
+                    // data-field: the visual editor brings the field clicked on the page into view here.
+                    <div key={f.key} data-field={f.key} className="transition-shadow">
+                        <FieldInput
+                            field={f}
+                            value={section.data[f.key]}
+                            path={`${path}.data`}
+                            onChange={(v) => onChange({ ...section, data: { ...section.data, [f.key]: v } })}
+                        />
+                    </div>
                 ))}
             </div>
         </Card>

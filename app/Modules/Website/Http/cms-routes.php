@@ -15,6 +15,8 @@ Route::middleware('can:website.manage')->prefix('website')->name('website.')->gr
     Route::post('/discard', [SiteBuilderController::class, 'discard'])->name('discard');
     Route::post('/revisions/{revision}/restore', [SiteBuilderController::class, 'restore'])->whereNumber('revision')->middleware('throttle:20,1')->name('revisions.restore');
     Route::get('/preview', [SiteBuilderController::class, 'preview'])->name('preview');
+    // The visual editor: the page drawn from the edits open in the editor, saved or not, as the owner types.
+    Route::post('/render', [SiteBuilderController::class, 'render'])->middleware('throttle:240,1')->name('render');
     Route::post('/media', [SiteBuilderController::class, 'uploadMedia'])->middleware('throttle:30,1')->name('media.store');
     Route::patch('/media/{media}', [SiteBuilderController::class, 'updateMedia'])->whereNumber('media')->name('media.update');
     Route::delete('/media/{media}', [SiteBuilderController::class, 'deleteMedia'])->whereNumber('media')->name('media.destroy');
