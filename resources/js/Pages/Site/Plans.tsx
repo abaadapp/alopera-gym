@@ -65,6 +65,7 @@ export function PlanCard({
     gift?: { label: string; href: string } | null;
 }) {
     const featured = plan.is_featured;
+    const featuredTag = usePage<{ chrome?: SiteChrome }>().props.chrome?.featured_label;
     const t = useT();
     const en = useLocale() === 'en';
     // What the owner set the plan to give: the door, the classes, or both. Nothing it does not give is ticked.
@@ -83,7 +84,7 @@ export function PlanCard({
         <>
             {featured && (
                 <span className="absolute -top-3 start-6 inline-flex items-center gap-1 rounded-full bg-brand px-3 py-1 text-xs font-medium text-white shadow-md shadow-brand/30">
-                    <Crown className="size-3.5" /> {t('الأكثر طلبًا')}
+                    <Crown className="size-3.5" /> {featuredTag || t('باقة مميزة')}
                 </span>
             )}
             <div className="flex items-start justify-between gap-3">

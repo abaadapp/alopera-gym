@@ -143,13 +143,13 @@ export default function GeneralSettings({ club, rules, governorates, currencies 
                             <Field label="رقم السجل التجاري" hint="يُطبع تحت هوية النادي في الفواتير والسندات" error={errors['rules.cr_number']}>
                                 <Input dir="ltr" value={form.data.rules.cr_number ?? ''} onChange={(e) => setRule('cr_number', e.target.value)} />
                             </Field>
-                            <Field label="البريد الإلكتروني" error={errors.email}>
+                            <Field label="البريد الإلكتروني" hint="يظهر في الموقع الإلكتروني أيضًا ويُحدَّث فيه عند الحفظ" error={errors.email}>
                                 <Input type="email" dir="ltr" value={form.data.email} onChange={(e) => form.setData('email', e.target.value)} />
                             </Field>
-                            <Field label="الهاتف" error={errors.phone}>
+                            <Field label="الهاتف" hint="يظهر في الموقع الإلكتروني أيضًا ويُحدَّث فيه عند الحفظ" error={errors.phone}>
                                 <Input dir="ltr" value={form.data.phone} onChange={(e) => form.setData('phone', e.target.value)} />
                             </Field>
-                            <Field label="العنوان" error={errors.address}>
+                            <Field label="العنوان" hint="يظهر في الموقع الإلكتروني أيضًا ويُحدَّث فيه عند الحفظ" error={errors.address}>
                                 <Input value={form.data.address} onChange={(e) => form.setData('address', e.target.value)} />
                             </Field>
                             <Field label="المدينة / الولاية" error={errors.city}>

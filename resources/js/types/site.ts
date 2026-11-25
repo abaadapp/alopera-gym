@@ -235,6 +235,8 @@ export interface SiteChrome {
     preview: boolean;
     /** Each inner page's title and line under it, as the owner wrote them. */
     pages: Record<PageKey, PageText>;
+    /** The featured plan's tag from the plans section («باقة مميزة» by default). */
+    featured_label?: string | null;
 }
 
 export interface SitePage {
