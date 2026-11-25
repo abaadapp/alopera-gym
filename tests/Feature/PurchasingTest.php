@@ -178,6 +178,12 @@ class PurchasingTest extends TestCase
         $this->actingAs($owner)->get(route('club.purchases.register'))->assertOk()->assertInertia(fn ($page) => $page
             ->has('rows', 2)->where('summary.total', fn ($t) => (float) $t === 30.25)->where('summary.due', fn ($d) => (float) $d === 30.25));
         $this->actingAs($owner)->get(route('club.purchases.suppliers.show', $supplier))->assertOk()->assertInertia(fn ($page) => $page->where('totals.due', fn ($d) => (float) $d === 30.25)->has('products', 1));
+        // Each purchase's page shows its paper beside the details, as a sale shows its invoice.
+        $bill = $this->asTenant($club, fn () => SupplierBill::where('reference', 'A-1')->sole());
+        $this->actingAs($owner)->get(route('club.purchases.bills.show', $bill))->assertOk()->assertInertia(fn ($page) => $page
+            ->where('paper.type', 'supplier_bill')->where('paper.html', fn ($html) => str_contains($html, 'A-1') || str_contains($html, $bill->number)));
+        $this->actingAs($owner)->get(route('club.purchases.show', $order))->assertOk()->assertInertia(fn ($page) => $page
+            ->where('paper.type', 'purchase_order')->where('paper.html', fn ($html) => str_contains($html, $order->number)));
     }
 
     public function test_purchasing_screens_follow_each_steps_permission_and_stay_in_their_club(): void
