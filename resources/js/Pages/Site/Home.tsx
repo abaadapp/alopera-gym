@@ -2,6 +2,7 @@ import { usePage } from '@inertiajs/react';
 import SiteLayout, { type SiteInfo } from '@/Layouts/SiteLayout';
 import { SiteSection } from '@/Components/Site/Sections';
 import { PostTile } from '@/Components/Site/Sections/System';
+import Canvas from '@/Components/SiteBuilder/Canvas';
 import type { SiteChrome, SitePage } from '@/types/site';
 
 export interface PostData {
@@ -25,6 +26,8 @@ interface Props {
     seo: { title: string };
     chrome?: SiteChrome;
     page: SitePage;
+    /** «إدارة الموقع»'s visual editor draws the page in a frame (the preview with ?canvas=1). */
+    canvas?: boolean;
 }
 
 /**
@@ -32,9 +35,11 @@ interface Props {
  * component (Components/Site/Sections). The server already left out hidden and empty sections, and filled the
  * system ones (plans, timetable, trainers…) with the club's live data.
  */
-export default function Home({ site, seo, page }: Props) {
+export default function Home({ site, seo, page, canvas = false }: Props) {
     const chrome = (usePage().props.chrome as SiteChrome | undefined) ?? null;
     const sections = page?.sections ?? [];
+
+    if (canvas) return <Canvas site={site} page={page} chrome={chrome} />;
 
     return (
         <SiteLayout site={site} seoTitle={seo.title}>

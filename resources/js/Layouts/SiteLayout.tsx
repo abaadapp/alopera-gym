@@ -81,10 +81,12 @@ function NavLink({ link, className, onClick }: { link: LinkData; className?: str
  * sends with every site page); <title>/description are rendered on the server from the `seo` prop, and Head here
  * only keeps the title in sync on client navigation.
  */
-export default function SiteLayout({ site, children, seoTitle }: { site: SiteInfo; children: ReactNode; seoTitle?: string }) {
+export default function SiteLayout({ site, children, seoTitle, chrome: given }: { site: SiteInfo; children: ReactNode; seoTitle?: string; chrome?: SiteChrome | null }) {
     const { tenant, member } = useShared();
     const t = useT();
-    const chrome = (usePage().props.chrome as SiteChrome | undefined) ?? null;
+    // The visual editor draws the menu and footer from the edits open in it (given); every other page, from the server's.
+    const served = (usePage().props.chrome as SiteChrome | undefined) ?? null;
+    const chrome = given !== undefined ? given : served;
     const [open, setOpen] = useState(false);
     const cart = useCart();
 
