@@ -45,53 +45,66 @@ final class TenantProvisioner
                 'status' => Tenant::STATUS_ACTIVE,
             ]);
 
-            $this->tenants->run($tenant, function (Tenant $tenant) use ($owner) {
-                Branch::create(['name' => 'الفرع الرئيسي', 'code' => 'MAIN', 'is_main' => true, 'phone' => $tenant->phone]);
-
-                $roles = [];
-                foreach (SystemRoles::definitions() as $key => $definition) {
-                    $roles[$key] = Role::create([
-                        'key' => $key,
-                        'name' => $definition['name'],
-                        'description' => $definition['description'],
-                        'permissions' => $definition['permissions'],
-                        'is_system' => true,
-                        'is_locked' => $key === SystemRoles::OWNER,
-                    ]);
-                }
-
-                $user = new User([
-                    'name' => $owner['name'],
-                    'email' => strtolower($owner['email']),
-                    'phone' => $owner['phone'] ?? null,
-                    'password' => $owner['password'],
-                ]);
-                $user->tenant_id = $tenant->id;
-                $user->role_id = $roles[SystemRoles::OWNER]->id;
-                $user->email_verified_at = now();
-                $user->save();
-
-                SiteSetting::create([
-                    'hero_title' => $tenant->name,
-                    'hero_subtitle' => 'ناديك للياقة والصحة — برامج متنوعة، فريق تدريب محترف، وأجواء تناسبك.',
-                    'hero_cta_label' => 'اشترك الآن',
-                    'about_title' => 'عن النادي',
-                    'contact_phone' => $tenant->phone,
-                    'contact_email' => $tenant->email,
-                    'seo_title' => $tenant->name.' — نادٍ رياضي',
-                    'seo_description' => 'اشترك في '.$tenant->name.': باقات مرنة، حصص جماعية، تدريب شخصي، وحجز أونلاين.',
-                ]);
-
-                foreach (self::EXPENSE_CATEGORIES as $name) {
-                    ExpenseCategory::create(['name' => $name]);
-                }
-
-                TemplateCatalog::seedDefaults();
-            });
+            $this->furnish($tenant, $owner);
 
             $this->audit->log('tenant.provisioned', $tenant, ['owner' => $owner['email']], tenantId: $tenant->id);
 
             return $tenant;
+        });
+    }
+
+    /**
+     * What every club starts with, inside an existing club record: main branch, system roles, owner account, website
+     * defaults, expense categories and WhatsApp template stubs. Also used by gym:demo to rebuild the demo club.
+     *
+     * @param  array{name: string, email: string, password: string, phone?: string|null}  $owner
+     */
+    public function furnish(Tenant $tenant, array $owner): User
+    {
+        return $this->tenants->run($tenant, function (Tenant $tenant) use ($owner) {
+            Branch::create(['name' => 'الفرع الرئيسي', 'code' => 'MAIN', 'is_main' => true, 'phone' => $tenant->phone]);
+
+            $roles = [];
+            foreach (SystemRoles::definitions() as $key => $definition) {
+                $roles[$key] = Role::create([
+                    'key' => $key,
+                    'name' => $definition['name'],
+                    'description' => $definition['description'],
+                    'permissions' => $definition['permissions'],
+                    'is_system' => true,
+                    'is_locked' => $key === SystemRoles::OWNER,
+                ]);
+            }
+
+            $user = new User([
+                'name' => $owner['name'],
+                'email' => strtolower($owner['email']),
+                'phone' => $owner['phone'] ?? null,
+                'password' => $owner['password'],
+            ]);
+            $user->tenant_id = $tenant->id;
+            $user->role_id = $roles[SystemRoles::OWNER]->id;
+            $user->email_verified_at = now();
+            $user->save();
+
+            SiteSetting::create([
+                'hero_title' => $tenant->name,
+                'hero_subtitle' => 'ناديك للياقة والصحة — برامج متنوعة، فريق تدريب محترف، وأجواء تناسبك.',
+                'hero_cta_label' => 'اشترك الآن',
+                'about_title' => 'عن النادي',
+                'contact_phone' => $tenant->phone,
+                'contact_email' => $tenant->email,
+                'seo_title' => $tenant->name.' — نادٍ رياضي',
+                'seo_description' => 'اشترك في '.$tenant->name.': باقات مرنة، حصص جماعية، تدريب شخصي، وحجز أونلاين.',
+            ]);
+
+            foreach (self::EXPENSE_CATEGORIES as $name) {
+                ExpenseCategory::create(['name' => $name]);
+            }
+
+            TemplateCatalog::seedDefaults();
+
+            return $user;
         });
     }
 

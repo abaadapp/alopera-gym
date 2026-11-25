@@ -45,7 +45,7 @@ class LoginController extends Controller
         $user = Auth::guard('web')->user();
         // Only the gym's staff sign in here: an account that belongs to no gym (an old platform account) or to a club
         // record this system does not serve (HomeGym) has no screen.
-        if ($user->tenant_id === null || ! HomeGym::allows($user->tenant_id)) {
+        if ($user->tenant_id === null || ! HomeGym::allowsPanel($user->tenant_id)) {
             Auth::guard('web')->logout();
             throw ValidationException::withMessages(['email' => 'هذا الحساب لا يملك صلاحية الدخول إلى النظام.']);
         }

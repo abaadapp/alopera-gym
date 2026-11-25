@@ -33,7 +33,7 @@ class ResolveTenantFromUser
         // An account that belongs to no gym (an old platform account), or to a club this system does not serve, has no
         // screen here.
         $tenant = $user->tenant_id ? $user->tenant()->first() : null;
-        if (! $tenant || ! HomeGym::allows($tenant->id)) {
+        if (! $tenant || ! HomeGym::allowsPanel($tenant->id)) {
             Auth::guard('web')->logout();
 
             return redirect()->route('login');
