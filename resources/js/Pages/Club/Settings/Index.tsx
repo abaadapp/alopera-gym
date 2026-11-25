@@ -1,4 +1,4 @@
-import { BellRing, Building2, Clock, Database, FileClock, FileText, Landmark, MonitorSmartphone, ScrollText, ShoppingBag, SlidersHorizontal, UserCog, type LucideIcon } from 'lucide-react';
+import { BellRing, Building2, Clock, Database, FileClock, FileText, Landmark, MessageCircle, MonitorSmartphone, ScrollText, ShoppingBag, SlidersHorizontal, UserCog, type LucideIcon } from 'lucide-react';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { NavCard, PageHeader } from '@/Components/ui';
 import { useCan, useShared } from '@/hooks/useShared';
@@ -20,6 +20,7 @@ const SECTIONS: { title: string; items: Entry[] }[] = [
         title: 'الإشعارات',
         items: [
             { title: 'الإشعارات', description: 'تذكيرات انتهاء العضوية والمتابعة وإشعارات الحصص', route: 'club.settings.notifications', permission: 'settings.manage', icon: BellRing },
+            { title: 'رسائل الواتساب', description: 'كل رسالة يرسلها النظام: هدفها ومتى تُرسل ونصها، وتعديله وإرساله إلى Meta للموافقة', route: 'club.settings.whatsapp-messages', permission: 'whatsapp.manage_templates', icon: MessageCircle },
         ],
     },
     {

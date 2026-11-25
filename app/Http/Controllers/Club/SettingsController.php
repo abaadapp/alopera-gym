@@ -27,6 +27,7 @@ class SettingsController extends Controller
     public const HUB_PERMISSIONS = [
         'settings.manage', 'branches.manage', 'users.manage', 'roles.manage',
         'audit.view', 'backups.manage', 'accounting.manage', 'documents.manage', 'pos_devices.manage',
+        'whatsapp.manage_templates',
     ];
 
     private const NOTIFICATION_RULES = ['expiry_reminder_days', 'expired_followup_days', 'notify_class_changes', 'class_reminder_hours', 'dues_reminders_enabled', 'dues_reminder_before_days', 'dues_reminder_overdue_days', 'dues_reminder_max'];

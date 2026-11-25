@@ -17,6 +17,7 @@ Schedule::command('gym:send-reminders --due')->hourly()->withoutOverlapping(55)-
 Schedule::command('finance:remind-dues')->dailyAt('10:30')->withoutOverlapping(120)->onOneServer();
 Schedule::command('gym:class-reminders')->everyFifteenMinutes()->withoutOverlapping(14)->onOneServer();
 Schedule::command('messaging:dispatch-scheduled')->everyMinute()->withoutOverlapping(10)->onOneServer();
+Schedule::command('whatsapp:sync-templates')->everyTenMinutes()->withoutOverlapping(9)->onOneServer();
 Schedule::command('accounting:sync')->dailyAt('02:30')->withoutOverlapping(120)->onOneServer();
 Schedule::command('sales:expire-orders')->everyFiveMinutes()->withoutOverlapping(10)->onOneServer();
 // Bookings left on a cancelled membership (a crash after a cancellation or an upgrade's payment): finished within a minute.

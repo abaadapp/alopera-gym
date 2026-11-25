@@ -22,7 +22,7 @@ export type NavGroup = { sections: NavSection[]; footer?: boolean };
 const REPORT_PERMISSIONS = ['reports.view', 'reports.financial', 'accounting.view', 'dues.view', 'sales.view', 'memberships.view', 'checkin.view', 'staff_attendance.view', 'payroll.reports', 'documents.view'];
 
 /** Settings screens live behind the settings hub; none of them appears in the main menu. */
-const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'accounting.manage', 'documents.manage', 'pos_devices.manage', 'papers.manage'];
+const SETTINGS_PERMISSIONS = ['settings.manage', 'branches.manage', 'users.manage', 'roles.manage', 'audit.view', 'backups.manage', 'accounting.manage', 'documents.manage', 'pos_devices.manage', 'papers.manage', 'whatsapp.manage_templates'];
 
 /*
  * The groups follow the reference panel's rhythm, split by thin rules: the day (dashboard, reception); the members
