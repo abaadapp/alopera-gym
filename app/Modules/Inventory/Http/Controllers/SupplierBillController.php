@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inventory\Http\Controllers;
 
+use App\Core\Papers\Papers;
 use App\Core\Support\Files\SafeFiles;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantContext;
@@ -127,6 +128,8 @@ class SupplierBillController extends Controller
                 ]),
             ],
             'accounts' => request()->user()->can('purchases.pay') ? Account::money()->postable()->whereIn('kind', Account::PAYING_KINDS)->orderBy('code')->get(['id', 'name', 'kind']) : [],
+            // The purchase invoice as it is printed, beside its details (as a sale shows its invoice).
+            'paper' => Papers::for('supplier_bill', $b)->toArray(),
             'can' => ['approve' => request()->user()->can('purchases.approve'), 'pay' => request()->user()->can('purchases.pay')],
         ]);
     }

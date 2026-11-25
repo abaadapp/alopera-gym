@@ -167,6 +167,8 @@ class PurchaseOrderController extends Controller
                     $o->cancelled_at ? ['label' => 'أُلغي'.($o->cancel_reason ? ': '.$o->cancel_reason : ''), 'by' => null, 'at' => $o->cancelled_at->format('Y-m-d H:i')] : null,
                 ])),
             ],
+            // The order as it is printed and sent to the supplier, beside its details (as a sale shows its invoice).
+            'paper' => Papers::for('purchase_order', $o)->toArray(),
             'can' => ['approve' => request()->user()->can('purchases.approve'), 'receive' => request()->user()->can('purchases.receive'), 'manage' => request()->user()->can('purchases.manage')],
         ]);
     }

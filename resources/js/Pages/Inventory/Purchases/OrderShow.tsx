@@ -8,6 +8,7 @@ import { useCurrency, useCan } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
 import { money, number, isoDate } from '@/lib/format';
 import PrintButton from '@/Components/Printing/PrintButton';
+import PaperPanel, { PaperAside, type PaperData } from '@/Components/Papers/PaperPanel';
 
 interface Item { id: number; product: string | null; sku: string | null; quantity: string; received_quantity: string; pending: number; remaining: number; unit: string | null; unit_factor: string; unit_cost: string; line_total: string }
 interface Order {
@@ -22,7 +23,7 @@ interface Order {
 const qty = (v: number | string) => number(v, Number(v) % 1 ? 3 : 0);
 
 /** A purchase order: its lines (ordered, received, waiting for approval, still to come), its receipts and bills, and the next step. */
-export default function OrderShow({ order, can }: { order: Order; can: { approve: boolean; receive: boolean; manage: boolean } }) {
+export default function OrderShow({ order, can, paper }: { order: Order; can: { approve: boolean; receive: boolean; manage: boolean }; paper: PaperData }) {
     const mayPrint = useCan()('papers.print');
     const currency = useCurrency();
     const [receiving, setReceiving] = useState(false);
@@ -45,7 +46,8 @@ export default function OrderShow({ order, can }: { order: Order; can: { approve
             />
             {order.cancel_reason && <Notice tone="gray" className="mb-4">{s === 'cancelled' ? 'سبب الإلغاء' : 'سبب الإغلاق'}: {order.cancel_reason}</Notice>}
 
-            <div className="grid gap-4 lg:grid-cols-[1fr_320px] lg:items-start">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
+            <div className="grid min-w-0 gap-4 lg:grid-cols-[1fr_320px] lg:items-start xl:col-span-3 xl:grid-cols-1">
                 <Card padded={false} className="overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="table-base">
@@ -107,6 +109,10 @@ export default function OrderShow({ order, can }: { order: Order; can: { approve
                         </ol>
                     </Card>
                 </div>
+            </div>
+                <PaperAside className="xl:col-span-2">
+                    <PaperPanel paper={paper} heading="أمر الشراء كما يُطبع" printUrl={route('club.purchases.print', order.id)} pdfUrl={route('club.papers.pdf', { type: 'purchase_order', id: order.id })} />
+                </PaperAside>
             </div>
 
             {receiving && <Receive order={order} canApprove={can.approve} onClose={() => setReceiving(false)} />}

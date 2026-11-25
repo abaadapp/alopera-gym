@@ -10,6 +10,7 @@ import { cn } from '@/lib/cn';
 import { money } from '@/lib/format';
 import { billState, type BillRow } from './Bills';
 import PrintButton from '@/Components/Printing/PrintButton';
+import PaperPanel, { PaperAside, type PaperData } from '@/Components/Papers/PaperPanel';
 
 interface Bill extends BillRow {
     subtotal: string; discount: string; tax: string; notes: string | null; reason: string | null; by: string | null; approver: string | null; approved_at: string | null;
@@ -17,8 +18,11 @@ interface Bill extends BillRow {
     payments: { id: number; number: string; amount: string; reference: string | null; reverse_reason: string | null; paid_on: string; account: string | null; by: string | null; reversed: boolean }[];
 }
 
-/** A supplier bill: its amounts, its order (ordered vs received vs billed), payments and what is still owed. */
-export default function BillShow({ bill, accounts, can }: { bill: Bill; accounts: { id: number; name: string; kind: string }[]; can: { approve: boolean; pay: boolean } }) {
+/**
+ * A supplier bill: its amounts, its order (ordered vs received vs billed), payments and what is still owed — and beside
+ * them the purchase invoice itself, as it is printed (as a sale's page shows its invoice).
+ */
+export default function BillShow({ bill, accounts, can, paper }: { bill: Bill; accounts: { id: number; name: string; kind: string }[]; can: { approve: boolean; pay: boolean }; paper: PaperData }) {
     const mayPrint = useCan()('papers.print');
     const currency = useCurrency();
     const [paying, setPaying] = useState(false);
@@ -42,7 +46,8 @@ export default function BillShow({ bill, accounts, can }: { bill: Bill; accounts
                 </>}
             />
             {bill.reason && <Notice tone="gray" className="mb-4">السبب: {bill.reason}</Notice>}
-            <div className="grid gap-4 lg:grid-cols-[1fr_340px] lg:items-start">
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
+            <div className="grid min-w-0 gap-4 lg:grid-cols-[1fr_340px] lg:items-start xl:col-span-3 xl:grid-cols-1">
                 <Card padded={false} className="overflow-hidden">
                     <div className="p-5 pb-2"><CardHeader title="المدفوعات" className="mb-0" /></div>
                     {bill.payments.length === 0 ? <p className="px-5 pb-5 text-[13px] text-muted">لا مدفوعات بعد.</p> : (
@@ -90,6 +95,10 @@ export default function BillShow({ bill, accounts, can }: { bill: Bill; accounts
                     )}
                     <Card><p className="text-[12px] text-muted">سجّله {bill.by ?? '—'}{bill.approver && <> · اعتمده {bill.approver} في <span className="num">{bill.approved_at}</span></>}. {bill.notes}</p></Card>
                 </div>
+            </div>
+                <PaperAside className="xl:col-span-2">
+                    <PaperPanel paper={paper} heading="فاتورة الشراء" printUrl={route('club.papers.show', { type: 'supplier_bill', id: bill.id, print: 1 })} pdfUrl={route('club.papers.pdf', { type: 'supplier_bill', id: bill.id })} note={bill.has_attachment ? 'ورقة النظام لهذا السند. فاتورة المورد الأصلية في «المرفق».' : undefined} />
+                </PaperAside>
             </div>
             {paying && <PayBill bill={bill} accounts={accounts} onClose={() => setPaying(false)} />}
             <ReasonDialog open={closing !== null} title={closing === 'void' ? 'إلغاء السند المعتمد' : 'رفض السند'} message={closing === 'void' ? 'يُعكس قيد الالتزام، ويبقى السند ملغى في السجل.' : undefined} confirm={closing === 'void' ? 'إلغاء السند' : 'رفض'} url={route('club.purchases.bills.decide', { supplierBill: bill.id, decision: closing ?? 'reject' })} onClose={() => setClosing(null)} />
