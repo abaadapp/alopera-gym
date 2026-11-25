@@ -52,7 +52,6 @@ use App\Modules\Inventory\Services\PosService;
 use App\Modules\Inventory\Services\PurchaseService;
 use App\Modules\Inventory\Services\StockService;
 use App\Modules\Inventory\Services\SupplierBillService;
-use App\Modules\Inventory\Services\SupplyService;
 use App\Modules\Inventory\Services\TransferService;
 use App\Modules\Messaging\Models\AutoReply;
 use App\Modules\Messaging\Models\Campaign;
@@ -60,7 +59,6 @@ use App\Modules\Messaging\Models\Conversation;
 use App\Modules\Messaging\Models\Message;
 use App\Modules\Messaging\Models\MessageTemplate;
 use App\Modules\Messaging\Services\TemplateCatalog;
-use App\Modules\Payments\Services\PaymentLinks;
 use App\Modules\Payroll\Models\Employee;
 use App\Modules\Payroll\Models\JobTitle;
 use App\Modules\Payroll\Services\PayrollService;
@@ -128,12 +126,18 @@ final class DemoClubBuilder
     /** @var list<Member> */
     private array $members = [];
 
+    /** The gym's setup was copied in first (DemoMirror): its plans, programs, products and website are used as they are. */
+    private bool $copied = false;
+
+    private bool $welcome = false;
+
     public function __construct(private readonly TenantContext $tenants) {}
 
     /** @return array<string, string> what each part made, or why it was skipped */
-    public function build(Tenant $club, User $owner, int $members = 240): array
+    public function build(Tenant $club, User $owner, int $members = 240, bool $copiedFromGym = false): array
     {
         $this->owner = $owner;
+        $this->copied = $copiedFromGym;
         $this->days = $members >= 100 ? 60 : 14;
         mt_srand(2026);
         $this->phone = 0;
@@ -164,7 +168,6 @@ final class DemoClubBuilder
                 $this->part('expenses', fn () => $this->expenses());
                 $this->part('cash shifts', fn () => $this->cashShifts());
                 $this->part('credit notes', fn () => $this->creditNotes());
-                $this->part('payment links', fn () => $this->paymentLinks());
                 $this->part('gifts', fn () => $this->gifts());
                 $this->part('payroll', fn () => $this->payroll());
                 $this->part('documents', fn () => $this->documents());
@@ -197,7 +200,7 @@ final class DemoClubBuilder
     private function club(): string
     {
         $club = $this->tenants->require();
-        $club->update([
+        $this->copied || $club->update([
             'legal_name' => 'Alopera Demo Fitness LLC', 'address' => 'الخوير، مسقط', 'city' => 'مسقط',
             'settings' => array_replace($club->settings ?? [], ['is_demo' => true, 'vat_rate' => 0, 'invoice_footer' => 'نسخة تجريبية — بيانات غير حقيقية']),
         ]);
@@ -251,6 +254,10 @@ final class DemoClubBuilder
 
     private function programs(): string
     {
+        if ($this->programs = $this->reuse(Program::where('is_active', true)->orderBy('sort')->orderBy('id')->get()->all(),
+            ['zumba', 'pilates', 'yoga', 'strength', 'hiit', 'stretch', 'kickbox', 'aqua', 'spin'])) {
+            return count(array_unique(array_map(fn ($p) => $p->id, $this->programs))).' programs (the gym\'s)';
+        }
         $rows = [
             'zumba' => ['زومبا', '#db2777', 'class', 'all', 'رقص لاتيني ممتع يحرق السعرات ويرفع الطاقة.', 50, 20],
             'pilates' => ['بيلاتس', '#7c3aed', 'class', 'all', 'تقوية عضلات الجذع وتحسين القوام والمرونة.', 55, 12],
@@ -299,6 +306,10 @@ final class DemoClubBuilder
 
     private function plans(): string
     {
+        if ($this->plans = $this->reuse(MembershipPlan::where('is_active', true)->orderBy('sort')->orderBy('id')->get()->all(),
+            ['monthly', 'quarter', 'semi', 'yearly', 'classes12', 'gym', 'student'])) {
+            return count(array_unique(array_map(fn ($p) => $p->id, $this->plans))).' plans (the gym\'s)';
+        }
         $rows = [
             'monthly' => ['الشهرية', 'combo', 1, 'month', 25, 5, null, true, 7, 1, false, ['دخول الصالة الرياضية', 'كل الحصص الجماعية', 'تقييم لياقة مجاني']],
             'quarter' => ['ربع سنوية', 'combo', 3, 'month', 65, 5, null, true, 14, 2, true, ['دخول الصالة الرياضية', 'كل الحصص الجماعية', 'تجميد حتى 14 يومًا', 'خصم 10% على التدريب الشخصي']],
@@ -327,17 +338,57 @@ final class DemoClubBuilder
 
     private function couponsAndPackages(): string
     {
+        $made = [];
+        if (! Coupon::exists()) {
+            $this->madeUpCoupons();
+            $made[] = '4 coupons';
+        }
+        if (! PtPackage::exists()) {
+            $this->madeUpPackages();
+            $made[] = '4 PT packages';
+        }
+
+        return $made === [] ? 'the gym\'s coupons and PT packages' : implode(', ', $made);
+    }
+
+    private function madeUpCoupons(): void
+    {
         Coupon::create(['code' => 'WELCOME10', 'description' => 'خصم 10% للأعضاء الجدد', 'type' => 'percent', 'value' => 10, 'per_member_limit' => 1]);
         Coupon::create(['code' => 'SUMMER5', 'description' => 'خصم 5 ريال على الربع سنوية', 'type' => 'fixed', 'value' => 5, 'plan_ids' => [$this->plans['quarter']->id], 'valid_until' => today()->addMonths(2), 'max_uses' => 100]);
         Coupon::create(['code' => 'FRIEND15', 'description' => 'خصم 15% عند دعوة صديقة', 'type' => 'percent', 'value' => 15, 'max_uses' => 50]);
         Coupon::create(['code' => 'EID2026', 'description' => 'عرض العيد — منتهي', 'type' => 'fixed', 'value' => 8, 'valid_until' => today()->subMonth(), 'max_uses' => 30]);
+    }
 
+    private function madeUpPackages(): void
+    {
+        $trainer = $this->trainers[3] ?? $this->trainers[0] ?? null;
         PtPackage::create(['name' => '4 جلسات تدريب شخصي', 'sessions_count' => 4, 'price' => 60, 'validity_days' => 30, 'description' => 'بداية مثالية مع خطة تمارين وتغذية.']);
         PtPackage::create(['name' => '8 جلسات تدريب شخصي', 'sessions_count' => 8, 'price' => 110, 'validity_days' => 60, 'description' => 'الأكثر طلبًا — متابعة أسبوعية مرتين.']);
-        PtPackage::create(['name' => '12 جلسة مع الكوتش شهد', 'sessions_count' => 12, 'price' => 150, 'validity_days' => 90, 'trainer_id' => $this->trainers[3]->id]);
+        PtPackage::create(['name' => '12 جلسة مع الكوتش شهد', 'sessions_count' => 12, 'price' => 150, 'validity_days' => 90, 'trainer_id' => $trainer?->id]);
         PtPackage::create(['name' => '20 جلسة — برنامج التحول', 'sessions_count' => 20, 'price' => 230, 'validity_days' => 120, 'description' => 'برنامج متكامل لثلاثة أشهر.']);
+    }
 
-        return '4 coupons, 4 PT packages';
+    /**
+     * The gym's rows under the demo's names (monthly, yoga…), in turn, so the rest of the build works on whatever the
+     * gym sells; nothing when the gym has none (the made-up catalogue is used).
+     *
+     * @template T
+     *
+     * @param  list<T>  $rows
+     * @param  list<string>  $names
+     * @return array<string, T>
+     */
+    private function reuse(array $rows, array $names): array
+    {
+        if (! $this->copied || $rows === []) {
+            return [];
+        }
+        $out = [];
+        foreach ($names as $i => $name) {
+            $out[$name] = $rows[$i % count($rows)];
+        }
+
+        return $out;
     }
 
     private function timetable(): string
@@ -356,7 +407,7 @@ final class DemoClubBuilder
             $p = $this->programs[$program];
             $row = [
                 'program_id' => $p->id, 'trainer_id' => $this->trainers[$trainer]->id, 'weekday' => $day, 'starts_at' => $time,
-                'duration_minutes' => $p->duration_minutes, 'capacity' => $p->default_capacity,
+                'duration_minutes' => $p->duration_minutes ?: 60, 'capacity' => $p->default_capacity ?: 15,
                 'room' => match ($program) {
                     'strength' => 'صالة الأوزان', 'aqua' => 'المسبح', 'spin' => 'قاعة الدراجات', default => 'الاستوديو'
                 },
@@ -377,7 +428,10 @@ final class DemoClubBuilder
     {
         // Templates and keyword replies only. No WhatsApp integration is set: the demo club never sends anything.
         TemplateCatalog::seedDefaults(approved: true);
-        MessageTemplate::query()->update(['status' => 'approved']);
+        $this->copied || MessageTemplate::query()->update(['status' => 'approved']);
+        if (AutoReply::exists()) {
+            return MessageTemplate::count().' templates, the gym\'s auto replies';
+        }
         foreach ([
             ['الأسعار', 'أهلًا بك! أسعار باقاتنا هنا: الموقع ← الباقات. يسعدنا خدمتك!'],
             ['الدوام', 'أوقات العمل: السبت–الخميس 6 صباحًا – 11 مساءً، الجمعة 4 – 10 مساءً.'],
@@ -390,7 +444,7 @@ final class DemoClubBuilder
         return MessageTemplate::count().' templates, 4 auto replies';
     }
 
-    private function website(): string
+    private function madeUpSite(): void
     {
         SiteSetting::query()->update([
             'hero_title' => 'قوتك تبدأ هنا',
@@ -416,6 +470,11 @@ final class DemoClubBuilder
             SitePost::create(['type' => $type, 'title' => $title, 'slug' => $slug, 'excerpt' => $excerpt, 'body' => $excerpt, 'is_published' => true, 'published_at' => now()->subDays($ago), 'ends_on' => $ends]);
         }
         SitePost::create(['type' => 'news', 'title' => 'مسودة: جدول رمضان', 'slug' => 'ramadan-draft', 'excerpt' => 'لم يُنشر بعد.', 'body' => 'جدول الحصص في رمضان.', 'is_published' => false]);
+    }
+
+    private function website(): string
+    {
+        $this->copied ? null : $this->madeUpSite();
 
         $messages = [
             ['سارة', 'استفسار عن الأسعار', 'كم سعر الاشتراك الشهري؟ وهل يوجد خصم للطالبات؟', 'new'],
@@ -433,7 +492,7 @@ final class DemoClubBuilder
                 'status' => in_array($status, ['new', 'read', 'replied'], true) ? $status : 'new', 'created_at' => $at, 'updated_at' => $at]);
         }
 
-        return '6 posts, '.count($messages).' contact messages';
+        return ($this->copied ? 'the gym\'s website, ' : '6 posts, ').count($messages).' contact messages';
     }
 
     private function inventory(): string
@@ -452,7 +511,14 @@ final class DemoClubBuilder
         ];
 
         $byProduct = [];
-        foreach ($rows as $i => [$name, $price, $cost, $cat, $supplier]) {
+        $theirs = $this->copied ? Product::where('is_active', true)->orderBy('id')->get() : collect();
+        foreach ($theirs as $i => $p) {
+            $this->products[] = $p;
+            if ($p->track_stock ?? true) {
+                $byProduct[$i % 3][] = ['product_id' => $p->id, 'quantity' => 60, 'unit_cost' => (float) ($p->cost ?: round((float) $p->price * 0.55, 3))];
+            }
+        }
+        foreach ($theirs->isEmpty() ? $rows : [] as $i => [$name, $price, $cost, $cat, $supplier]) {
             $p = new Product(['name' => $name, 'price' => $price, 'sku' => 'DEM-'.str_pad((string) ($i + 1), 3, '0', STR_PAD_LEFT), 'reorder_level' => 5]);
             $p->product_category_id = ProductCategory::firstOrCreate(['name' => $cat])->id;
             $p->save();
@@ -462,6 +528,7 @@ final class DemoClubBuilder
         }
 
         $purchases = app(PurchaseService::class);
+        ksort($byProduct);
         foreach ($byProduct as $supplier => $items) {
             $this->travel(today()->subDays(75 - $supplier * 5)->setTime(11, 0), function () use ($purchases, $supplier, $items) {
                 $po = $purchases->approve($purchases->create($this->suppliers[$supplier], $items));
@@ -469,12 +536,11 @@ final class DemoClubBuilder
             });
         }
 
-        // A second round for the drinks a month later, and one order still waiting for approval.
-        $this->travel(today()->subDays(30)->setTime(10, 0), function () use ($purchases, $byProduct) {
+        // A second round for the drinks a month later. No order left waiting: everything ordered was received.
+        isset($byProduct[1]) && $this->travel(today()->subDays(30)->setTime(10, 0), function () use ($purchases, $byProduct) {
             $po = $purchases->approve($purchases->create($this->suppliers[1], array_map(fn ($l) => ['quantity' => 40] + $l, $byProduct[1])));
             $purchases->receive($po, $po->items()->get()->mapWithKeys(fn ($item) => [$item->id => ['quantity' => $item->quantity]])->all(), approveNow: true);
         });
-        $purchases->create($this->suppliers[0], array_map(fn ($l) => ['quantity' => 20] + $l, array_slice($byProduct[0], 0, 4)));
 
         return count($this->products).' products, 3 suppliers, '.PurchaseOrder::count().' purchase orders';
     }
@@ -482,11 +548,13 @@ final class DemoClubBuilder
     private function members(int $count): string
     {
         $memberService = app(MemberService::class);
+        $this->welcome = Coupon::where('code', 'WELCOME10')->where('is_active', true)->exists();
         $memberships = app(MembershipService::class);
         $payments = app(PaymentService::class);
         $today = CarbonImmutable::today();
 
-        $mix = ['active' => 50, 'expiring' => 8, 'expired' => 14, 'renewed' => 10, 'frozen' => 3, 'pending' => 6, 'partial' => 6, 'lead' => 3];
+        // Every sale paid in full on the spot: the gym records nothing before payment, so no waiting or part-paid membership.
+        $mix = ['active' => 60, 'expiring' => 8, 'expired' => 16, 'renewed' => 10, 'frozen' => 3, 'lead' => 3];
         $scenarios = [];
         foreach ($mix as $scenario => $share) {
             $scenarios = array_merge($scenarios, array_fill(0, (int) round($count * $share / 100), $scenario));
@@ -519,16 +587,8 @@ final class DemoClubBuilder
                 if ($scenario === 'lead') {
                     return $member;
                 }
-                $membership = $memberships->sell($member, $plan, $i % 9 === 0 && $scenario === 'active' ? ['coupon_code' => 'WELCOME10'] : []);
+                $membership = $memberships->sell($member, $plan, $i % 9 === 0 && $scenario === 'active' && $this->welcome ? ['coupon_code' => 'WELCOME10'] : []);
                 $invoice = $membership->invoice()->first();
-                if ($scenario === 'pending') {
-                    return $member;
-                }
-                if ($scenario === 'partial') {
-                    $payments->record($invoice, round((float) $invoice->total / 2, 3), 'cash');
-
-                    return $member;
-                }
                 $method = ['cash', 'cash', 'card', 'bank_transfer'][$i % 4];
                 $payment = $payments->record($invoice, $invoice->total, $method, ['reference' => $method === 'card' ? 'POS-'.mt_rand(100000, 999999) : null]);
                 if ($method === 'bank_transfer') {
@@ -659,9 +719,7 @@ final class DemoClubBuilder
 
             $sub = $this->travel($soldAt, function () use ($pt, $payments, $member, $package, $trainer, $k) {
                 $sub = $pt->sell($member, $package, $trainer);
-                if ($k % 5 !== 4) {
-                    $payments->record($sub->invoice()->first(), $sub->price, $k % 2 ? 'card' : 'cash', ['reference' => $k % 2 ? 'POS-'.mt_rand(100000, 999999) : null]);
-                }
+                $payments->record($sub->invoice()->first(), $sub->price, $k % 2 ? 'card' : 'cash', ['reference' => $k % 2 ? 'POS-'.mt_rand(100000, 999999) : null]);
 
                 return $sub->fresh();
             });
@@ -711,7 +769,7 @@ final class DemoClubBuilder
                 $this->travel(now()->subDays($d)->setTime(mt_rand(8, 21), mt_rand(0, 59)), function () use ($pos, $stock, &$n) {
                     $shelf = $stock->quantities();
                     $items = collect($this->products)->shuffle()->take(mt_rand(1, 3))
-                        ->map(fn ($p) => ['product_id' => $p->id, 'quantity' => min(mt_rand(1, 3), (int) ($shelf[$p->id] ?? 0))])
+                        ->map(fn ($p) => ['product_id' => $p->id, 'quantity' => ($p->track_stock ?? true) ? min(mt_rand(1, 3), (int) ($shelf[$p->id] ?? 0)) : mt_rand(1, 3)])
                         ->where('quantity', '>', 0)->values()->all();
                     if ($items !== []) {
                         $pos->checkout($items, mt_rand(0, 2) ? 'cash' : 'card', mt_rand(0, 1) ? $this->members[array_rand($this->members)] : null);
@@ -739,12 +797,7 @@ final class DemoClubBuilder
             $transfers->receive($t->fresh());
         });
         $this->travel(today()->subDays(4)->setTime(10, 0), fn () => $transfers->create($main, $second, $tracked->slice(5, 3)->map(fn ($p) => ['product_id' => $p->id, 'quantity' => 4])->all(), 'دفعة ثانية', direct: true));
-        $transfers->create($main, $second, $tracked->slice(8, 2)->map(fn ($p) => ['product_id' => $p->id, 'quantity' => 3])->all(), 'بانتظار الموافقة');
-        $done[] = '3 transfers';
-
-        $supply = app(SupplyService::class);
-        $supply->create($second, $tracked->take(3)->map(fn ($p) => ['product_id' => $p->id, 'quantity' => 10])->all(), 'نفاد سريع في العذيبة', today()->addDays(5)->toDateString());
-        $done[] = '1 supply request';
+        $done[] = '2 transfers';
 
         $inventory = app(InventoryService::class);
         $this->travel(today()->subDays(15)->setTime(22, 0), function () use ($inventory, $main) {
@@ -755,10 +808,9 @@ final class DemoClubBuilder
             }
             $inventory->approveCount($inventory->saveCounts($count, $counts));
         });
-        $inventory->startCount($second, [], 'جرد أسبوعي — مسودة');
-        $done[] = '2 stock counts';
+        $done[] = '1 stock count';
 
-        $first = $this->products[0];
+        $first = $tracked->first() ?? $this->products[0];
         $inventory->adjust($first, $main, -2, 'damaged', 'عبوات تالفة');
         $done[] = '1 adjustment';
 
@@ -779,10 +831,8 @@ final class DemoClubBuilder
                 'subtotal' => round($total, 3), 'discount' => 0, 'tax' => 0, 'purchase_order_id' => $order->id,
             ])));
             $n++;
-            if ($k < count($orders) - 1) {
-                $paidOn = $issued->addDays(10);
-                $this->travel($paidOn->setTime(12, 0), fn () => $bills->pay($bill, $bank, $k === 0 ? round($total / 2, 3) : $bill->total, $paidOn->toDateString(), 'TRF-'.(5500 + $k)));
-            }
+            $paidOn = $issued->addDays(10);
+            $this->travel($paidOn->setTime(12, 0), fn () => $bills->pay($bill, $bank, $bill->total, $paidOn->toDateString(), 'TRF-'.(5500 + $k)));
         }
 
         return $n.' supplier bills';
@@ -847,21 +897,6 @@ final class DemoClubBuilder
         return $n.' credit notes';
     }
 
-    private function paymentLinks(): string
-    {
-        $links = app(PaymentLinks::class);
-        $n = 0;
-        foreach (Invoice::whereIn('status', ['issued', 'partially_paid', 'unpaid', 'open'])->inRandomOrder()->limit(5)->get() as $k => $invoice) {
-            try {
-                DB::transaction(fn () => $links->open($invoice, [3, 7, 30][$k % 3], 'رابط دفع تجريبي', whileOff: true));
-                $n++;
-            } catch (Throwable) {
-            }
-        }
-
-        return $n.' payment links (the demo club has no gateway: nobody can pay them)';
-    }
-
     private function gifts(): string
     {
         $gifts = app(GiftService::class);
@@ -869,7 +904,7 @@ final class DemoClubBuilder
         $rows = [
             ['أم سارة', 'سارة', 'monthly', true, 'كل عام وأنتِ بخير يا بنتي 🌸'],
             ['ريم', 'نوف', 'quarter', true, 'هدية تخرجك!'],
-            ['خالد', 'منى', 'monthly', false, null],
+            ['خالد', 'منى', 'monthly', true, null],
         ];
         $n = 0;
         foreach ($rows as [$giver, $recipient, $plan, $paid, $message]) {
@@ -910,17 +945,14 @@ final class DemoClubBuilder
         $runs = 0;
         for ($m = 3; $m >= 1; $m--) {
             $month = CarbonImmutable::today()->subMonths($m)->startOfMonth();
-            $this->travel($month->endOfMonth()->setTime(12, 0), function () use ($payroll, $month, $bank, $m) {
+            $this->travel($month->endOfMonth()->setTime(12, 0), function () use ($payroll, $month, $bank) {
                 $run = $payroll->approve($payroll->open($month->format('Y-m')));
-                if ($m > 1) {
-                    $payroll->pay($run->fresh(), $run->items()->pluck('id')->all(), $bank, $month->endOfMonth()->toDateString(), 'SAL-'.$month->format('Ym'));
-                }
+                $payroll->pay($run->fresh(), $run->items()->pluck('id')->all(), $bank, $month->endOfMonth()->toDateString(), 'SAL-'.$month->format('Ym'));
             });
             $runs++;
         }
-        $payroll->open(CarbonImmutable::today()->format('Y-m'));
 
-        return count($rows).' employees, '.($runs + 1).' payroll runs';
+        return count($rows).' employees, '.$runs.' payroll runs, all paid';
     }
 
     private function documents(): string
@@ -992,13 +1024,13 @@ final class DemoClubBuilder
         $threads = [
             [Conversation::NEW, 2, [['in', 'مساء الخير', 14], ['in', 'هل يوجد حصة زومبا يوم الخميس؟', 12]]],
             [Conversation::OPEN, 0, [['in', 'أبغى أجمّد اشتراكي أسبوع، مسافرة', 190], ['out', 'أهلًا بك! تم تسجيل طلب التجميد، يبدأ من الغد لمدة 7 أيام. رحلة سعيدة 🌸', 175]]],
-            [Conversation::PENDING, 0, [['in', 'شكرًا على التذكير، أبغى أجدد بنفس الباقة', 300], ['out', 'تمام، جهزنا لك فاتورة التجديد 👍', 290]]],
+            [Conversation::CLOSED, 0, [['in', 'شكرًا على التذكير، أبغى أجدد بنفس الباقة', 300], ['out', 'تمام، ننتظرك في الاستقبال للتجديد 👍', 290]]],
             [Conversation::NEW, 1, [['in', 'السلام عليكم، كم الأسعار؟', 40]]],
             [Conversation::CLOSED, 0, [['in', 'هل عندكم حصص للمبتدئات؟', 4320], ['out', 'نعم، كل سبت الساعة 6 مساءً.', 4300]]],
             [Conversation::OPEN, 1, [['in', 'نسيت قارورتي في الاستوديو أمس', 95], ['out', 'وجدناها، محفوظة في الاستقبال 😊', 80], ['in', 'شكرًا جزيلًا', 70]]],
             [Conversation::NEW, 3, [['in', 'متى تبدأ حصة البيلاتس؟', 9], ['in', 'وهل أحتاج حجز مسبق؟', 8], ['in', '؟', 5]]],
             [Conversation::CLOSED, 0, [['in', 'أبغى أغير موعد جلستي مع الكوتش شهد', 2880], ['out', 'تم نقلها إلى الأربعاء 6 مساءً', 2860]]],
-            [Conversation::PENDING, 0, [['in', 'كم سعر بروتين واي؟', 600], ['out', '18 ريال للعبوة 1 كغ', 590]]],
+            [Conversation::CLOSED, 0, [['in', 'كم سعر بروتين واي؟', 600], ['out', '18 ريال للعبوة 1 كغ', 590]]],
             [Conversation::OPEN, 0, [['in', 'هل يمكن الدفع بالتحويل البنكي؟', 230], ['out', 'نعم، نرسل لك رقم الحساب الآن', 220]]],
         ];
 
