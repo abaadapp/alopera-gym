@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Core\Backup\TenantTables;
 use App\Core\Demo\DemoClubBuilder;
+use App\Core\Demo\DemoMirror;
 use App\Core\Notifications\StaffNotifier;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\HomeGym;
@@ -33,7 +34,7 @@ class BuildDemoClub extends Command
 
     protected $description = 'Build (or rebuild) the demo club, full of made-up data, beside the gym';
 
-    public function handle(TenantProvisioner $provisioner, DemoClubBuilder $builder): int
+    public function handle(TenantProvisioner $provisioner, DemoClubBuilder $builder, DemoMirror $mirror): int
     {
         $slug = HomeGym::demoSlug();
         if (! $slug) {
@@ -86,6 +87,7 @@ class BuildDemoClub extends Command
             if ($club) {
                 $club->restore();
                 $this->wipe($club);
+                DemoMirror::forget();
             } else {
                 $club = Tenant::create(['name' => 'Alopera Gym — نسخة تجريبية', 'slug' => $slug, 'email' => 'hello@demo.aloperagym.om', 'phone' => '96824000010',
                     'city' => 'مسقط', 'primary_color' => '#9d174d', 'secondary_color' => '#f9a8d4', 'status' => Tenant::STATUS_ACTIVE]);
@@ -100,8 +102,15 @@ class BuildDemoClub extends Command
             app()->forgetInstance($remembered);
         }
 
+        // The gym's own setup first (plans, prices, programs, products, website…), so the demo shows the real catalogue.
+        if ($home) {
+            $this->info("Copying the gym's setup ({$home->slug})…");
+            $mirror->sync($home, $club);
+            $club->refresh();
+        }
+
         $this->info("Filling it with {$members} members and the rest (a few minutes)…");
-        $report = $builder->build($club, $owner, $members);
+        $report = $builder->build($club, $owner, $members, copiedFromGym: (bool) $home);
         $this->table(['Part', 'Result'], collect($report)->map(fn ($v, $k) => [$k, $v])->values()->all());
 
         $skipped = collect($report)->filter(fn ($v) => str_starts_with($v, 'SKIPPED'))->count();
