@@ -8,6 +8,7 @@ use App\Modules\Messaging\Http\Controllers\InvoiceMessageController;
 use App\Modules\Messaging\Http\Controllers\MessageLogController;
 use App\Modules\Messaging\Http\Controllers\ReportController;
 use App\Modules\Messaging\Http\Controllers\TemplateController;
+use App\Modules\Messaging\Http\Controllers\WhatsAppMessagesController;
 use App\Modules\Messaging\Http\Controllers\WhatsAppSettingsController;
 use Illuminate\Support\Facades\Route;
 
@@ -46,6 +47,10 @@ Route::middleware('can:whatsapp.view_reports')->group(function () {
 });
 
 Route::middleware('can:whatsapp.manage_templates')->group(function () {
+    // «الإعدادات ← رسائل الواتساب»: every message, what it is for and when it goes, its text edited and sent to Meta.
+    Route::get('/settings/whatsapp-messages', [WhatsAppMessagesController::class, 'index'])->name('settings.whatsapp-messages');
+    Route::put('/settings/whatsapp-messages/{template}', [WhatsAppMessagesController::class, 'update'])->middleware('throttle:20,1')->name('settings.whatsapp-messages.update');
+    Route::post('/settings/whatsapp-messages/refresh', [WhatsAppMessagesController::class, 'refresh'])->middleware('throttle:20,1')->name('settings.whatsapp-messages.refresh');
     Route::get('/templates', [TemplateController::class, 'index'])->name('templates.index');
     Route::post('/templates', [TemplateController::class, 'store'])->name('templates.store');
     Route::put('/templates/{template}', [TemplateController::class, 'update'])->name('templates.update');

@@ -77,6 +77,8 @@ final class InboundProcessor
                         'history' => $this->history($value, $integration),
                         'smb_app_state_sync' => $this->contacts($value, $integration),
                         'account_update' => $this->accountUpdate($value, $integration),
+                        // Meta approved, refused or paused a message template (MetaTemplates).
+                        'message_template_status_update' => app(MetaTemplates::class)->applyUpdate($value),
                         default => 0,
                     };
                     if ($count === 0 && in_array($field, ['history', 'smb_app_state_sync'], true)) {
@@ -105,7 +107,7 @@ final class InboundProcessor
             if ($phoneNumberId !== '') {
                 return $query->where('public_identifier', $phoneNumberId)->first();
             }
-            if ($field === 'account_update') {
+            if (in_array($field, ['account_update', 'message_template_status_update'], true)) {
                 $waba = (string) (Arr::get($value, 'waba_info.waba_id') ?: $entryId);
 
                 return $waba !== '' ? $query->where('settings->waba_id', $waba)->first() : null;
