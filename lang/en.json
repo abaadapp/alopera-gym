@@ -180,5 +180,6 @@
     "لديكِ صفحة دفع مفتوحة لاشتراك آخر. أكملي الدفع منها، أو انتظري ساعة ثم حاولي مرة أخرى.": "You have a payment page open for another membership. Complete the payment there, or wait an hour and try again.",
     "الدفع الإلكتروني غير متاح حاليًا. جدّدي اشتراكك في الاستقبال.": "Online payment is not available right now. Renew your membership at the reception.",
     "تم إنشاء حسابك. تعذّر فتح صفحة الدفع الآن: أكملي الدفع من حسابك لتفعيل اشتراكك.": "Your account is created. The payment page could not be opened right now: complete the payment from your account to activate your membership.",
-    "تم إنشاء حسابك. ادفعي في الاستقبال ليُفعَّل اشتراكك.": "Your account is created. Pay at the reception to activate your membership."
+    "تم إنشاء حسابك. ادفعي في الاستقبال ليُفعَّل اشتراكك.": "Your account is created. Pay at the reception to activate your membership.",
+    "الدفع": "Payment"
 }

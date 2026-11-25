@@ -25,9 +25,11 @@ class MembershipCheckout extends Model
 
     protected $guarded = ['id', 'tenant_id'];
 
+    protected $hidden = ['token'];
+
     protected function casts(): array
     {
-        return ['completed_at' => 'datetime'];
+        return ['completed_at' => 'datetime', 'options' => 'array'];
     }
 
     public function member(): BelongsTo

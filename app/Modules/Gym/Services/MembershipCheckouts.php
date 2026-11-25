@@ -14,7 +14,9 @@ use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Payments\Models\PaymentIntent;
 use App\Modules\Payments\Models\PaymentReview;
 use App\Modules\Payments\Services\OnlinePaymentService;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * A membership bought online is sold after it is paid, not before (owner's decision, 2026-11-24).
@@ -47,18 +49,20 @@ final class MembershipCheckouts
      * attempt that can no longer take money is abandoned. A choice that costs nothing (a full discount) is sold at once.
      *
      * @param  string  $kind  new (a sign-up) | renewal
-     * @param  string  $channel  website | portal
+     * @param  string  $channel  website | portal | link (reception's payment link: it gets its own address, token)
+     * @param  array{discount?: string|float|null, starts_on?: string|null, notes?: string|null, branch_id?: int|null}  $options
      */
-    public function open(Member $member, MembershipPlan $plan, string $kind, string $channel, ?string $coupon = null): MembershipCheckout
+    public function open(Member $member, MembershipPlan $plan, string $kind, string $channel, ?string $coupon = null, array $options = []): MembershipCheckout
     {
         $coupon = filled($coupon) ? trim((string) $coupon) : null;
+        $options = array_filter($options, fn ($v) => $v !== null && $v !== '');
 
-        return DB::transaction(function () use ($member, $plan, $kind, $channel, $coupon) {
+        return DB::transaction(function () use ($member, $plan, $kind, $channel, $coupon, $options) {
             Member::whereKey($member->id)->lockForUpdate()->first();
 
             foreach (MembershipCheckout::where('member_id', $member->id)->where('status', MembershipCheckout::OPEN)->lockForUpdate()->get() as $earlier) {
                 if (self::mayTakeMoney($earlier)) {
-                    if ($earlier->membership_plan_id === $plan->id && $earlier->kind === $kind && $earlier->coupon_code === $coupon) {
+                    if ($earlier->membership_plan_id === $plan->id && $earlier->kind === $kind && $earlier->coupon_code === $coupon && ($earlier->options ?? []) == $options && $earlier->channel === $channel) {
                         return $earlier;
                     }
                     throw new BusinessRuleException('checkout.open', __('لديكِ صفحة دفع مفتوحة لاشتراك آخر. أكملي الدفع منها، أو انتظري ساعة ثم حاولي مرة أخرى.'), 'membership_plan_id');
@@ -66,12 +70,12 @@ final class MembershipCheckouts
                 $earlier->forceFill(['status' => MembershipCheckout::ABANDONED])->save();
             }
 
-            $lines = $this->memberships->checkoutLines($member, $plan, $kind === Membership::KIND_RENEWAL, $coupon);
-            $draft = $this->invoices->draft($member, $lines, ['type' => 'membership', 'branch_id' => $member->branch_id]);
+            $lines = $this->memberships->checkoutLines($member, $plan, $kind === Membership::KIND_RENEWAL, ['coupon_code' => $coupon] + $options);
+            $draft = $this->invoices->draft($member, $lines, ['type' => 'membership', 'branch_id' => $options['branch_id'] ?? $member->branch_id]);
 
             // Nothing to pay: there is no payment to wait for — sold now, paid on issue (InvoiceService::issue).
             if (Money::isZero($draft->total)) {
-                $membership = $this->sell($member, $plan, $kind, $coupon);
+                $membership = $this->sell($member, $plan, $kind, $coupon, $options);
 
                 return MembershipCheckout::create([
                     'member_id' => $member->id, 'membership_plan_id' => $plan->id, 'kind' => $kind, 'channel' => $channel,
@@ -88,11 +92,26 @@ final class MembershipCheckouts
             $checkout = MembershipCheckout::create([
                 'member_id' => $member->id, 'membership_plan_id' => $plan->id, 'kind' => $kind, 'channel' => $channel,
                 'coupon_code' => $coupon, 'invoice_id' => $draft->id, 'status' => MembershipCheckout::OPEN,
+                'options' => $options ?: null,
+                'token' => $channel === 'link' ? Str::random(48) : null,
+                'created_by' => Auth::guard('web')->id(),
             ]);
             $this->audit->log('membership.checkout_opened', $checkout, ['plan' => $plan->id, 'kind' => $kind, 'channel' => $channel, 'total' => $draft->total]);
 
             return $checkout;
         });
+    }
+
+    /**
+     * Reception withdraws a payment link it sent. Its page stops opening a payment; money already on its way (a page
+     * opened before) is still recorded when Paymob confirms it (complete() does not ask), never lost.
+     */
+    public function cancel(MembershipCheckout $checkout): void
+    {
+        if ($checkout->status === MembershipCheckout::OPEN) {
+            $checkout->forceFill(['status' => MembershipCheckout::ABANDONED])->save();
+            $this->audit->log('membership.checkout_cancelled', $checkout, ['channel' => $checkout->channel]);
+        }
     }
 
     /** The member's open checkout, if any — with its draft (to pay it). */
@@ -125,7 +144,7 @@ final class MembershipCheckouts
         $problem = null;
         try {
             // Its own savepoint: a sale refused here leaves nothing half-made, and the money still gets an invoice below.
-            $membership = DB::transaction(fn () => $this->sell($member, $plan, $checkout->kind, $checkout->coupon_code));
+            $membership = DB::transaction(fn () => $this->sell($member, $plan, $checkout->kind, $checkout->coupon_code, $checkout->options ?? []));
             $invoice = Invoice::whereKey($membership->invoice_id)->firstOrFail();
             if (Money::cmp($invoice->balance(), $intent->amount) !== 0) {
                 $problem = 'checkout_amount_changed';
@@ -175,9 +194,10 @@ final class MembershipCheckouts
     }
 
     /** The sale, as the desk makes it — but announced without the invoice message: it is paid on the spot. */
-    private function sell(Member $member, MembershipPlan $plan, string $kind, ?string $coupon): Membership
+    /** @param array<string, mixed> $options */
+    private function sell(Member $member, MembershipPlan $plan, string $kind, ?string $coupon, array $options = []): Membership
     {
-        $options = array_filter(['coupon_code' => $coupon]) + ['invoice_message' => false];
+        $options = array_filter(['coupon_code' => $coupon]) + $options + ['invoice_message' => false];
 
         return $kind === Membership::KIND_RENEWAL
             ? $this->memberships->renew($member, $plan, $options)

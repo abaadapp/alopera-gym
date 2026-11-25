@@ -126,15 +126,16 @@ final class MembershipService
      * makes (the plan on sale, the member not blocked, no sale already waiting, no overlap, the coupon), then nothing
      * kept — the rows a sale writes are rolled back. For a membership paid online before it is sold (MembershipCheckouts).
      *
+     * @param  array{coupon_code?: string|null, discount?: string|float|null, starts_on?: string|null, notes?: string|null, branch_id?: int|null}  $options
      * @return list<array{description: string, unit_price: string, discount?: string}>
      */
-    public function checkoutLines(Member $member, MembershipPlan $plan, bool $renewal, ?string $coupon = null): array
+    public function checkoutLines(Member $member, MembershipPlan $plan, bool $renewal, array $options = []): array
     {
         [$plan, $kind, $terms] = $renewal ? $this->renewalTerms($member, $plan) : [$plan, Membership::KIND_NEW, []];
 
         DB::beginTransaction();
         try {
-            [, $lines] = $this->pending($member, $plan, $kind, $terms + array_filter(['coupon_code' => $coupon]));
+            [, $lines] = $this->pending($member, $plan, $kind, $terms + array_filter($options, fn ($v) => $v !== null && $v !== ''));
         } finally {
             DB::rollBack();
         }

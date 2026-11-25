@@ -10,6 +10,7 @@ use App\Core\Support\Phone;
 use App\Core\Tenancy\BranchContext;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\InvoiceAttachment;
+use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\MembershipPlan;
@@ -180,6 +181,18 @@ final class ManualInvoices
             $this->keepFiles($invoice, $files);
 
             $method = $payment['method'] ?? 'credit';
+            // A membership or a training package is sold only when it is paid (owner's decision, 2026-11-25): an
+            // invoice with one is paid in full as it is issued, or nothing is issued.
+            if ($made !== [] && $invoice->isOpen()) {
+                // Less than the whole is refused here; more is refused below, as for any invoice (paid_amount).
+                $short = filled($payment['amount'] ?? null) && Money::cmp(Money::normalize($payment['amount']), $invoice->balance()) < 0;
+                if ($method === 'credit' || $short) {
+                    throw new BusinessRuleException('invoice.subscription_unpaid', 'الفاتورة فيها اشتراك أو تدريب شخصي، وهذه تُباع مدفوعة بالكامل: اختاري طريقة الدفع وسجّلي المبلغ كاملًا ('.$invoice->balance().')، أو أرسلي للعضوة رابط دفع من ملفها.', 'payment_method');
+                }
+                if ($method === 'bank_transfer' && ! Auth::guard('web')->user()?->can('payments.confirm')) {
+                    throw new BusinessRuleException('invoice.subscription_transfer', 'البيع بتحويل بنكي يحتاج صلاحية تأكيد التحويلات، لأن المبلغ يجب أن يكون قد وصل الحساب.', 'payment_method');
+                }
+            }
             if ($method !== 'credit' && $invoice->isOpen()) {
                 $amount = filled($payment['amount'] ?? null) ? Money::normalize($payment['amount']) : $invoice->balance();
                 if (Money::cmp($amount, $invoice->balance()) > 0) {
@@ -187,12 +200,16 @@ final class ManualInvoices
                 }
                 if (Money::toMinor($amount) > 0) {
                     $proof = $payment['proof'] ?? null;
-                    $this->payments->record($invoice, $amount, $method, [
+                    $recorded = $this->payments->record($invoice, $amount, $method, [
                         'reference' => $payment['reference'] ?? null,
                         'paid_at' => filled($payment['paid_at'] ?? null) ? $payment['paid_at'] : now(),
                         'proof_path' => $proof instanceof UploadedFile ? $this->store($proof, 'tenants/'.$invoice->tenant_id.'/payment-proofs', 'payment_proof') : null,
                         'notes' => 'عند إصدار الفاتورة',
                     ]);
+                    // A subscription's transfer was seen in the account: confirmed now, so it is sold paid.
+                    if ($made !== [] && $recorded->status === Payment::PENDING) {
+                        $this->payments->confirm($recorded, $payment['reference'] ?? null);
+                    }
                 }
             }
 

@@ -49,6 +49,11 @@ final class PosCheckout
         if (($plans !== [] || $packages !== []) && ! $member) {
             throw new BusinessRuleException('pos.member_required', 'العضوية والتدريب الشخصي يُباعان لعضو: اختر العضو أو سجّله أولًا.', 'member_id');
         }
+        // A membership or a training package is sold only when it is paid (owner's decision, 2026-11-25): at the counter
+        // in cash or by card, never a Paymob page that leaves it waiting. Paying from afar: a payment link from her file.
+        if ($method === 'paymob' && ($plans !== [] || $packages !== [])) {
+            throw new BusinessRuleException('pos.paymob_subscriptions', 'العضوية والتدريب الشخصي يُباعان مدفوعين: ادفعي نقدًا أو بالبطاقة هنا، أو أرسلي للعضوة رابط دفع من ملفها.', 'payment_method');
+        }
         if ($method === 'paymob' && $items !== []) {
             throw new BusinessRuleException('pos.paymob_products', 'المنتجات تُدفع في مكانها نقدًا أو بالبطاقة؛ رابط Paymob للعضويات والتدريب الشخصي.', 'payment_method');
         }
@@ -75,7 +80,8 @@ final class PosCheckout
             }
 
             foreach ($plans as $line) {
-                $membership = $this->memberships->renew($member, MembershipPlan::findOrFail($line['plan_id']), array_filter(['branch_id' => $branch]));
+                // Paid on the spot: no invoice message, only the payment and the activation (PaidSales).
+                $membership = $this->memberships->renew($member, MembershipPlan::findOrFail($line['plan_id']), array_filter(['branch_id' => $branch]) + ['invoice_message' => false]);
                 $documents[] = $this->settle(Invoice::findOrFail($membership->invoice_id), 'membership', $method, $reference, $branch, $note, $device);
             }
 
@@ -160,6 +166,10 @@ final class PosCheckout
             ]);
         }
         $invoice->refresh();
+        // Sold only paid: money that could not be taken in full sells nothing (the whole checkout is rolled back).
+        if (in_array($kind, ['membership', 'pt'], true) && $invoice->isOpen()) {
+            throw new BusinessRuleException('pos.unpaid_subscription', 'لم يكتمل دفع '.($kind === 'membership' ? 'العضوية' : 'التدريب الشخصي').'، فلم يُبَع شيء.', 'payment_method');
+        }
         $slug = $this->tenants->require()->slug;
 
         return [

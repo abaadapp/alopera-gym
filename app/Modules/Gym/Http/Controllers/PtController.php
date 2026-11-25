@@ -2,6 +2,7 @@
 
 namespace App\Modules\Gym\Http\Controllers;
 
+use App\Core\Support\SubmittedOnce;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -10,6 +11,7 @@ use App\Modules\Gym\Models\PtPackage;
 use App\Modules\Gym\Models\PtSession;
 use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Gym\Models\Trainer;
+use App\Modules\Gym\Services\PaidSales;
 use App\Modules\Gym\Services\PtService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -45,10 +47,16 @@ class PtController extends Controller
         $data = $request->validate([
             'pt_package_id' => ['required', TenantRule::exists('gym_pt_packages')],
             'trainer_id' => ['nullable', TenantRule::exists('gym_trainers')],
-        ]);
-        $sub = $this->pt->sell($member, PtPackage::findOrFail($data['pt_package_id']), isset($data['trainer_id']) ? Trainer::find($data['trainer_id']) : null);
+            // Sold only paid (owner's decision, 2026-11-25): the package and its whole payment are one step.
+            'payment_method' => ['required', 'in:'.implode(',', PaidSales::METHODS)],
+            'payment_reference' => ['nullable', 'string', 'max:120', 'required_if:payment_method,card'],
+            'client_key' => SubmittedOnce::RULE,
+        ], ['payment_method.required' => 'اختاري طريقة الدفع.', 'payment_reference.required_if' => 'أدخلي رقم العملية من جهاز الشبكة.']);
+        // One form, one sale: paid on the spot, a double click must not sell (and charge) twice.
+        $invoiceId = SubmittedOnce::run($data['client_key'] ?? null, 'pt-sale:'.$member->id, fn () => app(PaidSales::class)->pt($member, PtPackage::findOrFail($data['pt_package_id']),
+            isset($data['trainer_id']) ? Trainer::find($data['trainer_id']) : null, ['method' => $data['payment_method'], 'reference' => $data['payment_reference'] ?? null])->invoice_id);
 
-        return redirect()->route('club.invoices.show', $sub->invoice_id)->with('success', 'تم إصدار فاتورة التدريب الشخصي. تُفعّل الباقة بعد الدفع.');
+        return redirect()->route('club.invoices.show', $invoiceId)->with('success', 'تم بيع التدريب الشخصي ودفعه وتفعيله.');
     }
 
     public function schedule(Request $request, PtSubscription $subscription): RedirectResponse

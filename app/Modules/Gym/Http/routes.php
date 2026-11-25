@@ -64,6 +64,7 @@ Route::post('/memberships/{membership}/freeze', [MembershipController::class, 'f
 Route::post('/memberships/{membership}/resume', [MembershipController::class, 'resume'])->middleware('can:memberships.freeze')->name('memberships.resume');
 Route::post('/memberships/{membership}/cancel', [MembershipController::class, 'cancel'])->middleware('can:memberships.cancel')->name('memberships.cancel');
 Route::post('/memberships/{membership}/upgrade', [MembershipController::class, 'upgrade'])->middleware('can:memberships.upgrade')->name('memberships.upgrade');
+Route::post('/membership-links/{checkout}/cancel', [MembershipController::class, 'cancelLink'])->middleware('can:memberships.sell')->name('memberships.link.cancel');
 
 Route::resource('plans', PlanController::class)->except(['show', 'create', 'edit'])->middleware('can:plans.manage');
 Route::resource('coupons', CouponController::class)->except(['show', 'create', 'edit'])->middleware('can:plans.manage');

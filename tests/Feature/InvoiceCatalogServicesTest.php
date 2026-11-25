@@ -10,7 +10,6 @@ use App\Modules\Accounting\Models\JournalEntry;
 use App\Modules\Finance\Events\InvoicePaid;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Services\InvoiceService;
-use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
@@ -29,8 +28,9 @@ use Tests\TestCase;
 /**
  * The invoice editor's catalogue (owner's decision, 2026-11-21): products with their add-ons, membership plans, personal
  * training and programs on ONE customer invoice. Prices and names are the catalogue's, kept as they were on issue; a
- * plan and a package are made pending for a member chosen and activated only once that invoice is paid in full, once;
- * voiding it withdraws them and nothing else; a program needs a price and books nothing; only products move stock.
+ * plan and a package are sold to a member chosen only when paid (owner's decision, 2026-11-25): the invoice is paid in
+ * full as it is issued and they are activated at once, once — on credit or part paid nothing is issued; a program needs
+ * a price and books nothing; only products move stock.
  */
 class InvoiceCatalogServicesTest extends TestCase
 {
@@ -65,7 +65,7 @@ class InvoiceCatalogServicesTest extends TestCase
     private function issue(User $by, array $lines, array $over = [])
     {
         return $this->actingAs($by)->post(route('club.invoices.store'), array_replace([
-            'customer_mode' => 'member', 'issue' => 1, 'payment_method' => 'credit',
+            'customer_mode' => 'member', 'issue' => 1, 'payment_method' => 'cash',
             'issue_date' => today()->toDateString(), 'due_date' => today()->addDays(7)->toDateString(),
             'lines' => $lines, 'client_key' => (string) Str::uuid(),
         ], $over));
@@ -81,20 +81,26 @@ class InvoiceCatalogServicesTest extends TestCase
         return array_replace(['item_type' => 'pt', 'item_id' => $pt->id, 'description' => $pt->name, 'quantity' => 1, 'unit_price' => 1, 'discount' => 0], $over);
     }
 
-    public function test_one_invoice_carries_a_product_and_its_addon_a_membership_and_training_activated_only_once_paid_in_full(): void
+    public function test_one_invoice_carries_a_product_and_its_addon_a_membership_and_training_sold_paid_in_full_and_activated_once(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
         $c = $this->catalogue($club);
         $member = $this->member($club);
         $zumba = $this->program($club, ['price' => 3]);
-
-        $this->issue($owner, [
+        $lines = [
             ['product_id' => $c['shake']->id, 'description' => 'Protein shake', 'quantity' => 2, 'unit_price' => 2, 'discount' => 0, 'addons' => [['addon_id' => $c['scoop']->id, 'quantity' => 1]]],
             $this->planLine($c['plan']),
             $this->ptLine($c['pt']),
             ['item_type' => 'program', 'item_id' => $zumba->id, 'description' => 'Zumba', 'quantity' => 2, 'unit_price' => 99, 'discount' => 0],
-        ], ['member_id' => $member->id])->assertSessionHasNoErrors();
+        ];
+
+        // Part paid, or on credit: refused on the payment method, nothing made, nothing off the shelf.
+        $this->issue($owner, $lines, ['member_id' => $member->id, 'paid_amount' => '50'])->assertSessionHasErrors('payment_method');
+        $this->issue($owner, $lines, ['member_id' => $member->id, 'payment_method' => 'credit'])->assertSessionHasErrors('payment_method');
+        $this->assertSame([0, 0, 0, 10.0], $this->asTenant($club, fn () => [Invoice::count(), Membership::count(), PtSubscription::count(), (float) app(StockService::class)->quantities(null)[$c['shake']->id]]));
+
+        $this->issue($owner, $lines, ['member_id' => $member->id])->assertSessionHasNoErrors();
 
         [$invoices, $invoice, $membership, $training] = $this->asTenant($club, fn () => [
             Invoice::count(), Invoice::with('items')->firstOrFail(), Membership::where('member_id', $member->id)->firstOrFail(), PtSubscription::where('member_id', $member->id)->firstOrFail(),
@@ -102,8 +108,10 @@ class InvoiceCatalogServicesTest extends TestCase
         // One invoice for all of it: no invoice of the membership's or the package's own.
         $this->assertSame(1, $invoices);
         $this->assertSame('other', $invoice->type);
-        $this->assertSame([Membership::PENDING, $invoice->id], [$membership->status, $membership->invoice_id]);
-        $this->assertSame([PtSubscription::PENDING, $invoice->id], [$training->status, $training->invoice_id]);
+        // Paid in full on issue: both active at once.
+        $this->assertSame([Invoice::PAID, '81.000'], [$invoice->status, $invoice->paid_total]);
+        $this->assertSame([Membership::ACTIVE, $invoice->id], [$membership->status, $membership->invoice_id]);
+        $this->assertSame([PtSubscription::ACTIVE, $invoice->id], [$training->status, $training->invoice_id]);
         // Every line, priced from the catalogue: 2×2 + 2×0.5 + 25 + 5 (first membership's signup) + 40 + 2×3 = 81.
         $this->assertSame([
             ['Protein shake', '2.000', '2.000'],
@@ -118,12 +126,7 @@ class InvoiceCatalogServicesTest extends TestCase
         $this->assertSame(8.0, $this->asTenant($club, fn () => (float) app(StockService::class)->quantities(null)[$c['shake']->id]));
         $this->assertSame(0, $this->asTenant($club, fn () => Booking::count()));
 
-        // Part paid: nothing activated.
-        $this->asTenant($club, fn () => app(PaymentService::class)->record($invoice->fresh(), '50.000', 'cash'));
-        $this->assertSame([Membership::PENDING, PtSubscription::PENDING], $this->asTenant($club, fn () => [$membership->fresh()->status, $training->fresh()->status]));
-
-        // Paid in full: both, once — the same «paid» again (a repeated Paymob callback) activates nothing twice.
-        $this->asTenant($club, fn () => app(PaymentService::class)->record($invoice->fresh(), '31.000', 'cash'));
+        // Once — the same «paid» again (a repeated Paymob callback) activates nothing twice.
         $this->asTenant($club, fn () => InvoicePaid::dispatch($invoice->fresh()));
         [$m, $t, $count, $activated] = $this->asTenant($club, fn () => [$membership->fresh(), $training->fresh(), Membership::where('member_id', $member->id)->count(), $membership->events()->where('type', 'activated')->count()]);
         $this->assertSame(Membership::ACTIVE, $m->status);
@@ -170,7 +173,7 @@ class InvoiceCatalogServicesTest extends TestCase
         $this->issue($owner, [$this->ptLine($c['pt']), $this->ptLine($c['pt'])], ['member_id' => $member->id])->assertSessionHasErrors('lines.0.item_id');
         $this->issue($owner, [$this->planLine($c['plan'], ['quantity' => 2])], ['member_id' => $member->id])->assertSessionHasErrors('lines.0.quantity');
         // Without the selling permission.
-        $clerk = $this->holding($club, ['invoices.view', 'invoices.manage']);
+        $clerk = $this->holding($club, ['invoices.view', 'invoices.manage', 'payments.record']);
         $this->issue($clerk, [$this->planLine($c['plan'])], ['member_id' => $member->id])->assertSessionHasErrors('lines.0.item_id');
         $this->issue($clerk, [$this->ptLine($c['pt'])], ['member_id' => $member->id])->assertSessionHasErrors('lines.0.item_id');
         $this->actingAs($clerk)->get(route('club.invoices.create'))->assertInertia(fn ($p) => $p->where('services.plans', [])->where('services.pt', []));
@@ -196,7 +199,8 @@ class InvoiceCatalogServicesTest extends TestCase
         $priced = $this->program($club, ['name' => 'Pilates', 'price' => '4.500']);
         $unpriced = $this->program($club, ['name' => 'Yoga', 'category' => 'program']);
         $line = fn ($p, $price) => ['item_type' => 'program', 'item_id' => $p->id, 'description' => $p->name, 'quantity' => 1, 'unit_price' => $price, 'discount' => 0];
-        $walkIn = ['customer_mode' => 'walk_in'];
+        // On credit: a program is no subscription, so it may be owed (and the clerk takes no money).
+        $walkIn = ['customer_mode' => 'walk_in', 'payment_method' => 'credit'];
 
         // Its price, whatever the form says; a walk-in may buy it.
         $this->issue($clerk, [$line($priced, 1)], $walkIn)->assertSessionHasNoErrors();
@@ -211,7 +215,7 @@ class InvoiceCatalogServicesTest extends TestCase
         $this->actingAs($clerk)->get(route('club.invoices.create'))->assertInertia(fn ($p) => $p->where('services.price_programs', false)->has('services.programs', 2));
     }
 
-    public function test_voiding_the_invoice_withdraws_what_waits_on_it_and_not_the_membership_running(): void
+    public function test_a_renewal_sold_on_the_invoice_is_paid_and_scheduled_after_the_running_one_and_the_paid_invoice_is_not_voided(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
@@ -224,16 +228,14 @@ class InvoiceCatalogServicesTest extends TestCase
             $this->planLine($c['plan']), $this->ptLine($c['pt']),
         ], ['member_id' => $member->id])->assertSessionHasNoErrors();
         [$invoice, $renewal, $training] = $this->asTenant($club, fn () => [Invoice::latest('id')->firstOrFail(), Membership::latest('id')->firstOrFail(), PtSubscription::firstOrFail()]);
-        $this->assertSame([Membership::PENDING, $running->ends_on->addDay()->toDateString()], [$renewal->status, $renewal->starts_on->toDateString()]);
+        // Sold paid: the renewal waits for the running membership to end — scheduled, not pending; the package active.
+        $this->assertSame([Invoice::PAID, Membership::SCHEDULED, $running->ends_on->addDay()->toDateString(), PtSubscription::ACTIVE], [$invoice->status, $renewal->status, $renewal->starts_on->toDateString(), $training->status]);
 
-        // The pending membership alone is not withdrawn from its own screen: that would void the shake with it.
-        $this->asTenant($club, fn () => $this->assertThrows(fn () => app(MembershipService::class)->cancel($renewal, 'خطأ'), BusinessRuleException::class));
-        $this->assertSame([Invoice::ISSUED, Membership::PENDING], $this->asTenant($club, fn () => [$invoice->fresh()->status, $renewal->fresh()->status]));
-
-        $this->asTenant($club, fn () => app(InvoiceService::class)->void($invoice->fresh(), 'خطأ في الإصدار'));
+        // Paid, the invoice is not voided (the money is refunded first): nothing withdrawn, the shake still sold.
+        $this->asTenant($club, fn () => $this->assertThrows(fn () => app(InvoiceService::class)->void($invoice->fresh(), 'خطأ في الإصدار'), BusinessRuleException::class));
         $this->assertSame(
-            [Membership::CANCELLED, PtSubscription::CANCELLED, Membership::ACTIVE, 10.0],
-            $this->asTenant($club, fn () => [$renewal->fresh()->status, $training->fresh()->status, $running->fresh()->status, (float) app(StockService::class)->quantities(null)[$c['shake']->id]]),
+            [Invoice::PAID, Membership::SCHEDULED, PtSubscription::ACTIVE, Membership::ACTIVE, 9.0],
+            $this->asTenant($club, fn () => [$invoice->fresh()->status, $renewal->fresh()->status, $training->fresh()->status, $running->fresh()->status, (float) app(StockService::class)->quantities(null)[$c['shake']->id]]),
         );
     }
 

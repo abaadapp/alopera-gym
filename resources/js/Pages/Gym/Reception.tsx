@@ -1,4 +1,5 @@
 import { Link, router, useForm } from '@inertiajs/react';
+import PaymentPicker, { paymentNote, type SaleMethod } from '@/Components/Gym/PaymentPicker';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
     Ban, CalendarPlus, CheckCircle2, CreditCard, DoorOpen, FileText, LogIn, MessageCircle, QrCode, ScanLine, ShoppingBag, UserPlus, UserRound, Wallet, XCircle, CalendarCheck,
@@ -36,6 +37,7 @@ interface PlanItem {
 }
 
 interface Props {
+    onlinePayments: boolean;
     todaySessions: SessionItem[];
     recentCheckins: { id: number; member: string | null; member_id: number | null; result: string; reason: string | null; at: string }[];
     expiringToday: { member_id: number; member: string | null; ends_on: string; plan: string }[];
@@ -69,7 +71,7 @@ async function checkIn(body: { member_id?: number; qr?: string }): Promise<Decis
     return { error: (data && (data.message as string)) || 'تعذّر تسجيل الدخول' };
 }
 
-export default function Reception({ todaySessions, recentCheckins, expiringToday, pendingPayments, plans, stats }: Props) {
+export default function Reception({ todaySessions, recentCheckins, expiringToday, pendingPayments, plans, stats, onlinePayments }: Props) {
     const can = useCan();
     const currency = useCurrency();
     const [selected, setSelected] = useState<MemberHit | null>(null);
@@ -301,16 +303,16 @@ export default function Reception({ todaySessions, recentCheckins, expiringToday
                 </div>
             </div>
 
-            {selected && <QuickSellModal open={sellOpen} onClose={() => setSellOpen(false)} member={selected} plans={plans} />}
+            {selected && <QuickSellModal open={sellOpen} onClose={() => setSellOpen(false)} member={selected} plans={plans} onlinePayments={onlinePayments} />}
             {selected && <QuickBookModal open={bookOpen} onClose={() => setBookOpen(false)} memberId={selected.id} sessions={todaySessions} />}
             <QuickPayModal invoice={payFor} onClose={() => setPayFor(null)} />
         </ClubLayout>
     );
 }
 
-function QuickSellModal({ open, onClose, member, plans }: { open: boolean; onClose: () => void; member: MemberHit; plans: PlanItem[] }) {
+function QuickSellModal({ open, onClose, member, plans, onlinePayments }: { open: boolean; onClose: () => void; member: MemberHit; plans: PlanItem[]; onlinePayments: boolean }) {
     const currency = useCurrency();
-    const form = useForm({ membership_plan_id: '', mode: member.membership ? 'renewal' : 'new', coupon_code: '' });
+    const form = useForm({ membership_plan_id: '', mode: member.membership ? 'renewal' : 'new', coupon_code: '', payment_method: '' as SaleMethod | '', payment_reference: '', client_key: clientKey() });
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -322,7 +324,7 @@ function QuickSellModal({ open, onClose, member, plans }: { open: boolean; onClo
             open={open}
             onClose={onClose}
             title={`${member.membership ? 'تجديد' : 'بيع عضوية'} — ${member.full_name}`}
-            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing} disabled={!form.data.membership_plan_id}>إصدار الفاتورة</Button></>}
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing} disabled={!form.data.membership_plan_id || !form.data.payment_method}>{form.data.payment_method === 'link' ? 'إنشاء رابط الدفع' : 'تسجيل الدفع والتفعيل'}</Button></>}
         >
             <form onSubmit={submit} className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -338,7 +340,15 @@ function QuickSellModal({ open, onClose, member, plans }: { open: boolean; onClo
                 <Field label="كود الخصم" error={form.errors.coupon_code}>
                     <Input dir="ltr" value={form.data.coupon_code} onChange={(e) => form.setData('coupon_code', e.target.value.toUpperCase())} />
                 </Field>
-                <p className="text-xs text-muted">{member.membership ? 'يبدأ التجديد بعد انتهاء العضوية الحالية، فلا يخسر العضو أي يوم.' : 'تبدأ العضوية اليوم.'} تُفعّل بعد اكتمال الدفع، وستنتقل لصفحة الفاتورة للتحصيل.</p>
+                <PaymentPicker
+                    method={form.data.payment_method}
+                    reference={form.data.payment_reference}
+                    onMethod={(m) => form.setData('payment_method', m)}
+                    onReference={(v) => form.setData('payment_reference', v)}
+                    errors={form.errors}
+                    allowLink={onlinePayments}
+                />
+                <p className="text-xs text-muted">{member.membership ? 'يبدأ التجديد بعد انتهاء العضوية الحالية، فلا يخسر العضو أي يوم.' : 'تبدأ العضوية اليوم.'} {paymentNote(form.data.payment_method)}</p>
             </form>
         </Modal>
     );

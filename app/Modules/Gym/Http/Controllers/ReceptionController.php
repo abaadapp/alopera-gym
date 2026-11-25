@@ -10,6 +10,7 @@ use App\Modules\Gym\Models\CheckIn;
 use App\Modules\Gym\Models\ClassSession;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\MembershipPlan;
+use App\Modules\Payments\Services\OnlinePaymentService;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -22,6 +23,8 @@ class ReceptionController extends Controller
     public function index(): Response
     {
         return Inertia::render('Gym/Reception', [
+            // A payment link can be offered only while online payment works (MembershipCheckouts).
+            'onlinePayments' => app(OnlinePaymentService::class)->available(),
             // The branch this desk works in (a user tied to a branch: theirs; else the one shown in the top bar).
             'todaySessions' => BranchContext::scope(ClassSession::with(['program:id,name,color', 'trainer:id,name']))
                 ->whereDate('starts_at', today())->where('status', '!=', ClassSession::CANCELLED)

@@ -27,12 +27,13 @@ class FormsIntegrityTest extends TestCase
     public function test_a_renewal_starts_after_the_current_period_whatever_start_date_the_form_still_carries(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $member = $this->member($club);
         $plan = $this->plan($club, ['duration_value' => 30, 'duration_unit' => 'day']);
         $current = $this->asTenant($club, fn () => $this->activeMembership($club, $member, $plan));
 
         // Switched to «new», a date typed, then back to «renewal»: the hidden date is still sent.
-        $this->actingAs($this->owner($club))->post(route('club.memberships.store', $member), ['membership_plan_id' => $plan->id, 'mode' => 'renewal', 'starts_on' => today()->toDateString()])->assertSessionHasNoErrors();
+        $this->actingAs($this->owner($club))->post(route('club.memberships.store', $member), ['membership_plan_id' => $plan->id, 'mode' => 'renewal', 'starts_on' => today()->toDateString(), 'payment_method' => 'cash'])->assertSessionHasNoErrors();
 
         $renewal = $this->asTenant($club, fn () => Membership::where('member_id', $member->id)->whereKeyNot($current->id)->sole());
         $this->assertTrue($renewal->starts_on->eq($current->fresh()->ends_on->addDay()));

@@ -19,8 +19,13 @@ return new class extends Migration
             $table->foreignId('member_id')->constrained('gym_members')->cascadeOnDelete();
             $table->foreignId('membership_plan_id')->constrained('gym_membership_plans')->restrictOnDelete();
             $table->string('kind', 10); // new | renewal (as MembershipService sells or renews)
-            $table->string('channel', 10); // website | portal
+            $table->string('channel', 10); // website | portal | link (a payment link reception sent)
             $table->string('coupon_code', 40)->nullable();
+            // What reception chose with a payment link: a manual discount, a start date, a note, the branch it sells in.
+            $table->json('options')->nullable();
+            // A payment link's address (link channel): opens the page that pays it, nothing else.
+            $table->string('token', 48)->nullable()->unique();
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             // The unnumbered draft while open; the sale's invoice once completed.
             $table->foreignId('invoice_id')->nullable()->constrained('invoices')->nullOnDelete();
             $table->foreignId('membership_id')->nullable()->constrained('gym_memberships')->nullOnDelete();

@@ -10,6 +10,7 @@ use App\Core\Support\Images\ImageUpload;
 use App\Core\Support\ImageStore;
 use App\Core\Support\Money;
 use App\Core\Tenancy\BranchContext;
+use App\Core\Tenancy\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Modules\Finance\Models\Invoice;
@@ -20,6 +21,7 @@ use App\Modules\Gym\Models\Booking;
 use App\Modules\Gym\Models\CheckIn;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\MembershipCheckout;
 use App\Modules\Gym\Models\MembershipEvent;
 use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Models\PtPackage;
@@ -145,7 +147,18 @@ class MemberController extends Controller
                 ->map(fn (Payment $p) => $p->only('id', 'receipt_number', 'kind', 'method', 'status', 'amount', 'reference') + ['paid_at' => $p->paid_at?->format('Y-m-d H:i'), 'invoice_id' => $p->invoice_id, 'reachable' => $branches->allows($user, $p->owningBranchId())])
             : [];
 
+        // A membership she was sent to pay from afar, not paid yet: not a sale (nothing is owed), just the link to send.
+        $link = MembershipCheckout::with(['plan:id,name', 'invoice'])->where('member_id', $member->id)->where('status', MembershipCheckout::OPEN)->latest('id')->first();
+
         return Inertia::render('Gym/Members/Show', [
+            'paymentLink' => $link && $link->invoice ? [
+                'id' => $link->id,
+                'channel' => $link->channel,
+                'plan' => $link->plan?->name,
+                'amount' => $link->invoice->total,
+                'url' => $link->token ? route('site.checkout.show', ['club' => app(TenantContext::class)->require()->slug, 'token' => $link->token]) : null,
+                'created_at' => $link->created_at->format('Y-m-d H:i'),
+            ] : null,
             'member' => GymPresenter::memberRow($member) + $member->only(
                 'gender', 'national_id', 'nationality', 'address', 'emergency_contact_name', 'emergency_contact_phone',
                 'goals', 'source', 'notes', 'whatsapp_opt_in', 'marketing_opt_in', 'message_language', 'phone_alt', 'branch_id'

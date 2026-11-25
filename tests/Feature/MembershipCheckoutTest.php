@@ -150,7 +150,7 @@ class MembershipCheckoutTest extends TestCase
             $this->assertSame(0, Message::whereIn('template_key', ['payment_failed', 'invoice_issued_membership'])->count());
         });
         $this->get(route('site.pay.return', ['club' => $club->slug, 'reference' => $intent->reference]))
-            ->assertInertia(fn ($p) => $p->where('status', 'failed')->where('checkout', true)->where('invoice.token', null));
+            ->assertInertia(fn ($p) => $p->where('status', 'failed')->where('retry_url', fn ($u) => str_ends_with((string) $u, '/portal'))->where('invoice.token', null));
         $this->get(route('portal.dashboard', ['club' => $club->slug]))
             ->assertInertia(fn ($p) => $p->where('checkout.amount', '25.000')->where('openInvoices', []));
         $again = $this->post(route('portal.checkout.pay', ['club' => $club->slug]));

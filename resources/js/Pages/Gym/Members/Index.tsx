@@ -31,7 +31,6 @@ export function exportFilters(filters: Record<string, string | undefined>): Reco
 const MEMBERSHIP_TABS = [
     { value: 'active', label: 'نشطة', dot: '#059669' },
     { value: 'expiring', label: 'قريبة من الانتهاء', dot: '#d97706' },
-    { value: 'pending', label: 'بانتظار الدفع', dot: '#d97706' },
     { value: 'frozen', label: 'مجمّدة', dot: '#7c3aed' },
     { value: 'expired', label: 'منتهية / بدون عضوية', dot: '#9ca3af' },
 ];

@@ -93,7 +93,7 @@ class PortalAuthController extends Controller
             if (! $payOnline) {
                 // Nothing sold, but the choice is checked as its sale will check it (the plan, the coupon), so a code
                 // that would be refused at the desk is refused now.
-                $memberships->checkoutLines($member, $plan, false, $data['coupon_code'] ?? null);
+                $memberships->checkoutLines($member, $plan, false, ['coupon_code' => $data['coupon_code'] ?? null]);
                 MemberNote::create([
                     'member_id' => $member->id, 'channel' => 'note', 'direction' => 'internal', 'follow_up_on' => today(),
                     'body' => 'سجّلت من الموقع واختارت باقة «'.$plan->name.'»'.(filled($data['coupon_code'] ?? null) ? ' بكود الخصم '.$data['coupon_code'] : '')
