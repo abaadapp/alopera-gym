@@ -10,8 +10,12 @@ use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
 use App\Modules\Gym\Http\GymPresenter;
 use App\Modules\Gym\Models\Member;
+use App\Modules\Gym\Models\MemberNote;
+use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\MembershipCheckout;
 use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Services\MemberService;
+use App\Modules\Gym\Services\MembershipCheckouts;
 use App\Modules\Gym\Services\MembershipService;
 use App\Modules\Payments\Services\OnlinePaymentService;
 use App\Modules\Website\Http\RendersSite;
@@ -46,7 +50,7 @@ class PortalAuthController extends Controller
         ]);
     }
 
-    public function storeRegistration(Request $request, MemberService $members, MembershipService $memberships, OnlinePaymentService $online, TenantContext $tenants): HttpResponse
+    public function storeRegistration(Request $request, MemberService $members, MembershipService $memberships, MembershipCheckouts $checkouts, OnlinePaymentService $online, TenantContext $tenants): HttpResponse
     {
         abort_unless($tenants->require()->setting('member_signup_enabled', true), 404);
 
@@ -69,7 +73,13 @@ class PortalAuthController extends Controller
             throw ValidationException::withMessages(['phone' => __('رقم الهاتف مسجّل مسبقًا. سجّل الدخول إلى بوابة الأعضاء أو تواصل مع الاستقبال.')]);
         }
 
-        $membership = DB::transaction(function () use ($data, $members, $memberships) {
+        // The sale happens after the payment (owner's decision, 2026-11-24). Online, the plan is sold when Paymob
+        // confirms the money (MembershipCheckouts): until then there is her account and nothing else — no membership,
+        // no invoice, no message. Paying at the desk, the desk sells it when she pays: her choice is noted for it.
+        $plan = MembershipPlan::findOrFail($data['membership_plan_id']);
+        $payOnline = ($data['pay_now'] ?? true) && $online->available();
+
+        [$member, $checkout] = DB::transaction(function () use ($data, $members, $memberships, $checkouts, $plan, $payOnline) {
             $member = $members->create([
                 'full_name' => $data['full_name'],
                 'phone' => $data['phone'],
@@ -80,28 +90,38 @@ class PortalAuthController extends Controller
                 'whatsapp_opt_in' => true,
             ], $data['password']);
 
-            return $memberships->sell($member, MembershipPlan::findOrFail($data['membership_plan_id']), array_filter([
-                'coupon_code' => $data['coupon_code'] ?? null,
-            ]) + ['invoice_message' => false]);
+            if (! $payOnline) {
+                // Nothing sold, but the choice is checked as its sale will check it (the plan, the coupon), so a code
+                // that would be refused at the desk is refused now.
+                $memberships->checkoutLines($member, $plan, false, ['coupon_code' => $data['coupon_code'] ?? null]);
+                MemberNote::create([
+                    'member_id' => $member->id, 'channel' => 'note', 'direction' => 'internal', 'follow_up_on' => today(),
+                    'body' => 'سجّلت من الموقع واختارت باقة «'.$plan->name.'»'.(filled($data['coupon_code'] ?? null) ? ' بكود الخصم '.$data['coupon_code'] : '')
+                        .'، وتدفع في الاستقبال. لم يُبَع شيء بعد: بِع لها الاشتراك عند الدفع.',
+                ]);
+
+                return [$member, null];
+            }
+
+            // Every check of the sale (the plan, the coupon…) is made now: a refusal undoes the account too.
+            return [$member, $checkouts->open($member, $plan, Membership::KIND_NEW, 'website', $data['coupon_code'] ?? null)];
         });
 
-        Auth::guard('member')->login($membership->member);
+        Auth::guard('member')->login($member);
         $request->session()->regenerate();
 
-        $invoice = $membership->invoice;
-        if (($data['pay_now'] ?? true) && $invoice->isOpen() && $online->available()) {
+        if ($checkout?->status === MembershipCheckout::COMPLETED) {
+            return redirect()->route('portal.dashboard')->with('success', __('تم التسجيل وتفعيل اشتراكك. أهلًا بك!'));
+        }
+        if ($checkout) {
             try {
-                $intent = $online->start($invoice, 'website');
-
-                return Inertia::location($intent->checkout_url);
+                return Inertia::location($online->start($checkout->invoice, 'website')->checkout_url);
             } catch (BusinessRuleException) {
-                // fall through to the portal with a pay-later message
+                return redirect()->route('portal.dashboard')->with('success', __('تم إنشاء حسابك. تعذّر فتح صفحة الدفع الآن: أكملي الدفع من حسابك لتفعيل اشتراكك.'));
             }
         }
 
-        return redirect()->route('portal.dashboard')->with('success', $invoice->isOpen()
-            ? ($online->available() ? __('تم التسجيل! أكمل الدفع لتفعيل اشتراكك (أونلاين من صفحة الفواتير أو في الاستقبال).') : __('تم التسجيل! أكمل الدفع في الاستقبال لتفعيل اشتراكك.'))
-            : __('تم التسجيل وتفعيل اشتراكك. أهلًا بك!'));
+        return redirect()->route('portal.dashboard')->with('success', __('تم إنشاء حسابك. ادفعي في الاستقبال ليُفعَّل اشتراكك.'));
     }
 
     public function login(): Response

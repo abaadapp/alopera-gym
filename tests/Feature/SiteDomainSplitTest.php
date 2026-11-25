@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Core\Tenancy\SiteDomains;
 use App\Models\Tenant;
 use App\Modules\Gym\Models\Member;
-use App\Modules\Gym\Models\Membership;
 use App\Modules\Website\Models\ContactMessage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\BuildsClubs;
@@ -153,7 +152,8 @@ class SiteDomainSplitTest extends TestCase
         $this->assertAuthenticated('member');
 
         $this->get(self::SITE.'/portal')->assertOk()->assertInertia(fn ($p) => $p->component('Portal/Dashboard'));
-        $this->assertSame(Membership::PENDING, $this->asTenant($club, fn () => Member::where('phone', '96891234567')->firstOrFail()->memberships()->first()->status));
+        // Paying at the desk: her account only, the sale is made when she pays (owner's decision, 2026-11-24).
+        $this->assertSame(0, $this->asTenant($club, fn () => Member::where('phone', '96891234567')->firstOrFail()->memberships()->count()));
 
         $this->post(self::SITE.'/portal/logout')->assertRedirect();
         $this->assertGuest('member');

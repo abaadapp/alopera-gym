@@ -17,7 +17,7 @@ use Tests\TestCase;
 
 /**
  * Two real PostgreSQL processes issuing an invoice for the same new customer at once (two tabs, a retry with a new
- * form): one member file, one invoice, one membership; the other is told the number is a member's now — never a
+ * form): one member file, one invoice paid on issue, one active membership; the other is told the number is a member's now — never a
  * second member, never an error page.
  */
 class InvoiceNewMemberConcurrencyTest extends TestCase
@@ -49,7 +49,7 @@ class InvoiceNewMemberConcurrencyTest extends TestCase
         $owner = $this->owner($club);
         $plan = $this->asTenant($club, fn () => MembershipPlan::create(['name' => 'Monthly', 'type' => 'combo', 'duration_value' => 1, 'duration_unit' => 'month', 'price' => 25]));
         $form = fn () => [
-            'customer_mode' => 'new', 'customer_name' => 'سارة', 'customer_phone' => '91234567', 'issue' => 1, 'payment_method' => 'credit',
+            'customer_mode' => 'new', 'customer_name' => 'سارة', 'customer_phone' => '91234567', 'issue' => 1, 'payment_method' => 'cash',
             'issue_date' => today()->toDateString(), 'due_date' => today()->addDays(7)->toDateString(), 'client_key' => (string) Str::uuid(),
             'lines' => [['item_type' => 'plan', 'item_id' => $plan->id, 'description' => 'Monthly', 'quantity' => 1, 'unit_price' => 25, 'discount' => 0]],
         ];
@@ -78,6 +78,8 @@ class InvoiceNewMemberConcurrencyTest extends TestCase
         $this->asTenant($club, function () {
             $this->assertSame(1, Member::where('phone', Phone::normalize('91234567'))->count());
             $this->assertSame([1, 1], [Invoice::count(), Membership::count()]);
+            // Sold paid (owner's decision, 2026-11-25): the one invoice paid in full on issue, its membership active.
+            $this->assertSame([Invoice::PAID, Membership::ACTIVE], [Invoice::sole()->status, Membership::sole()->status]);
         });
     }
 }

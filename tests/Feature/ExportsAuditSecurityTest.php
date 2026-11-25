@@ -63,11 +63,12 @@ class ExportsAuditSecurityTest extends TestCase
     public function test_sensitive_operations_are_audited_with_actor_and_are_immutable(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         $member = $this->member($club);
         $plan = $this->plan($club);
 
-        $this->actingAs($owner)->post(route('club.memberships.store', $member->id), ['membership_plan_id' => $plan->id, 'mode' => 'new']);
+        $this->actingAs($owner)->post(route('club.memberships.store', $member->id), ['membership_plan_id' => $plan->id, 'mode' => 'new', 'payment_method' => 'cash']);
         $membership = $this->asTenant($club, fn () => Membership::first());
         $this->actingAs($owner)->post(route('club.memberships.cancel', $membership->id), ['reason' => 'test']);
 

@@ -19,6 +19,8 @@ interface Props {
     invoice: { number?: string; token?: string | null };
     /** The link of the website order this payment is for, if any. */
     order?: string | null;
+    /** A membership not sold yet whose attempt failed: where it is paid again (its link, or the member's account). */
+    retry_url?: string | null;
     /** The link of the gift membership this payment is for (#192), if any: its card shows whether it is usable. */
     gift?: string | null;
 }
@@ -30,7 +32,7 @@ const MAX_POLLS = 40; // ~2 minutes
  * Landing page after the payment gateway. The query string from the gateway is
  * ignored on purpose: only the status recorded by the verified webhook is shown.
  */
-export default function PaymentReturn({ site, seo, reference, status: initial, held: heldAtFirst = false, amount, currency, invoice, order, gift }: Props) {
+export default function PaymentReturn({ site, seo, reference, status: initial, held: heldAtFirst = false, amount, currency, invoice, order, gift, retry_url = null }: Props) {
     const { member } = useShared();
     const t = useT();
     const cart = useCart();
@@ -156,6 +158,11 @@ export default function PaymentReturn({ site, seo, reference, status: initial, h
                         {order && (
                             <Link href={route('site.shop.order', { token: order })} className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-sm font-medium text-white hover:bg-brand-600">
                                 {t('عرض الطلب وحالته')}
+                            </Link>
+                        )}
+                        {retry_url && (status === 'failed' || status === 'expired') && (
+                            <Link href={retry_url} className="inline-flex items-center justify-center gap-2 rounded-full bg-brand py-3 text-sm font-medium text-white hover:bg-brand-600">
+                                <RefreshCw className="size-4" /> {t('المحاولة مرة أخرى')}
                             </Link>
                         )}
                         {!order && (status === 'failed' || status === 'expired') && invoice.token && (

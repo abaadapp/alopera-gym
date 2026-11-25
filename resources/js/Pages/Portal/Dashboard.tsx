@@ -47,6 +47,8 @@ interface Props {
     current: MembershipData | null;
     next: MembershipData | null;
     upcoming: { id: number; session: SessionData }[];
+    /** A membership bought online whose payment did not go through: nothing is sold until it is paid. */
+    checkout: { plan: string | null; amount: string; currency: string } | null;
     openInvoices: { id: number; number: string; total: string; balance: string; issue_date: string }[];
     visits: number;
     onlinePayments: boolean;
@@ -109,7 +111,7 @@ export function MembershipCard({ membership, compact = false }: { membership: Me
     );
 }
 
-export default function Dashboard({ site, seo, profile, current, next, upcoming, openInvoices, visits, onlinePayments }: Props) {
+export default function Dashboard({ site, seo, profile, current, next, upcoming, checkout, openInvoices, visits, onlinePayments }: Props) {
     const currency = useCurrency();
     const t = useT();
     const [paying, setPaying] = useState<number | null>(null);
@@ -118,6 +120,10 @@ export default function Dashboard({ site, seo, profile, current, next, upcoming,
     const pay = (id: number) => {
         setPaying(id);
         router.post(route('portal.invoices.pay', { invoice: id }), {}, { onFinish: () => setPaying(null) });
+    };
+    const payCheckout = () => {
+        setPaying(0);
+        router.post(route('portal.checkout.pay'), {}, { onFinish: () => setPaying(null) });
     };
 
     return (
@@ -153,6 +159,18 @@ export default function Dashboard({ site, seo, profile, current, next, upcoming,
                             <p className="mt-2 text-sm text-muted">{next.plan} · {t('من :from إلى :to', { from: date(next.starts_on), to: date(next.ends_on) })}</p>
                             {next.status === 'pending' && <p className="mt-2 text-xs text-muted">{t('يُفعَّل تلقائيًا بعد تأكيد الدفع.')}</p>}
                         </div>
+                    )}
+
+                    {checkout && onlinePayments && (
+                        <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                            <div>
+                                <p className="font-medium text-amber-900">{t('اشتراك لم يكتمل دفعه')}{checkout.plan ? ` · ${checkout.plan}` : ''}</p>
+                                <p className="mt-1 text-xs text-amber-800">{t('لم يُصدر اشتراككِ بعد: يُصدر ويُفعَّل فور تأكيد الدفع.')} <span className="num">{money(checkout.amount, checkout.currency)}</span></p>
+                            </div>
+                            <button onClick={payCheckout} disabled={paying === 0} className="rounded-full bg-brand px-4 py-2 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-60">
+                                {paying === 0 ? t('جارٍ التحويل…') : t('أكملي الدفع')}
+                            </button>
+                        </section>
                     )}
 
                     {openInvoices.length > 0 && (

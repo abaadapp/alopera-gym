@@ -3,8 +3,9 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import QRCode from 'react-qr-code';
 import {
     CalendarPlus, CreditCard, Download, FileText, HeartPulse, KeyRound, MessageCircle, MoreVertical, Pencil, Phone, Plus, QrCode, RefreshCw,
-    Send, ShieldCheck, Snowflake, Trash2, UserRound, Wallet, Repeat, Play, Ban, Fingerprint,
+    Send, ShieldCheck, Snowflake, Trash2, UserRound, Wallet, Repeat, Play, Ban, Fingerprint, Copy, Link2,
 } from 'lucide-react';
+import PaymentPicker, { paymentNote, type SaleMethod } from '@/Components/Gym/PaymentPicker';
 import ClubLayout from '@/Layouts/ClubLayout';
 import { clientKey } from '@/Components/Inventory/parts';
 import { BackLink, Badge, Button, Card, CardHeader, ChoiceCard, ConfirmAction, EmptyState, Field, FlatCards, Input, Modal, PageHeader, Select, StatCard, StatGrid, Tabs, Textarea, FileInput } from '@/Components/ui';
@@ -113,6 +114,8 @@ interface Props {
     trainers: Option[];
     templates: { key: string; name: string; body: string }[];
     onlinePayments: boolean;
+    /** A membership sent to pay from afar and not paid yet: nothing is sold or owed until she pays. */
+    paymentLink: { id: number; channel: string; plan: string | null; amount: string; url: string | null; created_at: string } | null;
 }
 
 type TabKey = 'memberships' | 'finance' | 'attendance' | 'pt' | 'documents' | 'crm' | 'whatsapp' | 'access';
@@ -235,6 +238,8 @@ export default function MemberShow(props: Props) {
                 }
             />
 
+            {props.paymentLink && <PaymentLinkCard link={props.paymentLink} member={member} />}
+
             <StatGrid className="mb-6">
                 <StatCard label="العضوية الحالية" value={current ? dayCount(current.days_left) : '—'} hint={current ? `${current.plan} · حتى ${date(current.ends_on)}` : hasPending ? 'طلب بانتظار الدفع' : 'لا عضوية سارية'} icon={<CalendarPlus />} tone={current ? 'green' : 'gray'} />
                 {can('invoices.view') ? (
@@ -303,7 +308,7 @@ export default function MemberShow(props: Props) {
                 </Card>
             </div>
 
-            <SellModal open={sellOpen} onClose={() => setSellOpen(false)} member={member} current={current} plans={props.plans} hasMemberships={memberships.length > 0} />
+            <SellModal open={sellOpen} onClose={() => setSellOpen(false)} member={member} current={current} plans={props.plans} hasMemberships={memberships.length > 0} onlinePayments={props.onlinePayments} />
 
             <Modal open={qrOpen} onClose={() => setQrOpen(false)} title="رمز الدخول QR" size="compact">
                 {member.qr_token && (
@@ -577,7 +582,39 @@ function QuoteBox({ quote, loading }: { quote: Quote | null; loading: boolean })
     );
 }
 
-function SellModal({ open, onClose, member, current, plans, hasMemberships }: { open: boolean; onClose: () => void; member: MemberDetail; current: MembershipItem | null; plans: PlanItem[]; hasMemberships: boolean }) {
+/** The payment link she was sent (or a sign-up she has not paid): copy it, send it on WhatsApp, or withdraw it. */
+function PaymentLinkCard({ link, member }: { link: NonNullable<Props['paymentLink']>; member: MemberDetail }) {
+    const currency = useCurrency();
+    const can = useCan();
+    const [copied, setCopied] = useState(false);
+    const text = link.url ? `مرحبًا ${member.full_name.split(' ')[0]}، رابط دفع اشتراكك${link.plan ? ` في باقة ${link.plan}` : ''} بمبلغ ${money(link.amount, currency)}: ${link.url} — يتفعّل اشتراكك فور الدفع.` : '';
+    return (
+        <Card className="mb-6 border-[#bfdbfe] bg-[#eff6ff]">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="flex items-center gap-2 text-[15px] font-bold text-ink"><Link2 className="size-4" />{link.channel === 'link' ? 'رابط دفع أُرسل للعضوة' : 'اشتراك من الموقع لم يُدفع بعد'}</p>
+                    <p className="mt-1 text-[13px] text-[#374151]">
+                        {link.plan} · <span className="num">{money(link.amount, currency)}</span> · {date(link.created_at)}. لم يُبَع شيء بعد: تُصدر الفاتورة وتُفعَّل العضوية تلقائيًا عند الدفع.
+                    </p>
+                    {link.url && <p dir="ltr" className="mt-2 truncate rounded-lg bg-white px-3 py-1.5 text-[12px] text-[#1d4ed8]">{link.url}</p>}
+                </div>
+                {link.url && (
+                    <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" icon={<Copy />} onClick={() => { void navigator.clipboard?.writeText(link.url!); setCopied(true); }}>{copied ? 'تم النسخ' : 'نسخ الرابط'}</Button>
+                        <Button size="sm" href={whatsappUrl(member.phone, text)} external icon={<MessageCircle />}>إرسال عبر واتساب</Button>
+                        {can('memberships.sell') && (
+                            <ConfirmAction url={route('club.memberships.link.cancel', link.id)} title="إلغاء رابط الدفع؟" message="لن يفتح الرابط صفحة دفع بعد الآن." confirmLabel="إلغاء الرابط" variant="ghost">
+                                إلغاء الرابط
+                            </ConfirmAction>
+                        )}
+                    </div>
+                )}
+            </div>
+        </Card>
+    );
+}
+
+function SellModal({ open, onClose, member, current, plans, hasMemberships, onlinePayments }: { open: boolean; onClose: () => void; member: MemberDetail; current: MembershipItem | null; plans: PlanItem[]; hasMemberships: boolean; onlinePayments: boolean }) {
     const can = useCan();
     const currency = useCurrency();
     const form = useForm({
@@ -587,12 +624,16 @@ function SellModal({ open, onClose, member, current, plans, hasMemberships }: { 
         coupon_code: '',
         discount: '',
         notes: '',
+        payment_method: '' as SaleMethod | '',
+        payment_reference: '',
+        client_key: clientKey(),
     });
     const { quote, loading } = useQuote({ member_id: member.id, membership_plan_id: form.data.membership_plan_id, coupon_code: form.data.coupon_code }, open);
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        form.post(route('club.memberships.store', member.id), { onSuccess: () => { form.reset(); onClose(); } });
+        // A new key for the next sale: the one sent is spent (SubmittedOnce).
+        form.post(route('club.memberships.store', member.id), { onSuccess: () => { form.reset(); form.setData('client_key', clientKey()); onClose(); } });
     };
 
     return (
@@ -603,7 +644,7 @@ function SellModal({ open, onClose, member, current, plans, hasMemberships }: { 
             footer={
                 <>
                     <Button variant="outline" onClick={onClose}>إلغاء</Button>
-                    <Button onClick={submit} loading={form.processing} disabled={!form.data.membership_plan_id}>إصدار الفاتورة</Button>
+                    <Button onClick={submit} loading={form.processing} disabled={!form.data.membership_plan_id || !form.data.payment_method}>{form.data.payment_method === 'link' ? 'إنشاء رابط الدفع' : 'تسجيل الدفع والتفعيل'}</Button>
                 </>
             }
         >
@@ -647,11 +688,19 @@ function SellModal({ open, onClose, member, current, plans, hasMemberships }: { 
                     <Field label="ملاحظات" error={form.errors.notes}>
                         <Input value={form.data.notes} onChange={(e) => form.setData('notes', e.target.value)} />
                     </Field>
+                    <PaymentPicker
+                        method={form.data.payment_method}
+                        reference={form.data.payment_reference}
+                        onMethod={(m) => form.setData('payment_method', m)}
+                        onReference={(v) => form.setData('payment_reference', v)}
+                        errors={form.errors}
+                        allowLink={onlinePayments}
+                    />
                 </div>
                 <div className="space-y-3 md:col-span-2">
                     <QuoteBox quote={quote} loading={loading} />
                     {quote && Number(form.data.discount) > 0 && <p className="text-xs text-muted">يُطرح الخصم اليدوي (<span className="num">{money(form.data.discount, currency)}</span>) عند إصدار الفاتورة.</p>}
-                    <p className="text-xs leading-6 text-muted">تُصدر فاتورة وتبقى العضوية «بانتظار الدفع». تُفعّل تلقائيًا عند اكتمال الدفع (نقدًا، أو تأكيد التحويل، أو الدفع الإلكتروني).</p>
+                    <p className="text-xs leading-6 text-muted">{paymentNote(form.data.payment_method)}</p>
                 </div>
             </form>
         </Modal>
@@ -659,7 +708,7 @@ function SellModal({ open, onClose, member, current, plans, hasMemberships }: { 
 }
 
 function ChangePlanModal({ membership, onClose, plans, memberId }: { membership: MembershipItem | null; onClose: () => void; plans: PlanItem[]; memberId: number }) {
-    const form = useForm({ membership_plan_id: '', coupon_code: '' });
+    const form = useForm({ membership_plan_id: '', coupon_code: '', payment_method: '' as SaleMethod | '', payment_reference: '', client_key: clientKey() });
     const { quote, loading } = useQuote(
         { member_id: memberId, membership_plan_id: form.data.membership_plan_id, coupon_code: form.data.coupon_code, upgrade_from: membership?.id ?? null },
         membership !== null,
@@ -668,7 +717,7 @@ function ChangePlanModal({ membership, onClose, plans, memberId }: { membership:
     const submit = (e: FormEvent) => {
         e.preventDefault();
         if (!membership) return;
-        form.post(route('club.memberships.upgrade', membership.id), { onSuccess: () => { form.reset(); onClose(); } });
+        form.post(route('club.memberships.upgrade', membership.id), { onSuccess: () => { form.reset(); form.setData('client_key', clientKey()); onClose(); } });
     };
 
     return (
@@ -676,10 +725,10 @@ function ChangePlanModal({ membership, onClose, plans, memberId }: { membership:
             open={membership !== null}
             onClose={onClose}
             title="تغيير / ترقية الباقة"
-            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing} disabled={!form.data.membership_plan_id}>إصدار فاتورة التغيير</Button></>}
+            footer={<><Button variant="outline" onClick={onClose}>إلغاء</Button><Button onClick={submit} loading={form.processing} disabled={!form.data.membership_plan_id || !form.data.payment_method}>تسجيل الدفع وتطبيق التغيير</Button></>}
         >
             <form onSubmit={submit} className="space-y-4">
-                <p className="text-sm text-muted">تبدأ الباقة الجديدة اليوم، وتُحتسب قيمة الأيام غير المستخدمة من «{membership?.plan}» رصيدًا. تبقى العضوية الحالية فعّالة حتى دفع فاتورة التغيير.</p>
+                <p className="text-sm text-muted">تبدأ الباقة الجديدة اليوم، وتُحتسب قيمة الأيام غير المستخدمة من «{membership?.plan}» رصيدًا. يُدفع الفرق الآن ويُطبَّق التغيير مباشرة.</p>
                 <Field label="الباقة الجديدة" error={form.errors.membership_plan_id} required>
                     <Select value={form.data.membership_plan_id} onChange={(e) => form.setData('membership_plan_id', e.target.value)} placeholder="اختر الباقة">
                         {plans.filter((p) => p.id !== membership?.plan_id).map((p) => <option key={p.id} value={p.id}>{p.name} — {p.duration_label}</option>)}
@@ -689,6 +738,13 @@ function ChangePlanModal({ membership, onClose, plans, memberId }: { membership:
                     <Input dir="ltr" value={form.data.coupon_code} onChange={(e) => form.setData('coupon_code', e.target.value.toUpperCase())} />
                 </Field>
                 <QuoteBox quote={quote} loading={loading} />
+                <PaymentPicker
+                    method={form.data.payment_method}
+                    reference={form.data.payment_reference}
+                    onMethod={(m) => form.setData('payment_method', m)}
+                    onReference={(v) => form.setData('payment_reference', v)}
+                    errors={form.errors}
+                />
             </form>
         </Modal>
     );
@@ -913,7 +969,7 @@ function AttendanceTab({ bookings, checkins }: Props) {
 function PtTab({ pt, ptPackages, trainers, member }: Props) {
     const can = useCan();
     const currency = useCurrency();
-    const form = useForm({ pt_package_id: '', trainer_id: '' });
+    const form = useForm({ pt_package_id: '', trainer_id: '', payment_method: '' as SaleMethod | '', payment_reference: '', client_key: clientKey() });
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -948,7 +1004,7 @@ function PtTab({ pt, ptPackages, trainers, member }: Props) {
             </Card>
             {can('pt.manage') && (
                 <Card>
-                    <CardHeader title="بيع باقة تدريب شخصي" subtitle="تُفعّل بعد دفع الفاتورة" />
+                    <CardHeader title="بيع باقة تدريب شخصي" subtitle="تُدفع كاملة الآن وتُفعَّل مباشرة" />
                     <form onSubmit={submit} className="space-y-4">
                         <Field label="الباقة" error={form.errors.pt_package_id} required>
                             <Select value={form.data.pt_package_id} onChange={(e) => form.setData('pt_package_id', e.target.value)} placeholder="اختر الباقة">
@@ -960,7 +1016,14 @@ function PtTab({ pt, ptPackages, trainers, member }: Props) {
                                 {trainers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </Select>
                         </Field>
-                        <Button type="submit" className="w-full" loading={form.processing} disabled={!form.data.pt_package_id}>إصدار الفاتورة</Button>
+                        <PaymentPicker
+                            method={form.data.payment_method}
+                            reference={form.data.payment_reference}
+                            onMethod={(m) => form.setData('payment_method', m)}
+                            onReference={(v) => form.setData('payment_reference', v)}
+                            errors={form.errors}
+                        />
+                        <Button type="submit" className="w-full" loading={form.processing} disabled={!form.data.pt_package_id || !form.data.payment_method}>تسجيل الدفع والتفعيل</Button>
                     </form>
                 </Card>
             )}

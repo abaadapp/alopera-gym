@@ -324,19 +324,20 @@ class MembershipLifecycleTest extends TestCase
     public function test_desk_flow_through_http_sells_and_takes_payment(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $member = $this->member($club);
         $plan = $this->plan($club);
         $reception = $this->staff($club, 'reception');
 
-        $this->actingAs($reception)->post(route('club.memberships.store', $member->id), ['membership_plan_id' => $plan->id, 'mode' => 'new'])
-            ->assertRedirect();
-        $m = $this->asTenant($club, fn () => Membership::firstOrFail());
-
-        $this->actingAs($reception)->post(route('club.payments.store', $m->invoice_id), ['amount' => 25, 'method' => 'card'])
-            ->assertSessionHasErrors('reference'); // card needs the terminal reference
-        $this->actingAs($reception)->post(route('club.payments.store', $m->invoice_id), ['amount' => 25, 'method' => 'card', 'reference' => 'T-1234'])
+        // Sold only paid (owner's decision, 2026-11-25): the sale and its payment are one step at the desk.
+        $this->actingAs($reception)->post(route('club.memberships.store', $member->id), ['membership_plan_id' => $plan->id, 'mode' => 'new', 'payment_method' => 'card'])
+            ->assertSessionHasErrors('payment_reference'); // card needs the terminal reference
+        $this->assertSame(0, $this->asTenant($club, fn () => Membership::count()));
+        $this->actingAs($reception)->post(route('club.memberships.store', $member->id), ['membership_plan_id' => $plan->id, 'mode' => 'new', 'payment_method' => 'card', 'payment_reference' => 'T-1234'])
             ->assertSessionHasNoErrors();
 
-        $this->assertSame(Membership::ACTIVE, $this->asTenant($club, fn () => $m->fresh()->status));
+        $m = $this->asTenant($club, fn () => Membership::firstOrFail());
+        $this->assertSame(Membership::ACTIVE, $m->status);
+        $this->assertSame(Invoice::PAID, $this->asTenant($club, fn () => $m->invoice()->first()->status));
     }
 }

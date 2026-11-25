@@ -555,7 +555,9 @@ function PaymentDialog({ total, cart, member, guest, discount, basketKey, device
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const [preview, setPreview] = useState<string | null>(null);
-    const methods = useMemo(() => ([['cash', 'نقدًا', Banknote], ['card', 'بطاقة', CreditCard], ['paymob', 'رابط Paymob', Link2]] as const).filter(([k]) => k !== 'paymob' || (allowed.paymob && !hasProducts)), [allowed.paymob, hasProducts]);
+    // A membership or a training package is sold only paid (owner's decision, 2026-11-25), and products are paid on the
+    // spot: the counter takes cash or a card. Paying from afar is a payment link from the member's file.
+    const methods = useMemo(() => ([['cash', 'نقدًا', Banknote], ['card', 'بطاقة', CreditCard]] as const), []);
     const change = method === 'cash' && given !== '' ? Math.round((Number(given) - total) * 1000) / 1000 : null;
     const quick = Array.from(new Set([total, Math.ceil(total), Math.ceil(total / 5) * 5, Math.ceil(total / 10) * 10, Math.ceil(total / 20) * 20])).filter((v) => v >= total).slice(0, 4);
 

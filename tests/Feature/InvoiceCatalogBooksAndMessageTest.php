@@ -11,6 +11,7 @@ use App\Modules\Accounting\Models\JournalLine;
 use App\Modules\Accounting\Services\FinanceReports;
 use App\Modules\Accounting\Services\LedgerProjector;
 use App\Modules\Finance\Models\Invoice;
+use App\Modules\Finance\Models\Payment;
 use App\Modules\Finance\Services\CreditNoteService;
 use App\Modules\Finance\Services\InvoiceService;
 use App\Modules\Finance\Services\PaymentService;
@@ -36,8 +37,12 @@ use Tests\TestCase;
  * A mixed customer invoice in the books and to the member (owner's decisions, 2026-11-21): its revenue goes line by line
  * to memberships, personal training, store products and other services — VAT on its own line, each discount inside its
  * line — balanced; a void reverses it as posted, a credit note goes to returns with its VAT; invoices of one kind and
- * entries posted before are as they were. The member is sent the invoice message once, with consent, saying the
- * membership starts only once it is paid in full (when Meta approved that wording; the plain one until then).
+ * entries posted before are as they were.
+ *
+ * A membership or a package is sold only when paid (owner's decision, 2026-11-25): an invoice carrying one is paid in
+ * full as it is issued (here in cash), so nothing stays receivable and it announces nothing as an invoice — not the
+ * wording saying the membership starts once paid, nor the plain one: the member is told of the payment and the
+ * activation instead (payment_received, membership_activated), with consent, once.
  */
 class InvoiceCatalogBooksAndMessageTest extends TestCase
 {
@@ -86,12 +91,13 @@ class InvoiceCatalogBooksAndMessageTest extends TestCase
 
     /**
      * The shake ×2 less 0.500 with a scoop each (4.500, store), the plan less 2 with its first signup fee (28, memberships),
-     * the package (40, personal training), the program ×2 less 1 (5, other): 77.500 net, VAT 5% 3.875, 81.375.
+     * the package (40, personal training), the program ×2 less 1 (5, other): 77.500 net, VAT 5% 3.875, 81.375 — paid in
+     * cash on issue, as a sale with a membership or a package must be.
      */
     private function mixed(Tenant $club, User $by, Member $member, array $c, array $over = []): Invoice
     {
         $this->actingAs($by)->post(route('club.invoices.store'), array_replace([
-            'customer_mode' => 'member', 'member_id' => $member->id, 'issue' => 1, 'payment_method' => 'credit',
+            'customer_mode' => 'member', 'member_id' => $member->id, 'issue' => 1, 'payment_method' => 'cash',
             'issue_date' => today()->toDateString(), 'due_date' => today()->addDays(7)->toDateString(), 'client_key' => (string) Str::uuid(),
             'lines' => [
                 ['product_id' => $c['shake']->id, 'description' => 'Protein shake', 'quantity' => 2, 'unit_price' => 2, 'discount' => 0.5, 'addons' => [['addon_id' => $c['scoop']->id, 'quantity' => 1]]],
@@ -121,6 +127,13 @@ class InvoiceCatalogBooksAndMessageTest extends TestCase
             ->whereIn('template_key', ['invoice_issued', 'invoice_issued_membership'])->pluck('template_key')->all());
     }
 
+    /** @return list<array{0: string, 1: string}> the payment and activation notices of a member: template, status */
+    private function notices(Tenant $club, Member $member): array
+    {
+        return $this->asTenant($club, fn () => Message::where('member_id', $member->id)->whereIn('template_key', ['payment_received', 'membership_activated'])
+            ->orderBy('id')->get()->map(fn (Message $m) => [$m->template_key, $m->status])->all());
+    }
+
     public function test_a_mixed_invoice_books_each_lines_revenue_to_its_account_with_its_vat_and_a_void_reverses_it(): void
     {
         $club = $this->vatClub();
@@ -128,16 +141,21 @@ class InvoiceCatalogBooksAndMessageTest extends TestCase
         $c = $this->catalogue($club);
         $invoice = $this->mixed($club, $owner, $this->member($club), $c);
 
-        $this->assertSame(['other', '3.875', '81.375'], [$invoice->type, $invoice->tax_total, $invoice->total]);
+        $this->assertSame(['other', '3.875', '81.375', Invoice::PAID], [$invoice->type, $invoice->tax_total, $invoice->total, $invoice->status]);
+        // Paid on issue: the money in the till, nothing receivable.
         $this->assertBooks($club, [
-            'receivable' => '81.375', 'revenue_pos' => '4.500', 'revenue_membership' => '28.000', 'revenue_pt' => '40.000', 'revenue_other' => '5.000', 'vat_payable' => '3.875',
+            'receivable' => '0.000', 'cash' => '81.375', 'revenue_pos' => '4.500', 'revenue_membership' => '28.000', 'revenue_pt' => '40.000', 'revenue_other' => '5.000', 'vat_payable' => '3.875',
         ]);
         // One entry for the invoice, its credits by line.
         $this->assertSame(1, $this->asTenant($club, fn () => JournalEntry::where('source_type', 'invoice')->where('source_id', $invoice->id)->count()));
 
-        $this->asTenant($club, fn () => app(InvoiceService::class)->void($invoice->fresh(), 'خطأ في الإصدار'));
+        // Issued by mistake: its payment cancelled (a paid invoice is not voided), then the invoice voided.
+        $this->asTenant($club, function () use ($invoice) {
+            app(PaymentService::class)->cancel(Payment::where('invoice_id', $invoice->id)->sole(), 'خطأ في الإصدار');
+            app(InvoiceService::class)->void($invoice->fresh(), 'خطأ في الإصدار');
+        });
         $this->assertBooks($club, [
-            'receivable' => '0.000', 'revenue_pos' => '0.000', 'revenue_membership' => '0.000', 'revenue_pt' => '0.000', 'revenue_other' => '0.000', 'vat_payable' => '0.000',
+            'receivable' => '0.000', 'cash' => '0.000', 'revenue_pos' => '0.000', 'revenue_membership' => '0.000', 'revenue_pt' => '0.000', 'revenue_other' => '0.000', 'vat_payable' => '0.000',
         ]);
     }
 
@@ -150,8 +168,9 @@ class InvoiceCatalogBooksAndMessageTest extends TestCase
 
         $note = $this->asTenant($club, fn () => app(CreditNoteService::class)->issue($invoice->fresh(), '21.000', 'خصم متفق عليه'));
         $tax = $note->tax_amount ?? '0.000';
+        // Paid in full on issue: the 21 credited is owed back to the member (a credit on the receivable) until refunded.
         $this->assertBooks($club, [
-            'receivable' => '60.375', 'revenue_pos' => '4.500', 'revenue_membership' => '28.000', 'revenue_pt' => '40.000', 'revenue_other' => '5.000',
+            'receivable' => '-21.000', 'revenue_pos' => '4.500', 'revenue_membership' => '28.000', 'revenue_pt' => '40.000', 'revenue_other' => '5.000',
         ]);
         $this->assertSame('21.000', $this->asTenant($club, fn () => Money::add(app(FinanceReports::class)->balanceOf('sales_returns'), $tax)));
         $this->assertSame(Money::sub('3.875', $tax), $this->balance($club, 'vat_payable'));
@@ -187,7 +206,7 @@ class InvoiceCatalogBooksAndMessageTest extends TestCase
         $this->assertSame($before, $this->asTenant($club, fn () => JournalLine::orderBy('id')->get(['account_id', 'debit', 'credit'])->toArray()));
     }
 
-    public function test_the_member_is_sent_the_invoice_once_saying_the_membership_starts_once_paid_when_that_wording_is_approved(): void
+    public function test_a_mixed_invoice_paid_on_issue_sends_no_invoice_message_even_with_the_membership_wording_approved(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
@@ -196,21 +215,19 @@ class InvoiceCatalogBooksAndMessageTest extends TestCase
         $member = $this->member($club, ['phone' => '96891234567']);
 
         $invoice = $this->mixed($club, $owner, $member, $c);
-        $this->assertSame(['invoice_issued_membership'], $this->sent($club, $invoice));
-        $body = $this->asTenant($club, fn () => Message::where('template_key', 'invoice_issued_membership')->sole()->body);
-        $this->assertStringContainsString('يتفعّل بعد سداد الفاتورة كاملة', (string) $body);
+        $this->assertSame([], $this->sent($club, $invoice), 'nothing owed: no invoice message, in either wording');
+        $this->assertSame([['payment_received', Message::SENT], ['membership_activated', Message::SENT]], $this->notices($club, $member));
 
-        // Once: announced again (a retried job, the same event), nothing more.
+        // Announced again (a retried job, the same event): still nothing, the notices once.
         $this->asTenant($club, fn () => app(MemberNotifier::class)->invoiceIssued($member, $invoice->fresh()));
-        $this->assertSame(['invoice_issued_membership'], $this->sent($club, $invoice));
+        $this->assertSame([], $this->sent($club, $invoice));
+        $this->assertSame([['payment_received', Message::SENT], ['membership_activated', Message::SENT]], $this->notices($club, $member));
 
-        // The customer's page says it too, until paid in full.
-        $this->get(route('site.invoice', ['club' => $club->slug, 'token' => $invoice->public_token]))->assertOk()->assertInertia(fn ($p) => $p->where('starts_when_paid', true));
-        $this->asTenant($club, fn () => app(PaymentService::class)->record($invoice->fresh(), $invoice->total, 'cash'));
+        // The customer's page has nothing waiting on payment.
         $this->get(route('site.invoice', ['club' => $club->slug, 'token' => $invoice->public_token]))->assertOk()->assertInertia(fn ($p) => $p->where('starts_when_paid', false));
     }
 
-    public function test_until_that_wording_is_approved_the_plain_message_once_and_none_without_consent_or_when_paid_on_issue(): void
+    public function test_with_the_plain_wording_the_payment_and_activation_go_with_consent_and_are_skipped_without_never_an_invoice_message(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
@@ -218,16 +235,13 @@ class InvoiceCatalogBooksAndMessageTest extends TestCase
         $this->whatsapp($club, membershipWording: false);
 
         $member = $this->member($club, ['phone' => '96891234567']);
-        $invoice = $this->mixed($club, $owner, $member, $c);
-        $this->assertSame(['invoice_issued'], $this->sent($club, $invoice));
+        $this->assertSame([], $this->sent($club, $this->mixed($club, $owner, $member, $c)));
+        $this->assertSame([['payment_received', Message::SENT], ['membership_activated', Message::SENT]], $this->notices($club, $member));
 
         // No consent to service messages: nothing sent.
         $quiet = $this->member($club, ['phone' => '96891234568']);
         $this->asTenant($club, fn () => $quiet->forceFill(['whatsapp_opt_in' => false])->save());
         $this->assertSame([], $this->sent($club, $this->mixed($club, $owner, $quiet, $c)));
-
-        // Paid in full when issued: nothing owed, no invoice message (its activation says the rest).
-        $paid = $this->member($club, ['phone' => '96891234569']);
-        $this->assertSame([], $this->sent($club, $this->mixed($club, $owner, $paid, $c, ['payment_method' => 'cash'])));
+        $this->assertSame([['payment_received', Message::SKIPPED], ['membership_activated', Message::SKIPPED]], $this->notices($club, $quiet));
     }
 }

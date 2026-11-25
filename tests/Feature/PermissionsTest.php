@@ -140,7 +140,7 @@ class PermissionsTest extends TestCase
         $plan = $this->plan($club);
 
         $this->actingAs($this->staff($club, 'reception'))
-            ->post(route('club.memberships.store', $member->id), ['membership_plan_id' => $plan->id, 'mode' => 'new', 'discount' => 10])
+            ->post(route('club.memberships.store', $member->id), ['membership_plan_id' => $plan->id, 'mode' => 'new', 'discount' => 10, 'payment_method' => 'cash'])
             ->assertSessionHasErrors('discount');
     }
 

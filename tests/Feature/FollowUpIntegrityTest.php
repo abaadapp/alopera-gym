@@ -46,12 +46,15 @@ class FollowUpIntegrityTest extends TestCase
     public function test_a_personal_training_sale_sent_twice_is_one_subscription_and_one_invoice(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         $member = $this->member($club);
         $package = $this->asTenant($club, fn () => PtPackage::create(['name' => 'PT 4', 'sessions_count' => 4, 'price' => 40, 'validity_days' => 30]));
 
-        $this->actingAs($owner)->post(route('club.pt.store', $member), ['pt_package_id' => $package->id])->assertSessionHasNoErrors();
-        $this->actingAs($owner)->post(route('club.pt.store', $member), ['pt_package_id' => $package->id])->assertSessionHasErrors('pt_package_id');
+        // Sold paid in one step (owner's decision, 2026-11-25): the same form sent twice (its key) sells — and charges — once.
+        $form = ['pt_package_id' => $package->id, 'payment_method' => 'cash', 'client_key' => (string) Str::uuid()];
+        $this->actingAs($owner)->post(route('club.pt.store', $member), $form)->assertSessionHasNoErrors();
+        $this->actingAs($owner)->post(route('club.pt.store', $member), $form)->assertSessionHasNoErrors();
 
         $this->asTenant($club, fn () => $this->assertSame(1, PtSubscription::where('member_id', $member->id)->count()));
     }

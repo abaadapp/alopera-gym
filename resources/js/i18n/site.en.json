@@ -104,7 +104,7 @@
     "دفع إلكتروني الآن": "Pay online now",
     "بطاقة بنكية عبر بوابة دفع آمنة، ويُفعَّل اشتراكك فور تأكيد الدفع.": "By bank card through a secure payment gateway; your membership is activated as soon as the payment is confirmed.",
     "الدفع في الاستقبال": "Pay at reception",
-    "نصدر فاتورتك الآن، ويُفعَّل الاشتراك بعد تأكيد الدفع في النادي.": "We issue your invoice now; the membership is activated once the payment is confirmed at the club.",
+    "ننشئ حسابكِ الآن، ويُصدر اشتراككِ وفاتورته حين تدفعين في النادي.": "We create your account now; your membership and its invoice are issued when you pay at the club.",
     "التسجيل والانتقال للدفع": "Sign up and go to payment",
     "إتمام التسجيل": "Complete sign-up",
     "لديك حساب؟": "Have an account?",
@@ -353,5 +353,13 @@
     "يظهر الدفع بعد تأكيد رقم المستلمة.": "Payment appears once the recipient's number is confirmed.",
     "رسالة الهدية على واتساب المستلمة:": "The gift's message on the recipient's WhatsApp:",
     "الاشتراك أو باقة التدريب في هذه الفاتورة يتفعّل بعد سدادها كاملة.": "The membership or training package on this invoice starts once it is paid in full.",
-    "باقة مميزة": "Featured plan"
+    "باقة مميزة": "Featured plan",
+    "مرحبًا :name": "Hello :name",
+    "مرحبًا": "Hello",
+    "اشتراكك في :plan": "Your :plan membership",
+    "اشتراكك": "Your membership",
+    "يتفعّل اشتراكك فور تأكيد الدفع، وتصلك الفاتورة على واتساب.": "Your membership starts as soon as the payment is confirmed, and the invoice reaches you on WhatsApp.",
+    "تم الدفع وتفعيل اشتراكك. شكرًا لك!": "Paid, and your membership is active. Thank you!",
+    "لم يعد هذا الرابط صالحًا للدفع.": "This link can no longer be paid.",
+    "تواصلي مع النادي ليرسل لك رابطًا جديدًا.": "Contact the club for a new link."
 }

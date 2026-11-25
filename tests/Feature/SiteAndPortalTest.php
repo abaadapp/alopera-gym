@@ -36,7 +36,7 @@ class SiteAndPortalTest extends TestCase
         $this->get('/c/no-such-club')->assertNotFound();
     }
 
-    public function test_online_signup_creates_the_member_and_a_pending_membership_visible_to_staff(): void
+    public function test_signup_paying_at_the_desk_creates_the_member_and_sells_nothing_yet(): void
     {
         $club = $this->club();
         $plan = $this->plan($club);
@@ -50,12 +50,13 @@ class SiteAndPortalTest extends TestCase
             $member = Member::where('phone', '96891234567')->firstOrFail();
             $this->assertSame('website', $member->source);
             $this->assertFalse($member->marketing_opt_in, 'Marketing consent is opt-in only.');
-            $this->assertSame(Membership::PENDING, $member->memberships()->first()->status);
+            // The sale happens when she pays at the desk (owner's decision, 2026-11-24): nothing is sold before.
+            $this->assertSame(0, $member->memberships()->count());
         });
         $this->assertAuthenticated('member');
 
         $this->actingAs($this->owner($club))->get(route('club.members.index', ['membership' => 'pending']))
-            ->assertInertia(fn ($page) => $page->where('members.total', 1));
+            ->assertInertia(fn ($page) => $page->where('members.total', 0));
     }
 
     public function test_signup_rejects_honeypot_and_duplicate_phone(): void
@@ -69,7 +70,7 @@ class SiteAndPortalTest extends TestCase
         $this->post(route('site.join.store', ['club' => $club->slug]), ['website' => 'spam', 'phone' => '92222222'] + $data)->assertSessionHasErrors('website');
     }
 
-    public function test_portal_shows_membership_and_allows_renewal_invoice(): void
+    public function test_portal_shows_membership_and_renewal_needs_online_payment(): void
     {
         $club = $this->club();
         $member = $this->member($club, ['password' => 'secret123']);
@@ -80,9 +81,9 @@ class SiteAndPortalTest extends TestCase
         $this->get(route('portal.dashboard', ['club' => $club->slug]))
             ->assertInertia(fn ($page) => $page->component('Portal/Dashboard')->where('current.status', 'active')->has('profile.qr_token'));
 
-        $this->post(route('portal.renew.store', ['club' => $club->slug]), ['membership_plan_id' => $plan->id])->assertRedirect();
-        $this->assertSame(1, $this->asTenant($club, fn () => Membership::where('member_id', $member->id)->where('status', 'pending')->count()));
+        // Without online payment nothing is sold from the portal: the desk renews it when she pays (MembershipCheckoutTest).
         $this->post(route('portal.renew.store', ['club' => $club->slug]), ['membership_plan_id' => $plan->id])->assertSessionHasErrors('membership_plan_id');
+        $this->assertSame(0, $this->asTenant($club, fn () => Membership::where('member_id', $member->id)->where('status', 'pending')->count()));
     }
 
     public function test_contact_form_is_stored_for_the_club(): void

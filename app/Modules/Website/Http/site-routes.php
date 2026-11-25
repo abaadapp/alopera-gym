@@ -41,6 +41,9 @@ Route::get('/pay/status/{reference}', [PayController::class, 'status'])->name('s
 // A payment link's own address (v2): opens a page only while it is its invoice's live link.
 Route::get('/pay/link/{token}', [PayController::class, 'link'])->where('token', '[A-Za-z0-9]{48}')->name('site.pay.link');
 Route::post('/pay/link/{token}', [PayController::class, 'startLink'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:public-forms')->name('site.pay.link.start');
+// A payment link reception sent for a membership (MembershipCheckouts): nothing is sold until it is paid.
+Route::get('/pay/checkout/{token}', [PayController::class, 'checkout'])->where('token', '[A-Za-z0-9]{48}')->name('site.checkout.show');
+Route::post('/pay/checkout/{token}', [PayController::class, 'startCheckout'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:public-forms')->name('site.checkout.start');
 Route::get('/pay/{token}', [PayController::class, 'show'])->where('token', '[A-Za-z0-9]{48}')->name('site.pay.show');
 Route::post('/pay/{token}', [PayController::class, 'start'])->where('token', '[A-Za-z0-9]{48}')->middleware('throttle:public-forms')->name('site.pay.start');
 Route::get('/invoice/{token}', [PayController::class, 'invoice'])->where('token', '[A-Za-z0-9]{48}')->name('site.invoice');
@@ -75,6 +78,7 @@ Route::prefix('portal')->name('portal.')->group(function () {
         Route::post('/renew', [PortalController::class, 'storeRenewal'])->name('renew.store');
         Route::get('/invoices', [PortalController::class, 'invoices'])->name('invoices');
         Route::post('/invoices/{invoice}/pay', [PortalController::class, 'pay'])->name('invoices.pay');
+        Route::post('/checkout/pay', [PortalController::class, 'payCheckout'])->name('checkout.pay');
         Route::get('/classes', [PortalController::class, 'classes'])->name('classes');
         Route::post('/classes/{session}/book', [PortalController::class, 'book'])->name('classes.book');
         Route::post('/bookings/{booking}/cancel', [PortalController::class, 'cancelBooking'])->name('bookings.cancel');

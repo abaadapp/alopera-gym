@@ -152,7 +152,8 @@ final class PaymobClient
                     'currency' => $intent->currency,
                     'payment_methods' => self::checkoutIds($integration),
                     'items' => [[
-                        'name' => Str::limit('Invoice '.$invoice->number, 50, ''),
+                        // A membership bought online is paid before it is sold: its draft has no number yet (MembershipCheckouts).
+                        'name' => Str::limit($invoice->number ? 'Invoice '.$invoice->number : 'Membership', 50, ''),
                         'amount' => Money::toMinor($intent->amount),
                         'quantity' => 1,
                     ]],

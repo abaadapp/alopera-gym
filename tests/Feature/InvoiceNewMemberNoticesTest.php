@@ -6,6 +6,7 @@ use App\Models\Tenant;
 use App\Models\TenantIntegration;
 use App\Models\User;
 use App\Modules\Finance\Models\Invoice;
+use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\MembershipPlan;
@@ -23,8 +24,12 @@ use Tests\TestCase;
  * «إشعارات العضو الجديد» on a new customer's invoice that registers them (owner's decision, 2026-11-21): consent to
  * service messages on WhatsApp kept on the member file (off unless ticked), the language of the messages, and — only
  * with that consent — the invoice and the welcome, each off unless ticked. Sent through the club's own notices
- * (InvoiceMessage, MemberNotifier::welcome: consent, approval, dedupe), once each, only once the invoice is issued and
- * saved; nothing at all otherwise — not even a skipped row that would stop a later message.
+ * (InvoiceMessage, MemberNotifier: consent, approval, dedupe), once each, only once the invoice is issued and saved.
+ *
+ * A membership or a package is sold only when paid (owner's decision, 2026-11-25): such an invoice is paid in full on
+ * issue, so it announces nothing as an invoice (nothing is owed) — the member is told of the payment and the
+ * activation instead (payment_received, membership_activated), as every member is, sent with consent and recorded as
+ * skipped without it (keyed on that payment and that membership, so they stop no later message).
  */
 class InvoiceNewMemberNoticesTest extends TestCase
 {
@@ -52,7 +57,7 @@ class InvoiceNewMemberNoticesTest extends TestCase
     private function form(array $lines, array $over = []): array
     {
         return array_replace([
-            'customer_mode' => 'new', 'customer_name' => 'Sara', 'customer_phone' => '9'.random_int(1000000, 9999999), 'issue' => 1, 'payment_method' => 'credit',
+            'customer_mode' => 'new', 'customer_name' => 'Sara', 'customer_phone' => '9'.random_int(1000000, 9999999), 'issue' => 1, 'payment_method' => 'cash',
             'issue_date' => today()->toDateString(), 'due_date' => today()->addDays(7)->toDateString(), 'lines' => $lines, 'client_key' => (string) Str::uuid(),
         ], $over);
     }
@@ -87,11 +92,15 @@ class InvoiceNewMemberNoticesTest extends TestCase
 
         $this->issue($owner, $this->form([$this->planLine($c['plan'])]))->assertSessionHasNoErrors();
 
-        $this->asTenant($club, fn () => $this->assertSame([false, 'ar'], [Member::sole()->whatsapp_opt_in, Member::sole()->message_language], 'consent off unless ticked'));
-        $this->assertSame([], $this->messages($club), 'no welcome, no invoice message, not even a skipped one');
+        [$member, $payment, $membership] = $this->asTenant($club, fn () => [Member::sole(), Payment::sole(), Membership::sole()]);
+        $this->assertSame([false, 'ar'], [$member->whatsapp_opt_in, $member->message_language], 'consent off unless ticked');
+        $this->assertSame([
+            ['payment_received', Message::SKIPPED, 'payment:'.$payment->id],
+            ['membership_activated', Message::SKIPPED, 'activated:'.$membership->id],
+        ], $this->messages($club), 'no welcome, no invoice message; the payment and activation notices not sent without consent');
     }
 
-    public function test_with_consent_the_invoice_and_the_welcome_go_once_each_in_the_members_language(): void
+    public function test_with_consent_the_welcome_the_payment_and_the_activation_go_once_each_and_no_invoice_message(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
@@ -102,15 +111,18 @@ class InvoiceNewMemberNoticesTest extends TestCase
         $this->issue($owner, $form)->assertSessionHasNoErrors();
         $this->issue($owner, $form)->assertSessionHasNoErrors(); // the same form again (a double click)
 
-        [$member, $invoice] = $this->asTenant($club, fn () => [Member::sole(), Invoice::sole()]);
+        [$member, $invoice, $payment, $membership] = $this->asTenant($club, fn () => [Member::sole(), Invoice::sole(), Payment::sole(), Membership::sole()]);
         $this->assertSame([true, 'en'], [$member->whatsapp_opt_in, $member->message_language], 'the customer\'s consent and language on their file');
+        $this->assertSame(Invoice::PAID, $invoice->status);
+        // Paid on issue: no invoice message although it was ticked (nothing is owed); the payment and the activation instead.
         $this->assertSame([
             ['member_welcome', Message::SENT, 'welcome:'.$member->id],
-            ['invoice_issued_membership_en', Message::SENT, 'invoice:'.$invoice->id],
-        ], $this->messages($club), 'each once, the invoice in the member\'s language, sent after the invoice was saved');
+            ['payment_received', Message::SENT, 'payment:'.$payment->id],
+            ['membership_activated', Message::SENT, 'activated:'.$membership->id],
+        ], $this->messages($club), 'each once, sent after the invoice was saved');
     }
 
-    public function test_an_arabic_customer_gets_the_arabic_invoice_message_and_consent_alone_sends_nothing(): void
+    public function test_paid_on_issue_with_the_invoice_ticked_or_not_a_consenting_customer_gets_the_payment_and_activation_and_no_invoice_message(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
@@ -124,8 +136,10 @@ class InvoiceNewMemberNoticesTest extends TestCase
             $first = Member::where('phone', 'like', '%91111111')->sole();
             $second = Member::where('phone', 'like', '%92222222')->sole();
             $this->assertTrue($second->whatsapp_opt_in, 'consent kept for later messages');
-            $this->assertSame(['invoice_issued_membership'], Message::where('member_id', $first->id)->pluck('template_key')->all());
-            $this->assertSame(0, Message::where('member_id', $second->id)->count(), 'consent alone sends nothing');
+            // The invoice ticked or not: the same club notices, the invoice message never.
+            foreach ([$first, $second] as $member) {
+                $this->assertSame([['payment_received', Message::SENT], ['membership_activated', Message::SENT]], Message::where('member_id', $member->id)->orderBy('id')->get()->map(fn (Message $m) => [$m->template_key, $m->status])->all());
+            }
         });
     }
 
@@ -159,29 +173,29 @@ class InvoiceNewMemberNoticesTest extends TestCase
         $this->assertSame([], $this->messages($club), 'the messages were written with the transaction, and went with it');
     }
 
-    public function test_a_package_alone_is_sent_when_asked_and_an_invoice_paid_on_issue_asks_for_nothing(): void
+    public function test_a_package_alone_announces_its_payment_and_a_membership_its_payment_and_activation_with_the_welcome(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
         $this->whatsapp($club);
         $c = $this->catalogue($club);
 
-        // Personal training alone: the general invoice message, once.
+        // Personal training alone, paid on issue: its payment, once — no invoice message.
         $this->issue($owner, $this->form([$this->ptLine($c['pt'])], ['customer_phone' => '93333333', 'new_member' => ['whatsapp_opt_in' => 1, 'send_invoice' => 1]]))->assertSessionHasNoErrors();
-        // Paid in full on issue: no invoice message (nothing owed); the welcome asked for still goes, and — the customer
-        // having consented — the club's own notices of a payment and an activation, as for every member.
+        // A membership: no invoice message either; the welcome asked for still goes, and — the customer having
+        // consented — the club's own notices of a payment and an activation, as for every member.
         $this->issue($owner, $this->form([$this->planLine($c['plan'])], ['customer_phone' => '94444444', 'payment_method' => 'cash', 'new_member' => ['whatsapp_opt_in' => 1, 'send_invoice' => 1, 'welcome' => 1]]))->assertSessionHasNoErrors();
 
         $this->asTenant($club, function () {
             $pt = Member::where('phone', 'like', '%93333333')->sole();
             $paid = Member::where('phone', 'like', '%94444444')->sole();
-            $this->assertSame(['invoice_issued'], Message::where('member_id', $pt->id)->pluck('template_key')->all());
+            $this->assertSame(['payment_received'], Message::where('member_id', $pt->id)->pluck('template_key')->all());
             $this->assertSame(['member_welcome', 'payment_received', 'membership_activated'], Message::where('member_id', $paid->id)->orderBy('id')->pluck('template_key')->all());
             $this->assertSame(Membership::ACTIVE, Membership::where('member_id', $paid->id)->sole()->status, 'activation as before: paid in full');
         });
     }
 
-    public function test_a_registered_members_invoice_is_announced_as_before(): void
+    public function test_a_registered_members_subscription_invoice_announces_the_payment_and_the_activation_not_the_invoice(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
@@ -189,9 +203,12 @@ class InvoiceNewMemberNoticesTest extends TestCase
         $c = $this->catalogue($club);
         $member = $this->member($club);
 
+        // A membership, sold paid: no invoice message (nothing is owed), the payment and the activation instead, as for
+        // a new customer — the member's consent is on their file already.
         $this->issue($owner, $this->form([$this->planLine($c['plan'])], ['customer_mode' => 'member', 'member_id' => $member->id]))->assertSessionHasNoErrors();
-
-        $invoice = $this->asTenant($club, fn () => Invoice::sole());
-        $this->assertSame([['invoice_issued_membership', Message::SENT]], $this->asTenant($club, fn () => Message::where('related_type', 'invoice')->where('related_id', $invoice->id)->get()->map(fn ($m) => [$m->template_key, $m->status])->all()));
+        $sold = $this->asTenant($club, fn () => Invoice::sole());
+        $this->assertSame([], $this->asTenant($club, fn () => Message::where('related_type', 'invoice')->where('related_id', $sold->id)->pluck('template_key')->all()));
+        // (The welcome is the member file's own, from registering it before.)
+        $this->assertSame(['payment_received', 'membership_activated'], $this->asTenant($club, fn () => Message::where('member_id', $member->id)->where('template_key', '!=', 'member_welcome')->orderBy('id')->pluck('template_key')->all()));
     }
 }

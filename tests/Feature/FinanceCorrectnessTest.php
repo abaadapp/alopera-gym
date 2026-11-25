@@ -114,12 +114,13 @@ class FinanceCorrectnessTest extends TestCase
     public function test_a_package_sold_in_a_branch_is_that_branchs_and_its_seller_opens_it(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $khoud = $this->asTenant($club, fn () => Branch::create(['name' => 'فرع الخوض', 'is_active' => true]));
         $seller = $this->staff($club, 'manager', ['branch_id' => $khoud->id]);
         $member = $this->member($club, ['branch_id' => $khoud->id]);
         $package = $this->asTenant($club, fn () => PtPackage::create(['name' => 'PT 4', 'sessions_count' => 4, 'price' => 40, 'validity_days' => 30]));
 
-        $this->actingAs($seller)->post(route('club.pt.store', $member), ['pt_package_id' => $package->id])->assertRedirect();
+        $this->actingAs($seller)->post(route('club.pt.store', $member), ['pt_package_id' => $package->id, 'payment_method' => 'card', 'payment_reference' => 'T-1'])->assertRedirect();
         $invoice = $this->asTenant($club, fn () => Invoice::where('type', 'pt')->sole());
         $this->assertSame($khoud->id, $invoice->branch_id);
         $this->actingAs($seller)->get(route('club.invoices.show', $invoice))->assertOk();

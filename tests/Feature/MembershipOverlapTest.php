@@ -145,13 +145,14 @@ class MembershipOverlapTest extends TestCase
     public function test_a_renewal_starts_after_the_last_period_and_always_passes(): void
     {
         $club = $this->club();
+        $this->fundAccounts($club);
         $owner = $this->owner($club);
         $member = $this->member($club);
         $plan = $this->plan($club);
         $current = $this->activeMembership($club, $member, $plan);
 
         $second = $this->pay($club, $this->renew($club, $member, $plan));
-        $this->actingAs($owner)->post(route('club.memberships.store', $member), ['membership_plan_id' => $plan->id, 'mode' => 'renewal'])
+        $this->actingAs($owner)->post(route('club.memberships.store', $member), ['membership_plan_id' => $plan->id, 'mode' => 'renewal', 'payment_method' => 'cash'])
             ->assertRedirect()->assertSessionHasNoErrors();
         $third = $this->asTenant($club, fn () => Membership::where('member_id', $member->id)->latest('id')->firstOrFail());
 
@@ -185,9 +186,9 @@ class MembershipOverlapTest extends TestCase
         $before = $this->counts($club);
 
         // The member page sends a start date; the desk's form does not (the sale starts today).
-        $this->actingAs($owner)->post(route('club.memberships.store', $member), ['membership_plan_id' => $plan->id, 'mode' => 'new', 'starts_on' => today()->addDays(3)->toDateString()])
+        $this->actingAs($owner)->post(route('club.memberships.store', $member), ['membership_plan_id' => $plan->id, 'mode' => 'new', 'starts_on' => today()->addDays(3)->toDateString(), 'payment_method' => 'cash'])
             ->assertSessionHasErrors('starts_on');
-        $this->actingAs($owner)->post(route('club.memberships.store', $member), ['membership_plan_id' => $plan->id, 'mode' => 'new'])
+        $this->actingAs($owner)->post(route('club.memberships.store', $member), ['membership_plan_id' => $plan->id, 'mode' => 'new', 'payment_method' => 'cash'])
             ->assertSessionHasErrors('membership_plan_id');
 
         $this->assertSame($before, $this->counts($club));

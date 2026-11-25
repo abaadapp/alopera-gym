@@ -122,6 +122,28 @@ final class MembershipService
     }
 
     /**
+     * The lines selling ($renewal false) or renewing this plan would bill now, without selling it: every check a sale
+     * makes (the plan on sale, the member not blocked, no sale already waiting, no overlap, the coupon), then nothing
+     * kept — the rows a sale writes are rolled back. For a membership paid online before it is sold (MembershipCheckouts).
+     *
+     * @param  array{coupon_code?: string|null, discount?: string|float|null, starts_on?: string|null, notes?: string|null, branch_id?: int|null}  $options
+     * @return list<array{description: string, unit_price: string, discount?: string}>
+     */
+    public function checkoutLines(Member $member, MembershipPlan $plan, bool $renewal, array $options = []): array
+    {
+        [$plan, $kind, $terms] = $renewal ? $this->renewalTerms($member, $plan) : [$plan, Membership::KIND_NEW, []];
+
+        DB::beginTransaction();
+        try {
+            [, $lines] = $this->pending($member, $plan, $kind, $terms + array_filter($options, fn ($v) => $v !== null && $v !== ''));
+        } finally {
+            DB::rollBack();
+        }
+
+        return array_map(fn (array $l) => array_diff_key($l, ['itemable' => true]), $lines);
+    }
+
+    /**
      * The invoice the lines of pendingForInvoice() were issued on: the membership is tied to it, as a sale is, and
      * announced (MembershipCreated: the invoice message to the member) — or later by announce(), once the money taken
      * with the invoice is recorded, so the message asks only what is still owed (none: no message).

@@ -7,6 +7,7 @@ use App\Core\Export\ExcelLimit;
 use App\Core\Export\TableExporter;
 use App\Core\Support\BusinessRuleException;
 use App\Core\Support\Money;
+use App\Core\Support\SubmittedOnce;
 use App\Core\Tenancy\BranchContext;
 use App\Core\Tenancy\TenantRule;
 use App\Http\Controllers\Controller;
@@ -14,14 +15,18 @@ use App\Modules\Gym\Http\GymPresenter;
 use App\Modules\Gym\Models\Coupon;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\MembershipCheckout;
 use App\Modules\Gym\Models\MembershipPlan;
 use App\Modules\Gym\Services\CouponService;
+use App\Modules\Gym\Services\MembershipCheckouts;
 use App\Modules\Gym\Services\MembershipService;
+use App\Modules\Gym\Services\PaidSales;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -154,7 +159,11 @@ class MembershipController extends Controller
             'coupon_code' => ['nullable', 'string', 'max:40'],
             'discount' => ['nullable', 'numeric', 'min:0', 'max:99999'],
             'notes' => ['nullable', 'string', 'max:500'],
-        ]);
+            // Sold only paid (owner's decision, 2026-11-25): the money now, or a payment link that sells it once paid.
+            'payment_method' => ['required', 'in:cash,card,bank_transfer,link'],
+            'payment_reference' => ['nullable', 'string', 'max:120', 'required_if:payment_method,card'],
+            'client_key' => SubmittedOnce::RULE,
+        ], ['payment_method.required' => 'اختاري طريقة الدفع.', 'payment_reference.required_if' => 'أدخلي رقم العملية من جهاز الشبكة.']);
 
         if (! empty($data['discount']) && ! $request->user()->can('plans.manage')) {
             throw new BusinessRuleException('discount.forbidden', 'الخصم اليدوي يحتاج صلاحية إدارة الباقات.', 'discount');
@@ -167,14 +176,21 @@ class MembershipController extends Controller
             $options['branch_id'] = $branch;
         }
 
-        $membership = $data['mode'] === 'renewal'
-            ? $this->service->renew($member, $plan, $options)
-            : $this->service->sell($member, $plan, $options);
+        // Paying from afar: nothing is sold now. The link sells it, invoice and all, when Paymob confirms the money.
+        if ($data['payment_method'] === 'link') {
+            $checkout = app(MembershipCheckouts::class)->open($member, $plan, $data['mode'] === 'renewal' ? Membership::KIND_RENEWAL : Membership::KIND_NEW, 'link',
+                $options['coupon_code'] ?? null, Arr::except($options, ['coupon_code']));
 
-        return redirect()->route('club.invoices.show', $membership->invoice_id)
-            ->with('success', $membership->status === Membership::PENDING
-                ? 'تم إصدار الفاتورة. ستُفعّل العضوية بعد تأكيد الدفع.'
-                : 'تم تفعيل العضوية.');
+            return redirect()->route('club.members.show', $member)->with('success', $checkout->status === MembershipCheckout::COMPLETED
+                ? 'تم تفعيل العضوية (لا مبلغ عليها).'
+                : 'تم إنشاء رابط الدفع. أرسليه للعضوة: تُصدر الفاتورة وتُفعّل العضوية تلقائيًا عند الدفع.');
+        }
+
+        // One form, one sale: paid on the spot, a double click must not sell (and charge) twice.
+        $invoiceId = SubmittedOnce::run($data['client_key'] ?? null, 'membership-sale:'.$member->id, fn () => app(PaidSales::class)
+            ->membership($member, $plan, $data['mode'], $options, ['method' => $data['payment_method'], 'reference' => $data['payment_reference'] ?? null])->invoice_id);
+
+        return redirect()->route('club.invoices.show', $invoiceId)->with('success', 'تم البيع والدفع وتفعيل العضوية.');
     }
 
     public function freeze(Request $request, Membership $membership): RedirectResponse
@@ -211,9 +227,26 @@ class MembershipController extends Controller
         $data = $request->validate([
             'membership_plan_id' => ['required', TenantRule::exists('gym_membership_plans')],
             'coupon_code' => ['nullable', 'string', 'max:40'],
-        ]);
-        $new = $this->service->upgrade($membership, MembershipPlan::findOrFail($data['membership_plan_id']), array_filter(['coupon_code' => $data['coupon_code'] ?? null]));
+            'payment_method' => ['required', 'in:'.implode(',', PaidSales::METHODS)],
+            'payment_reference' => ['nullable', 'string', 'max:120', 'required_if:payment_method,card'],
+            'client_key' => SubmittedOnce::RULE,
+        ], ['payment_method.required' => 'اختاري طريقة الدفع.', 'payment_reference.required_if' => 'أدخلي رقم العملية من جهاز الشبكة.']);
+        $options = array_filter(['coupon_code' => $data['coupon_code'] ?? null]);
+        if ($branch = app(BranchContext::class)->id()) {
+            $options['branch_id'] = $branch;
+        }
+        $invoiceId = SubmittedOnce::run($data['client_key'] ?? null, 'membership-upgrade:'.$membership->id, fn () => app(PaidSales::class)
+            ->upgrade($membership, MembershipPlan::findOrFail($data['membership_plan_id']), $options, ['method' => $data['payment_method'], 'reference' => $data['payment_reference'] ?? null])->invoice_id);
 
-        return redirect()->route('club.invoices.show', $new->invoice_id)->with('success', 'تم إصدار فاتورة تغيير الباقة. ستُطبّق بعد الدفع.');
+        return redirect()->route('club.invoices.show', $invoiceId)->with('success', 'تم تغيير الباقة ودفعها، وطُبّقت.');
+    }
+
+    /** Withdraws a payment link reception sent (MembershipCheckouts::cancel). */
+    public function cancelLink(MembershipCheckout $checkout): RedirectResponse
+    {
+        abort_unless($checkout->channel === 'link', 404);
+        app(MembershipCheckouts::class)->cancel($checkout);
+
+        return back()->with('success', 'أُلغي رابط الدفع.');
     }
 }

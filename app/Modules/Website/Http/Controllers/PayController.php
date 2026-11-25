@@ -4,11 +4,13 @@ namespace App\Modules\Website\Http\Controllers;
 
 use App\Core\Papers\Papers;
 use App\Core\Support\BusinessRuleException;
+use App\Core\Support\SiteLanguage;
 use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Invoice;
 use App\Modules\Finance\Models\Payment;
 use App\Modules\Gym\Models\GiftMembership;
 use App\Modules\Gym\Models\Membership;
+use App\Modules\Gym\Models\MembershipCheckout;
 use App\Modules\Gym\Models\PtSubscription;
 use App\Modules\Inventory\Models\Sale;
 use App\Modules\Messaging\Services\MemberNotifier;
@@ -113,7 +115,10 @@ class PayController extends Controller
             'held' => self::held($intent),
             'amount' => $intent->amount,
             'currency' => $intent->currency,
-            'invoice' => $intent->invoice?->only('number') + ['token' => $intent->invoice?->public_token],
+            // A membership bought online has no invoice until its money is confirmed (MembershipCheckouts): none to show yet.
+            'invoice' => ($intent->invoice?->only('number') ?? []) + ['token' => $intent->invoice?->public_token],
+            // Its attempt failed and nothing is sold: tried again from the link she was sent, or from her account.
+            'retry_url' => self::retryUrl($intent),
             // A website order's payment returns to the order's own page link.
             'order' => $intent->invoice_id ? Sale::where('invoice_id', $intent->invoice_id)->where('source', Sale::WEBSITE)->value('public_token') : null,
             // A gift's payment (#192) returns to the gift's card, which shows it usable only once the webhook paid it.
@@ -122,6 +127,50 @@ class PayController extends Controller
     }
 
     /** Polled by the return page until the webhook has arrived. */
+    /** Where a failed attempt of a membership not sold yet is paid again (null: not such an attempt). */
+    private static function retryUrl(PaymentIntent $intent): ?string
+    {
+        $checkout = $intent->invoice_id ? MembershipCheckout::where('invoice_id', $intent->invoice_id)->where('status', MembershipCheckout::OPEN)->first() : null;
+
+        return match (true) {
+            $checkout === null => null,
+            $checkout->token !== null => route('site.checkout.show', ['token' => $checkout->token]),
+            default => route('portal.dashboard'),
+        };
+    }
+
+    /**
+     * The page of a payment link reception sent: what she pays for and how much, and «ادفعي الآن». Nothing is sold
+     * until the money is confirmed (MembershipCheckouts); a link paid, or withdrawn, says so.
+     */
+    public function checkout(string $token): Response
+    {
+        $checkout = MembershipCheckout::with(['plan', 'member:id,full_name', 'invoice.items'])->where('token', $token)->firstOrFail();
+        $invoice = $checkout->invoice;
+
+        return $this->page('Site/CheckoutPay', [
+            'state' => $checkout->status,
+            'name' => explode(' ', trim((string) $checkout->member?->full_name))[0] ?? '',
+            'plan' => SiteLanguage::pick($checkout->plan?->name, $checkout->plan?->name_en) ?? $checkout->plan?->name,
+            'lines' => $checkout->status === MembershipCheckout::OPEN && $invoice ? $invoice->items->map(fn ($i) => $i->only('description', 'line_total'))->values() : [],
+            'start_url' => route('site.checkout.start', ['token' => $token]),
+            'total' => $invoice?->total,
+            'currency' => $invoice?->currency,
+            // Paid: the invoice and receipt it became.
+            'invoice_url' => $checkout->status === MembershipCheckout::COMPLETED && $invoice?->public_token ? route('site.invoice', ['token' => $invoice->public_token]) : null,
+        ], __('الدفع'));
+    }
+
+    public function startCheckout(string $token, OnlinePaymentService $online): HttpResponse
+    {
+        $checkout = MembershipCheckout::where('token', $token)->firstOrFail();
+        if ($checkout->status !== MembershipCheckout::OPEN || ! $checkout->invoice) {
+            return redirect()->route('site.checkout.show', ['token' => $token]);
+        }
+
+        return Inertia::location($online->start($checkout->invoice, 'whatsapp')->checkout_url);
+    }
+
     public function status(string $reference): JsonResponse
     {
         $intent = PaymentIntent::where('reference', $reference)->firstOrFail();

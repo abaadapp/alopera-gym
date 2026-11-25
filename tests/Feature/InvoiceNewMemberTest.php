@@ -9,8 +9,6 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Modules\Accounting\Services\FinanceReports;
 use App\Modules\Finance\Models\Invoice;
-use App\Modules\Finance\Services\InvoiceService;
-use App\Modules\Finance\Services\PaymentService;
 use App\Modules\Gym\Models\Member;
 use App\Modules\Gym\Models\Membership;
 use App\Modules\Gym\Models\MembershipPlan;
@@ -26,10 +24,11 @@ use Tests\TestCase;
 
 /**
  * A new customer sold a membership or personal training on a customer invoice (owner's decision, 2026-11-21): issuing
- * registers their member file (the members' rules, the phone normalized), the invoice, its lines, the pending membership
- * or package and any money taken now — all in one transaction, or none of it. A number already registered makes no
- * second member; a new customer's invoice without a plan or a package registers no one; activation waits for the
- * invoice to be paid in full; permissions and branches hold.
+ * registers their member file (the members' rules, the phone normalized), the invoice, its lines, the membership or
+ * package and the money taken now — all in one transaction, or none of it. A membership or a package is sold only when
+ * it is paid (owner's decision, 2026-11-25): the invoice is paid in full as it is issued and the sale is active at once;
+ * on credit or part paid nothing is issued and no one is registered. A number already registered makes no second
+ * member; a new customer's invoice without a plan or a package registers no one; permissions and branches hold.
  */
 class InvoiceNewMemberTest extends TestCase
 {
@@ -64,7 +63,7 @@ class InvoiceNewMemberTest extends TestCase
     {
         return array_replace([
             'customer_mode' => 'new', 'customer_name' => 'سارة الحارثية', 'customer_phone' => '9123 4567', 'customer_email' => 'Sara@Example.com',
-            'issue' => 1, 'payment_method' => 'credit', 'issue_date' => today()->toDateString(), 'due_date' => today()->addDays(7)->toDateString(),
+            'issue' => 1, 'payment_method' => 'cash', 'issue_date' => today()->toDateString(), 'due_date' => today()->addDays(7)->toDateString(),
             'lines' => $lines, 'client_key' => (string) Str::uuid(),
         ], $over);
     }
@@ -114,14 +113,16 @@ class InvoiceNewMemberTest extends TestCase
             $membership = Membership::sole();
             // One invoice, the member's: no invoice of the membership's own.
             $this->assertSame(['member', $member->id, 'membership', '30.000'], [$invoice->billable_type, $invoice->billable_id, $invoice->type, $invoice->total]);
-            $this->assertSame([$member->id, Membership::PENDING, $invoice->id, $c['plan']->id], [$membership->member_id, $membership->status, $membership->invoice_id, $membership->membership_plan_id]);
+            // Sold paid: the invoice paid in full on issue, the membership active from today.
+            $this->assertSame([Invoice::PAID, '30.000', '0.000'], [$invoice->status, $invoice->paid_total, $invoice->balance()]);
+            $this->assertSame([$member->id, Membership::ACTIVE, $invoice->id, $c['plan']->id], [$membership->member_id, $membership->status, $membership->invoice_id, $membership->membership_plan_id]);
             $this->assertSame([$invoice->branch_id, $invoice->branch_id], [$member->branch_id, $membership->branch_id]);
             $this->assertSame(['membership', 'membership'], $invoice->items->pluck('itemable_type')->all(), 'the plan and its signup fee, on the membership');
             $this->assertDatabaseHas('audit_logs', ['event' => 'member.registered_on_invoice', 'subject_id' => $member->id]);
         });
     }
 
-    public function test_a_new_customer_sold_personal_training_is_registered_with_the_package_pending(): void
+    public function test_a_new_customer_sold_personal_training_is_registered_with_the_package_paid_and_active(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
@@ -134,7 +135,8 @@ class InvoiceNewMemberTest extends TestCase
             $invoice = Invoice::sole();
             $training = PtSubscription::sole();
             $this->assertSame(['pt', '40.000', $member->id], [$invoice->type, $invoice->total, $invoice->billable_id]);
-            $this->assertSame([$member->id, PtSubscription::PENDING, $invoice->id], [$training->member_id, $training->status, $training->invoice_id]);
+            $this->assertSame([Invoice::PAID, '40.000'], [$invoice->status, $invoice->paid_total]);
+            $this->assertSame([$member->id, PtSubscription::ACTIVE, $invoice->id], [$training->member_id, $training->status, $training->invoice_id]);
             $this->assertSame(0, Membership::count());
         });
     }
@@ -173,7 +175,7 @@ class InvoiceNewMemberTest extends TestCase
         $this->assertSame([1, 0, 0, 0], $this->counts($club));
 
         // Without «عرض الأعضاء»: refused all the same, the member not named.
-        $clerk = $this->holding($club, ['invoices.view', 'invoices.manage', 'memberships.sell', 'members.manage']);
+        $clerk = $this->holding($club, ['invoices.view', 'invoices.manage', 'payments.record', 'memberships.sell', 'members.manage']);
         $this->issue($clerk, [$this->planLine($c['plan'])])->assertSessionHasErrors('customer_phone')->assertSessionDoesntHaveErrors('existing_member_id');
         $this->assertSame([1, 0, 0, 0], $this->counts($club));
 
@@ -221,31 +223,27 @@ class InvoiceNewMemberTest extends TestCase
         $this->assertSame([1, 1, 1, 1], $this->counts($club));
     }
 
-    public function test_activation_waits_for_payment_in_full_and_voiding_withdraws_the_sale(): void
+    public function test_a_plan_or_package_on_credit_or_part_paid_is_refused_and_leaves_nothing_and_paid_in_full_it_is_active_at_once(): void
     {
         $club = $this->club();
         $owner = $this->owner($club);
         $c = $this->catalogue($club);
+        $lines = [$this->productLine($c['shake']), $this->planLine($c['plan']), $this->ptLine($c['pt'])];
 
-        // Part paid on issue: both pending.
-        $this->issue($owner, [$this->planLine($c['plan']), $this->ptLine($c['pt'])], ['payment_method' => 'cash', 'paid_amount' => '20'])->assertSessionHasNoErrors();
-        [$invoice, $membership, $training] = $this->asTenant($club, fn () => [Invoice::sole(), Membership::sole(), PtSubscription::sole()]);
-        $this->assertSame(['20.000', Membership::PENDING, PtSubscription::PENDING], [$invoice->paid_total, $membership->status, $training->status]);
-
-        // The rest: both active, once.
-        $this->asTenant($club, fn () => app(PaymentService::class)->record($invoice->fresh(), '50.000', 'cash'));
-        $this->assertSame([Membership::ACTIVE, PtSubscription::ACTIVE], $this->asTenant($club, fn () => [$membership->fresh()->status, $training->fresh()->status]));
-
-        // Another new customer, nothing paid, the invoice voided: the sale withdrawn, the member file kept.
-        $this->issue($owner, [$this->planLine($c['plan']), $this->ptLine($c['pt'])], ['customer_phone' => '92345678', 'customer_email' => null])->assertSessionHasNoErrors();
-        $this->asTenant($club, function () {
-            $second = Member::where('phone', Phone::normalize('92345678'))->sole();
-            $invoice = Invoice::where('billable_id', $second->id)->sole();
-            app(InvoiceService::class)->void($invoice, 'خطأ');
-            $this->assertSame(Membership::CANCELLED, Membership::where('member_id', $second->id)->sole()->status);
-            $this->assertSame(PtSubscription::CANCELLED, PtSubscription::where('member_id', $second->id)->sole()->status);
-            $this->assertNotNull($second->fresh());
+        // Sold only when paid: part paid, or on credit (آجل), is refused on the payment method — no member registered,
+        // no invoice, no membership, no package, the product still on the shelf.
+        $this->issue($owner, $lines, ['payment_method' => 'cash', 'paid_amount' => '20'])->assertSessionHasErrors('payment_method');
+        $this->issue($owner, $lines, ['payment_method' => 'credit'])->assertSessionHasErrors('payment_method');
+        $this->assertSame([0, 0, 0, 0], $this->counts($club));
+        $this->asTenant($club, function () use ($c) {
+            $this->assertSame(10.0, (float) app(StockService::class)->quantities(null)[$c['shake']->id]);
+            $this->assertSame(0, DB::table('audit_logs')->where('event', 'member.registered_on_invoice')->count());
         });
+
+        // Paid in full (the whole balance typed): both active at once.
+        $this->issue($owner, [$this->planLine($c['plan']), $this->ptLine($c['pt'])], ['payment_method' => 'card', 'paid_amount' => '70'])->assertSessionHasNoErrors();
+        [$invoice, $membership, $training] = $this->asTenant($club, fn () => [Invoice::sole(), Membership::sole(), PtSubscription::sole()]);
+        $this->assertSame([Invoice::PAID, '70.000', Membership::ACTIVE, PtSubscription::ACTIVE], [$invoice->status, $invoice->paid_total, $membership->status, $training->status]);
     }
 
     public function test_registering_takes_its_permission_and_the_users_branch(): void
@@ -255,17 +253,18 @@ class InvoiceNewMemberTest extends TestCase
         $c = $this->catalogue($club);
 
         // May sell, may not register members: refused on the line, nothing made.
-        $seller = $this->holding($club, ['invoices.view', 'invoices.manage', 'memberships.sell', 'pt.sell', 'members.view']);
+        // Each may take the money (a plan or a package is sold paid), so only the permission named is missing.
+        $seller = $this->holding($club, ['invoices.view', 'invoices.manage', 'payments.record', 'memberships.sell', 'pt.sell', 'members.view']);
         $this->issue($seller, [$this->planLine($c['plan'])])->assertSessionHasErrors('lines.0.item_id');
         // May register, may not sell the plan.
-        $registrar = $this->holding($club, ['invoices.view', 'invoices.manage', 'members.manage', 'members.view']);
+        $registrar = $this->holding($club, ['invoices.view', 'invoices.manage', 'payments.record', 'members.manage', 'members.view']);
         $this->issue($registrar, [$this->ptLine($c['pt'])])->assertSessionHasErrors('lines.0.item_id');
         $this->assertSame([0, 0, 0, 0], $this->counts($club));
         $this->actingAs($seller)->get(route('club.invoices.create'))->assertInertia(fn ($p) => $p->where('may.register', false));
 
         // Tied to a branch: the member, the invoice and the membership are that branch's.
         $here = $this->asTenant($club, fn () => Branch::create(['name' => 'الخوض', 'is_active' => true]));
-        $staff = $this->holding($club, ['invoices.view', 'invoices.manage', 'memberships.sell', 'members.manage', 'members.view'], ['branch_id' => $here->id]);
+        $staff = $this->holding($club, ['invoices.view', 'invoices.manage', 'payments.record', 'memberships.sell', 'members.manage', 'members.view'], ['branch_id' => $here->id]);
         $this->issue($staff, [$this->planLine($c['plan'])])->assertSessionHasNoErrors();
         $this->asTenant($club, fn () => $this->assertSame([$here->id, $here->id, $here->id], [Member::sole()->branch_id, Invoice::sole()->branch_id, Membership::sole()->branch_id]));
     }
