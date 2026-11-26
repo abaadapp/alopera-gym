@@ -44,6 +44,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -81,6 +82,15 @@ class InvoiceController extends Controller
                 default => $q->where('status', $s),
             })
             ->when($request->string('type')->toString(), fn ($q, $t) => $q->where('type', $t))
+            // What was sold (owner's decision, 2026-11-25: one section for every sale): an invoice with a line of that
+            // kind — a mixed one is under each of its kinds; «other» has none of them (free text, a service).
+            ->when($request->string('category')->toString(), fn ($q, $c) => self::ofCategory($q, $c))
+            // Where it was sold: the point of sale, the website shop, or the desk and the panel (everything else).
+            ->when($request->string('source')->toString(), fn ($q, $s) => match ($s) {
+                'pos', 'website' => $q->whereExists(fn ($e) => $e->selectRaw('1')->from('sales')->whereColumn('sales.invoice_id', 'invoices.id')->where('sales.source', $s)),
+                'desk' => $q->whereNotExists(fn ($e) => $e->selectRaw('1')->from('sales')->whereColumn('sales.invoice_id', 'invoices.id')),
+                default => $q,
+            })
             ->when($request->string('q')->toString(), fn ($q, $term) => $q->where(fn ($w) => $w->where('number', 'ilike', "%{$term}%")->orWhere('customer_name', 'ilike', "%{$term}%")->when(preg_replace('/\D/', '', $term), fn ($x, $digits) => $x->orWhere('customer_phone', 'like', "%{$digits}%"))))
             // The period (PeriodTabs) is on the issue date; the due date has its own choices (and older links' dates).
             ->tap(fn ($q) => $period->apply($q, 'issue_date'))
@@ -92,8 +102,17 @@ class InvoiceController extends Controller
             })
             ->when($request->date('due_from'), fn ($q, $d) => $q->where('due_date', '>=', $d))
             ->when($request->date('due_to'), fn ($q, $d) => $q->where('due_date', '<=', $d))
-            ->latest('id')->paginate($perPage)->withQueryString()
-            ->through(fn (Invoice $i) => self::row($i));
+            ->latest('id');
+        // The period's sales as filtered (never a draft or a voided invoice): how many, worth, and collected.
+        $summary = $drafts ? null : (clone $invoices)->reorder()->where('status', '!=', Invoice::VOID)
+            ->selectRaw('count(*) as n, coalesce(sum(total - credited_total), 0) as sold, coalesce(sum(least(paid_total, total - credited_total)), 0) as collected')->first();
+        $invoices = $invoices->paginate($perPage)->withQueryString();
+        $kinds = self::categoriesOf($invoices->pluck('id')->all());
+        $sales = DB::table('sales')->whereIn('invoice_id', $invoices->pluck('id'))->get(['id', 'invoice_id', 'source', 'number'])->keyBy('invoice_id');
+        $invoices->through(fn (Invoice $i) => self::row($i) + [
+            'categories' => $kinds[$i->id] ?? ['other'],
+            'sale' => ($s = $sales->get($i->id)) ? ['id' => $s->id, 'source' => $s->source, 'number' => $s->number] : null,
+        ]);
 
         // What is owed across the branch in view: still open, past due, due within a week, and owed back to customers.
         $open = 'greatest(total - credited_total - paid_total, 0)';
@@ -108,12 +127,64 @@ class InvoiceController extends Controller
         return Inertia::render('Finance/Invoices/Index', [
             'invoices' => $invoices,
             'totals' => collect(['receivable', 'overdue', 'due_soon', 'refund_due'])->mapWithKeys(fn ($k) => [$k => Money::normalize($totals->{$k} ?? 0)]),
-            'filters' => $request->only('state', 'status', 'type', 'q', 'due', 'due_from', 'due_to', 'per_page'),
+            'filters' => $request->only('state', 'status', 'type', 'category', 'source', 'q', 'due', 'due_from', 'due_to', 'per_page'),
+            'summary' => $summary ? ['count' => (int) $summary->n, 'sold' => Money::normalize($summary->sold), 'collected' => Money::normalize($summary->collected)] : null,
+            'categories' => self::CATEGORY_LABELS,
             'period' => $period->toArray(),
             'draftCount' => $request->user()->can('invoices.manage') ? BranchContext::scope(Invoice::drafts())->count() : 0,
             'states' => self::STATES,
             'statuses' => self::DOCUMENT_STATUSES,
         ]);
+    }
+
+    /** What an invoice sold, by its lines' kinds (InvoiceItem::itemable_type). */
+    public const CATEGORIES = [
+        'membership' => ['membership', 'membership_plan'],
+        'pt' => ['pt_subscription', 'pt_package'],
+        'program' => ['program'],
+        'products' => ['product', 'product_addon'],
+        'gift' => ['gift_membership'],
+    ];
+
+    public const CATEGORY_LABELS = ['membership' => 'اشتراكات', 'pt' => 'تدريب شخصي', 'program' => 'برامج', 'products' => 'منتجات', 'gift' => 'هدايا', 'other' => 'أخرى'];
+
+    private static function ofCategory($query, string $category)
+    {
+        $lines = fn (array $types) => fn ($e) => $e->selectRaw('1')->from('invoice_items')->whereColumn('invoice_items.invoice_id', 'invoices.id')->whereIn('invoice_items.itemable_type', $types);
+
+        return match (true) {
+            isset(self::CATEGORIES[$category]) => $query->whereExists($lines(self::CATEGORIES[$category])),
+            $category === 'other' => $query->whereNotExists($lines(array_merge(...array_values(self::CATEGORIES)))),
+            default => $query,
+        };
+    }
+
+    /** @param list<int> $ids @return array<int, list<string>> invoice id => its kinds, in the order of CATEGORIES */
+    public static function categoriesOf(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        $byType = [];
+        foreach (self::CATEGORIES as $kind => $types) {
+            foreach ($types as $type) {
+                $byType[$type] = $kind;
+            }
+        }
+        $found = [];
+        foreach (DB::table('invoice_items')->whereIn('invoice_id', $ids)->whereNotNull('itemable_type')->distinct()->get(['invoice_id', 'itemable_type']) as $row) {
+            if (isset($byType[$row->itemable_type])) {
+                $found[$row->invoice_id][$byType[$row->itemable_type]] = true;
+            }
+        }
+        $order = array_flip(array_keys(self::CATEGORIES));
+
+        return array_map(function ($kinds) use ($order) {
+            $kinds = array_keys($kinds);
+            usort($kinds, fn ($a, $b) => $order[$a] <=> $order[$b]);
+
+            return $kinds;
+        }, $found);
     }
 
     /** @return array<string, mixed> */
@@ -525,6 +596,9 @@ class InvoiceController extends Controller
 
         return Inertia::render('Finance/Invoices/Show', [
             'invoice' => self::row($invoice) + [
+                // What it sold, and the sale or website order it is the invoice of (its own page: receipt, order steps).
+                'categories' => self::categoriesOf([$invoice->id])[$invoice->id] ?? ['other'],
+                'sale' => ($s = DB::table('sales')->where('invoice_id', $invoice->id)->first(['id', 'source', 'number'])) ? ['id' => $s->id, 'source' => $s->source, 'number' => $s->number] : null,
                 'notes' => $invoice->notes, 'void_reason' => $invoice->void_reason, 'creator' => $invoice->creator?->name,
                 // The team's own: a note never printed, and the files kept with the invoice.
                 'internal_notes' => $invoice->internal_notes, 'payment_terms_days' => $invoice->payment_terms_days,

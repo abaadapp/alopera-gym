@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowLeftRight, Ban, Banknote, Check, Clock, Copy, Credi
 import ClubLayout from '@/Layouts/ClubLayout';
 import PaperPanel, { DocumentMeta, LtrDates, PaperAside, type PaperData } from '@/Components/Papers/PaperPanel';
 import { clientKey } from '@/Components/Inventory/parts';
+import { SALE_KIND_LABELS } from '@/lib/labels';
 import { Badge, Button, Card, ChoiceCard, ConfirmAction, Field, Input, Modal, Notice, PageHeader, Select, Textarea, BackLink, FileInput } from '@/Components/ui';
 import { useCan, useCurrency } from '@/hooks/useShared';
 import { cn } from '@/lib/cn';
@@ -67,6 +68,10 @@ interface CreditNoteRow {
 interface Invoice {
     id: number;
     number: string;
+    /** What it sold, by its lines. */
+    categories?: string[];
+    /** The till sale or website order it is the invoice of. */
+    sale?: { id: number; source: string; number: string } | null;
     type: string;
     status: string;
     customer_name: string;
@@ -166,7 +171,7 @@ export default function InvoiceShow({ invoice, intents, paymentReviews = [], onl
     return (
         <ClubLayout title={`فاتورة ${invoice.number}`}>
             <PageHeader
-                back={<BackLink href={route('club.invoices.index')}>فواتير العملاء</BackLink>}
+                back={<BackLink href={route('club.invoices.index')}>المبيعات</BackLink>}
                 title={<span className="num">{invoice.number}</span>}
                 subtitle={`${invoice.customer_name} — ${INVOICE_STATES[invoice.state]?.[0] ?? statusLabel} · ${invoiceType[invoice.type] ?? invoice.type}`}
                 actions={
@@ -212,6 +217,9 @@ export default function InvoiceShow({ invoice, intents, paymentReviews = [], onl
                         { label: invoice.billable_type === 'member' ? 'العضو' : 'العميل', value: invoice.billable_type === 'member' && invoice.billable_id ? <Link href={route('club.members.show', invoice.billable_id)} className="font-medium hover:text-brand">{invoice.customer_name}</Link> : invoice.customer_name },
                         invoice.customer_phone ? { label: 'الهاتف', value: invoice.customer_phone, ltr: true } : null,
                         { label: 'نوع الفاتورة', value: invoiceType[invoice.type] ?? invoice.type },
+                        // What it sold, and the till sale or website order it is the invoice of (its receipt, the order's steps).
+                        { label: 'ما بيع', value: (invoice.categories ?? ['other']).map((c) => SALE_KIND_LABELS[c] ?? c).join('، ') },
+                        ...(invoice.sale ? [{ label: invoice.sale.source === 'website' ? 'طلب الموقع' : 'عملية نقطة البيع', value: <Link href={route('club.sales.show', invoice.sale.id)} className="font-medium text-[#1d4ed8] num">{invoice.sale.number}</Link> }] : []),
                         { label: 'تاريخ الإصدار', value: invoice.issue_date, ltr: true },
                         invoice.due_date ? { label: 'الاستحقاق', value: invoice.due_date, ltr: true } : null,
                         invoice.paid_at ? { label: 'تاريخ السداد', value: invoice.paid_at, ltr: true } : null,

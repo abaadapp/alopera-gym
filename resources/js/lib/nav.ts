@@ -1,6 +1,6 @@
 import { usePage } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
-import { BarChart3, Blocks, Boxes, Briefcase, ClipboardList, DoorOpen, Dumbbell, FileText, FolderOpen, Globe, LayoutGrid, MessageCircle, Package, ScanLine, Settings, ShoppingBag, Ticket, Users, Wallet } from 'lucide-react';
+import { BarChart3, Blocks, Boxes, Briefcase, ClipboardList, DoorOpen, Dumbbell, FolderOpen, Globe, LayoutGrid, MessageCircle, Package, ScanLine, Settings, ShoppingBag, Ticket, Users, Wallet } from 'lucide-react';
 import { useCan, useShared } from '@/hooks/useShared';
 
 /**
@@ -85,21 +85,18 @@ export const NAV: NavGroup[] = [
                 ],
             },
             {
+                // One section for every sale (owner's decision, 2026-11-25): each sale is an invoice — memberships,
+                // personal training, programs, products, gifts — chosen by what was sold and where. The till's sales
+                // and the website's orders keep their own pages (a receipt, an order's steps), and the orders to prepare
+                // and hand over their own tab. The point of sale opens from the page — or straight from the menu for
+                // whoever only sells.
                 label: 'المبيعات',
                 icon: ShoppingBag,
-                // One page: every sale from the till and the website (each with its own page, a website order's steps
-                // included); its figures are the sales report's. The point of sale opens from its header — or straight
-                // from the menu for whoever only sells.
                 tabs: [
-                    { label: 'المبيعات', route: 'club.sales.index', permission: ['sales.view', 'orders.manage'], match: 'club.sales.*' },
+                    { label: 'كل المبيعات', route: 'club.invoices.index', permission: 'invoices.view', match: ['club.invoices.*', 'club.credit-notes.*'] },
+                    { label: 'عمليات نقطة البيع والطلبات', route: 'club.sales.index', permission: ['sales.view', 'orders.manage'], match: 'club.sales.*' },
                     { label: 'نقطة البيع', route: 'club.pos.index', permission: 'pos.sell', menuOnly: true },
                 ],
-            },
-            {
-                // One entry of its own, not a tab of finance: one place to issue, read and collect a customer's invoice.
-                label: 'فواتير العملاء',
-                icon: FileText,
-                tabs: [{ label: 'فواتير العملاء', route: 'club.invoices.index', permission: 'invoices.view', match: ['club.invoices.*', 'club.credit-notes.*'] }],
             },
             {
                 label: 'المشتريات',

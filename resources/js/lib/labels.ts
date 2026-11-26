@@ -34,6 +34,9 @@ export const invoiceStatus: Record<string, [string, Tone]> = {
 
 export const invoiceType: Record<string, string> = { membership: 'عضوية', pt: 'تدريب شخصي', pos: 'مبيعات المنتجات', gift: 'هدية اشتراك', other: 'أخرى' };
 
+/** What a sale sold, by its invoice's lines (InvoiceController::CATEGORY_LABELS). */
+export const SALE_KIND_LABELS: Record<string, string> = { membership: 'اشتراكات', pt: 'تدريب شخصي', program: 'برامج', products: 'منتجات', gift: 'هدايا', other: 'أخرى' };
+
 export const paymentStatus: Record<string, [string, Tone]> = {
     pending: ['بانتظار التأكيد', 'amber'],
     completed: ['مكتملة', 'green'],

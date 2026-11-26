@@ -78,7 +78,7 @@ export default function SaleShow({ sale, can, printOrders = false, printer = nul
     return (
         <ClubLayout title={`عملية البيع ${sale.number}`}>
             <PageHeader
-                back={<BackLink href={route('club.sales.index')}>المبيعات</BackLink>}
+                back={<BackLink href={route('club.invoices.index', { category: 'products' })}>المبيعات</BackLink>}
                 title={<span className="flex flex-wrap items-center gap-2">{order ? 'طلب' : 'عملية بيع'} <span className="num">{sale.number}</span> <StateBadge sale={sale} /></span>}
                 subtitle={<span className="num">{sale.at}</span>}
                 actions={<>
